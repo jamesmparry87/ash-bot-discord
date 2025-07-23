@@ -6,28 +6,48 @@ import discord
 from discord.ext import commands
 from collections import defaultdict
 from keep_alive import keep_alive
-import fcntl
 import sys
-import google.generativeai as genai
+import platform
+import sys
+from google import genai
 import re
 import signal
 import atexit
 
-# --- Locking for single instance ---
+
+# --- Locking for single instance (cross-platform) ---
 LOCK_FILE = "bot.lock"
 def acquire_lock():
-    try:
-        lock_file = open(LOCK_FILE, 'w')
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        lock_file.write(str(os.getpid()))
-        lock_file.flush()
-        return lock_file
-    except (IOError, OSError):
-        print("❌ Bot is already running! Cannot start multiple instances.")
-        sys.exit(1)
+    if platform.system() == "Windows":
+        # Windows: skip locking, just warn
+        print("⚠️ File locking is not supported on Windows. Skipping single-instance lock.")
+        try:
+            lock_file = open(LOCK_FILE, 'w')
+            lock_file.write(str(os.getpid()))
+            lock_file.flush()
+            return lock_file
+        except Exception:
+            pass
+        return None
+
+    else:
+        try:
+            import fcntl
+            LOCK_EX = getattr(fcntl, 'LOCK_EX', None)
+            LOCK_NB = getattr(fcntl, 'LOCK_NB', None)
+            if LOCK_EX is None or LOCK_NB is None:
+                raise AttributeError("fcntl missing LOCK_EX or LOCK_NB")
+            lock_file = open(LOCK_FILE, 'w')
+            fcntl.flock(lock_file.fileno(), LOCK_EX | LOCK_NB)
+            lock_file.write(str(os.getpid()))
+            lock_file.flush()
+            return lock_file
+        except (IOError, OSError, AttributeError):
+            print("❌ Bot is already running or fcntl is not available! Cannot start multiple instances.")
+            sys.exit(1)
 
 lock_file = acquire_lock()
-print("✅ Bot lock acquired, starting...")
+print("✅ Bot lock acquired or skipped, starting...")
 keep_alive()
 
 # --- Config ---
@@ -44,13 +64,13 @@ intents.guilds = True
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# --- Gemini AI Setup ---
+
+# --- Gemini AI Setup (google-genai SDK) ---
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    print("✅ Gemini AI configured successfully")
+    client = genai.Client()
+    print("✅ Gemini AI client initialized successfully")
 else:
-    model = None
+    client = None
     print("⚠️ GOOGLE_API_KEY not found - Gemini features disabled")
 
 FAQ_RESPONSES = {
@@ -203,7 +223,7 @@ async def on_message(message):
         await message.reply("Your culinary opinions are noted and rejected. Pineapple is a valid pizza topping. Please refrain from such unproductive discourse.")
         return
 
-    if bot.user is not None and bot.user in message.mentions and model and BOT_PERSONA["enabled"]:
+    if bot.user is not None and bot.user in message.mentions and client and BOT_PERSONA["enabled"]:
         content = message.content.replace(f'<@{bot.user.id}>', '').strip()
 
         # FAQ auto-response
@@ -288,11 +308,17 @@ async def on_message(message):
         
         try:
             async with message.channel.typing():
-                response = model.generate_content(prompt)
-            if response and response.text:
-                await message.reply(response.text[:2000])
-            else:
-                await message.reply(ERROR_MESSAGE)
+                if client:
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=prompt
+                    )
+                    if response and hasattr(response, 'text') and response.text:
+                        await message.reply(response.text[:2000])
+                    else:
+                        await message.reply(ERROR_MESSAGE)
+                else:
+                    await message.reply(ERROR_MESSAGE)
         except Exception as e:
             # Check for token exhaustion or quota errors in the exception message
             error_str = str(e).lower()
@@ -345,7 +371,7 @@ async def all_strikes(ctx):
 @commands.has_permissions(manage_messages=True)
 async def ash_status(ctx):
     active = sum(1 for v in strikes.values() if v > 0)
-    ai_status = "Online" if model else "Offline"
+    ai_status = "Online" if client else "Offline"
     persona = "Enabled" if BOT_PERSONA['enabled'] else "Disabled"
     await ctx.send(
         f"🤖 Ash at your service.\n"
