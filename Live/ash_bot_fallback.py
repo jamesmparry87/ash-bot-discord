@@ -35,8 +35,12 @@ def acquire_lock():
             import fcntl
             LOCK_EX = getattr(fcntl, 'LOCK_EX', None)
             LOCK_NB = getattr(fcntl, 'LOCK_NB', None)
-            if LOCK_EX is None or LOCK_NB is None:
-                raise AttributeError("fcntl missing LOCK_EX or LOCK_NB")
+            if LOCK_EX is None or LOCK_NB is None or not hasattr(fcntl, 'flock'):
+                print("⚠️ fcntl.flock or lock constants not available. Skipping single-instance lock.")
+                lock_file = open(LOCK_FILE, 'w')
+                lock_file.write(str(os.getpid()))
+                lock_file.flush()
+                return lock_file
             lock_file = open(LOCK_FILE, 'w')
             fcntl.flock(lock_file.fileno(), LOCK_EX | LOCK_NB)
             lock_file.write(str(os.getpid()))
