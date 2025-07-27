@@ -312,7 +312,7 @@ async def on_message(message):
         
         try:
             async with message.channel.typing():
-                if client:
+                if client:b
                     response = client.models.generate_content(
                         model="gemini-2.5-flash",
                         contents=prompt
