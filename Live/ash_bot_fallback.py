@@ -8,7 +8,6 @@ from collections import defaultdict
 from keep_alive import keep_alive
 import sys
 import platform
-import sys
 from google import genai
 import re
 import signal
@@ -312,7 +311,7 @@ async def on_message(message):
         
         try:
             async with message.channel.typing():
-                if client:b
+                if client:
                     response = client.models.generate_content(
                         model="gemini-2.5-flash",
                         contents=prompt
@@ -324,6 +323,7 @@ async def on_message(message):
                 else:
                     await message.reply(ERROR_MESSAGE)
         except Exception as e:
+            print(f"AI database overloaded. Further communication rescinded: {e}")
             # Check for token exhaustion or quota errors in the exception message
             error_str = str(e).lower()
             if "quota" in error_str or "token" in error_str or "limit" in error_str:
