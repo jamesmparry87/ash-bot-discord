@@ -282,6 +282,88 @@ class DatabaseManager:
             logger.error(f"Error setting config value {key}: {e}")
             conn.rollback()
     
+    def bulk_import_strikes(self, strikes_data: Dict[int, int]) -> int:
+        """Bulk import strike data"""
+        conn = self.get_connection()
+        if not conn:
+            return 0
+        
+        try:
+            with conn.cursor() as cur:
+                # Prepare data for batch insert
+                data_tuples = [(user_id, count, count) for user_id, count in strikes_data.items() if count > 0]
+                
+                if data_tuples:
+                    cur.executemany("""
+                        INSERT INTO strikes (user_id, strike_count, updated_at)
+                        VALUES (%s, %s, CURRENT_TIMESTAMP)
+                        ON CONFLICT (user_id)
+                        DO UPDATE SET strike_count = %s, updated_at = CURRENT_TIMESTAMP
+                    """, data_tuples)
+                    conn.commit()
+                    logger.info(f"Bulk imported {len(data_tuples)} strike records")
+                    return len(data_tuples)
+                return 0
+        except Exception as e:
+            logger.error(f"Error bulk importing strikes: {e}")
+            conn.rollback()
+            return 0
+    
+    def bulk_import_games(self, games_data: List[Dict[str, str]]) -> int:
+        """Bulk import game recommendations"""
+        conn = self.get_connection()
+        if not conn:
+            return 0
+        
+        try:
+            with conn.cursor() as cur:
+                # Prepare data for batch insert
+                data_tuples = [(game['name'], game['reason'], game['added_by']) for game in games_data]
+                
+                if data_tuples:
+                    cur.executemany("""
+                        INSERT INTO game_recommendations (name, reason, added_by, created_at)
+                        VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                    """, data_tuples)
+                    conn.commit()
+                    logger.info(f"Bulk imported {len(data_tuples)} game recommendations")
+                    return len(data_tuples)
+                return 0
+        except Exception as e:
+            logger.error(f"Error bulk importing games: {e}")
+            conn.rollback()
+            return 0
+    
+    def clear_all_games(self):
+        """Clear all game recommendations (use with caution)"""
+        conn = self.get_connection()
+        if not conn:
+            return
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM game_recommendations")
+                conn.commit()
+                logger.info("All game recommendations cleared")
+        except Exception as e:
+            logger.error(f"Error clearing games: {e}")
+            conn.rollback()
+    
+    def clear_all_strikes(self):
+        """Clear all strikes (use with caution)"""
+        conn = self.get_connection()
+        if not conn:
+            return
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM strikes")
+                conn.commit()
+                logger.info("All strikes cleared")
+        except Exception as e:
+            logger.error(f"Error clearing strikes: {e}")
+            conn.rollback()
+
     def close(self):
         """Close database connection"""
         if self.connection and not self.connection.closed:

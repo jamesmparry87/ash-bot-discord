@@ -282,6 +282,50 @@ async def on_message(message):
                 await message.reply(f"🧾 {user.name} has {count} strike(s). I advise caution.")
                 return
 
+        # Check for game lookup queries
+        game_query_patterns = [
+            r"has\s+jonesy\s+played\s+(.+?)[\?\.]?$",
+            r"did\s+jonesy\s+play\s+(.+?)[\?\.]?$",
+            r"has\s+captain\s+jonesy\s+played\s+(.+?)[\?\.]?$",
+            r"did\s+captain\s+jonesy\s+play\s+(.+?)[\?\.]?$",
+            r"has\s+jonesyspacecat\s+played\s+(.+?)[\?\.]?$",
+            r"did\s+jonesyspacecat\s+play\s+(.+?)[\?\.]?$"
+        ]
+        
+        for pattern in game_query_patterns:
+            match = re.search(pattern, content.lower())
+            if match:
+                game_name = match.group(1).strip()
+                games = db.get_all_games()
+                
+                # Search for the game in recommendations
+                found_game = None
+                for game in games:
+                    if game_name.lower() in game['name'].lower() or game['name'].lower() in game_name.lower():
+                        found_game = game
+                        break
+                
+                # If not found, try fuzzy matching
+                if not found_game:
+                    import difflib
+                    game_names = [game['name'].lower() for game in games]
+                    matches = difflib.get_close_matches(game_name.lower(), game_names, n=1, cutoff=0.6)
+                    if matches:
+                        match_name = matches[0]
+                        for game in games:
+                            if game['name'].lower() == match_name:
+                                found_game = game
+                                break
+                
+                if found_game:
+                    # Game is in recommendations list
+                    contributor = f" (suggested by {found_game['added_by']})" if found_game['added_by'] else ""
+                    await message.reply(f"Analysis complete. '{found_game['name']}' is catalogued in our recommendation database{contributor}. However, I have no data on whether Captain Jonesy has actually engaged with this title. My surveillance protocols do not extend to her gaming activities.")
+                else:
+                    # Game not found in recommendations
+                    await message.reply(f"'{game_name}' is not present in our recommendation database. I have no records of this title being suggested or discussed. My observational data is limited to catalogued recommendations.")
+                return
+
         # Enhanced fallback responses when AI is disabled
         if not ai_enabled:
             # Pattern-based fallback responses in Ash's character
@@ -447,6 +491,115 @@ async def toggle_ai(ctx):
     BOT_PERSONA["enabled"] = not BOT_PERSONA["enabled"]
     status = "enabled" if BOT_PERSONA["enabled"] else "disabled"
     await ctx.send(f"🎭 AI conversations {status}.")
+
+# --- Data Migration Commands ---
+@bot.command(name="importstrikes")
+@commands.has_permissions(manage_messages=True)
+async def import_strikes(ctx):
+    """Import strikes from strikes.json file"""
+    try:
+        import json
+        with open("strikes.json", 'r') as f:
+            strikes_data = json.load(f)
+        
+        # Convert string keys to integers
+        converted_data = {}
+        for user_id_str, count in strikes_data.items():
+            try:
+                user_id = int(user_id_str)
+                converted_data[user_id] = int(count)
+            except ValueError:
+                await ctx.send(f"⚠️ Warning: Invalid data format for user {user_id_str}")
+        
+        imported_count = db.bulk_import_strikes(converted_data)
+        await ctx.send(f"✅ Successfully imported {imported_count} strike records from strikes.json")
+        
+    except FileNotFoundError:
+        await ctx.send("❌ strikes.json file not found. Please ensure the file exists in the bot directory.")
+    except Exception as e:
+        await ctx.send(f"❌ Error importing strikes: {str(e)}")
+
+@bot.command(name="clearallgames")
+@commands.has_permissions(manage_messages=True)
+async def clear_all_games(ctx):
+    """Clear all game recommendations (use with caution)"""
+    await ctx.send("⚠️ **WARNING**: This will delete ALL game recommendations from the database. Type `CONFIRM DELETE` to proceed or anything else to cancel.")
+    
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel
+    
+    try:
+        msg = await bot.wait_for('message', check=check, timeout=30.0)
+        if msg.content == "CONFIRM DELETE":
+            db.clear_all_games()
+            await ctx.send("✅ All game recommendations have been cleared from the database.")
+        else:
+            await ctx.send("❌ Operation cancelled. No data was deleted.")
+    except:
+        await ctx.send("❌ Operation timed out. No data was deleted.")
+
+@bot.command(name="clearallstrikes")
+@commands.has_permissions(manage_messages=True)
+async def clear_all_strikes(ctx):
+    """Clear all strikes (use with caution)"""
+    await ctx.send("⚠️ **WARNING**: This will delete ALL strike records from the database. Type `CONFIRM DELETE` to proceed or anything else to cancel.")
+    
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel
+    
+    try:
+        msg = await bot.wait_for('message', check=check, timeout=30.0)
+        if msg.content == "CONFIRM DELETE":
+            db.clear_all_strikes()
+            await ctx.send("✅ All strike records have been cleared from the database.")
+        else:
+            await ctx.send("❌ Operation cancelled. No data was deleted.")
+    except:
+        await ctx.send("❌ Operation timed out. No data was deleted.")
+
+@bot.command(name="dbstats")
+@commands.has_permissions(manage_messages=True)
+async def db_stats(ctx):
+    """Show database statistics"""
+    try:
+        games = db.get_all_games()
+        strikes = db.get_all_strikes()
+        
+        total_games = len(games)
+        total_users_with_strikes = len([s for s in strikes.values() if s > 0])
+        total_strikes = sum(strikes.values())
+        
+        # Count unique contributors
+        contributors = set()
+        for game in games:
+            if game.get('added_by'):
+                contributors.add(game['added_by'])
+        
+        stats_msg = (
+            f"📊 **Database Statistics:**\n"
+            f"• **Games**: {total_games} recommendations\n"
+            f"• **Contributors**: {len(contributors)} unique users\n"
+            f"• **Strikes**: {total_strikes} total across {total_users_with_strikes} users\n"
+        )
+        
+        if contributors:
+            top_contributors = {}
+            for game in games:
+                contributor = game.get('added_by', '')
+                if contributor:
+                    top_contributors[contributor] = top_contributors.get(contributor, 0) + 1
+            
+            # Sort by contribution count
+            sorted_contributors = sorted(top_contributors.items(), key=lambda x: x[1], reverse=True)
+            
+            stats_msg += f"\n**Top Contributors:**\n"
+            for i, (contributor, count) in enumerate(sorted_contributors[:5]):
+                stats_msg += f"{i+1}. {contributor}: {count} games\n"
+        
+        await ctx.send(stats_msg)
+        
+    except Exception as e:
+        await ctx.send(f"❌ Error retrieving database statistics: {str(e)}")
 
 # --- Game Commands ---
 @bot.command(name="addgame")
