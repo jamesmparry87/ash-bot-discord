@@ -12,6 +12,14 @@ import atexit
 import logging
 from typing import Optional, Any, List
 
+# Try to import aiohttp, handle if not available
+try:
+    import aiohttp
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    aiohttp = None
+    AIOHTTP_AVAILABLE = False
+
 # Try to import google.generativeai, handle if not available
 try:
     import google.generativeai as genai
@@ -569,15 +577,38 @@ async def fix_game_reasons(ctx):
             await ctx.send("❌ No games found in database.")
             return
         
+        # Show current sample of reasons to debug
+        sample_msg = "🔍 **Sample of current game reasons:**\n"
+        for i, game in enumerate(games[:5]):
+            sample_msg += f"• {game['name']}: \"{game['reason']}\" (by: {game['added_by']})\n"
+        await ctx.send(sample_msg)
+        
         updated_count = 0
         for game in games:
+            current_reason = game['reason'] or ""
+            current_added_by = game['added_by'] or ""
+            
             # Check if this game has the old "Suggested by community member" reason
-            if game['reason'] == "Suggested by community member":
-                if game['added_by'] and game['added_by'].strip():
-                    new_reason = f"Suggested by {game['added_by']}"
+            # OR if it has a generic reason that should be updated
+            needs_update = False
+            new_reason = current_reason
+            
+            if current_reason == "Suggested by community member":
+                needs_update = True
+                if current_added_by.strip():
+                    new_reason = f"Suggested by {current_added_by}"
                 else:
                     new_reason = "Community suggestion"
-                
+            elif current_reason == "Community suggestion" and current_added_by.strip():
+                # Update generic "Community suggestion" to show actual contributor
+                needs_update = True
+                new_reason = f"Suggested by {current_added_by}"
+            elif not current_reason.strip() and current_added_by.strip():
+                # Handle empty reasons
+                needs_update = True
+                new_reason = f"Suggested by {current_added_by}"
+            
+            if needs_update:
                 # Update the game's reason
                 conn = db.get_connection()
                 if conn:
@@ -746,25 +777,81 @@ async def clean_played_games(ctx, youtube_channel_id: Optional[str] = None, twit
             await ctx.send("❌ No played games found. Check API credentials and channel/username.")
             return
         
-        # Find matches using fuzzy matching
+        # Find matches using multiple approaches
         games_to_remove = []
+        
+        # First, get all video titles for direct searching
+        all_video_titles = []
+        if AIOHTTP_AVAILABLE and aiohttp is not None:
+            try:
+                # Re-fetch video titles for direct searching
+                async with aiohttp.ClientSession() as session:
+                    # YouTube titles
+                    if youtube_api_key := os.getenv('YOUTUBE_API_KEY'):
+                        try:
+                            url = f"https://www.googleapis.com/youtube/v3/channels"
+                            params = {'part': 'contentDetails', 'id': youtube_channel_id, 'key': youtube_api_key}
+                            async with session.get(url, params=params) as response:
+                                if response.status == 200:
+                                    data = await response.json()
+                                    if data.get('items'):
+                                        uploads_playlist_id = data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+                                        
+                                        # Get video titles
+                                        url = f"https://www.googleapis.com/youtube/v3/playlistItems"
+                                        params = {'part': 'snippet', 'playlistId': uploads_playlist_id, 'maxResults': 50, 'key': youtube_api_key}
+                                        async with session.get(url, params=params) as response:
+                                            if response.status == 200:
+                                                data = await response.json()
+                                                for item in data.get('items', []):
+                                                    all_video_titles.append(item['snippet']['title'])
+                        except Exception as e:
+                            print(f"Error fetching YouTube titles: {e}")
+            except Exception as e:
+                print(f"Error in title fetching: {e}")
+        else:
+            await ctx.send("⚠️ aiohttp module not available - cannot fetch video titles for direct matching")
+        
         for game in games:
             game_name_lower = game['name'].lower().strip()
+            found_match = False
             
-            # Check for exact matches first
+            # Method 1: Check extracted game names
             for played_game in all_played_games:
                 played_game_lower = played_game.lower().strip()
                 
                 # Exact match
                 if game_name_lower == played_game_lower:
                     games_to_remove.append((game, played_game, "exact"))
+                    found_match = True
                     break
                 
                 # Fuzzy match (75% similarity for played games)
                 similarity = difflib.SequenceMatcher(None, game_name_lower, played_game_lower).ratio()
                 if similarity >= 0.75:
                     games_to_remove.append((game, played_game, f"fuzzy ({similarity:.0%})"))
+                    found_match = True
                     break
+            
+            # Method 2: Check if game name appears anywhere in video titles
+            if not found_match:
+                for video_title in all_video_titles:
+                    video_title_lower = video_title.lower()
+                    
+                    # Check if the game name appears in the title
+                    if game_name_lower in video_title_lower:
+                        # Additional check to avoid false positives with very short names
+                        if len(game_name_lower) >= 4 or game_name_lower == video_title_lower:
+                            games_to_remove.append((game, video_title, "title_contains"))
+                            found_match = True
+                            break
+                    
+                    # Also try fuzzy matching against the full title
+                    similarity = difflib.SequenceMatcher(None, game_name_lower, video_title_lower).ratio()
+                    if similarity >= 0.6:  # Lower threshold for title matching
+                        games_to_remove.append((game, video_title, f"title_fuzzy ({similarity:.0%})"))
+                        found_match = True
+                        break
         
         if not games_to_remove:
             await ctx.send("✅ No matching games found. All recommendations appear to be unplayed!")
@@ -967,30 +1054,45 @@ def extract_game_from_title(title: str) -> str:
     """Extract game name from video title using common patterns"""
     title = title.strip()
     
-    # Common patterns for game titles in videos
+    # Common patterns for game titles in videos (order matters - most specific first)
     patterns = [
-        r'^([^|]+)\s*\|',  # "Game Name | Episode"
-        r'^([^-]+)\s*-',   # "Game Name - Part 1"
-        r'^([^:]+):',      # "Game Name: Subtitle"
-        r'^([^#]+)#',      # "Game Name #1"
-        r'^([^(]+)\(',     # "Game Name (Part 1)"
-        r'^([^[]+)\[',     # "Game Name [Episode]"
+        r'^([^|]+?)\s*\|\s*',           # "Game Name | Episode"
+        r'^([^-]+?)\s*-\s*(?:part|ep|episode|#|\d)',  # "Game Name - Part 1" or "Game Name - Episode"
+        r'^([^:]+?):\s*(?:part|ep|episode|#|\d)',     # "Game Name: Part 1"
+        r'^([^#]+?)#\d',                # "Game Name #1"
+        r'^([^(]+?)\s*\(',              # "Game Name (Part 1)"
+        r'^([^[]+?)\s*\[',              # "Game Name [Episode]"
+        r'^([^-]+?)\s*-\s*(.+)',        # "Game Name - Anything else"
+        r'^([^:]+?):\s*(.+)',           # "Game Name: Anything else"
     ]
     
     for pattern in patterns:
         match = re.match(pattern, title, re.IGNORECASE)
         if match:
             game_name = match.group(1).strip()
-            # Filter out common non-game words
-            if len(game_name) > 3 and not any(word in game_name.lower() for word in ['stream', 'live', 'chat', 'vod', 'highlight']):
+            # Clean up common prefixes/suffixes
+            game_name = re.sub(r'\s*(let\'s play|gameplay|walkthrough|playthrough)\s*', '', game_name, flags=re.IGNORECASE)
+            game_name = game_name.strip()
+            
+            # Filter out common non-game words and ensure minimum length
+            if (len(game_name) > 3 and 
+                not any(word in game_name.lower() for word in ['stream', 'live', 'chat', 'vod', 'highlight', 'reaction', 'review']) and
+                not re.match(r'^\d+$', game_name)):  # Not just numbers
                 return game_name
     
-    # If no pattern matches, return the first few words (likely the game name)
-    words = title.split()
+    # If no pattern matches, try to extract first meaningful words
+    # Remove common video prefixes first
+    clean_title = re.sub(r'^(let\'s play|gameplay|walkthrough|playthrough)\s+', '', title, flags=re.IGNORECASE)
+    words = clean_title.split()
+    
     if len(words) >= 2:
-        potential_game = ' '.join(words[:3])  # Take first 3 words
-        if len(potential_game) > 3:
-            return potential_game
+        # Try different word combinations
+        for word_count in [4, 3, 2]:  # Try 4 words, then 3, then 2
+            if len(words) >= word_count:
+                potential_game = ' '.join(words[:word_count])
+                if (len(potential_game) > 3 and 
+                    not any(word in potential_game.lower() for word in ['stream', 'live', 'chat', 'vod', 'highlight'])):
+                    return potential_game
     
     return ""
 

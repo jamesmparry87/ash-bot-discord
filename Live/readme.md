@@ -216,7 +216,7 @@ The bot is designed to efficiently import large lists of game recommendations wi
    !cleanplayedgames
    ```
 
-   - Analyzes YouTube and Twitch play history
+   - Analyzes e and Twitch play history
    - Shows preview of games to remove
    - Type `CONFIRM CLEANUP` to proceed
 
