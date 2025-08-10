@@ -38,6 +38,7 @@ A sophisticated Discord moderation and AI assistant bot featuring strike trackin
 ### Dynamic Game Lookup
 
 Users can ask Ash about games using natural language:
+
 - `@Ashbot Has Jonesy played Resident Evil 2?`
 - `@Ashbot Did Captain Jonesy play Dark Souls?`
 - `@Ashbot Has JonesySpaceCat played Sekiro?`
@@ -176,12 +177,14 @@ Required Discord permissions:
 The bot is designed to efficiently import large lists of game recommendations with contributor attribution.
 
 **Supported Formats:**
+
 - **With Contributors**: `game name - username` (e.g., "Dark Souls - mysticaldragonborn")
 - **Without Contributors**: `game name` (e.g., "Resident Evil 2")
 - **Mixed Lists**: Combination of both formats in the same import
 - **Large Datasets**: Optimized for 80+ game entries in single operation
 
 **Key Features:**
+
 - **Fuzzy Duplicate Detection**: Prevents near-duplicates with 85% similarity matching
 - **Typo Tolerance**: Handles variations like "RE2" vs "Resident Evil 2"
 - **Batch Processing**: Uses PostgreSQL's efficient bulk operations
@@ -192,7 +195,8 @@ The bot is designed to efficiently import large lists of game recommendations wi
 #### Method 1: Bot Command Import (Recommended)
 
 1. **Update Migration Script**
-   - Edit `data_migration.py` 
+
+   - Edit `data_migration.py`
    - Replace `SAMPLE_GAMES_TEXT` with your games list
    - Format: one game per line, use "game name - username" for attribution
 
@@ -220,8 +224,7 @@ The bot is designed to efficiently import large lists of game recommendations wi
    - Use `!dbstats` to check final game count
    - Use `!listgames` to spot-check entries
 
-#### 
-Method 2: Manual Script Execution
+#### Method 2: Manual Script Execution
 
 1. **Prepare Your Games List** (same as Method 1)
 2. **Run Migration Script**
