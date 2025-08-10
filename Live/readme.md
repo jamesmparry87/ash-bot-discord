@@ -140,7 +140,7 @@ The bot is designed to efficiently import large lists of game recommendations wi
 
 #### Step-by-Step Game Migration Process
 
-**Method 1: Bot Command Import (Easiest - Recommended)**
+#### Method 1: Bot Command Import (Easiest - Recommended)
 
 1. **Update Migration Script**
    - Edit `data_migration.py` 
@@ -148,9 +148,11 @@ The bot is designed to efficiently import large lists of game recommendations wi
    - Format: one game per line, use "game name - username" for attribution
 
 2. **Run Import Command**
-   ```
+
+   ```text
    !bulkimportgames
    ```
+
    - Shows preview of games to be imported
    - Type `CONFIRM IMPORT` to proceed
    - Automatically updates recommendation list
@@ -159,16 +161,17 @@ The bot is designed to efficiently import large lists of game recommendations wi
    - Use `!dbstats` to check total games imported
    - Use `!listgames` to spot-check entries
 
-**Method 2: Manual Script Execution (Advanced)**
+#### Method 2: Manual Script Execution (Advanced)
 
 1. **Prepare Your Games List** (same as Method 1)
 2. **Run Migration Script**
+
    ```bash
    cd Live
    python data_migration.py
    ```
 
-**Method 3: Individual Bot Commands (For smaller lists)**
+#### Method 3: Individual Bot Commands (For smaller lists)
 
 1. **Clear Existing Data** (if needed)
 
