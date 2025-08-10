@@ -2,10 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python3 ash_bot_fallback.py"
+startCommand = "python ash_bot_fallback.py"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
-
-[variables]
-NIXPACKS_PYTHON_VERSION = "3.11"
