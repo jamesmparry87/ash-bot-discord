@@ -1,17 +1,32 @@
 
 import difflib
-import json
 import os
 import discord
 from discord.ext import commands
-from collections import defaultdict
-from keep_alive import keep_alive
+from database import db
 import sys
 import platform
-from google import genai
 import re
 import signal
 import atexit
+import logging
+from typing import Optional, Any
+
+# Try to import google.generativeai, handle if not available
+try:
+    import google.generativeai as genai
+    GENAI_AVAILABLE = True
+except ImportError:
+    genai = None
+    GENAI_AVAILABLE = False
+
+# Try to import fcntl for Unix systems, handle if not available
+try:
+    import fcntl
+    FCNTL_AVAILABLE = True
+except ImportError:
+    fcntl = None
+    FCNTL_AVAILABLE = False
 
 
 # --- Locking for single instance (cross-platform) ---
@@ -30,8 +45,18 @@ def acquire_lock():
         return None
 
     else:
+        if not FCNTL_AVAILABLE or fcntl is None:
+            print("⚠️ fcntl module not available. Skipping single-instance lock.")
+            try:
+                lock_file = open(LOCK_FILE, 'w')
+                lock_file.write(str(os.getpid()))
+                lock_file.flush()
+                return lock_file
+            except Exception:
+                pass
+            return None
+        
         try:
-            import fcntl
             LOCK_EX = getattr(fcntl, 'LOCK_EX', None)
             LOCK_NB = getattr(fcntl, 'LOCK_NB', None)
             if LOCK_EX is None or LOCK_NB is None or not hasattr(fcntl, 'flock'):
@@ -40,18 +65,30 @@ def acquire_lock():
                 lock_file.write(str(os.getpid()))
                 lock_file.flush()
                 return lock_file
-            lock_file = open(LOCK_FILE, 'w')
-            fcntl.flock(lock_file.fileno(), LOCK_EX | LOCK_NB)
-            lock_file.write(str(os.getpid()))
-            lock_file.flush()
-            return lock_file
-        except (IOError, OSError, AttributeError):
-            print("❌ Bot is already running or fcntl is not available! Cannot start multiple instances.")
-            sys.exit(1)
+            
+            # Try to acquire the lock
+            try:
+                lock_file = open(LOCK_FILE, 'w')
+                fcntl.flock(lock_file.fileno(), LOCK_EX | LOCK_NB)  # type: ignore
+                lock_file.write(str(os.getpid()))
+                lock_file.flush()
+                return lock_file
+            except (IOError, OSError):
+                print("❌ Bot is already running! Cannot start multiple instances.")
+                sys.exit(1)
+        except (ImportError, AttributeError):
+            print("⚠️ fcntl module not available. Skipping single-instance lock.")
+            try:
+                lock_file = open(LOCK_FILE, 'w')
+                lock_file.write(str(os.getpid()))
+                lock_file.flush()
+                return lock_file
+            except Exception:
+                pass
+            return None
 
 lock_file = acquire_lock()
 print("✅ Bot lock acquired or skipped, starting...")
-keep_alive()
 
 # --- Config ---
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -68,13 +105,17 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 
-# --- Gemini AI Setup (google-genai SDK) ---
-if GEMINI_API_KEY:
-    client = genai.Client()
-    print("✅ Gemini AI client initialized successfully")
+# --- Gemini AI Setup (google-generativeai SDK) ---
+if GEMINI_API_KEY and GENAI_AVAILABLE and genai is not None:
+    genai.configure(api_key=GEMINI_API_KEY)  # type: ignore
+    print("✅ Gemini AI configured successfully")
+    ai_enabled = True
 else:
-    client = None
-    print("⚠️ GOOGLE_API_KEY not found - Gemini features disabled")
+    ai_enabled = False
+    if not GEMINI_API_KEY:
+        print("⚠️ GOOGLE_API_KEY not found - Gemini features disabled")
+    elif not GENAI_AVAILABLE:
+        print("⚠️ google.generativeai module not available - Gemini features disabled")
 
 FAQ_RESPONSES = {
     "how do i add a game recommendation": "The procedure is simple. Submit your suggestion using the command: `!recommend` or `!addgame Game Name - \"Reason in speech marks\"`. Efficiency is paramount.",
@@ -89,30 +130,11 @@ BOT_PERSONA = {
     "enabled": True
 }
 
-# --- Strike Management ---
-STRIKE_FILE = "strikes.json"
-if os.path.exists(STRIKE_FILE):
-    with open(STRIKE_FILE, "r") as f:
-        strikes = json.load(f)
-        strikes = {int(k): v for k, v in strikes.items()}
-else:
-    strikes = {}
+# --- Strike Management (Database-based) ---
+# All strike operations now use the database
 
-def save_strikes():
-    with open(STRIKE_FILE, "w") as f:
-        json.dump(strikes, f)
-
-# --- Game Recommendations ---
-GAMES_FILE = "games.json"
-if os.path.exists(GAMES_FILE):
-    with open(GAMES_FILE, "r") as f:
-        game_recs = json.load(f)
-else:
-    game_recs = []
-
-def save_games():
-    with open(GAMES_FILE, "w") as f:
-        json.dump(game_recs, f)
+# --- Game Recommendations (Database-based) ---
+# All game operations now use the database
 
 # @bot.command(name="setupreclist")
 # @commands.has_permissions(manage_messages=True)
@@ -209,9 +231,7 @@ async def on_message(message):
 
     if message.channel.id == VIOLATION_CHANNEL_ID:
         for user in message.mentions:
-            strikes[user.id] = strikes.get(user.id, 0) + 1
-            count = strikes[user.id]
-            save_strikes()
+            count = db.add_user_strike(user.id)
             mod_channel = bot.get_channel(MOD_ALERT_CHANNEL_ID)
             # Only send if mod_channel is a TextChannel
             if isinstance(mod_channel, discord.TextChannel):
@@ -226,7 +246,7 @@ async def on_message(message):
         await message.reply("Your culinary opinions are noted and rejected. Pineapple is a valid pizza topping. Please refrain from such unproductive discourse.")
         return
 
-    if bot.user is not None and bot.user in message.mentions and client and BOT_PERSONA["enabled"]:
+    if bot.user is not None and bot.user in message.mentions and ai_enabled and BOT_PERSONA["enabled"]:
         content = message.content.replace(f'<@{bot.user.id}>', '').strip()
 
         # FAQ auto-response
@@ -240,7 +260,7 @@ async def on_message(message):
             match = re.search(r"<@!?(\d+)>", content)
             if match:
                 user_id = int(match.group(1))
-                count = strikes.get(user_id, 0)
+                count = db.get_user_strikes(user_id)
                 user = await bot.fetch_user(user_id)
                 await message.reply(f"🧾 {user.name} has {count} strike(s). I advise caution.")
                 return
@@ -261,30 +281,6 @@ async def on_message(message):
                     role = "User" if msg.author != bot.user else "Ash"
                     history.append(f"{role}: {msg.content}")
             context = "\n".join(reversed(history))
-
-        # If the prompt requests a list of users with strikes, insert the actual list from strikes.json
-        strikes_list = []
-        guild = bot.get_guild(GUILD_ID)
-        if os.path.exists(STRIKE_FILE):
-            with open(STRIKE_FILE, "r") as f:
-                strikes_data = json.load(f)
-            for user_id, count in strikes_data.items():
-                name = None
-                if guild:
-                    member = guild.get_member(int(user_id))
-                    if member:
-                        name = member.display_name
-                if not name:
-                    try:
-                        user = await bot.fetch_user(int(user_id))
-                        name = user.name
-                    except Exception:
-                        name = None
-                if name:
-                    strikes_list.append(f"• {name}: {count} strike{'s' if count != 1 else ''}")
-                else:
-                    strikes_list.append(f"• Unknown User: {count}")
-        strikes_report = "\n".join(strikes_list) if strikes_list else "No strikes recorded."
 
         # Adjust tone if author is Captain Jonesy or if the query is about Captain Jonesy
         import random
@@ -307,15 +303,11 @@ async def on_message(message):
             + f"User's question: {content}\n"
             + "Respond in character:"
         )
-        # No longer replace [insert list of users with strikes and number of strikes each] in the prompt
         
         try:
             async with message.channel.typing():
-                if client:
-                    response = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=prompt
-                    )
+                if ai_enabled and genai is not None:
+                    response = genai.generate_content(prompt)  # type: ignore
                     if response and hasattr(response, 'text') and response.text:
                         await message.reply(response.text[:2000])
                     else:
@@ -335,7 +327,7 @@ async def on_message(message):
 @bot.command(name="strikes")
 @commands.has_permissions(manage_messages=True)
 async def get_strikes(ctx, member: discord.Member):
-    count = strikes.get(member.id, 0)
+    count = db.get_user_strikes(member.id)
     # Never @mention Captain Jonesy, just use her name
     if str(member.id) == "651329927895056384":
         await ctx.send(f"🔍 Captain Jonesy has {count} strike(s).")
@@ -345,8 +337,7 @@ async def get_strikes(ctx, member: discord.Member):
 @bot.command(name="resetstrikes")
 @commands.has_permissions(manage_messages=True)
 async def reset_strikes(ctx, member: discord.Member):
-    strikes[member.id] = 0
-    save_strikes()
+    db.set_user_strikes(member.id, 0)
     # Never @mention Captain Jonesy, just use her name
     if str(member.id) == "651329927895056384":
         await ctx.send(f"✅ Strikes for Captain Jonesy have been reset.")
@@ -356,11 +347,12 @@ async def reset_strikes(ctx, member: discord.Member):
 @bot.command(name="allstrikes")
 @commands.has_permissions(manage_messages=True)
 async def all_strikes(ctx):
-    if not strikes:
+    strikes_data = db.get_all_strikes()
+    if not strikes_data:
         await ctx.send("📋 No strikes recorded.")
         return
     report = "📋 **Strike Report:**\n"
-    for user_id, count in strikes.items():
+    for user_id, count in strikes_data.items():
         if count > 0:
             try:
                 user = await bot.fetch_user(user_id)
@@ -374,8 +366,9 @@ async def all_strikes(ctx):
 @bot.command(name="ashstatus")
 @commands.has_permissions(manage_messages=True)
 async def ash_status(ctx):
-    active = sum(1 for v in strikes.values() if v > 0)
-    ai_status = "Online" if client else "Offline"
+    strikes_data = db.get_all_strikes()
+    active = sum(1 for v in strikes_data.values() if v > 0)
+    ai_status = "Online" if ai_enabled else "Offline"
     persona = "Enabled" if BOT_PERSONA['enabled'] else "Disabled"
     await ctx.send(
         f"🤖 Ash at your service.\n"
@@ -417,36 +410,29 @@ RECOMMEND_LIST_MESSAGE_ID_FILE = "recommend_list_message_id.txt"
 
 async def post_or_update_recommend_list(ctx, channel):
     intro = "📋 Recommendations for mission enrichment. Review and consider."
-    if not game_recs:
+    games = db.get_all_games()
+    if not games:
         content = f"{intro}\n(No recommendations currently catalogued.)"
     else:
-        lines = [f"• {rec['name']} — \"{rec['reason']}\"" + (f" (by {rec['added_by']})" if rec['added_by'] else "") for rec in game_recs]
+        lines = [f"• {game['name']} — \"{game['reason']}\"" + (f" (by {game['added_by']})" if game['added_by'] else "") for game in games]
         content = f"{intro}\n" + "\n".join(lines)
     # Try to update the existing message if possible
-    message_id = None
-    if os.path.exists(RECOMMEND_LIST_MESSAGE_ID_FILE):
-        with open(RECOMMEND_LIST_MESSAGE_ID_FILE, "r") as f:
-            try:
-                message_id = int(f.read().strip())
-            except Exception:
-                message_id = None
+    message_id = db.get_config_value("recommend_list_message_id")
     msg = None
     if message_id:
         try:
-            msg = await channel.fetch_message(message_id)
+            msg = await channel.fetch_message(int(message_id))
             await msg.edit(content=content)
         except Exception:
             msg = None
     if not msg:
         msg = await channel.send(content)
-        with open(RECOMMEND_LIST_MESSAGE_ID_FILE, "w") as f:
-            f.write(str(msg.id))
+        db.set_config_value("recommend_list_message_id", str(msg.id))
 
 # Helper for adding games, called by add_game and recommend
 async def _add_game(ctx, entry: str):
     added = []
     duplicate = []
-    existing_names = [rec['name'].strip().lower() for rec in game_recs]
     for part in entry.split(","):
         part = part.strip()
         if not part:
@@ -458,9 +444,7 @@ async def _add_game(ctx, entry: str):
         if not name:
             continue
         # Typo-tolerant duplicate check (case-insensitive, fuzzy match)
-        name_lc = name.strip().lower()
-        close_matches = difflib.get_close_matches(name_lc, existing_names, n=1, cutoff=0.85)
-        if name_lc in existing_names or close_matches:
+        if db.game_exists(name):
             duplicate.append(name)
             continue
         # Exclude username if user is Sir Decent Jam (user ID 337833732901961729)
@@ -468,11 +452,11 @@ async def _add_game(ctx, entry: str):
             added_by = ""
         else:
             added_by = ctx.author.name
-        game_recs.append({"name": name, "reason": reason, "added_by": added_by})
-        added.append(name)
-        existing_names.append(name_lc)
+        
+        if db.add_game_recommendation(name, reason, added_by):
+            added.append(name)
+    
     if added:
-        save_games()
         RECOMMEND_CHANNEL_ID = 1271568447108550687
         recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
         confirm_msg = f"🧾 Recommendation(s) logged: {', '.join(added)}. Efficiency noted."
@@ -491,13 +475,14 @@ async def _add_game(ctx, entry: str):
 
 @bot.command(name="listgames")
 async def list_games(ctx):
-    if not game_recs:
+    games = db.get_all_games()
+    if not games:
         await ctx.send("No recommendations currently catalogued. Observation is key to survival.")
         return
     msg = "📋 **Current Game Recommendations:**\n"
-    for i, rec in enumerate(game_recs, 1):
-        submitter = f" by {rec['added_by']}" if rec['added_by'] else ""
-        msg += f"{i}. **{rec['name']}** — \"{rec['reason']}\"{submitter}\n"
+    for i, game in enumerate(games, 1):
+        submitter = f" by {game['added_by']}" if game['added_by'] else ""
+        msg += f"{i}. **{game['name']}** — \"{game['reason']}\"{submitter}\n"
     await ctx.send(msg[:2000])
 
 @bot.command(name="removegame")
@@ -509,24 +494,18 @@ async def remove_game(ctx, *, arg: str):
         index = int(arg)
     except ValueError:
         pass
+    
     removed = None
-    if index is not None and 1 <= index <= len(game_recs):
-        removed = game_recs.pop(index - 1)
+    if index is not None:
+        removed = db.remove_game_by_index(index)
     else:
-        # Typo-tolerant name match
-        names = [rec['name'] for rec in game_recs]
-        arg_lc = arg.strip().lower()
-        matches = difflib.get_close_matches(arg_lc, [n.lower() for n in names], n=1, cutoff=0.8)
-        if matches:
-            match_name = matches[0]
-            for i, rec in enumerate(game_recs):
-                if rec['name'].strip().lower() == match_name:
-                    removed = game_recs.pop(i)
-                    break
+        # Try name match
+        removed = db.remove_game_by_name(arg)
+    
     if not removed:
         await ctx.send("⚠️ Removal protocol failed: No matching recommendation found by that index or designation. Precision is essential. Please specify a valid entry for expungement.")
         return
-    save_games()
+    
     RECOMMEND_CHANNEL_ID = 1271568447108550687
     recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
     # Only send the detailed removal message in the invoking channel if not the recommendations channel
