@@ -23,9 +23,14 @@ def parse_games_list(games_text: str) -> List[Dict[str, str]]:
             username = ""  # No username provided
         
         if game_name:
+            if username:
+                reason = f"Suggested by {username}"
+            else:
+                reason = "Community suggestion"
+            
             games.append({
                 'name': game_name,
-                'reason': f"Suggested by community member",
+                'reason': reason,
                 'added_by': username
             })
     

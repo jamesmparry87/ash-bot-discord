@@ -559,6 +559,52 @@ async def clear_all_strikes(ctx):
     except:
         await ctx.send("❌ Operation timed out. No data was deleted.")
 
+@bot.command(name="fixgamereasons")
+@commands.has_permissions(manage_messages=True)
+async def fix_game_reasons(ctx):
+    """Fix the reason text for existing games to show contributor names properly"""
+    try:
+        games = db.get_all_games()
+        if not games:
+            await ctx.send("❌ No games found in database.")
+            return
+        
+        updated_count = 0
+        for game in games:
+            # Check if this game has the old "Suggested by community member" reason
+            if game['reason'] == "Suggested by community member":
+                if game['added_by'] and game['added_by'].strip():
+                    new_reason = f"Suggested by {game['added_by']}"
+                else:
+                    new_reason = "Community suggestion"
+                
+                # Update the game's reason
+                conn = db.get_connection()
+                if conn:
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                UPDATE game_recommendations 
+                                SET reason = %s 
+                                WHERE id = %s
+                            """, (new_reason, game['id']))
+                            conn.commit()
+                            updated_count += 1
+                    except Exception as e:
+                        print(f"Error updating game {game['id']}: {e}")
+                        conn.rollback()
+        
+        await ctx.send(f"✅ Updated {updated_count} game reasons to show contributor names properly.")
+        
+        # Update the recommendations list
+        RECOMMEND_CHANNEL_ID = 1271568447108550687
+        recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
+        if recommend_channel:
+            await post_or_update_recommend_list(ctx, recommend_channel)
+            
+    except Exception as e:
+        await ctx.send(f"❌ Error fixing game reasons: {str(e)}")
+
 @bot.command(name="dbstats")
 @commands.has_permissions(manage_messages=True)
 async def db_stats(ctx):
@@ -1032,12 +1078,26 @@ async def list_games(ctx):
     if not games:
         await ctx.send("No recommendations currently catalogued. Observation is key to survival.")
         return
+    
+    # Split into multiple messages if too long
     msg = "📋 **Current Game Recommendations:**\n"
+    current_msg = msg
+    
     for i, game in enumerate(games, 1):
         submitter = f" by {game['added_by']}" if game['added_by'] and game['added_by'].strip() else ""
         game_title = game['name'].title()
-        msg += f"{i}. **{game_title}** — \"{game['reason']}\"{submitter}\n"
-    await ctx.send(msg[:2000])
+        line = f"{i}. **{game_title}** — \"{game['reason']}\"{submitter}\n"
+        
+        # Check if adding this line would exceed Discord's limit
+        if len(current_msg + line) > 1900:  # Leave some buffer
+            await ctx.send(current_msg)
+            current_msg = line
+        else:
+            current_msg += line
+    
+    # Send the final message
+    if current_msg.strip():
+        await ctx.send(current_msg)
 
 @bot.command(name="removegame")
 @commands.has_permissions(manage_messages=True)
