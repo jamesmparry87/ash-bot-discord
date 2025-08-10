@@ -577,11 +577,18 @@ async def fix_game_reasons(ctx):
             await ctx.send("❌ No games found in database.")
             return
         
-        # Show current sample of reasons to debug
+        # Show current sample of reasons to debug (shorter version)
         sample_msg = "🔍 **Sample of current game reasons:**\n"
-        for i, game in enumerate(games[:5]):
-            sample_msg += f"• {game['name']}: \"{game['reason']}\" (by: {game['added_by']})\n"
-        await ctx.send(sample_msg)
+        for i, game in enumerate(games[:3]):  # Only show 3 games to avoid length limit
+            name = game['name'][:30] + "..." if len(game['name']) > 30 else game['name']
+            reason = game['reason'][:40] + "..." if len(game['reason']) > 40 else game['reason']
+            added_by = game['added_by'][:15] + "..." if game['added_by'] and len(game['added_by']) > 15 else game['added_by']
+            sample_msg += f"• {name}: \"{reason}\" (by: {added_by})\n"
+        
+        if len(sample_msg) < 1900:  # Only send if under Discord limit
+            await ctx.send(sample_msg)
+        else:
+            await ctx.send("🔍 **Starting game reason analysis...** (sample too large to display)")
         
         updated_count = 0
         for game in games:
@@ -1110,24 +1117,73 @@ RECOMMEND_LIST_MESSAGE_ID_FILE = "recommend_list_message_id.txt"
 
 
 async def post_or_update_recommend_list(ctx, channel):
-    intro = "📋 Recommendations for mission enrichment. Review and consider."
     games = db.get_all_games()
+    
+    # Create embed
+    embed = discord.Embed(
+        title="📋 Game Recommendations",
+        description="Recommendations for mission enrichment. Review and consider.",
+        color=0x2F3136  # Dark gray color matching Ash's aesthetic
+    )
+    
     if not games:
-        content = f"{intro}\n(No recommendations currently catalogued.)"
+        embed.add_field(
+            name="Status",
+            value="No recommendations currently catalogued.",
+            inline=False
+        )
     else:
-        lines = [f"• {game['name']} — \"{game['reason']}\"" + (f" (by {game['added_by']})" if game['added_by'] else "") for game in games]
-        content = f"{intro}\n" + "\n".join(lines)
+        # Split games into multiple fields to avoid embed limits
+        games_per_field = 10  # Discord embed field limit is 1024 characters
+        
+        for i in range(0, len(games), games_per_field):
+            field_games = games[i:i + games_per_field]
+            field_lines = []
+            
+            for j, game in enumerate(field_games, start=i + 1):
+                contributor = f" (by {game['added_by']})" if game['added_by'] and game['added_by'].strip() else ""
+                # Truncate long names/reasons to fit in embed
+                name = game['name'][:40] + "..." if len(game['name']) > 40 else game['name']
+                reason = game['reason'][:60] + "..." if len(game['reason']) > 60 else game['reason']
+                field_lines.append(f"{j}. **{name}** — \"{reason}\"{contributor}")
+            
+            field_name = f"Games {i + 1}-{min(i + games_per_field, len(games))}" if len(games) > games_per_field else "Current Recommendations"
+            field_value = "\n".join(field_lines)
+            
+            # Ensure field value doesn't exceed Discord's 1024 character limit
+            if len(field_value) > 1024:
+                # Further truncate if needed
+                truncated_lines = []
+                current_length = 0
+                for line in field_lines:
+                    if current_length + len(line) + 1 > 1000:  # Leave buffer for "..."
+                        truncated_lines.append("...")
+                        break
+                    truncated_lines.append(line)
+                    current_length += len(line) + 1
+                field_value = "\n".join(truncated_lines)
+            
+            embed.add_field(
+                name=field_name,
+                value=field_value,
+                inline=False
+            )
+    
+    # Add footer with stats
+    embed.set_footer(text=f"Total recommendations: {len(games)} | Last updated")
+    embed.timestamp = discord.utils.utcnow()
+    
     # Try to update the existing message if possible
     message_id = db.get_config_value("recommend_list_message_id")
     msg = None
     if message_id:
         try:
             msg = await channel.fetch_message(int(message_id))
-            await msg.edit(content=content)
+            await msg.edit(embed=embed)
         except Exception:
             msg = None
     if not msg:
-        msg = await channel.send(content)
+        msg = await channel.send(embed=embed)
         db.set_config_value("recommend_list_message_id", str(msg.id))
 
 # Helper for adding games, called by add_game and recommend
