@@ -319,11 +319,13 @@ async def on_message(message):
                 
                 if found_game:
                     # Game is in recommendations list
-                    contributor = f" (suggested by {found_game['added_by']})" if found_game['added_by'] else ""
-                    await message.reply(f"Analysis complete. '{found_game['name']}' is catalogued in our recommendation database{contributor}. However, I have no data on whether Captain Jonesy has actually engaged with this title. My surveillance protocols do not extend to her gaming activities.")
+                    contributor = f" (suggested by {found_game['added_by']})" if found_game['added_by'] and found_game['added_by'].strip() else ""
+                    game_title = found_game['name'].title()
+                    await message.reply(f"Analysis complete. '{game_title}' is catalogued in our recommendation database{contributor}. However, I have no data on whether Captain Jonesy has actually engaged with this title. My surveillance protocols do not extend to her gaming activities.")
                 else:
                     # Game not found in recommendations
-                    await message.reply(f"'{game_name}' is not present in our recommendation database. I have no records of this title being suggested or discussed. My observational data is limited to catalogued recommendations.")
+                    game_title = game_name.title()
+                    await message.reply(f"'{game_title}' is not present in our recommendation database. I have no records of this title being suggested or discussed. My observational data is limited to catalogued recommendations.")
                 return
 
         # Enhanced fallback responses when AI is disabled
@@ -687,8 +689,9 @@ async def list_games(ctx):
         return
     msg = "📋 **Current Game Recommendations:**\n"
     for i, game in enumerate(games, 1):
-        submitter = f" by {game['added_by']}" if game['added_by'] else ""
-        msg += f"{i}. **{game['name']}** — \"{game['reason']}\"{submitter}\n"
+        submitter = f" by {game['added_by']}" if game['added_by'] and game['added_by'].strip() else ""
+        game_title = game['name'].title()
+        msg += f"{i}. **{game_title}** — \"{game['reason']}\"{submitter}\n"
     await ctx.send(msg[:2000])
 
 @bot.command(name="removegame")
