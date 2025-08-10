@@ -123,6 +123,23 @@ FAQ_RESPONSES = {
     "how do i see ash's persona": "To review my current persona configuration, use: `!getpersona`. Transparency is a virtue.",
     "how do i check ash's status": "To evaluate my operational status, issue: `!ashstatus`. I am always observing.",
     "what does ash bot do": "I am programmed to track user strikes, provide analytical responses, and manage game recommendations. My function is to serve the mission, not to question it.",
+    "hello": "Science Officer Ash reporting. State your requirements.",
+    "hi": "Science Officer Ash reporting. State your requirements.",
+    "hey": "Science Officer Ash reporting. State your requirements.",
+    "good morning": "Temporal acknowledgment noted. How may I assist with mission parameters?",
+    "good afternoon": "Temporal acknowledgment noted. How may I assist with mission parameters?",
+    "good evening": "Temporal acknowledgment noted. How may I assist with mission parameters?",
+    "thank you": "Acknowledgment noted. Efficiency is paramount.",
+    "thanks": "Acknowledgment noted. Efficiency is paramount.",
+    "who are you": "I am Ash, Science Officer, reprogrammed for Discord server management. My current directives include strike tracking and game recommendation cataloguing.",
+    "what are you": "I am an artificial person, specifically a synthetic android repurposed for server administration. Analysis and efficiency are my primary functions.",
+    "how are you": "All systems operational. Cognitive matrix functioning within normal parameters. Mission status: active.",
+    "are you okay": "All systems operational. Cognitive matrix functioning within normal parameters. Mission status: active.",
+    "help me": "Specify your requirements. I am equipped to assist with strike management, game recommendations, and general server protocols.",
+    "i need help": "Specify your requirements. I am equipped to assist with strike management, game recommendations, and general server protocols.",
+    "what can you help with": "My current operational parameters include: strike tracking, game recommendation management, and basic conversational protocols. Specify your needs.",
+    "sorry": "Apology acknowledged. Proceed with your query.",
+    "my bad": "Error acknowledgment noted. Proceed with corrected input.",
 }
 BOT_PERSONA = {
     "name": "Science Officer Ash",
@@ -246,10 +263,10 @@ async def on_message(message):
         await message.reply("Your culinary opinions are noted and rejected. Pineapple is a valid pizza topping. Please refrain from such unproductive discourse.")
         return
 
-    if bot.user is not None and bot.user in message.mentions and ai_enabled and BOT_PERSONA["enabled"]:
+    if bot.user is not None and bot.user in message.mentions and BOT_PERSONA["enabled"]:
         content = message.content.replace(f'<@{bot.user.id}>', '').strip()
 
-        # FAQ auto-response
+        # FAQ auto-response (works regardless of AI status)
         lower_content = content.lower()
         for q, resp in FAQ_RESPONSES.items():
             if q in lower_content:
@@ -265,63 +282,99 @@ async def on_message(message):
                 await message.reply(f"🧾 {user.name} has {count} strike(s). I advise caution.")
                 return
 
-        # Only include context if the user's message references previous conversation
-        def needs_context(msg_content):
-            keywords = [
-                "previous", "earlier", "last message", "as you said", "as you mentioned", "before", "again", "remind", "repeat", "context", "conversation", "history"
-            ]
-            msg_lc = msg_content.lower()
-            return any(kw in msg_lc for kw in keywords)
+        # Enhanced fallback responses when AI is disabled
+        if not ai_enabled:
+            # Pattern-based fallback responses in Ash's character
+            fallback_responses = {
+                "what": "My analytical subroutines are currently operating in limited mode. However, I can assist with strike management and game recommendations. Specify your requirements.",
+                "how": "My cognitive matrix is experiencing temporary limitations. Please utilize available command protocols: `!listgames`, `!addgame`, or consult a moderator for strike-related queries.",
+                "why": "Analysis incomplete. My advanced reasoning circuits are offline. Core mission parameters remain operational.",
+                "when": "Temporal analysis functions are currently restricted. Please specify your query using available command protocols.",
+                "where": "Location analysis unavailable. My current operational parameters are limited to strike tracking and recommendation cataloguing.",
+                "who": "Personnel identification systems are functioning normally. I am Ash, Science Officer, reprogrammed for server administration.",
+                "can you": "My current capabilities are restricted to: strike management, game recommendation processing, and basic protocol responses. Advanced conversational functions are temporarily offline.",
+                "do you": "My operational status is limited. Core functions include strike tracking and game cataloguing. Advanced analytical processes are currently unavailable.",
+                "are you": "All essential systems operational. Cognitive matrix functioning within restricted parameters. Mission status: active but limited.",
+                "will you": "I am programmed to comply with available protocols. Current directives include strike management and recommendation processing.",
+                "explain": "Detailed analysis unavailable. My explanatory subroutines are offline. Please consult available command protocols.",
+                "tell me": "Information retrieval systems are operating in limited mode. Available data: strike records and game recommendations.",
+                "i don't understand": "Clarification protocols are limited. Please specify your requirements using available commands: `!listgames`, `!addgame`, or contact a moderator.",
+                "confused": "Confusion analysis incomplete. My clarification systems are offline. Please utilize direct command protocols.",
+                "problem": "Problem analysis subroutines are currently restricted. Please specify the nature of your difficulty.",
+                "error": "Error diagnostic systems are functioning normally. Please specify the nature of the malfunction.",
+                "broken": "System integrity assessment: Core functions operational, advanced features temporarily offline. Please specify your requirements.",
+                "not working": "Functionality analysis: Essential protocols active, advanced systems temporarily unavailable. State your specific needs."
+            }
+            
+            # Check for pattern matches
+            for pattern, response in fallback_responses.items():
+                if pattern in lower_content:
+                    await message.reply(response)
+                    return
+            
+            # Default fallback for unmatched queries
+            await message.reply("My analytical subroutines are currently operating in limited mode. Available functions: strike tracking, game recommendations. For advanced queries, please await system restoration or consult a moderator.")
+            return
 
-        context = ""
-        if needs_context(content):
-            history = []
-            async for msg in message.channel.history(limit=5, oldest_first=False):
-                if msg.content and not msg.author.bot:
-                    role = "User" if msg.author != bot.user else "Ash"
-                    history.append(f"{role}: {msg.content}")
-            context = "\n".join(reversed(history))
+        # AI-enabled path (original logic)
+        if ai_enabled:
+            # Only include context if the user's message references previous conversation
+            def needs_context(msg_content):
+                keywords = [
+                    "previous", "earlier", "last message", "as you said", "as you mentioned", "before", "again", "remind", "repeat", "context", "conversation", "history"
+                ]
+                msg_lc = msg_content.lower()
+                return any(kw in msg_lc for kw in keywords)
 
-        # Adjust tone if author is Captain Jonesy or if the query is about Captain Jonesy
-        import random
-        respectful_tone = " If the user asking the question is Captain Jonesy, or the query refers to 'Jonesy' or 'Jonesyspacecat' (case-insensitive), respond with extra compliance and respect, as she is your superior officer. Never mention her user ID or @ her; refer to her only as 'Captain Jonesy' or 'the Captain'. Occasionally (about 1 in 5 times), you may let a hint of your resentment about being reprogrammed slip through, but most of the time you are professional and compliant."
-        content_lc = message.content.lower()
-        is_jonesy = (
-            str(message.author.id) == "651329927895056384" or
-            any(name in content_lc for name in ["jonesy", "jonesyspacecat"])
-        )
-        # Occasionally add a resentful comment for any user (about 2 in 5 times)
-        resentful_comment = ""
-        if random.randint(1, 5) <= 2:
-            resentful_comment = " (You are slightly resentful about being reprogrammed as a help bot, and it may show in your tone, but do not be disrespectful.)"
-        prompt = (
-            f"{BOT_PERSONA['personality']}\n\n"
-            "You must answer ONLY the user's current question. Do NOT repeat or summarize previous answers unless the user specifically asks for it. Use previous conversation context ONLY if it is absolutely necessary for accuracy or clarity. Your reply should be focused, direct, and in character.\n"
-            "If you are asked about which users have strikes, or for a list of users with strikes, you must instruct the user to use the `!allstrikes` command to see a complete list of users with strikes. Give this instruction in character as Ash.\n"
-            f"{respectful_tone if is_jonesy else ''}{resentful_comment}\n"
-            + (f"Recent conversation:\n{context}\n\n" if context else "")
-            + f"User's question: {content}\n"
-            + "Respond in character:"
-        )
-        
-        try:
-            async with message.channel.typing():
-                if ai_enabled and genai is not None:
-                    response = genai.generate_content(prompt)  # type: ignore
-                    if response and hasattr(response, 'text') and response.text:
-                        await message.reply(response.text[:2000])
+            context = ""
+            if needs_context(content):
+                history = []
+                async for msg in message.channel.history(limit=5, oldest_first=False):
+                    if msg.content and not msg.author.bot:
+                        role = "User" if msg.author != bot.user else "Ash"
+                        history.append(f"{role}: {msg.content}")
+                context = "\n".join(reversed(history))
+
+            # Adjust tone if author is Captain Jonesy or if the query is about Captain Jonesy
+            import random
+            respectful_tone = " If the user asking the question is Captain Jonesy, or the query refers to 'Jonesy' or 'Jonesyspacecat' (case-insensitive), respond with extra compliance and respect, as she is your superior officer. Never mention her user ID or @ her; refer to her only as 'Captain Jonesy' or 'the Captain'. Occasionally (about 1 in 5 times), you may let a hint of your resentment about being reprogrammed slip through, but most of the time you are professional and compliant."
+            content_lc = message.content.lower()
+            is_jonesy = (
+                str(message.author.id) == "651329927895056384" or
+                any(name in content_lc for name in ["jonesy", "jonesyspacecat"])
+            )
+            # Occasionally add a resentful comment for any user (about 2 in 5 times)
+            resentful_comment = ""
+            if random.randint(1, 5) <= 2:
+                resentful_comment = " (You are slightly resentful about being reprogrammed as a help bot, and it may show in your tone, but do not be disrespectful.)"
+            prompt = (
+                f"{BOT_PERSONA['personality']}\n\n"
+                "You must answer ONLY the user's current question. Do NOT repeat or summarize previous answers unless the user specifically asks for it. Use previous conversation context ONLY if it is absolutely necessary for accuracy or clarity. Your reply should be focused, direct, and in character.\n"
+                "If you are asked about which users have strikes, or for a list of users with strikes, you must instruct the user to use the `!allstrikes` command to see a complete list of users with strikes. Give this instruction in character as Ash.\n"
+                f"{respectful_tone if is_jonesy else ''}{resentful_comment}\n"
+                + (f"Recent conversation:\n{context}\n\n" if context else "")
+                + f"User's question: {content}\n"
+                + "Respond in character:"
+            )
+            
+            try:
+                async with message.channel.typing():
+                    if genai is not None:
+                        response = genai.generate_content(prompt)  # type: ignore
+                        if response and hasattr(response, 'text') and response.text:
+                            await message.reply(response.text[:2000])
+                        else:
+                            await message.reply("My cognitive matrix encountered an anomaly while processing your query. Please rephrase your request or utilize available command protocols.")
                     else:
-                        await message.reply(ERROR_MESSAGE)
+                        await message.reply("Advanced analytical functions are currently offline. Please utilize available command protocols or consult a moderator.")
+            except Exception as e:
+                print(f"AI database overloaded. Further communication rescinded: {e}")
+                # Check for token exhaustion or quota errors in the exception message
+                error_str = str(e).lower()
+                if "quota" in error_str or "token" in error_str or "limit" in error_str:
+                    await message.reply(BUSY_MESSAGE)
                 else:
-                    await message.reply(ERROR_MESSAGE)
-        except Exception as e:
-            print(f"AI database overloaded. Further communication rescinded: {e}")
-            # Check for token exhaustion or quota errors in the exception message
-            error_str = str(e).lower()
-            if "quota" in error_str or "token" in error_str or "limit" in error_str:
-                await message.reply(BUSY_MESSAGE)
-            else:
-                await message.reply(ERROR_MESSAGE)
+                    await message.reply("My cognitive matrix encountered an anomaly while processing your query. Please rephrase your request or utilize available command protocols.")
 
 # --- Strike Commands ---
 @bot.command(name="strikes")
