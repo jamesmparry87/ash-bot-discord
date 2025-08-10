@@ -10,6 +10,7 @@ import re
 import signal
 import atexit
 import logging
+import asyncio
 from typing import Optional, Any, List
 
 # Try to import aiohttp, handle if not available
@@ -901,8 +902,10 @@ async def clean_played_games(ctx, youtube_channel_id: Optional[str] = None, twit
                 await ctx.send(f"📊 **Cleanup Complete**: {len(remaining_games)} games remain in recommendations")
             else:
                 await ctx.send("❌ Cleanup cancelled. No games were removed.")
-        except:
+        except asyncio.TimeoutError:
             await ctx.send("❌ Cleanup timed out. No games were removed.")
+        except Exception as e:
+            await ctx.send(f"❌ Error during cleanup confirmation: {str(e)}")
             
     except Exception as e:
         await ctx.send(f"❌ Error during cleanup: {str(e)}")
