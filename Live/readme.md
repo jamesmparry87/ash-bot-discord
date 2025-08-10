@@ -97,6 +97,7 @@ The bot automatically creates these tables on first run:
 **Data Migration:**
 
 - `!importstrikes` - Import strikes from strikes.json file
+- `!bulkimportgames` - Import games from migration script (recommended)
 - `!dbstats` - Show database statistics and top contributors
 - `!clearallstrikes` - Clear all strike records (with confirmation)
 
@@ -119,29 +120,88 @@ Ash will search the recommendation database and respond in character, indicating
 
 ### Data Migration
 
-#### Bulk Import Features
+#### Game Recommendation Migration (Primary Use Case)
 
-The bot includes comprehensive data migration tools:
+The bot is designed to efficiently import large lists of game recommendations with contributor attribution. This is the main migration feature for most users.
 
-**Strike Data:**
+**Supported Formats:**
 
-- Import from existing `strikes.json` files
-- Automatic data type conversion and validation
-- Batch processing for efficiency
+- **With Contributors**: `game name - username` (e.g., "Dark Souls - mysticaldragonborn")
+- **Without Contributors**: `game name` (e.g., "Resident Evil 2")
+- **Mixed Lists**: Combination of both formats in the same import
+- **Large Datasets**: Optimized for 80+ game entries in single operation
 
-**Game Recommendations:**
+**Key Features:**
 
-- Parse text lists with contributor attribution
-- Handle mixed formats (with/without usernames)
-- Fuzzy matching for duplicate detection
-- Support for 80+ game entries in single operation
+- **Fuzzy Duplicate Detection**: Prevents near-duplicates with 85% similarity matching
+- **Typo Tolerance**: Handles variations like "RE2" vs "Resident Evil 2"
+- **Batch Processing**: Uses PostgreSQL's efficient bulk operations
+- **Contributor Tracking**: Maintains attribution for community recommendations
 
-#### Migration Process
+#### Step-by-Step Game Migration Process
 
-1. **Prepare Data**: Ensure `strikes.json` exists for strike import
-2. **Use Bot Commands**: `!importstrikes` for automated import
-3. **Verify Import**: Use `!dbstats` to confirm successful migration
-4. **Manual Migration**: Use `data_migration.py` script for large datasets
+**Method 1: Bot Command Import (Easiest - Recommended)**
+
+1. **Update Migration Script**
+   - Edit `data_migration.py` 
+   - Replace `SAMPLE_GAMES_TEXT` with your games list
+   - Format: one game per line, use "game name - username" for attribution
+
+2. **Run Import Command**
+   ```
+   !bulkimportgames
+   ```
+   - Shows preview of games to be imported
+   - Type `CONFIRM IMPORT` to proceed
+   - Automatically updates recommendation list
+
+3. **Verify Import**
+   - Use `!dbstats` to check total games imported
+   - Use `!listgames` to spot-check entries
+
+**Method 2: Manual Script Execution (Advanced)**
+
+1. **Prepare Your Games List** (same as Method 1)
+2. **Run Migration Script**
+   ```bash
+   cd Live
+   python data_migration.py
+   ```
+
+**Method 3: Individual Bot Commands (For smaller lists)**
+
+1. **Clear Existing Data** (if needed)
+
+   ```text
+   !clearallgames
+   ```
+
+   Type `CONFIRM DELETE` when prompted
+
+2. **Import Games Individually**
+
+   ```text
+   !addgame Dark Souls - mysticaldragonborn
+   !addgame Resident Evil 2
+   ```
+
+3. **Verify Results**
+
+   ```text
+   !dbstats
+   !listgames
+   ```
+
+#### Method 3: Direct Database Import (Advanced)
+
+For very large datasets or custom formatting needs, modify the migration script directly and run it on Railway.
+
+#### Strike Migration (Reference)
+
+For strike data (if needed in future):
+
+- Use `!importstrikes` to import from `strikes.json`
+- Manual strike management via `!strikes @user` commands
 
 ### Configuration
 

@@ -603,6 +603,58 @@ async def db_stats(ctx):
     except Exception as e:
         await ctx.send(f"❌ Error retrieving database statistics: {str(e)}")
 
+@bot.command(name="bulkimportgames")
+@commands.has_permissions(manage_messages=True)
+async def bulk_import_games(ctx):
+    """Import games from the migration script's sample data"""
+    try:
+        from data_migration import SAMPLE_GAMES_TEXT, parse_games_list
+        
+        await ctx.send("🔄 Starting bulk game import from migration script...")
+        
+        # Parse the games from the sample text
+        games_data = parse_games_list(SAMPLE_GAMES_TEXT)
+        
+        if not games_data:
+            await ctx.send("❌ No games found in migration script. Please check the SAMPLE_GAMES_TEXT in data_migration.py")
+            return
+        
+        # Show preview
+        preview_msg = f"📋 **Import Preview** ({len(games_data)} games):\n"
+        for i, game in enumerate(games_data[:5]):
+            contributor = f" by {game['added_by']}" if game['added_by'] else ""
+            preview_msg += f"• {game['name']}{contributor}\n"
+        if len(games_data) > 5:
+            preview_msg += f"... and {len(games_data) - 5} more games\n"
+        
+        preview_msg += f"\n⚠️ **WARNING**: This will add {len(games_data)} games to the database. Type `CONFIRM IMPORT` to proceed or anything else to cancel."
+        
+        await ctx.send(preview_msg)
+        
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+        
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=30.0)
+            if msg.content == "CONFIRM IMPORT":
+                imported_count = db.bulk_import_games(games_data)
+                await ctx.send(f"✅ Successfully imported {imported_count} game recommendations from migration script!")
+                
+                # Update the recommendations list if in the right channel
+                RECOMMEND_CHANNEL_ID = 1271568447108550687
+                recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
+                if recommend_channel:
+                    await post_or_update_recommend_list(ctx, recommend_channel)
+            else:
+                await ctx.send("❌ Import cancelled. No games were added.")
+        except:
+            await ctx.send("❌ Import timed out. No games were added.")
+            
+    except ImportError as e:
+        await ctx.send(f"❌ Error importing migration script: {str(e)}")
+    except Exception as e:
+        await ctx.send(f"❌ Error during bulk import: {str(e)}")
+
 # --- Game Commands ---
 @bot.command(name="addgame")
 async def add_game(ctx, *, entry: str):
