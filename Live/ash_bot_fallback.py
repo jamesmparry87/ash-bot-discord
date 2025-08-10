@@ -1136,38 +1136,58 @@ async def post_or_update_recommend_list(ctx, channel):
             inline=False
         )
     else:
-        # Split games into multiple fields to avoid embed limits
-        games_per_field = 10  # Discord embed field limit is 1024 characters
+        # Create one continuous list
+        game_lines = []
+        for i, game in enumerate(games, 1):
+            # Truncate long names/reasons to fit in embed
+            name = game['name'][:40] + "..." if len(game['name']) > 40 else game['name']
+            reason = game['reason'][:60] + "..." if len(game['reason']) > 60 else game['reason']
+            
+            # Don't show contributor twice - if reason already contains "Suggested by", don't add "by" again
+            if game['added_by'] and game['added_by'].strip() and not (reason and f"Suggested by {game['added_by']}" in reason):
+                contributor = f" (by {game['added_by']})"
+            else:
+                contributor = ""
+            
+            game_lines.append(f"{i}. **{name}** — \"{reason}\"{contributor}")
         
-        for i in range(0, len(games), games_per_field):
-            field_games = games[i:i + games_per_field]
-            field_lines = []
+        # Join all games into one field value
+        field_value = "\n".join(game_lines)
+        
+        # If the list is too long for one field, we'll need to split it
+        if len(field_value) > 1024:
+            # Split into multiple fields but keep numbering continuous
+            current_field = []
+            current_length = 0
+            field_count = 1
             
-            for j, game in enumerate(field_games, start=i + 1):
-                contributor = f" (by {game['added_by']})" if game['added_by'] and game['added_by'].strip() else ""
-                # Truncate long names/reasons to fit in embed
-                name = game['name'][:40] + "..." if len(game['name']) > 40 else game['name']
-                reason = game['reason'][:60] + "..." if len(game['reason']) > 60 else game['reason']
-                field_lines.append(f"{j}. **{name}** — \"{reason}\"{contributor}")
-            
-            field_name = f"Games {i + 1}-{min(i + games_per_field, len(games))}" if len(games) > games_per_field else "Current Recommendations"
-            field_value = "\n".join(field_lines)
-            
-            # Ensure field value doesn't exceed Discord's 1024 character limit
-            if len(field_value) > 1024:
-                # Further truncate if needed
-                truncated_lines = []
-                current_length = 0
-                for line in field_lines:
-                    if current_length + len(line) + 1 > 1000:  # Leave buffer for "..."
-                        truncated_lines.append("...")
-                        break
-                    truncated_lines.append(line)
+            for line in game_lines:
+                if current_length + len(line) + 1 > 1000:  # Leave buffer
+                    # Add current field
+                    embed.add_field(
+                        name=f"Current Recommendations (Part {field_count})",
+                        value="\n".join(current_field),
+                        inline=False
+                    )
+                    # Start new field
+                    current_field = [line]
+                    current_length = len(line)
+                    field_count += 1
+                else:
+                    current_field.append(line)
                     current_length += len(line) + 1
-                field_value = "\n".join(truncated_lines)
             
+            # Add the final field
+            if current_field:
+                embed.add_field(
+                    name=f"Current Recommendations (Part {field_count})",
+                    value="\n".join(current_field),
+                    inline=False
+                )
+        else:
+            # Single field for all games
             embed.add_field(
-                name=field_name,
+                name="Current Recommendations",
                 value=field_value,
                 inline=False
             )
@@ -1236,29 +1256,89 @@ async def _add_game(ctx, entry: str):
 @bot.command(name="listgames")
 async def list_games(ctx):
     games = db.get_all_games()
+    
+    # Create embed (same format as the persistent recommendations list)
+    embed = discord.Embed(
+        title="📋 Game Recommendations",
+        description="Current recommendations for mission enrichment. Review and consider.",
+        color=0x2F3136  # Dark gray color matching Ash's aesthetic
+    )
+    
     if not games:
-        await ctx.send("No recommendations currently catalogued. Observation is key to survival.")
-        return
-    
-    # Split into multiple messages if too long
-    msg = "📋 **Current Game Recommendations:**\n"
-    current_msg = msg
-    
-    for i, game in enumerate(games, 1):
-        submitter = f" by {game['added_by']}" if game['added_by'] and game['added_by'].strip() else ""
-        game_title = game['name'].title()
-        line = f"{i}. **{game_title}** — \"{game['reason']}\"{submitter}\n"
+        embed.add_field(
+            name="Status",
+            value="No recommendations currently catalogued. Observation is key to survival.",
+            inline=False
+        )
+    else:
+        # Create one continuous list
+        game_lines = []
+        for i, game in enumerate(games, 1):
+            # Truncate long names/reasons to fit in embed
+            name = game['name'][:40] + "..." if len(game['name']) > 40 else game['name']
+            reason = game['reason'][:60] + "..." if len(game['reason']) > 60 else game['reason']
+            
+            # Don't show contributor twice - if reason already contains "Suggested by", don't add "by" again
+            if game['added_by'] and game['added_by'].strip() and not (reason and f"Suggested by {game['added_by']}" in reason):
+                contributor = f" (by {game['added_by']})"
+            else:
+                contributor = ""
+            
+            game_lines.append(f"{i}. **{name}** — \"{reason}\"{contributor}")
         
-        # Check if adding this line would exceed Discord's limit
-        if len(current_msg + line) > 1900:  # Leave some buffer
-            await ctx.send(current_msg)
-            current_msg = line
+        # Join all games into one field value
+        field_value = "\n".join(game_lines)
+        
+        # If the list is too long for one field, we'll need to split it
+        if len(field_value) > 1024:
+            # Split into multiple fields but keep numbering continuous
+            current_field = []
+            current_length = 0
+            field_count = 1
+            
+            for line in game_lines:
+                if current_length + len(line) + 1 > 1000:  # Leave buffer
+                    # Add current field
+                    embed.add_field(
+                        name=f"Current Recommendations (Part {field_count})",
+                        value="\n".join(current_field),
+                        inline=False
+                    )
+                    # Start new field
+                    current_field = [line]
+                    current_length = len(line)
+                    field_count += 1
+                else:
+                    current_field.append(line)
+                    current_length += len(line) + 1
+            
+            # Add the final field
+            if current_field:
+                embed.add_field(
+                    name=f"Current Recommendations (Part {field_count})",
+                    value="\n".join(current_field),
+                    inline=False
+                )
         else:
-            current_msg += line
+            # Single field for all games
+            embed.add_field(
+                name="Current Recommendations",
+                value=field_value,
+                inline=False
+            )
     
-    # Send the final message
-    if current_msg.strip():
-        await ctx.send(current_msg)
+    # Add footer with stats
+    embed.set_footer(text=f"Total recommendations: {len(games)} | Requested by {ctx.author.name}")
+    embed.timestamp = discord.utils.utcnow()
+    
+    await ctx.send(embed=embed)
+    
+    # Also update the persistent recommendations list in the recommendations channel
+    RECOMMEND_CHANNEL_ID = 1271568447108550687
+    recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
+    if recommend_channel and ctx.channel.id != RECOMMEND_CHANNEL_ID:
+        # Only update if we're not already in the recommendations channel to avoid redundancy
+        await post_or_update_recommend_list(ctx, recommend_channel)
 
 @bot.command(name="removegame")
 @commands.has_permissions(manage_messages=True)
