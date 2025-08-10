@@ -1122,6 +1122,23 @@ RECOMMEND_LIST_MESSAGE_ID_FILE = "recommend_list_message_id.txt"
 async def post_or_update_recommend_list(ctx, channel):
     games = db.get_all_games()
     
+    # Preamble text for the recommendations channel
+    preamble = """# Welcome to the Game Recommendations Channel
+
+Since Jonesy gets games suggested to her all the time, in the YT comments, on Twitch, and in the server, we've decided to get a list going.
+
+A few things to mention up top:
+
+Firstly, a game being on this list is NOT any guarantee it will be played. Jonesy gets to decide, not any of us.
+
+Secondly, this list is in no particular order, so no reading into anything.
+
+Finally, think about what sort of games Jonesy actually plays, either for content or in her own time, when making suggestions.
+
+To add a game, first check the list and then use the /recommend command by typing / followed by "recommend" and the name of the game.
+
+If you want to add any other comments, you can discuss the list in ⁠🎮game-chat"""
+    
     # Create embed
     embed = discord.Embed(
         title="📋 Game Recommendations",
@@ -1165,7 +1182,7 @@ async def post_or_update_recommend_list(ctx, channel):
                 if current_length + len(line) + 1 > 1000:  # Leave buffer
                     # Add current field
                     embed.add_field(
-                        name=f"Current Recommendations (Part {field_count})",
+                        name="\u200b",  # Zero-width space for invisible field name
                         value="\n".join(current_field),
                         inline=False
                     )
@@ -1180,7 +1197,7 @@ async def post_or_update_recommend_list(ctx, channel):
             # Add the final field
             if current_field:
                 embed.add_field(
-                    name=f"Current Recommendations (Part {field_count})",
+                    name="\u200b",  # Zero-width space for invisible field name
                     value="\n".join(current_field),
                     inline=False
                 )
@@ -1202,11 +1219,11 @@ async def post_or_update_recommend_list(ctx, channel):
     if message_id:
         try:
             msg = await channel.fetch_message(int(message_id))
-            await msg.edit(embed=embed)
+            await msg.edit(content=preamble, embed=embed)
         except Exception:
             msg = None
     if not msg:
-        msg = await channel.send(embed=embed)
+        msg = await channel.send(content=preamble, embed=embed)
         db.set_config_value("recommend_list_message_id", str(msg.id))
 
 # Helper for adding games, called by add_game and recommend
@@ -1300,7 +1317,7 @@ async def list_games(ctx):
                 if current_length + len(line) + 1 > 1000:  # Leave buffer
                     # Add current field
                     embed.add_field(
-                        name=f"Current Recommendations (Part {field_count})",
+                        name="\u200b",  # Zero-width space for invisible field name
                         value="\n".join(current_field),
                         inline=False
                     )
@@ -1315,7 +1332,7 @@ async def list_games(ctx):
             # Add the final field
             if current_field:
                 embed.add_field(
-                    name=f"Current Recommendations (Part {field_count})",
+                    name="\u200b",  # Zero-width space for invisible field name
                     value="\n".join(current_field),
                     inline=False
                 )
