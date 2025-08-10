@@ -1,55 +1,131 @@
-# Ash Discord Bot - Railway Deployment Guide
+# Ash Discord Bot - User Guide
 
-A sophisticated Discord moderation and AI assistant bot featuring strike tracking, game recommendations, bulk data migration, and personality-driven interactions with dynamic game lookup capabilities.
+A sophisticated Discord moderation and AI assistant bot featuring strike tracking, game recommendations, and personality-driven interactions with dynamic game lookup capabilities.
 
-## Features
+## Quick Reference for Daily Use
 
-- **Strike Management**: Automatic strike tracking with PostgreSQL database persistence
-- **AI Conversations**: Powered by Google's Gemini AI with Ash character personality
-- **Game Recommendations**: Community-driven game suggestion system with bulk import
-- **Dynamic Game Lookup**: Ask Ash about games in the recommendation database
-- **Data Migration**: Bulk import tools for existing strike and game data
-- **Persistent Data**: PostgreSQL database for reliable data storage
-- **Railway Optimized**: Configured for seamless Railway.app deployment
-- **Enhanced Fallback**: Intelligent responses even when AI is offline
+### User Commands (Everyone)
 
-## Railway.app Deployment
+- `!addgame <name> - <reason>` - Add game recommendation
+- `!recommend <name> - <reason>` - Add game recommendation (alias)
+- `!listgames` - List all game recommendations
+- Ask Ash: `@Ashbot Has Jonesy played [game name]?` - Query game database
 
-### Prerequisites
+### Moderator Commands (Requires "Manage Messages" permission)
 
-1. **Railway Account**: Sign up at [railway.app](https://railway.app)
-2. **Discord Bot Token**: Create a bot at [Discord Developer Portal](https://discord.com/developers/applications)
-3. **Google AI API Key**: Get your key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+#### Strike Management
 
-### Deployment Steps
+- `!strikes @user` - Check user's strikes
+- `!resetstrikes @user` - Reset user's strikes
+- `!allstrikes` - List all users with strikes
 
-#### 1. Connect Repository
+#### Game Management
 
-- Fork or clone this repository to your GitHub account
-- Connect your GitHub repository to Railway
+- `!removegame <name/index>` - Remove game recommendation
+- `!listgames` - View all recommendations with index numbers
 
-#### 2. Add PostgreSQL Database
+#### Bot Status
 
-- In your Railway project, click "New Service"
-- Select "Database" → "PostgreSQL"
-- Railway will automatically provide a `DATABASE_URL` environment variable
+- `!ashstatus` - View bot status and statistics
+- `!dbstats` - Show database statistics and top contributors
 
-#### 3. Configure Environment Variables
+#### AI Configuration
 
-Set these environment variables in Railway:
+- `!setpersona <text>` - Change bot personality
+- `!getpersona` - View current personality
+- `!toggleai` - Enable/disable AI conversations
 
-```text
-DISCORD_TOKEN=your_discord_bot_token_here
-GOOGLE_API_KEY=your_google_ai_api_key_here
-```
+### Dynamic Game Lookup
 
-**Note**: `DATABASE_URL` is automatically provided by Railway's PostgreSQL service.
+Users can ask Ash about games using natural language:
+- `@Ashbot Has Jonesy played Resident Evil 2?`
+- `@Ashbot Did Captain Jonesy play Dark Souls?`
+- `@Ashbot Has JonesySpaceCat played Sekiro?`
 
-#### 4. Deploy
+Ash will search the recommendation database and respond in character, indicating whether the game is catalogued and who suggested it.
 
-- Railway will automatically detect the Python project
-- It will install dependencies from `requirements.txt`
-- The bot will start using the `Procfile` configuration
+### AI Features
+
+#### Ash's Personality
+
+- Clinical Analysis: Responds with scientific precision
+- Character Loyalty: Special deference to "Captain Jonesy"
+- Fallback Intelligence: Maintains character even when AI is offline
+- Dynamic Responses: Context-aware conversation handling
+
+---
+
+## Advanced Administration
+
+### Data Management Commands (Admin Only)
+
+#### Bulk Operations
+
+- `!bulkimportgames` - Import games from migration script
+- `!cleanplayedgames` - Remove already-played games using YouTube/Twitch APIs
+- `!clearallgames` - Clear all game recommendations (with confirmation)
+- `!importstrikes` - Import strikes from strikes.json file
+- `!clearallstrikes` - Clear all strike records (with confirmation)
+
+### Automated Game Cleanup
+
+The `!cleanplayedgames` command automatically:
+
+- Fetches Play History from Captain Jonesy's YouTube (UCPoUxLHeTnE9SUDAkqfJzDQ) and Twitch (jonesyspacecat)
+- Analyzes Video Titles to extract game names using pattern matching
+- Matches Games using fuzzy matching (75% similarity threshold)
+- Shows Preview of games to be removed with match confidence
+- Requires Confirmation before removing any games
+- Updates Lists automatically after cleanup
+
+#### Required API Keys
+
+- `YOUTUBE_API_KEY` - YouTube Data API v3 key
+- `TWITCH_CLIENT_ID` - Twitch application client ID
+- `TWITCH_CLIENT_SECRET` - Twitch application client secret
+
+---
+
+## Technical Documentation
+
+### Railway.app Deployment
+
+#### Prerequisites
+
+1. Railway Account: Sign up at [railway.app](https://railway.app)
+2. Discord Bot Token: Create a bot at [Discord Developer Portal](https://discord.com/developers/applications)
+3. Google AI API Key: Get your key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+
+#### Deployment Steps
+
+1. Connect Repository
+
+   - Fork or clone this repository to your GitHub account
+   - Connect your GitHub repository to Railway
+
+2. Add PostgreSQL Database
+
+   - In your Railway project, click "New Service"
+   - Select "Database" → "PostgreSQL"
+   - Railway will automatically provide a `DATABASE_URL` environment variable
+
+3. Configure Environment Variables
+
+   Set these environment variables in Railway:
+
+   ```bash
+   DISCORD_TOKEN=your_discord_bot_token_here
+   GOOGLE_API_KEY=your_google_ai_api_key_here
+   YOUTUBE_API_KEY=your_youtube_api_key_here (optional)
+   TWITCH_CLIENT_ID=your_twitch_client_id_here (optional)
+   TWITCH_CLIENT_SECRET=your_twitch_client_secret_here (optional)
+   ```
+
+4. Deploy
+
+   - Railway will automatically detect the Python project
+   - It will install dependencies from `requirements.txt`
+   - The bot will start using the `Procfile` configuration
 
 ### Project Structure
 
@@ -68,143 +144,9 @@ Live/
 
 The bot automatically creates these tables on first run:
 
-- **strikes**: User strike tracking with bulk import support
-- **game_recommendations**: Community game suggestions with contributor tracking
-- **bot_config**: Bot configuration storage
-
-### Bot Commands
-
-#### User Commands
-
-- `!addgame <name> - <reason>` - Add game recommendation
-- `!recommend <name> - <reason>` - Add game recommendation (alias)
-- `!listgames` - List all game recommendations
-- **Dynamic Queries**: `@Ashbot Has Jonesy played [game name]?` - Query game database
-
-#### Moderator Commands (Requires "Manage Messages" permission)
-
-**Strike Management:**
-
-- `!strikes @user` - Check user's strikes
-- `!resetstrikes @user` - Reset user's strikes
-- `!allstrikes` - List all users with strikes
-
-**Game Management:**
-
-- `!removegame <name/index>` - Remove game recommendation
-- `!clearallgames` - Clear all game recommendations (with confirmation)
-
-**Data Migration:**
-
-- `!importstrikes` - Import strikes from strikes.json file
-- `!bulkimportgames` - Import games from migration script (recommended)
-- `!dbstats` - Show database statistics and top contributors
-- `!clearallstrikes` - Clear all strike records (with confirmation)
-
-**Bot Configuration:**
-
-- `!setpersona <text>` - Change bot personality
-- `!getpersona` - View current personality
-- `!toggleai` - Enable/disable AI conversations
-- `!ashstatus` - View bot status and statistics
-
-### Dynamic Game Lookup
-
-Users can ask Ash about games using natural language:
-
-- `@Ashbot Has Jonesy played Resident Evil 2?`
-- `@Ashbot Did Captain Jonesy play Dark Souls?`
-- `@Ashbot Has JonesySpaceCat played Sekiro?`
-
-Ash will search the recommendation database and respond in character, indicating whether the game is catalogued and who suggested it.
-
-### Data Migration
-
-#### Game Recommendation Migration (Primary Use Case)
-
-The bot is designed to efficiently import large lists of game recommendations with contributor attribution. This is the main migration feature for most users.
-
-**Supported Formats:**
-
-- **With Contributors**: `game name - username` (e.g., "Dark Souls - mysticaldragonborn")
-- **Without Contributors**: `game name` (e.g., "Resident Evil 2")
-- **Mixed Lists**: Combination of both formats in the same import
-- **Large Datasets**: Optimized for 80+ game entries in single operation
-
-**Key Features:**
-
-- **Fuzzy Duplicate Detection**: Prevents near-duplicates with 85% similarity matching
-- **Typo Tolerance**: Handles variations like "RE2" vs "Resident Evil 2"
-- **Batch Processing**: Uses PostgreSQL's efficient bulk operations
-- **Contributor Tracking**: Maintains attribution for community recommendations
-
-#### Step-by-Step Game Migration Process
-
-#### Method 1: Bot Command Import (Easiest - Recommended)
-
-1. **Update Migration Script**
-   - Edit `data_migration.py` 
-   - Replace `SAMPLE_GAMES_TEXT` with your games list
-   - Format: one game per line, use "game name - username" for attribution
-
-2. **Run Import Command**
-
-   ```text
-   !bulkimportgames
-   ```
-
-   - Shows preview of games to be imported
-   - Type `CONFIRM IMPORT` to proceed
-   - Automatically updates recommendation list
-
-3. **Verify Import**
-   - Use `!dbstats` to check total games imported
-   - Use `!listgames` to spot-check entries
-
-#### Method 2: Manual Script Execution (Advanced)
-
-1. **Prepare Your Games List** (same as Method 1)
-2. **Run Migration Script**
-
-   ```bash
-   cd Live
-   python data_migration.py
-   ```
-
-#### Method 3: Individual Bot Commands (For smaller lists)
-
-1. **Clear Existing Data** (if needed)
-
-   ```text
-   !clearallgames
-   ```
-
-   Type `CONFIRM DELETE` when prompted
-
-2. **Import Games Individually**
-
-   ```text
-   !addgame Dark Souls - mysticaldragonborn
-   !addgame Resident Evil 2
-   ```
-
-3. **Verify Results**
-
-   ```text
-   !dbstats
-   !listgames
-   ```
-
-#### Method 3: Direct Database Import (Advanced)
-
-For very large datasets or custom formatting needs, modify the migration script directly and run it on Railway.
-
-#### Strike Migration (Reference)
-
-For strike data (if needed in future):
-
-- Use `!importstrikes` to import from `strikes.json`
-- Manual strike management via `!strikes @user` commands
+- strikes: User strike tracking with bulk import support
+- game_recommendations: Community game suggestions with contributor tracking
+- bot_config: Bot configuration storage
 
 ### Configuration
 
@@ -227,25 +169,89 @@ Required Discord permissions:
 - Use Slash Commands
 - Manage Messages (for moderator features)
 
-### AI Features
+### Data Migration
 
-#### Personality System
+#### Game Recommendation Migration
 
-Ash maintains character consistency with:
+The bot is designed to efficiently import large lists of game recommendations with contributor attribution.
 
-- **Clinical Analysis**: Responds with scientific precision
-- **Character Loyalty**: Special deference to "Captain Jonesy"
-- **Fallback Intelligence**: Maintains character even when AI is offline
-- **Dynamic Responses**: Context-aware conversation handling
+**Supported Formats:**
+- **With Contributors**: `game name - username` (e.g., "Dark Souls - mysticaldragonborn")
+- **Without Contributors**: `game name` (e.g., "Resident Evil 2")
+- **Mixed Lists**: Combination of both formats in the same import
+- **Large Datasets**: Optimized for 80+ game entries in single operation
 
-#### Enhanced Fallback System
+**Key Features:**
+- **Fuzzy Duplicate Detection**: Prevents near-duplicates with 85% similarity matching
+- **Typo Tolerance**: Handles variations like "RE2" vs "Resident Evil 2"
+- **Batch Processing**: Uses PostgreSQL's efficient bulk operations
+- **Contributor Tracking**: Maintains attribution for community recommendations
 
-When AI is unavailable, Ash provides:
+#### Migration Process
 
-- **Pattern-based responses** for common question types
-- **In-character explanations** of limited functionality
-- **Command guidance** for available features
-- **Personality consistency** regardless of AI status
+#### Method 1: Bot Command Import (Recommended)
+
+1. **Update Migration Script**
+   - Edit `data_migration.py` 
+   - Replace `SAMPLE_GAMES_TEXT` with your games list
+   - Format: one game per line, use "game name - username" for attribution
+
+2. **Run Import Command**
+
+   ```text
+   !bulkimportgames
+   ```
+
+   - Shows preview of games to be imported
+   - Type `CONFIRM IMPORT` to proceed
+   - Automatically updates recommendation list
+
+3. **Clean Already-Played Games**
+
+   ```text
+   !cleanplayedgames
+   ```
+
+   - Analyzes YouTube and Twitch play history
+   - Shows preview of games to remove
+   - Type `CONFIRM CLEANUP` to proceed
+
+4. **Verify Results**
+   - Use `!dbstats` to check final game count
+   - Use `!listgames` to spot-check entries
+
+#### 
+Method 2: Manual Script Execution
+
+1. **Prepare Your Games List** (same as Method 1)
+2. **Run Migration Script**
+
+   ```bash
+   cd Live
+   python data_migration.py
+   ```
+
+#### Method 3: Individual Commands (Small Lists)
+
+1. **Clear Existing Data** (if needed)
+
+   ```text
+   !clearallgames
+   ```
+
+2. **Import Games Individually**
+
+   ```text
+   !addgame Dark Souls - mysticaldragonborn
+   !addgame Resident Evil 2
+   ```
+
+#### Strike Migration
+
+For strike data (if needed):
+
+- Use `!importstrikes` to import from `strikes.json`
+- Manual strike management via `!strikes @user` commands
 
 ### Monitoring
 
@@ -286,19 +292,10 @@ Use `!dbstats` to monitor:
    - Monitor for rate limiting
    - Bot will use fallback responses automatically
 
-4. **Migration Issues**
-   - Ensure data files are in correct format
-   - Check file permissions and accessibility
-   - Use `!dbstats` to verify successful imports
-
-#### Support
-
-For deployment issues:
-
-- Check Railway documentation
-- Review bot logs in Railway dashboard
-- Verify all environment variables are configured
-- Test migration commands with small datasets first
+4. **API Integration Issues**
+   - Verify YouTube/Twitch API keys are configured
+   - Check API quotas and rate limits
+   - Review error messages in bot responses
 
 ### Security Notes
 
@@ -333,6 +330,13 @@ For deployment issues:
 - **Dynamic Queries**: Natural language game lookup with pattern matching
 - **Statistics Tracking**: Comprehensive analytics on recommendations and contributors
 
+#### YouTube/Twitch Integration
+
+- **Smart Title Parsing**: Extracts game names from various video title formats
+- **Rate Limiting**: Respects API limits with automatic delays
+- **Error Handling**: Graceful handling of API errors or missing credentials
+- **Batch Processing**: Efficiently processes large video histories
+
 ---
 
-**Ready to deploy?** Push your code to GitHub, connect to Railway, add your environment variables, and your bot will be live in minutes with full data migration capabilities!
+**Ready to deploy?** Push your code to GitHub, connect to Railway, add your environment variables, and your bot will be live in minutes with full data migration and cleanup capabilities!

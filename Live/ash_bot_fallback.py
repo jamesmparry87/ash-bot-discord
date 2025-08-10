@@ -10,7 +10,7 @@ import re
 import signal
 import atexit
 import logging
-from typing import Optional, Any
+from typing import Optional, Any, List
 
 # Try to import google.generativeai, handle if not available
 try:
@@ -654,6 +654,299 @@ async def bulk_import_games(ctx):
         await ctx.send(f"❌ Error importing migration script: {str(e)}")
     except Exception as e:
         await ctx.send(f"❌ Error during bulk import: {str(e)}")
+
+@bot.command(name="cleanplayedgames")
+@commands.has_permissions(manage_messages=True)
+async def clean_played_games(ctx, youtube_channel_id: Optional[str] = None, twitch_username: Optional[str] = None):
+    """Remove games from recommendations that have already been played on YouTube or Twitch"""
+    
+    # Hardcoded values for Captain Jonesy's channels
+    if not youtube_channel_id:
+        youtube_channel_id = "UCPoUxLHeTnE9SUDAkqfJzDQ"  # Captain Jonesy's YouTube channel
+    if not twitch_username:
+        twitch_username = "jonesyspacecat"  # Captain Jonesy's Twitch username
+    
+    await ctx.send("🔍 Starting analysis of played games across platforms...")
+    
+    try:
+        # Get current game recommendations
+        games = db.get_all_games()
+        if not games:
+            await ctx.send("❌ No games in recommendation database to analyze.")
+            return
+        
+        await ctx.send(f"📋 Analyzing {len(games)} game recommendations against play history...")
+        
+        # Fetch YouTube play history
+        youtube_games = []
+        try:
+            youtube_games = await fetch_youtube_games(youtube_channel_id)
+            await ctx.send(f"📺 Found {len(youtube_games)} games from YouTube history")
+        except Exception as e:
+            await ctx.send(f"⚠️ YouTube API error: {str(e)}")
+        
+        # Fetch Twitch play history
+        twitch_games = []
+        try:
+            twitch_games = await fetch_twitch_games(twitch_username)
+            await ctx.send(f"🎮 Found {len(twitch_games)} games from Twitch history")
+        except Exception as e:
+            await ctx.send(f"⚠️ Twitch API error: {str(e)}")
+        
+        # Combine all played games
+        all_played_games = set(youtube_games + twitch_games)
+        
+        if not all_played_games:
+            await ctx.send("❌ No played games found. Check API credentials and channel/username.")
+            return
+        
+        # Find matches using fuzzy matching
+        games_to_remove = []
+        for game in games:
+            game_name_lower = game['name'].lower().strip()
+            
+            # Check for exact matches first
+            for played_game in all_played_games:
+                played_game_lower = played_game.lower().strip()
+                
+                # Exact match
+                if game_name_lower == played_game_lower:
+                    games_to_remove.append((game, played_game, "exact"))
+                    break
+                
+                # Fuzzy match (75% similarity for played games)
+                similarity = difflib.SequenceMatcher(None, game_name_lower, played_game_lower).ratio()
+                if similarity >= 0.75:
+                    games_to_remove.append((game, played_game, f"fuzzy ({similarity:.0%})"))
+                    break
+        
+        if not games_to_remove:
+            await ctx.send("✅ No matching games found. All recommendations appear to be unplayed!")
+            return
+        
+        # Show preview of games to be removed
+        preview_msg = f"🎯 **Found {len(games_to_remove)} games to remove:**\n"
+        for i, (game, matched_title, match_type) in enumerate(games_to_remove[:10]):
+            contributor = f" (by {game['added_by']})" if game['added_by'] else ""
+            preview_msg += f"• **{game['name']}**{contributor} → matched '{matched_title}' ({match_type})\n"
+        
+        if len(games_to_remove) > 10:
+            preview_msg += f"... and {len(games_to_remove) - 10} more games\n"
+        
+        preview_msg += f"\n⚠️ **WARNING**: This will remove {len(games_to_remove)} games from recommendations. Type `CONFIRM CLEANUP` to proceed or anything else to cancel."
+        
+        await ctx.send(preview_msg)
+        
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+        
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=60.0)
+            if msg.content == "CONFIRM CLEANUP":
+                removed_count = 0
+                for game, matched_title, match_type in games_to_remove:
+                    if db.remove_game_by_id(game['id']):
+                        removed_count += 1
+                
+                await ctx.send(f"✅ Successfully removed {removed_count} already-played games from recommendations!")
+                
+                # Update the recommendations list
+                RECOMMEND_CHANNEL_ID = 1271568447108550687
+                recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
+                if recommend_channel:
+                    await post_or_update_recommend_list(ctx, recommend_channel)
+                
+                # Show final stats
+                remaining_games = db.get_all_games()
+                await ctx.send(f"📊 **Cleanup Complete**: {len(remaining_games)} games remain in recommendations")
+            else:
+                await ctx.send("❌ Cleanup cancelled. No games were removed.")
+        except:
+            await ctx.send("❌ Cleanup timed out. No games were removed.")
+            
+    except Exception as e:
+        await ctx.send(f"❌ Error during cleanup: {str(e)}")
+
+async def fetch_youtube_games(channel_id: str) -> List[str]:
+    """Fetch game titles from YouTube channel using YouTube Data API"""
+    # This requires YouTube Data API v3 key
+    youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+    if not youtube_api_key:
+        raise Exception("YOUTUBE_API_KEY not configured")
+    
+    import aiohttp
+    import asyncio
+    
+    games = []
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Get channel uploads playlist
+            url = f"https://www.googleapis.com/youtube/v3/channels"
+            params = {
+                'part': 'contentDetails',
+                'id': channel_id,
+                'key': youtube_api_key
+            }
+            
+            async with session.get(url, params=params) as response:
+                if response.status != 200:
+                    raise Exception(f"YouTube API error: {response.status}")
+                
+                data = await response.json()
+                if not data.get('items'):
+                    raise Exception("Channel not found")
+                
+                uploads_playlist_id = data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+            
+            # Get videos from uploads playlist (last 200 videos)
+            next_page_token = None
+            video_count = 0
+            max_videos = 200
+            
+            while video_count < max_videos:
+                url = f"https://www.googleapis.com/youtube/v3/playlistItems"
+                params = {
+                    'part': 'snippet',
+                    'playlistId': uploads_playlist_id,
+                    'maxResults': min(50, max_videos - video_count),
+                    'key': youtube_api_key
+                }
+                
+                if next_page_token:
+                    params['pageToken'] = next_page_token
+                
+                async with session.get(url, params=params) as response:
+                    if response.status != 200:
+                        break
+                    
+                    data = await response.json()
+                    
+                    for item in data.get('items', []):
+                        title = item['snippet']['title']
+                        # Extract game name from video title (basic parsing)
+                        game_name = extract_game_from_title(title)
+                        if game_name:
+                            games.append(game_name)
+                    
+                    video_count += len(data.get('items', []))
+                    next_page_token = data.get('nextPageToken')
+                    
+                    if not next_page_token:
+                        break
+                    
+                    # Rate limiting
+                    await asyncio.sleep(0.1)
+    
+    except Exception as e:
+        raise Exception(f"YouTube fetch error: {str(e)}")
+    
+    return list(set(games))  # Remove duplicates
+
+async def fetch_twitch_games(username: str) -> List[str]:
+    """Fetch game titles from Twitch channel using Twitch API"""
+    # This requires Twitch Client ID and Client Secret
+    twitch_client_id = os.getenv('TWITCH_CLIENT_ID')
+    twitch_client_secret = os.getenv('TWITCH_CLIENT_SECRET')
+    
+    if not twitch_client_id or not twitch_client_secret:
+        raise Exception("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET not configured")
+    
+    import aiohttp
+    import asyncio
+    
+    games = []
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Get OAuth token
+            token_url = "https://id.twitch.tv/oauth2/token"
+            token_data = {
+                'client_id': twitch_client_id,
+                'client_secret': twitch_client_secret,
+                'grant_type': 'client_credentials'
+            }
+            
+            async with session.post(token_url, data=token_data) as response:
+                if response.status != 200:
+                    raise Exception(f"Twitch OAuth error: {response.status}")
+                
+                token_response = await response.json()
+                access_token = token_response['access_token']
+            
+            headers = {
+                'Client-ID': twitch_client_id,
+                'Authorization': f'Bearer {access_token}'
+            }
+            
+            # Get user ID
+            user_url = f"https://api.twitch.tv/helix/users?login={username}"
+            async with session.get(user_url, headers=headers) as response:
+                if response.status != 200:
+                    raise Exception(f"Twitch user lookup error: {response.status}")
+                
+                user_data = await response.json()
+                if not user_data.get('data'):
+                    raise Exception("Twitch user not found")
+                
+                user_id = user_data['data'][0]['id']
+            
+            # Get recent videos (last 100)
+            videos_url = f"https://api.twitch.tv/helix/videos"
+            params = {
+                'user_id': user_id,
+                'first': 100,
+                'type': 'all'
+            }
+            
+            async with session.get(videos_url, headers=headers, params=params) as response:
+                if response.status != 200:
+                    raise Exception(f"Twitch videos error: {response.status}")
+                
+                videos_data = await response.json()
+                
+                for video in videos_data.get('data', []):
+                    title = video['title']
+                    # Extract game name from video title
+                    game_name = extract_game_from_title(title)
+                    if game_name:
+                        games.append(game_name)
+    
+    except Exception as e:
+        raise Exception(f"Twitch fetch error: {str(e)}")
+    
+    return list(set(games))  # Remove duplicates
+
+def extract_game_from_title(title: str) -> str:
+    """Extract game name from video title using common patterns"""
+    title = title.strip()
+    
+    # Common patterns for game titles in videos
+    patterns = [
+        r'^([^|]+)\s*\|',  # "Game Name | Episode"
+        r'^([^-]+)\s*-',   # "Game Name - Part 1"
+        r'^([^:]+):',      # "Game Name: Subtitle"
+        r'^([^#]+)#',      # "Game Name #1"
+        r'^([^(]+)\(',     # "Game Name (Part 1)"
+        r'^([^[]+)\[',     # "Game Name [Episode]"
+    ]
+    
+    for pattern in patterns:
+        match = re.match(pattern, title, re.IGNORECASE)
+        if match:
+            game_name = match.group(1).strip()
+            # Filter out common non-game words
+            if len(game_name) > 3 and not any(word in game_name.lower() for word in ['stream', 'live', 'chat', 'vod', 'highlight']):
+                return game_name
+    
+    # If no pattern matches, return the first few words (likely the game name)
+    words = title.split()
+    if len(words) >= 2:
+        potential_game = ' '.join(words[:3])  # Take first 3 words
+        if len(potential_game) > 3:
+            return potential_game
+    
+    return ""
 
 # --- Game Commands ---
 @bot.command(name="addgame")
