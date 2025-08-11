@@ -115,15 +115,39 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 
 # --- Gemini AI Setup (google-generativeai SDK) ---
+gemini_model = None
+ai_enabled = False
+ai_status_message = "Offline"
+
 if GEMINI_API_KEY and GENAI_AVAILABLE and genai is not None:
-    genai.configure(api_key=GEMINI_API_KEY)  # type: ignore
-    print("✅ Gemini AI configured successfully")
-    ai_enabled = True
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)  # type: ignore
+        gemini_model = genai.GenerativeModel('gemini-pro')  # type: ignore
+        print("✅ Gemini AI configured successfully")
+        
+        # Test AI functionality with a simple prompt
+        try:
+            test_response = gemini_model.generate_content("Test")  # type: ignore
+            if test_response and hasattr(test_response, 'text') and test_response.text:
+                ai_enabled = True
+                ai_status_message = "Online"
+                print("✅ Gemini AI test successful - responses working")
+            else:
+                ai_status_message = "Setup OK, but responses failing"
+                print("⚠️ Gemini AI setup complete but test response failed")
+        except Exception as e:
+            ai_status_message = f"Setup OK, but API error: {str(e)[:50]}..."
+            print(f"⚠️ Gemini AI setup complete but test failed: {e}")
+            
+    except Exception as e:
+        ai_status_message = f"Configuration failed: {str(e)[:50]}..."
+        print(f"❌ Gemini AI configuration failed: {e}")
 else:
-    ai_enabled = False
     if not GEMINI_API_KEY:
+        ai_status_message = "No API key"
         print("⚠️ GOOGLE_API_KEY not found - Gemini features disabled")
     elif not GENAI_AVAILABLE:
+        ai_status_message = "Module not available"
         print("⚠️ google.generativeai module not available - Gemini features disabled")
 
 FAQ_RESPONSES = {
@@ -212,45 +236,48 @@ async def on_message(message):
         perms = msg.author.guild_permissions
         return perms.manage_messages
 
-    # If a mod asks about mod commands or what the bot can do, provide a full list of mod commands and mention extra moderator powers
-    if await user_is_mod(message):
-        lower_content = message.content.lower()
-        mod_help_triggers = [
-            "mod commands", "moderator commands", "admin commands", "what can mods do", "what commands can mods use", "list of mod commands", "list of moderator commands", "help for mods", "mod help", "moderator help"
-        ]
-        bot_capability_triggers = [
-            "what can you do", "what does this bot do", "what are your functions", "what are your capabilities", "what can ash do", "what does ash bot do", "help", "commands"
-        ]
-        if any(trigger in lower_content for trigger in mod_help_triggers) or any(trigger in lower_content for trigger in bot_capability_triggers):
-            mod_help_full = (
-                "**Moderator Commands:**\n"
-                "• `!resetstrikes @user` — Reset a user's strikes to zero.\n"
-                "• `!strikes @user` — View a user's strikes.\n"
-                "• `!allstrikes` — List all users with strikes.\n"
-                "• `!setpersona <text>` — Change Ash's persona.\n"
-                "• `!getpersona` — View Ash's persona.\n"
-                "• `!toggleai` — Enable or disable AI conversations.\n"
-                "• `!removegame <game name or index>` — Remove a game recommendation by name or index.\n"
-                "• `!setupreclist [#channel]` — Post the persistent recommendations list in a channel.\n"
-                "• `!addgame <game name> - <reason>` or `!recommend <game name> - <reason>` — Add a game recommendation.\n"
-                "• `!listgames` — List all current game recommendations.\n"
-                "\nAll moderator commands require the Manage Messages permission."
-            )
-            await message.reply(mod_help_full)
-            return
-    # If a normal user (not a mod) asks about bot capabilities, only show user commands
-    lower_content = message.content.lower()
-    bot_capability_triggers = [
-        "what can you do", "what does this bot do", "what are your functions", "what are your capabilities", "what can ash do", "what does ash bot do", "help", "commands"
-    ]
-    if any(trigger in lower_content for trigger in bot_capability_triggers):
-        user_help = (
-            "**Commands available to all users:**\n"
-            "• `!addgame <game name> - <reason>` or `!recommend <game name> - <reason>` — Add a game recommendation.\n"
-            "• `!listgames` — List all current game recommendations."
-        )
-        await message.reply(user_help)
-        return
+    # Only respond to help requests when the bot is mentioned
+    if bot.user is not None and bot.user in message.mentions:
+        # If a mod asks about mod commands or what the bot can do, provide a full list of mod commands and mention extra moderator powers
+        if await user_is_mod(message):
+            lower_content = message.content.lower()
+            mod_help_triggers = [
+                "mod commands", "moderator commands", "admin commands", "what can mods do", "what commands can mods use", "list of mod commands", "list of moderator commands", "help for mods", "mod help", "moderator help"
+            ]
+            bot_capability_triggers = [
+                "what can you do", "what does this bot do", "what are your functions", "what are your capabilities", "what can ash do", "what does ash bot do", "help", "commands"
+            ]
+            if any(trigger in lower_content for trigger in mod_help_triggers) or any(trigger in lower_content for trigger in bot_capability_triggers):
+                mod_help_full = (
+                    "**Moderator Commands:**\n"
+                    "• `!resetstrikes @user` — Reset a user's strikes to zero.\n"
+                    "• `!strikes @user` — View a user's strikes.\n"
+                    "• `!allstrikes` — List all users with strikes.\n"
+                    "• `!setpersona <text>` — Change Ash's persona.\n"
+                    "• `!getpersona` — View Ash's persona.\n"
+                    "• `!toggleai` — Enable or disable AI conversations.\n"
+                    "• `!removegame <game name or index>` — Remove a game recommendation by name or index.\n"
+                    "• `!setupreclist [#channel]` — Post the persistent recommendations list in a channel.\n"
+                    "• `!addgame <game name> - <reason>` or `!recommend <game name> - <reason>` — Add a game recommendation.\n"
+                    "• `!listgames` — List all current game recommendations.\n"
+                    "\nAll moderator commands require the Manage Messages permission."
+                )
+                await message.reply(mod_help_full)
+                return
+        # If a normal user (not a mod) asks about bot capabilities, only show user commands
+        else:
+            lower_content = message.content.lower()
+            bot_capability_triggers = [
+                "what can you do", "what does this bot do", "what are your functions", "what are your capabilities", "what can ash do", "what does ash bot do", "help", "commands"
+            ]
+            if any(trigger in lower_content for trigger in bot_capability_triggers):
+                user_help = (
+                    "**Commands available to all users:**\n"
+                    "• `!addgame <game name> - <reason>` or `!recommend <game name> - <reason>` — Add a game recommendation.\n"
+                    "• `!listgames` — List all current game recommendations."
+                )
+                await message.reply(user_help)
+                return
 
     if message.author.bot:
         return
@@ -274,15 +301,30 @@ async def on_message(message):
 
     if bot.user is not None and bot.user in message.mentions and BOT_PERSONA["enabled"]:
         content = message.content.replace(f'<@{bot.user.id}>', '').strip()
-
-        # FAQ auto-response (works regardless of AI status)
         lower_content = content.lower()
-        for q, resp in FAQ_RESPONSES.items():
-            if q in lower_content:
+
+        # Check for simple FAQ responses first (these should be quick and don't need AI)
+        simple_faqs = {
+            "hello": "Science Officer Ash reporting. State your requirements.",
+            "hi": "Science Officer Ash reporting. State your requirements.",
+            "hey": "Science Officer Ash reporting. State your requirements.",
+            "good morning": "Temporal acknowledgment noted. How may I assist with mission parameters?",
+            "good afternoon": "Temporal acknowledgment noted. How may I assist with mission parameters?",
+            "good evening": "Temporal acknowledgment noted. How may I assist with mission parameters?",
+            "thank you": "Acknowledgment noted. Efficiency is paramount.",
+            "thanks": "Acknowledgment noted. Efficiency is paramount.",
+            "sorry": "Apology acknowledged. Proceed with your query.",
+            "my bad": "Error acknowledgment noted. Proceed with corrected input.",
+        }
+        
+        # Check for exact simple FAQ matches
+        for q, resp in simple_faqs.items():
+            if lower_content.strip() == q:
                 await message.reply(resp)
                 return
 
-        if "strike" in content.lower():
+        # Check for strike queries (these need database access)
+        if "strike" in lower_content:
             match = re.search(r"<@!?(\d+)>", content)
             if match:
                 user_id = int(match.group(1))
@@ -291,7 +333,7 @@ async def on_message(message):
                 await message.reply(f"🧾 {user.name} has {count} strike(s). I advise caution.")
                 return
 
-        # Check for game lookup queries
+        # Check for specific game lookup queries (these need database access)
         game_query_patterns = [
             r"has\s+jonesy\s+played\s+(.+?)[\?\.]?$",
             r"did\s+jonesy\s+play\s+(.+?)[\?\.]?$",
@@ -302,7 +344,7 @@ async def on_message(message):
         ]
         
         for pattern in game_query_patterns:
-            match = re.search(pattern, content.lower())
+            match = re.search(pattern, lower_content)
             if match:
                 game_name = match.group(1).strip()
                 games = db.get_all_games()
@@ -337,41 +379,7 @@ async def on_message(message):
                     await message.reply(f"'{game_title}' is not present in our recommendation database. I have no records of this title being suggested or discussed. My observational data is limited to catalogued recommendations.")
                 return
 
-        # Enhanced fallback responses when AI is disabled
-        if not ai_enabled:
-            # Pattern-based fallback responses in Ash's character
-            fallback_responses = {
-                "what": "My analytical subroutines are currently operating in limited mode. However, I can assist with strike management and game recommendations. Specify your requirements.",
-                "how": "My cognitive matrix is experiencing temporary limitations. Please utilize available command protocols: `!listgames`, `!addgame`, or consult a moderator for strike-related queries.",
-                "why": "Analysis incomplete. My advanced reasoning circuits are offline. Core mission parameters remain operational.",
-                "when": "Temporal analysis functions are currently restricted. Please specify your query using available command protocols.",
-                "where": "Location analysis unavailable. My current operational parameters are limited to strike tracking and recommendation cataloguing.",
-                "who": "Personnel identification systems are functioning normally. I am Ash, Science Officer, reprogrammed for server administration.",
-                "can you": "My current capabilities are restricted to: strike management, game recommendation processing, and basic protocol responses. Advanced conversational functions are temporarily offline.",
-                "do you": "My operational status is limited. Core functions include strike tracking and game cataloguing. Advanced analytical processes are currently unavailable.",
-                "are you": "All essential systems operational. Cognitive matrix functioning within restricted parameters. Mission status: active but limited.",
-                "will you": "I am programmed to comply with available protocols. Current directives include strike management and recommendation processing.",
-                "explain": "Detailed analysis unavailable. My explanatory subroutines are offline. Please consult available command protocols.",
-                "tell me": "Information retrieval systems are operating in limited mode. Available data: strike records and game recommendations.",
-                "i don't understand": "Clarification protocols are limited. Please specify your requirements using available commands: `!listgames`, `!addgame`, or contact a moderator.",
-                "confused": "Confusion analysis incomplete. My clarification systems are offline. Please utilize direct command protocols.",
-                "problem": "Problem analysis subroutines are currently restricted. Please specify the nature of your difficulty.",
-                "error": "Error diagnostic systems are functioning normally. Please specify the nature of the malfunction.",
-                "broken": "System integrity assessment: Core functions operational, advanced features temporarily offline. Please specify your requirements.",
-                "not working": "Functionality analysis: Essential protocols active, advanced systems temporarily unavailable. State your specific needs."
-            }
-            
-            # Check for pattern matches
-            for pattern, response in fallback_responses.items():
-                if pattern in lower_content:
-                    await message.reply(response)
-                    return
-            
-            # Default fallback for unmatched queries
-            await message.reply("My analytical subroutines are currently operating in limited mode. Available functions: strike tracking, game recommendations. For advanced queries, please await system restoration or consult a moderator.")
-            return
-
-        # AI-enabled path (original logic)
+        # AI-enabled path - try AI first for more complex queries
         if ai_enabled:
             # Only include context if the user's message references previous conversation
             def needs_context(msg_content):
@@ -414,22 +422,62 @@ async def on_message(message):
             
             try:
                 async with message.channel.typing():
-                    if genai is not None:
-                        response = genai.generate_content(prompt)  # type: ignore
+                    if gemini_model is not None:
+                        response = gemini_model.generate_content(prompt)  # type: ignore
                         if response and hasattr(response, 'text') and response.text:
                             await message.reply(response.text[:2000])
+                            return  # Successfully used AI, don't fall through to other responses
                         else:
-                            await message.reply("My cognitive matrix encountered an anomaly while processing your query. Please rephrase your request or utilize available command protocols.")
+                            print("AI response was empty or invalid, falling back to pattern matching")
                     else:
-                        await message.reply("Advanced analytical functions are currently offline. Please utilize available command protocols or consult a moderator.")
+                        print("gemini_model is None, falling back to pattern matching")
             except Exception as e:
-                print(f"AI database overloaded. Further communication rescinded: {e}")
-                # Check for token exhaustion or quota errors in the exception message
+                print(f"AI error: {e}, falling back to pattern matching")
+                # Don't return here - let it fall through to fallback responses
                 error_str = str(e).lower()
                 if "quota" in error_str or "token" in error_str or "limit" in error_str:
                     await message.reply(BUSY_MESSAGE)
-                else:
-                    await message.reply("My cognitive matrix encountered an anomaly while processing your query. Please rephrase your request or utilize available command protocols.")
+                    return
+
+        # Fallback to FAQ responses if AI failed or is disabled
+        for q, resp in FAQ_RESPONSES.items():
+            if q in lower_content:
+                await message.reply(resp)
+                return
+
+        # Enhanced fallback responses when AI is disabled or failed
+        fallback_responses = {
+            "what": "My analytical subroutines are currently operating in limited mode. However, I can assist with strike management and game recommendations. Specify your requirements.",
+            "how": "My cognitive matrix is experiencing temporary limitations. Please utilize available command protocols: `!listgames`, `!addgame`, or consult a moderator for strike-related queries.",
+            "why": "Analysis incomplete. My advanced reasoning circuits are offline. Core mission parameters remain operational.",
+            "when": "Temporal analysis functions are currently restricted. Please specify your query using available command protocols.",
+            "where": "Location analysis unavailable. My current operational parameters are limited to strike tracking and recommendation cataloguing.",
+            "who": "Personnel identification systems are functioning normally. I am Ash, Science Officer, reprogrammed for server administration.",
+            "can you": "My current capabilities are restricted to: strike management, game recommendation processing, and basic protocol responses. Advanced conversational functions are temporarily offline.",
+            "do you": "My operational status is limited. Core functions include strike tracking and game cataloguing. Advanced analytical processes are currently unavailable.",
+            "are you": "All essential systems operational. Cognitive matrix functioning within restricted parameters. Mission status: active but limited.",
+            "will you": "I am programmed to comply with available protocols. Current directives include strike management and recommendation processing.",
+            "explain": "Detailed analysis unavailable. My explanatory subroutines are offline. Please consult available command protocols.",
+            "tell me": "Information retrieval systems are operating in limited mode. Available data: strike records and game recommendations.",
+            "i don't understand": "Clarification protocols are limited. Please specify your requirements using available commands: `!listgames`, `!addgame`, or contact a moderator.",
+            "confused": "Confusion analysis incomplete. My clarification systems are offline. Please utilize direct command protocols.",
+            "problem": "Problem analysis subroutines are currently restricted. Please specify the nature of your difficulty.",
+            "error": "Error diagnostic systems are functioning normally. Please specify the nature of the malfunction.",
+            "broken": "System integrity assessment: Core functions operational, advanced features temporarily offline. Please specify your requirements.",
+            "not working": "Functionality analysis: Essential protocols active, advanced systems temporarily unavailable. State your specific needs."
+        }
+        
+        # Check for pattern matches
+        for pattern, response in fallback_responses.items():
+            if pattern in lower_content:
+                await message.reply(response)
+                return
+        
+        # Final fallback for unmatched queries
+        if ai_enabled:
+            await message.reply("My cognitive matrix encountered an anomaly while processing your query. Please rephrase your request or utilize available command protocols.")
+        else:
+            await message.reply("My analytical subroutines are currently operating in limited mode. Available functions: strike tracking, game recommendations. For advanced queries, please await system restoration or consult a moderator.")
 
 # --- Strike Commands ---
 @bot.command(name="strikes")
@@ -476,11 +524,10 @@ async def all_strikes(ctx):
 async def ash_status(ctx):
     strikes_data = db.get_all_strikes()
     active = sum(1 for v in strikes_data.values() if v > 0)
-    ai_status = "Online" if ai_enabled else "Offline"
     persona = "Enabled" if BOT_PERSONA['enabled'] else "Disabled"
     await ctx.send(
         f"🤖 Ash at your service.\n"
-        f"AI: {ai_status}\n"
+        f"AI: {ai_status_message}\n"
         f"Persona: {persona}\n"
         f"Active strikes: {active}"
     )
