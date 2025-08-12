@@ -721,6 +721,66 @@ async def list_models(ctx):
     except Exception as e:
         await ctx.send(f"❌ Error listing models: {str(e)}")
 
+@bot.command(name="debugstrikes")
+@commands.has_permissions(manage_messages=True)
+async def debug_strikes(ctx):
+    """Debug strikes data to see what's in the database"""
+    try:
+        # Check database connection
+        conn = db.get_connection()
+        if not conn:
+            await ctx.send("❌ **Database connection failed**")
+            return
+        
+        await ctx.send("🔍 **Debugging strikes data...**")
+        
+        # Get raw strikes data
+        strikes_data = db.get_all_strikes()
+        await ctx.send(f"📊 **Raw strikes data:** {strikes_data}")
+        
+        # Calculate total
+        total_strikes = sum(strikes_data.values()) if strikes_data else 0
+        await ctx.send(f"🧮 **Calculated total:** {total_strikes}")
+        
+        # Check if strikes.json exists (old format)
+        import os
+        if os.path.exists("strikes.json"):
+            await ctx.send("📁 **strikes.json file found** - data may not be migrated to database")
+            try:
+                import json
+                with open("strikes.json", 'r') as f:
+                    json_data = json.load(f)
+                await ctx.send(f"📋 **JSON file contains:** {json_data}")
+            except Exception as e:
+                await ctx.send(f"❌ **Error reading JSON:** {str(e)}")
+        else:
+            await ctx.send("✅ **No strikes.json file found** - should be using database")
+        
+        # Check database directly
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM strikes")
+                count_result = cur.fetchone()
+                total_records = count_result[0] if count_result else 0
+                
+                cur.execute("SELECT user_id, strike_count FROM strikes")
+                all_records = cur.fetchall()
+                
+                await ctx.send(f"🗃️ **Database records:** {total_records} total")
+                if all_records:
+                    records_str = ", ".join([f"User {row[0]}: {row[1]} strikes" for row in all_records[:5]])
+                    if len(all_records) > 5:
+                        records_str += f"... and {len(all_records) - 5} more"
+                    await ctx.send(f"📝 **Sample records:** {records_str}")
+                else:
+                    await ctx.send("📝 **No records found in database**")
+                    
+        except Exception as e:
+            await ctx.send(f"❌ **Database query error:** {str(e)}")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Debug error:** {str(e)}")
+
 @bot.command(name="dbstats")
 @commands.has_permissions(manage_messages=True)
 async def db_stats(ctx):
