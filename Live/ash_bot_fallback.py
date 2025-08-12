@@ -759,24 +759,64 @@ async def debug_strikes(ctx):
         # Check database directly
         try:
             with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM strikes")
-                count_result = cur.fetchone()
-                total_records = count_result[0] if count_result else 0
+                # Check if strikes table exists
+                cur.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'strikes'
+                    )
+                """)
+                result = cur.fetchone()
+                table_exists = result[0] if result else False
+                await ctx.send(f"🏗️ **Strikes table exists:** {table_exists}")
                 
-                cur.execute("SELECT user_id, strike_count FROM strikes")
-                all_records = cur.fetchall()
-                
-                await ctx.send(f"🗃️ **Database records:** {total_records} total")
-                if all_records:
-                    records_str = ", ".join([f"User {row[0]}: {row[1]} strikes" for row in all_records[:5]])
-                    if len(all_records) > 5:
-                        records_str += f"... and {len(all_records) - 5} more"
-                    await ctx.send(f"📝 **Sample records:** {records_str}")
+                if table_exists:
+                    # Get table structure
+                    cur.execute("""
+                        SELECT column_name, data_type 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'strikes'
+                        ORDER BY ordinal_position
+                    """)
+                    columns = cur.fetchall()
+                    column_info = ", ".join([f"{col[0]}({col[1]})" for col in columns])
+                    await ctx.send(f"🏗️ **Table structure:** {column_info}")
+                    
+                    # Count total records
+                    cur.execute("SELECT COUNT(*) FROM strikes")
+                    count_result = cur.fetchone()
+                    total_records = count_result[0] if count_result else 0
+                    await ctx.send(f"🗃️ **Total database records:** {total_records}")
+                    
+                    # Get ALL records (not just > 0)
+                    cur.execute("SELECT user_id, strike_count FROM strikes ORDER BY user_id")
+                    all_records = cur.fetchall()
+                    
+                    if all_records:
+                        records_str = ", ".join([f"User {row[0]}: {row[1]} strikes" for row in all_records[:10]])
+                        if len(all_records) > 10:
+                            records_str += f"... and {len(all_records) - 10} more"
+                        await ctx.send(f"📝 **All records:** {records_str}")
+                        
+                        # Now test the specific query that get_all_strikes() uses
+                        cur.execute("SELECT user_id, strike_count FROM strikes WHERE strike_count > 0")
+                        filtered_records = cur.fetchall()
+                        await ctx.send(f"🔍 **Records with strikes > 0:** {len(filtered_records)} found")
+                        
+                        if filtered_records:
+                            filtered_str = ", ".join([f"User {row[0]}: {row[1]} strikes" for row in filtered_records])
+                            await ctx.send(f"📝 **Filtered records:** {filtered_str}")
+                        else:
+                            await ctx.send("❌ **No records found with strike_count > 0** - this is the problem!")
+                    else:
+                        await ctx.send("📝 **No records found in strikes table**")
                 else:
-                    await ctx.send("📝 **No records found in database**")
+                    await ctx.send("❌ **Strikes table does not exist**")
                     
         except Exception as e:
             await ctx.send(f"❌ **Database query error:** {str(e)}")
+            import traceback
+            print(f"Full database error: {traceback.format_exc()}")
             
     except Exception as e:
         await ctx.send(f"❌ **Debug error:** {str(e)}")
