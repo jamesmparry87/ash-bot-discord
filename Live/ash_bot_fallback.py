@@ -122,7 +122,7 @@ ai_status_message = "Offline"
 if GEMINI_API_KEY and GENAI_AVAILABLE and genai is not None:
     try:
         genai.configure(api_key=GEMINI_API_KEY)  # type: ignore
-        gemini_model = genai.GenerativeModel('gemini-pro')  # type: ignore
+        gemini_model = genai.GenerativeModel('gemini-1.5-flash')  # type: ignore
         print("✅ Gemini AI configured successfully")
         
         # Test AI functionality with a simple prompt
@@ -523,13 +523,13 @@ async def all_strikes(ctx):
 @commands.has_permissions(manage_messages=True)
 async def ash_status(ctx):
     strikes_data = db.get_all_strikes()
-    active = sum(1 for v in strikes_data.values() if v > 0)
+    total_strikes = sum(strikes_data.values())  # Sum all strike values
     persona = "Enabled" if BOT_PERSONA['enabled'] else "Disabled"
     await ctx.send(
         f"🤖 Ash at your service.\n"
         f"AI: {ai_status_message}\n"
         f"Persona: {persona}\n"
-        f"Active strikes: {active}"
+        f"Total strikes: {total_strikes}"
     )
 
 @bot.command(name="setpersona")
@@ -690,6 +690,36 @@ async def fix_game_reasons(ctx):
             
     except Exception as e:
         await ctx.send(f"❌ Error fixing game reasons: {str(e)}")
+
+@bot.command(name="listmodels")
+@commands.has_permissions(manage_messages=True)
+async def list_models(ctx):
+    """List available Gemini models for your API key"""
+    if not GEMINI_API_KEY:
+        await ctx.send("❌ No GOOGLE_API_KEY configured")
+        return
+    
+    if not GENAI_AVAILABLE or genai is None:
+        await ctx.send("❌ google.generativeai module not available")
+        return
+    
+    try:
+        await ctx.send("🔍 Checking available Gemini models...")
+        
+        # List available models
+        models = []
+        for model in genai.list_models():  # type: ignore
+            if 'generateContent' in model.supported_generation_methods:
+                models.append(model.name)
+        
+        if models:
+            model_list = "\n".join([f"• {model}" for model in models])
+            await ctx.send(f"📋 **Available Gemini Models:**\n{model_list}")
+        else:
+            await ctx.send("❌ No models with generateContent support found")
+            
+    except Exception as e:
+        await ctx.send(f"❌ Error listing models: {str(e)}")
 
 @bot.command(name="dbstats")
 @commands.has_permissions(manage_messages=True)
