@@ -2,7 +2,7 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import logging
-from typing import List, Dict, Optional, Any, Union
+from typing import List, Dict, Optional, Any, Union, cast
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -92,7 +92,11 @@ class DatabaseManager:
                 cur.execute("SELECT strike_count FROM strikes WHERE user_id = %s", (user_id,))
                 result = cur.fetchone()
                 if result:
-                    return int(result[0])  # Use index instead of key
+                    # Handle both RealDictCursor (dict-like) and regular cursor (tuple-like)
+                    try:
+                        return int(result['strike_count'])  # type: ignore
+                    except (TypeError, KeyError):
+                        return int(result[0])  # Fallback to index access
                 return 0
         except Exception as e:
             logger.error(f"Error getting strikes for user {user_id}: {e}")
@@ -134,7 +138,17 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 cur.execute("SELECT user_id, strike_count FROM strikes WHERE strike_count > 0")
                 results = cur.fetchall()
-                return {int(row[0]): int(row[1]) for row in results}  # Use indices instead of keys
+                # Handle both RealDictCursor (dict-like) and regular cursor (tuple-like)
+                result_dict = {}
+                for row in results:
+                    try:
+                        user_id = int(row['user_id'])  # type: ignore
+                        strike_count = int(row['strike_count'])  # type: ignore
+                    except (TypeError, KeyError):
+                        user_id = int(row[0])
+                        strike_count = int(row[1])
+                    result_dict[user_id] = strike_count
+                return result_dict
         except Exception as e:
             logger.error(f"Error getting all strikes: {e}")
             return {}
@@ -257,7 +271,11 @@ class DatabaseManager:
                 cur.execute("SELECT value FROM bot_config WHERE key = %s", (key,))
                 result = cur.fetchone()
                 if result:
-                    return str(result[0])  # Use index instead of key
+                    # Handle both RealDictCursor (dict-like) and regular cursor (tuple-like)
+                    try:
+                        return str(result['value'])  # type: ignore
+                    except (TypeError, KeyError):
+                        return str(result[0])  # Fallback to index access
                 return None
         except Exception as e:
             logger.error(f"Error getting config value {key}: {e}")
