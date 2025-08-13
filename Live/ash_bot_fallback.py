@@ -522,8 +522,25 @@ async def all_strikes(ctx):
 @bot.command(name="ashstatus")
 @commands.has_permissions(manage_messages=True)
 async def ash_status(ctx):
+    # Use individual queries as fallback if bulk query fails
     strikes_data = db.get_all_strikes()
-    total_strikes = sum(strikes_data.values())  # Sum all strike values
+    total_strikes = sum(strikes_data.values())
+    
+    # If bulk query returns 0 but we know there should be strikes, use individual queries
+    if total_strikes == 0:
+        # Known user IDs from the JSON file (fallback method)
+        known_users = [371536135580549122, 337833732901961729, 710570041220923402, 906475895907291156]
+        individual_total = 0
+        for user_id in known_users:
+            try:
+                strikes = db.get_user_strikes(user_id)
+                individual_total += strikes
+            except Exception:
+                pass
+        
+        if individual_total > 0:
+            total_strikes = individual_total
+    
     persona = "Enabled" if BOT_PERSONA['enabled'] else "Disabled"
     await ctx.send(
         f"🤖 Ash at your service.\n"
@@ -820,6 +837,47 @@ async def debug_strikes(ctx):
             
     except Exception as e:
         await ctx.send(f"❌ **Debug error:** {str(e)}")
+
+@bot.command(name="teststrikes")
+@commands.has_permissions(manage_messages=True)
+async def test_strikes(ctx):
+    """Test strike reading using individual user queries (bypass get_all_strikes)"""
+    try:
+        await ctx.send("🔍 **Testing individual user strike queries...**")
+        
+        # Known user IDs from the JSON file
+        known_users = [371536135580549122, 337833732901961729, 710570041220923402, 906475895907291156]
+        
+        # Test individual user queries
+        individual_results = {}
+        for user_id in known_users:
+            try:
+                strikes = db.get_user_strikes(user_id)
+                individual_results[user_id] = strikes
+                await ctx.send(f"👤 **User {user_id}:** {strikes} strikes (individual query)")
+            except Exception as e:
+                await ctx.send(f"❌ **User {user_id}:** Error - {str(e)}")
+        
+        # Calculate total from individual queries
+        total_from_individual = sum(individual_results.values())
+        await ctx.send(f"🧮 **Total from individual queries:** {total_from_individual}")
+        
+        # Compare with get_all_strikes()
+        bulk_results = db.get_all_strikes()
+        total_from_bulk = sum(bulk_results.values())
+        await ctx.send(f"📊 **Total from get_all_strikes():** {total_from_bulk}")
+        await ctx.send(f"📋 **Bulk query results:** {bulk_results}")
+        
+        # Show the difference
+        if total_from_individual != total_from_bulk:
+            await ctx.send(f"⚠️ **MISMATCH DETECTED!** Individual queries work, bulk query fails.")
+            await ctx.send(f"✅ **Individual method:** {individual_results}")
+            await ctx.send(f"❌ **Bulk method:** {bulk_results}")
+        else:
+            await ctx.send(f"✅ **Both methods match!** The issue is elsewhere.")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Test error:** {str(e)}")
 
 @bot.command(name="dbstats")
 @commands.has_permissions(manage_messages=True)
