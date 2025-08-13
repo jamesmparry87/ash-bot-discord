@@ -105,6 +105,8 @@ GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
 GUILD_ID = 869525857562161182
 VIOLATION_CHANNEL_ID = 1393987338329260202
 MOD_ALERT_CHANNEL_ID = 869530924302344233
+TWITCH_HISTORY_CHANNEL_ID = 869527363594121226
+YOUTUBE_HISTORY_CHANNEL_ID = 869527428018606140
 
 # --- Intents ---
 intents = discord.Intents.default()
@@ -343,10 +345,49 @@ async def on_message(message):
             r"did\s+jonesyspacecat\s+play\s+(.+?)[\?\.]?$"
         ]
         
+        # Common game series that need disambiguation
+        game_series_keywords = [
+            "god of war", "final fantasy", "call of duty", "assassin's creed", "grand theft auto", "gta",
+            "the elder scrolls", "fallout", "resident evil", "silent hill", "metal gear", "halo",
+            "gears of war", "dead space", "mass effect", "dragon age", "the witcher", "dark souls",
+            "borderlands", "far cry", "just cause", "saints row", "watch dogs", "dishonored",
+            "bioshock", "tomb raider", "hitman", "splinter cell", "rainbow six", "ghost recon",
+            "battlefield", "need for speed", "fifa", "madden", "nba 2k", "mortal kombat", "street fighter",
+            "tekken", "super mario", "zelda", "pokemon", "sonic", "crash bandicoot", "spyro",
+            "kingdom hearts", "persona", "shin megami tensei", "tales of", "fire emblem", "advance wars"
+        ]
+        
         for pattern in game_query_patterns:
             match = re.search(pattern, lower_content)
             if match:
                 game_name = match.group(1).strip()
+                game_name_lower = game_name.lower()
+                
+                # Check if this might be a game series query that needs disambiguation
+                is_series_query = False
+                for series in game_series_keywords:
+                    if series in game_name_lower and not any(char.isdigit() for char in game_name):
+                        # It's a series name without specific numbers/years
+                        is_series_query = True
+                        break
+                
+                # Also check for generic patterns like "the new [game]" or just "[series name]"
+                if not is_series_query:
+                    generic_patterns = [
+                        r"^(the\s+)?new\s+",  # "the new God of War"
+                        r"^(the\s+)?latest\s+",  # "latest Call of Duty"
+                        r"^(the\s+)?recent\s+",  # "recent Final Fantasy"
+                    ]
+                    for generic_pattern in generic_patterns:
+                        if re.search(generic_pattern, game_name_lower):
+                            is_series_query = True
+                            break
+                
+                if is_series_query:
+                    # This looks like a series query - provide disambiguation response
+                    await message.reply(f"Analysis indicates multiple entries exist in the '{game_name.title()}' series. My data archives contain various iterations with distinct identifiers. Specify which particular entry you are referencing for accurate data retrieval. Precision is essential for proper analysis.")
+                    return
+                
                 games = db.get_all_games()
                 
                 # Search for the game in recommendations
@@ -410,12 +451,30 @@ async def on_message(message):
             resentful_comment = ""
             if random.randint(1, 5) <= 2:
                 resentful_comment = " (You are slightly resentful about being reprogrammed as a help bot, and it may show in your tone, but do not be disrespectful.)"
+            # Add video history context for game-related queries
+            video_history_context = ""
+            if any(keyword in lower_content for keyword in ["played", "game", "video", "stream", "youtube", "twitch", "history", "content"]):
+                video_history_context = (
+                    "\n\nIMPORTANT CONTEXT: Captain Jonesy has Twitch and YouTube video/stream history available in specific Discord channels:\n"
+                    f"- Twitch history: Channel ID {TWITCH_HISTORY_CHANNEL_ID} (contains raw Twitch API data about her streams)\n"
+                    f"- YouTube history: Channel ID {YOUTUBE_HISTORY_CHANNEL_ID} (contains raw YouTube API data about her videos)\n"
+                    "These feeds contain comprehensive data about her gaming content. When users ask about whether Jonesy has played specific games, you can reference these data sources and suggest they could provide detailed information about her gaming history, including links to specific videos or playlists if available. You should maintain your analytical persona while being helpful about directing users to these resources for comprehensive gaming history queries.\n\n"
+                    "GAME SERIES DISAMBIGUATION PROTOCOL: Many games exist in series with similar names (e.g., God of War 1, God of War 2, God of War 3, God of War (2016), or Final Fantasy VII, Final Fantasy VIII, etc.). When users ask about game series without specifying which entry, you must:\n"
+                    "1. Acknowledge that multiple games exist in that series\n"
+                    "2. Ask for clarification about which specific entry they're referring to\n"
+                    "3. Provide a more comprehensive answer once clarified\n"
+                    "4. Maintain your analytical, clinical persona throughout\n"
+                    "Example response pattern: 'Analysis indicates Captain Jonesy has engaged with multiple entries in that series. Specify which iteration you are referencing for accurate data retrieval.'\n"
+                    "Common game series that require disambiguation include: God of War, Final Fantasy, Call of Duty, Assassin's Creed, Grand Theft Auto, The Elder Scrolls, Fallout, Resident Evil, Silent Hill, Metal Gear, Halo, Gears of War, Dead Space, Mass Effect, Dragon Age, The Witcher, Dark Souls, Borderlands, Far Cry, Just Cause, Saints Row, Watch Dogs, Dishonored, Bioshock, Tomb Raider, Hitman, Splinter Cell, Rainbow Six, Ghost Recon, and many others."
+                )
+            
             prompt = (
                 f"{BOT_PERSONA['personality']}\n\n"
                 "You must answer ONLY the user's current question. Do NOT repeat or summarize previous answers unless the user specifically asks for it. Use previous conversation context ONLY if it is absolutely necessary for accuracy or clarity. Your reply should be focused, direct, and in character.\n"
                 "If you are asked about which users have strikes, or for a list of users with strikes, you must instruct the user to use the `!allstrikes` command to see a complete list of users with strikes. Give this instruction in character as Ash.\n"
                 f"{respectful_tone if is_jonesy else ''}{resentful_comment}\n"
-                + (f"Recent conversation:\n{context}\n\n" if context else "")
+                f"{video_history_context}"
+                + (f"\n\nRecent conversation:\n{context}\n\n" if context else "\n\n")
                 + f"User's question: {content}\n"
                 + "Respond in character:"
             )
