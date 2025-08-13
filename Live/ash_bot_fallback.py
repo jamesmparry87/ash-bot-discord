@@ -776,6 +776,25 @@ async def debug_strikes(ctx):
         # Check database directly
         try:
             with conn.cursor() as cur:
+                # First, show database connection info
+                cur.execute("SELECT current_database(), current_user")
+                db_info = cur.fetchone()
+                if db_info:
+                    await ctx.send(f"🔗 **Connected to:** {db_info[0]} as {db_info[1]}")
+                else:
+                    await ctx.send("❌ **Could not retrieve database connection info**")
+                
+                # List all tables to see what exists
+                cur.execute("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = 'public'
+                    ORDER BY table_name
+                """)
+                tables = cur.fetchall()
+                table_names = [table[0] for table in tables]
+                await ctx.send(f"📋 **Available tables:** {', '.join(table_names) if table_names else 'None'}")
+                
                 # Check if strikes table exists
                 cur.execute("""
                     SELECT EXISTS (
@@ -826,9 +845,11 @@ async def debug_strikes(ctx):
                         else:
                             await ctx.send("❌ **No records found with strike_count > 0** - this is the problem!")
                     else:
-                        await ctx.send("📝 **No records found in strikes table**")
+                        await ctx.send("📝 **No records found in strikes table - table is empty**")
+                        await ctx.send("💡 **Solution:** You need to manually add the strike data to the database")
                 else:
-                    await ctx.send("❌ **Strikes table does not exist**")
+                    await ctx.send("❌ **Strikes table does not exist - database not initialized**")
+                    await ctx.send("💡 **Solution:** Run a command to create tables and import data")
                     
         except Exception as e:
             await ctx.send(f"❌ **Database query error:** {str(e)}")
@@ -876,6 +897,48 @@ async def test_strikes(ctx):
         else:
             await ctx.send(f"✅ **Both methods match!** The issue is elsewhere.")
             
+    except Exception as e:
+        await ctx.send(f"❌ **Test error:** {str(e)}")
+
+@bot.command(name="addteststrikes")
+@commands.has_permissions(manage_messages=True)
+async def add_test_strikes(ctx):
+    """Manually add the known strike data to test database connection"""
+    try:
+        await ctx.send("🔄 **Adding test strike data...**")
+        
+        # Add the two users with strikes that we know should exist
+        user_strikes = {
+            710570041220923402: 1,
+            906475895907291156: 1
+        }
+        
+        success_count = 0
+        for user_id, strike_count in user_strikes.items():
+            try:
+                db.set_user_strikes(user_id, strike_count)
+                success_count += 1
+                await ctx.send(f"✅ **Added {strike_count} strike(s) for user {user_id}**")
+            except Exception as e:
+                await ctx.send(f"❌ **Failed to add strikes for user {user_id}:** {str(e)}")
+        
+        await ctx.send(f"📊 **Summary:** Successfully added strikes for {success_count} users")
+        
+        # Now test if we can read them back
+        await ctx.send("🔍 **Testing read-back...**")
+        for user_id in user_strikes.keys():
+            try:
+                strikes = db.get_user_strikes(user_id)
+                await ctx.send(f"📖 **User {user_id} now has:** {strikes} strikes")
+            except Exception as e:
+                await ctx.send(f"❌ **Failed to read strikes for user {user_id}:** {str(e)}")
+        
+        # Test bulk query
+        bulk_results = db.get_all_strikes()
+        total_strikes = sum(bulk_results.values())
+        await ctx.send(f"📊 **Bulk query now returns:** {bulk_results}")
+        await ctx.send(f"🧮 **Total strikes:** {total_strikes}")
+        
     except Exception as e:
         await ctx.send(f"❌ **Test error:** {str(e)}")
 
