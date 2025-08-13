@@ -384,8 +384,25 @@ async def on_message(message):
                             break
                 
                 if is_series_query:
-                    # This looks like a series query - provide disambiguation response
-                    await message.reply(f"Analysis indicates multiple entries exist in the '{game_name.title()}' series. My data archives contain various iterations with distinct identifiers. Specify which particular entry you are referencing for accurate data retrieval. Precision is essential for proper analysis.")
+                    # Get games from database first
+                    games = db.get_all_games()
+                    
+                    # This looks like a series query - find all games in this series from our database
+                    series_games = []
+                    for game in games:
+                        game_lower = game['name'].lower()
+                        # Check if this game belongs to the detected series
+                        for series in game_series_keywords:
+                            if series in game_name_lower and series in game_lower:
+                                series_games.append(game['name'])
+                                break
+                    
+                    # Create disambiguation response with specific games if found
+                    if series_games:
+                        games_list = ", ".join([f"'{game}'" for game in series_games])
+                        await message.reply(f"Analysis indicates multiple entries exist in the '{game_name.title()}' series. My data archives contain the following iterations: {games_list}. Specify which particular entry you are referencing for accurate data retrieval. Precision is essential for proper analysis.")
+                    else:
+                        await message.reply(f"Analysis indicates multiple entries exist in the '{game_name.title()}' series. My data archives contain various iterations with distinct identifiers. Specify which particular entry you are referencing for accurate data retrieval. Precision is essential for proper analysis.")
                     return
                 
                 games = db.get_all_games()
@@ -456,15 +473,17 @@ async def on_message(message):
             if any(keyword in lower_content for keyword in ["played", "game", "video", "stream", "youtube", "twitch", "history", "content"]):
                 video_history_context = (
                     "\n\nIMPORTANT CONTEXT: Captain Jonesy has Twitch and YouTube video/stream history available in specific Discord channels:\n"
-                    f"- Twitch history: Channel ID {TWITCH_HISTORY_CHANNEL_ID} (contains raw Twitch API data about her streams)\n"
-                    f"- YouTube history: Channel ID {YOUTUBE_HISTORY_CHANNEL_ID} (contains raw YouTube API data about her videos)\n"
+                    f"- Twitch history: <#{TWITCH_HISTORY_CHANNEL_ID}> (contains raw Twitch API data about her streams)\n"
+                    f"- YouTube history: <#{YOUTUBE_HISTORY_CHANNEL_ID}> (contains raw YouTube API data about her videos)\n"
                     "These feeds contain comprehensive data about her gaming content. When users ask about whether Jonesy has played specific games, you can reference these data sources and suggest they could provide detailed information about her gaming history, including links to specific videos or playlists if available. You should maintain your analytical persona while being helpful about directing users to these resources for comprehensive gaming history queries.\n\n"
                     "GAME SERIES DISAMBIGUATION PROTOCOL: Many games exist in series with similar names (e.g., God of War 1, God of War 2, God of War 3, God of War (2016), or Final Fantasy VII, Final Fantasy VIII, etc.). When users ask about game series without specifying which entry, you must:\n"
                     "1. Acknowledge that multiple games exist in that series\n"
                     "2. Ask for clarification about which specific entry they're referring to\n"
-                    "3. Provide a more comprehensive answer once clarified\n"
-                    "4. Maintain your analytical, clinical persona throughout\n"
+                    "3. If specific games from the series are found in the recommendation database, list them to help the user choose\n"
+                    "4. Provide a more comprehensive answer once clarified\n"
+                    "5. Maintain your analytical, clinical persona throughout\n"
                     "Example response pattern: 'Analysis indicates Captain Jonesy has engaged with multiple entries in that series. Specify which iteration you are referencing for accurate data retrieval.'\n"
+                    "When mentioning Discord channels, always use the format <#CHANNEL_ID> so they appear as clickable links.\n"
                     "Common game series that require disambiguation include: God of War, Final Fantasy, Call of Duty, Assassin's Creed, Grand Theft Auto, The Elder Scrolls, Fallout, Resident Evil, Silent Hill, Metal Gear, Halo, Gears of War, Dead Space, Mass Effect, Dragon Age, The Witcher, Dark Souls, Borderlands, Far Cry, Just Cause, Saints Row, Watch Dogs, Dishonored, Bioshock, Tomb Raider, Hitman, Splinter Cell, Rainbow Six, Ghost Recon, and many others."
                 )
             
