@@ -11,7 +11,7 @@ import signal
 import atexit
 import logging
 import asyncio
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict, Union
 
 # Try to import aiohttp, handle if not available
 try:
@@ -40,7 +40,7 @@ except ImportError:
 
 # --- Locking for single instance (cross-platform) ---
 LOCK_FILE = "bot.lock"
-def acquire_lock():
+def acquire_lock() -> Optional[Any]:
     if platform.system() == "Windows":
         # Windows: skip locking, just warn
         print("⚠️ File locking is not supported on Windows. Skipping single-instance lock.")
@@ -78,7 +78,7 @@ def acquire_lock():
             # Try to acquire the lock
             try:
                 lock_file = open(LOCK_FILE, 'w')
-                fcntl.flock(lock_file.fileno(), LOCK_EX | LOCK_NB)  # type: ignore
+                fcntl.flock(lock_file.fileno(), int(LOCK_EX | LOCK_NB))  # type: ignore
                 lock_file.write(str(os.getpid()))
                 lock_file.flush()
                 return lock_file
@@ -1762,6 +1762,534 @@ async def remove_game(ctx, *, arg: str):
     # Always update the persistent recommendations list
     if recommend_channel:
         await post_or_update_recommend_list(ctx, recommend_channel)
+
+# --- Played Games Commands ---
+@bot.command(name="addplayedgame")
+@commands.has_permissions(manage_messages=True)
+async def add_played_game_cmd(ctx, *, game_info: str):
+    """Add a played game to the database. Format: Game Name | series:Series | year:2023 | platform:PC | status:completed | episodes:12 | notes:Additional info"""
+    try:
+        # Parse the game info
+        parts = [part.strip() for part in game_info.split('|')]
+        canonical_name = parts[0]
+        
+        # Parse optional parameters
+        series_name = None
+        release_year = None
+        platform = None
+        completion_status = "unknown"
+        total_episodes = 0
+        notes = None
+        alternative_names = []
+        
+        for part in parts[1:]:
+            if ':' in part:
+                key, value = part.split(':', 1)
+                key = key.strip().lower()
+                value = value.strip()
+                
+                if key == 'series':
+                    series_name = value
+                elif key == 'year':
+                    try:
+                        release_year = int(value)
+                    except ValueError:
+                        pass
+                elif key == 'platform':
+                    platform = value
+                elif key == 'status':
+                    completion_status = value
+                elif key == 'episodes':
+                    try:
+                        total_episodes = int(value)
+                    except ValueError:
+                        pass
+                elif key == 'notes':
+                    notes = value
+                elif key == 'alt' or key == 'alternatives':
+                    alternative_names = [name.strip() for name in value.split(',')]
+        
+        # Add the game
+        success = db.add_played_game(
+            canonical_name=canonical_name,
+            alternative_names=alternative_names,
+            series_name=series_name,
+            release_year=release_year,
+            platform=platform,
+            completion_status=completion_status,
+            total_episodes=total_episodes,
+            notes=notes
+        )
+        
+        if success:
+            await ctx.send(f"✅ **Game catalogued:** '{canonical_name}' has been added to the played games database. Analysis complete.")
+        else:
+            await ctx.send(f"❌ **Cataloguing failed:** Unable to add '{canonical_name}' to the database. System malfunction detected.")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Error processing game data:** {str(e)}")
+
+@bot.command(name="listplayedgames")
+@commands.has_permissions(manage_messages=True)
+async def list_played_games_cmd(ctx, series_filter: Optional[str] = None):
+    """List all played games, optionally filtered by series"""
+    try:
+        games = db.get_all_played_games(series_filter)
+        
+        if not games:
+            if series_filter:
+                await ctx.send(f"📋 **No games found in '{series_filter}' series.** Database query complete.")
+            else:
+                await ctx.send("📋 **No played games catalogued.** Database is empty.")
+            return
+        
+        # Create embed
+        embed = discord.Embed(
+            title=f"🎮 Played Games Database" + (f" - {series_filter}" if series_filter else ""),
+            description="Captain Jonesy's gaming history archive. Analysis complete.",
+            color=0x2F3136
+        )
+        
+        # Group by series if not filtering
+        if not series_filter:
+            series_groups = {}
+            for game in games:
+                series = game.get('series_name', 'Standalone Games')
+                if series not in series_groups:
+                    series_groups[series] = []
+                series_groups[series].append(game)
+            
+            for series, series_games in series_groups.items():
+                game_lines = []
+                for game in series_games[:10]:  # Limit to avoid embed limits
+                    status_emoji = {
+                        'completed': '✅',
+                        'ongoing': '🔄',
+                        'dropped': '❌',
+                        'unknown': '❓'
+                    }.get(game.get('completion_status', 'unknown'), '❓')
+                    
+                    episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get('total_episodes', 0) > 0 else ""
+                    year = f" ({game.get('release_year')})" if game.get('release_year') else ""
+                    
+                    game_lines.append(f"{status_emoji} **{game['canonical_name']}**{year}{episodes}")
+                
+                if len(series_games) > 10:
+                    game_lines.append(f"... and {len(series_games) - 10} more games")
+                
+                embed.add_field(
+                    name=f"📁 {series} ({len(series_games)} games)",
+                    value="\n".join(game_lines) if game_lines else "No games",
+                    inline=False
+                )
+        else:
+            # Show detailed list for specific series
+            game_lines = []
+            for i, game in enumerate(games[:20], 1):  # Limit to 20 for detailed view
+                status_emoji = {
+                    'completed': '✅',
+                    'ongoing': '🔄',
+                    'dropped': '❌',
+                    'unknown': '❓'
+                }.get(game.get('completion_status', 'unknown'), '❓')
+                
+                episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get('total_episodes', 0) > 0 else ""
+                year = f" ({game.get('release_year')})" if game.get('release_year') else ""
+                platform = f" [{game.get('platform')}]" if game.get('platform') else ""
+                
+                game_lines.append(f"{i}. {status_emoji} **{game['canonical_name']}**{year}{episodes}{platform}")
+            
+            if len(games) > 20:
+                game_lines.append(f"... and {len(games) - 20} more games")
+            
+            embed.add_field(
+                name="Games List",
+                value="\n".join(game_lines) if game_lines else "No games found",
+                inline=False
+            )
+        
+        # Add footer
+        embed.set_footer(text=f"Total games: {len(games)} | Database query: {ctx.author.name}")
+        embed.timestamp = discord.utils.utcnow()
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        await ctx.send(f"❌ **Database query failed:** {str(e)}")
+
+@bot.command(name="searchplayedgames")
+@commands.has_permissions(manage_messages=True)
+async def search_played_games_cmd(ctx, *, query: str):
+    """Search played games by name, series, or notes"""
+    try:
+        games = db.search_played_games(query)
+        
+        if not games:
+            await ctx.send(f"🔍 **Search complete:** No games found matching '{query}'. Database analysis yielded no results.")
+            return
+        
+        # Create embed
+        embed = discord.Embed(
+            title=f"🔍 Search Results: '{query}'",
+            description=f"Found {len(games)} matching entries in the played games database.",
+            color=0x2F3136
+        )
+        
+        game_lines = []
+        for i, game in enumerate(games[:15], 1):  # Limit to 15 results
+            status_emoji = {
+                'completed': '✅',
+                'ongoing': '🔄',
+                'dropped': '❌',
+                'unknown': '❓'
+            }.get(game.get('completion_status', 'unknown'), '❓')
+            
+            series = f" [{game.get('series_name')}]" if game.get('series_name') else ""
+            episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get('total_episodes', 0) > 0 else ""
+            year = f" ({game.get('release_year')})" if game.get('release_year') else ""
+            
+            game_lines.append(f"{i}. {status_emoji} **{game['canonical_name']}**{series}{year}{episodes}")
+        
+        if len(games) > 15:
+            game_lines.append(f"... and {len(games) - 15} more results")
+        
+        embed.add_field(
+            name="Matching Games",
+            value="\n".join(game_lines),
+            inline=False
+        )
+        
+        embed.set_footer(text=f"Search query: {query} | Requested by {ctx.author.name}")
+        embed.timestamp = discord.utils.utcnow()
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        await ctx.send(f"❌ **Search failed:** {str(e)}")
+
+@bot.command(name="gameinfo")
+@commands.has_permissions(manage_messages=True)
+async def game_info_cmd(ctx, *, game_name: str):
+    """Get detailed information about a specific played game"""
+    try:
+        game = db.get_played_game(game_name)
+        
+        if not game:
+            await ctx.send(f"🔍 **Game not found:** '{game_name}' is not in the played games database. Analysis complete.")
+            return
+        
+        # Create detailed embed
+        embed = discord.Embed(
+            title=f"🎮 {game['canonical_name']}",
+            description="Detailed game analysis from database archives.",
+            color=0x2F3136
+        )
+        
+        # Basic info
+        if game.get('series_name'):
+            embed.add_field(name="📁 Series", value=game['series_name'], inline=True)
+        if game.get('release_year'):
+            embed.add_field(name="📅 Release Year", value=str(game['release_year']), inline=True)
+        if game.get('platform'):
+            embed.add_field(name="🖥️ Platform", value=game['platform'], inline=True)
+        
+        # Status and progress
+        status_emoji = {
+            'completed': '✅ Completed',
+            'ongoing': '🔄 Ongoing',
+            'dropped': '❌ Dropped',
+            'unknown': '❓ Unknown'
+        }.get(game.get('completion_status', 'unknown'), '❓ Unknown')
+        
+        embed.add_field(name="📊 Status", value=status_emoji, inline=True)
+        
+        if game.get('total_episodes', 0) > 0:
+            embed.add_field(name="📺 Episodes", value=str(game['total_episodes']), inline=True)
+        
+        # Alternative names
+        if game.get('alternative_names'):
+            alt_names = ", ".join(game['alternative_names'])
+            embed.add_field(name="🔄 Alternative Names", value=alt_names, inline=False)
+        
+        # Links
+        if game.get('youtube_playlist_url'):
+            embed.add_field(name="📺 YouTube Playlist", value=f"[View Playlist]({game['youtube_playlist_url']})", inline=True)
+        
+        if game.get('twitch_vod_urls'):
+            vod_count = len(game['twitch_vod_urls'])
+            embed.add_field(name="🎮 Twitch VODs", value=f"{vod_count} VODs available", inline=True)
+        
+        # Notes
+        if game.get('notes'):
+            embed.add_field(name="📝 Notes", value=game['notes'], inline=False)
+        
+        # Timestamps
+        if game.get('first_played_date'):
+            embed.add_field(name="🎯 First Played", value=game['first_played_date'], inline=True)
+        
+        embed.set_footer(text=f"Database ID: {game['id']} | Last updated: {game.get('updated_at', 'Unknown')}")
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        await ctx.send(f"❌ **Information retrieval failed:** {str(e)}")
+
+@bot.command(name="updateplayedgame")
+@commands.has_permissions(manage_messages=True)
+async def update_played_game_cmd(ctx, game_name: str, *, updates: str):
+    """Update a played game's information. Format: status:completed | episodes:15 | notes:New info"""
+    try:
+        # Find the game first
+        game = db.get_played_game(game_name)
+        if not game:
+            await ctx.send(f"🔍 **Game not found:** '{game_name}' is not in the played games database.")
+            return
+        
+        # Parse updates
+        update_data = {}
+        parts = [part.strip() for part in updates.split('|')]
+        
+        for part in parts:
+            if ':' in part:
+                key, value = part.split(':', 1)
+                key = key.strip().lower()
+                value = value.strip()
+                
+                if key == 'status':
+                    update_data['completion_status'] = value
+                elif key == 'episodes':
+                    try:
+                        update_data['total_episodes'] = int(value)
+                    except ValueError:
+                        await ctx.send(f"⚠️ **Invalid episode count:** '{value}' is not a valid number.")
+                        return
+                elif key == 'notes':
+                    update_data['notes'] = value
+                elif key == 'platform':
+                    update_data['platform'] = value
+                elif key == 'year':
+                    try:
+                        update_data['release_year'] = int(value)
+                    except ValueError:
+                        await ctx.send(f"⚠️ **Invalid year:** '{value}' is not a valid year.")
+                        return
+                elif key == 'series':
+                    update_data['series_name'] = value
+                elif key == 'youtube':
+                    update_data['youtube_playlist_url'] = value
+        
+        if not update_data:
+            await ctx.send("⚠️ **No valid updates provided.** Use format: status:completed | episodes:15 | notes:New info")
+            return
+        
+        # Apply updates
+        success = db.update_played_game(game['id'], **update_data)
+        
+        if success:
+            updated_fields = ", ".join(update_data.keys())
+            await ctx.send(f"✅ **Game updated:** '{game['canonical_name']}' has been modified. Updated fields: {updated_fields}")
+        else:
+            await ctx.send(f"❌ **Update failed:** Unable to modify '{game['canonical_name']}'. System malfunction detected.")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Update error:** {str(e)}")
+
+@bot.command(name="removeplayedgame")
+@commands.has_permissions(manage_messages=True)
+async def remove_played_game_cmd(ctx, *, game_name: str):
+    """Remove a played game from the database"""
+    try:
+        # Find the game first
+        game = db.get_played_game(game_name)
+        if not game:
+            await ctx.send(f"🔍 **Game not found:** '{game_name}' is not in the played games database.")
+            return
+        
+        # Confirmation
+        await ctx.send(f"⚠️ **WARNING:** This will permanently remove '{game['canonical_name']}' from the played games database. Type `CONFIRM DELETE` to proceed or anything else to cancel.")
+        
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+        
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=30.0)
+            if msg.content == "CONFIRM DELETE":
+                removed = db.remove_played_game(game['id'])
+                if removed:
+                    await ctx.send(f"✅ **Game removed:** '{removed['canonical_name']}' has been expunged from the database. Protocol complete.")
+                else:
+                    await ctx.send("❌ **Removal failed:** System malfunction during deletion process.")
+            else:
+                await ctx.send("❌ **Operation cancelled:** No data was deleted.")
+        except asyncio.TimeoutError:
+            await ctx.send("❌ **Operation timed out:** No data was deleted.")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Removal error:** {str(e)}")
+
+@bot.command(name="bulkimportplayedgames")
+@commands.has_permissions(manage_messages=True)
+async def bulk_import_played_games_cmd(ctx):
+    """Import played games from a predefined sample dataset"""
+    try:
+        # Sample data for initial population
+        sample_games = [
+            {
+                'canonical_name': 'God of War (2018)',
+                'alternative_names': ['God of War 4', 'GoW 2018'],
+                'series_name': 'God of War',
+                'release_year': 2018,
+                'platform': 'PlayStation 4',
+                'completion_status': 'completed',
+                'total_episodes': 15,
+                'notes': 'Full playthrough with side content'
+            },
+            {
+                'canonical_name': 'God of War: Ragnarök',
+                'alternative_names': ['God of War Ragnarok', 'GoW Ragnarok'],
+                'series_name': 'God of War',
+                'release_year': 2022,
+                'platform': 'PlayStation 5',
+                'completion_status': 'completed',
+                'total_episodes': 12,
+                'notes': 'Complete story playthrough'
+            },
+            {
+                'canonical_name': 'The Last of Us Part II',
+                'alternative_names': ['TLOU2', 'The Last of Us 2'],
+                'series_name': 'The Last of Us',
+                'release_year': 2020,
+                'platform': 'PlayStation 4',
+                'completion_status': 'completed',
+                'total_episodes': 18,
+                'notes': 'Full story completion'
+            }
+        ]
+        
+        await ctx.send(f"🔄 **Importing sample played games data...** ({len(sample_games)} games)")
+        
+        imported_count = db.bulk_import_played_games(sample_games)
+        
+        if imported_count > 0:
+            await ctx.send(f"✅ **Import complete:** Successfully imported {imported_count} played games to the database.")
+        else:
+            await ctx.send("❌ **Import failed:** No games were imported. Check database connection.")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Import error:** {str(e)}")
+
+@bot.command(name="fixcanonicalname")
+@commands.has_permissions(manage_messages=True)
+async def fix_canonical_name_cmd(ctx, current_name: str, *, new_canonical_name: str):
+    """Fix the canonical name of a played game to correct grammatical errors or improve formatting"""
+    try:
+        # Find the game first
+        game = db.get_played_game(current_name)
+        if not game:
+            await ctx.send(f"🔍 **Game not found:** '{current_name}' is not in the played games database. Analysis complete.")
+            return
+        
+        # Show current information
+        old_name = game['canonical_name']
+        await ctx.send(f"📝 **Current canonical name:** '{old_name}'\n📝 **Proposed new name:** '{new_canonical_name}'\n\n⚠️ **Confirmation required:** This will update the canonical name used for database searches and AI responses. Type `CONFIRM UPDATE` to proceed or anything else to cancel.")
+        
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+        
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=30.0)
+            if msg.content == "CONFIRM UPDATE":
+                # Update the canonical name
+                success = db.update_played_game(game['id'], canonical_name=new_canonical_name)
+                
+                if success:
+                    await ctx.send(f"✅ **Canonical name updated:** '{old_name}' → '{new_canonical_name}'\n\n📊 **Database analysis:** The bot will now recognize this game by its corrected canonical name. Previous alternative names remain valid for searches.")
+                    
+                    # Show updated game info
+                    updated_game = db.get_played_game(new_canonical_name)
+                    if updated_game:
+                        alt_names = ", ".join(updated_game.get('alternative_names', [])) if updated_game.get('alternative_names') else "None"
+                        series = updated_game.get('series_name', 'None')
+                        await ctx.send(f"🔍 **Updated game record:**\n• **Canonical Name:** {updated_game['canonical_name']}\n• **Series:** {series}\n• **Alternative Names:** {alt_names}")
+                else:
+                    await ctx.send(f"❌ **Update failed:** Unable to modify canonical name for '{old_name}'. System malfunction detected.")
+            else:
+                await ctx.send("❌ **Operation cancelled:** No changes were made to the canonical name.")
+        except asyncio.TimeoutError:
+            await ctx.send("❌ **Operation timed out:** No changes were made to the canonical name.")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Canonical name correction error:** {str(e)}")
+
+@bot.command(name="addaltname")
+@commands.has_permissions(manage_messages=True)
+async def add_alternative_name_cmd(ctx, game_name: str, *, alternative_name: str):
+    """Add an alternative name to a played game for better search recognition"""
+    try:
+        # Find the game first
+        game = db.get_played_game(game_name)
+        if not game:
+            await ctx.send(f"🔍 **Game not found:** '{game_name}' is not in the played games database.")
+            return
+        
+        # Get current alternative names
+        current_alt_names = game.get('alternative_names', []) or []
+        
+        # Check if the alternative name already exists
+        if alternative_name.lower() in [name.lower() for name in current_alt_names]:
+            await ctx.send(f"⚠️ **Alternative name already exists:** '{alternative_name}' is already listed as an alternative name for '{game['canonical_name']}'.")
+            return
+        
+        # Add the new alternative name
+        updated_alt_names = current_alt_names + [alternative_name]
+        success = db.update_played_game(game['id'], alternative_names=updated_alt_names)
+        
+        if success:
+            await ctx.send(f"✅ **Alternative name added:** '{alternative_name}' has been added to '{game['canonical_name']}'\n\n📊 **Current alternative names:** {', '.join(updated_alt_names)}")
+        else:
+            await ctx.send(f"❌ **Update failed:** Unable to add alternative name to '{game['canonical_name']}'. System malfunction detected.")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Alternative name addition error:** {str(e)}")
+
+@bot.command(name="removealtname")
+@commands.has_permissions(manage_messages=True)
+async def remove_alternative_name_cmd(ctx, game_name: str, *, alternative_name: str):
+    """Remove an alternative name from a played game"""
+    try:
+        # Find the game first
+        game = db.get_played_game(game_name)
+        if not game:
+            await ctx.send(f"🔍 **Game not found:** '{game_name}' is not in the played games database.")
+            return
+        
+        # Get current alternative names
+        current_alt_names = game.get('alternative_names', []) or []
+        
+        # Find and remove the alternative name (case-insensitive)
+        updated_alt_names = []
+        removed = False
+        for name in current_alt_names:
+            if name.lower() == alternative_name.lower():
+                removed = True
+            else:
+                updated_alt_names.append(name)
+        
+        if not removed:
+            await ctx.send(f"⚠️ **Alternative name not found:** '{alternative_name}' is not listed as an alternative name for '{game['canonical_name']}'.\n\n📊 **Current alternative names:** {', '.join(current_alt_names) if current_alt_names else 'None'}")
+            return
+        
+        # Update the game with the new list
+        success = db.update_played_game(game['id'], alternative_names=updated_alt_names)
+        
+        if success:
+            remaining_names = ', '.join(updated_alt_names) if updated_alt_names else 'None'
+            await ctx.send(f"✅ **Alternative name removed:** '{alternative_name}' has been removed from '{game['canonical_name']}'\n\n📊 **Remaining alternative names:** {remaining_names}")
+        else:
+            await ctx.send(f"❌ **Update failed:** Unable to remove alternative name from '{game['canonical_name']}'. System malfunction detected.")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Alternative name removal error:** {str(e)}")
 
 # --- Cleanup ---
 def cleanup():

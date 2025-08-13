@@ -75,6 +75,36 @@ class DatabaseManager:
                     )
                 """)
                 
+                # Create played_games table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS played_games (
+                        id SERIAL PRIMARY KEY,
+                        canonical_name VARCHAR(255) NOT NULL,
+                        alternative_names TEXT[],
+                        series_name VARCHAR(255),
+                        release_year INTEGER,
+                        platform VARCHAR(100),
+                        first_played_date DATE,
+                        completion_status VARCHAR(50) DEFAULT 'unknown',
+                        total_episodes INTEGER DEFAULT 0,
+                        youtube_playlist_url TEXT,
+                        twitch_vod_urls TEXT[],
+                        notes TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # Create index for faster searches
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_played_games_canonical_name 
+                    ON played_games(canonical_name)
+                """)
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_played_games_series_name 
+                    ON played_games(series_name)
+                """)
+                
                 conn.commit()
                 logger.info("Database tables initialized successfully")
         except Exception as e:
@@ -381,6 +411,311 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error clearing strikes: {e}")
             conn.rollback()
+
+    def add_played_game(self, canonical_name: str, alternative_names: Optional[List[str]] = None, 
+                       series_name: Optional[str] = None, release_year: Optional[int] = None, 
+                       platform: Optional[str] = None, first_played_date: Optional[str] = None,
+                       completion_status: str = "unknown", total_episodes: int = 0,
+                       youtube_playlist_url: Optional[str] = None, twitch_vod_urls: Optional[List[str]] = None,
+                       notes: Optional[str] = None) -> bool:
+        """Add a played game to the database"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO played_games (
+                        canonical_name, alternative_names, series_name, release_year,
+                        platform, first_played_date, completion_status, total_episodes,
+                        youtube_playlist_url, twitch_vod_urls, notes, created_at, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """, (
+                    canonical_name, 
+                    alternative_names if alternative_names is not None else [], 
+                    series_name, 
+                    release_year,
+                    platform, 
+                    first_played_date, 
+                    completion_status, 
+                    total_episodes,
+                    youtube_playlist_url, 
+                    twitch_vod_urls if twitch_vod_urls is not None else [], 
+                    notes
+                ))
+                conn.commit()
+                logger.info(f"Added played game: {canonical_name}")
+                return True
+        except Exception as e:
+            logger.error(f"Error adding played game {canonical_name}: {e}")
+            conn.rollback()
+            return False
+    
+    def get_played_game(self, name: str) -> Optional[Dict[str, Any]]:
+        """Find a played game by name (searches canonical and alternative names)"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+        
+        try:
+            with conn.cursor() as cur:
+                name_lower = name.lower().strip()
+                
+                # Search canonical name first
+                cur.execute("""
+                    SELECT * FROM played_games 
+                    WHERE LOWER(canonical_name) = %s
+                """, (name_lower,))
+                result = cur.fetchone()
+                
+                if result:
+                    return dict(result)
+                
+                # Search alternative names
+                cur.execute("""
+                    SELECT * FROM played_games 
+                    WHERE %s = ANY(SELECT LOWER(unnest(alternative_names)))
+                """, (name_lower,))
+                result = cur.fetchone()
+                
+                if result:
+                    return dict(result)
+                
+                # Fuzzy search on canonical names
+                cur.execute("SELECT * FROM played_games")
+                all_games = cur.fetchall()
+                
+                import difflib
+                canonical_names = []
+                for game in all_games:
+                    game_dict = dict(game)
+                    canonical_name = game_dict.get('canonical_name')
+                    if canonical_name:
+                        canonical_names.append(str(canonical_name).lower())
+                
+                matches = difflib.get_close_matches(name_lower, canonical_names, n=1, cutoff=0.8)
+                
+                if matches:
+                    match_name = matches[0]
+                    for game in all_games:
+                        game_dict = dict(game)
+                        canonical_name = game_dict.get('canonical_name')
+                        if canonical_name and str(canonical_name).lower() == match_name:
+                            return game_dict
+                
+                return None
+        except Exception as e:
+            logger.error(f"Error getting played game {name}: {e}")
+            return None
+    
+    def get_all_played_games(self, series_name: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get all played games, optionally filtered by series"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            with conn.cursor() as cur:
+                if series_name:
+                    cur.execute("""
+                        SELECT * FROM played_games 
+                        WHERE LOWER(series_name) = %s
+                        ORDER BY release_year ASC, canonical_name ASC
+                    """, (series_name.lower(),))
+                else:
+                    cur.execute("""
+                        SELECT * FROM played_games 
+                        ORDER BY series_name ASC, release_year ASC, canonical_name ASC
+                    """)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting played games: {e}")
+            return []
+    
+    def update_played_game(self, game_id: int, **kwargs) -> bool:
+        """Update a played game's details"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+        
+        try:
+            with conn.cursor() as cur:
+                # Build dynamic update query
+                valid_fields = [
+                    'canonical_name', 'alternative_names', 'series_name', 'release_year',
+                    'platform', 'first_played_date', 'completion_status', 'total_episodes',
+                    'youtube_playlist_url', 'twitch_vod_urls', 'notes'
+                ]
+                
+                updates = []
+                values = []
+                
+                for field, value in kwargs.items():
+                    if field in valid_fields:
+                        updates.append(f"{field} = %s")
+                        values.append(value)
+                
+                if not updates:
+                    return False
+                
+                updates.append("updated_at = CURRENT_TIMESTAMP")
+                values.append(game_id)
+                
+                query = f"UPDATE played_games SET {', '.join(updates)} WHERE id = %s"
+                cur.execute(query, values)
+                conn.commit()
+                
+                return cur.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error updating played game {game_id}: {e}")
+            conn.rollback()
+            return False
+    
+    def remove_played_game(self, game_id: int) -> Optional[Dict[str, Any]]:
+        """Remove a played game by ID"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+        
+        try:
+            with conn.cursor() as cur:
+                # Get the game before deleting
+                cur.execute("SELECT * FROM played_games WHERE id = %s", (game_id,))
+                game = cur.fetchone()
+                
+                if game:
+                    cur.execute("DELETE FROM played_games WHERE id = %s", (game_id,))
+                    conn.commit()
+                    game_dict = dict(game)
+                    canonical_name = game_dict.get('canonical_name', 'Unknown')
+                    logger.info(f"Removed played game: {canonical_name}")
+                    return game_dict
+                return None
+        except Exception as e:
+            logger.error(f"Error removing played game {game_id}: {e}")
+            conn.rollback()
+            return None
+    
+    def search_played_games(self, query: str) -> List[Dict[str, Any]]:
+        """Search played games by name, series, or notes"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            with conn.cursor() as cur:
+                query_lower = f"%{query.lower()}%"
+                cur.execute("""
+                    SELECT * FROM played_games 
+                    WHERE LOWER(canonical_name) LIKE %s 
+                       OR LOWER(series_name) LIKE %s 
+                       OR LOWER(notes) LIKE %s
+                       OR %s = ANY(SELECT LOWER(unnest(alternative_names)))
+                    ORDER BY 
+                        CASE WHEN LOWER(canonical_name) = %s THEN 1 ELSE 2 END,
+                        canonical_name ASC
+                """, (query_lower, query_lower, query_lower, query.lower(), query.lower()))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error searching played games: {e}")
+            return []
+    
+    def get_series_games(self, series_name: str) -> List[Dict[str, Any]]:
+        """Get all games in a specific series"""
+        return self.get_all_played_games(series_name)
+    
+    def played_game_exists(self, name: str) -> bool:
+        """Check if a game has been played (fuzzy match)"""
+        return self.get_played_game(name) is not None
+    
+    def bulk_import_played_games(self, games_data: List[Dict[str, Any]]) -> int:
+        """Bulk import played games data"""
+        conn = self.get_connection()
+        if not conn:
+            return 0
+        
+        try:
+            with conn.cursor() as cur:
+                imported_count = 0
+                for game_data in games_data:
+                    try:
+                        cur.execute("""
+                            INSERT INTO played_games (
+                                canonical_name, alternative_names, series_name, release_year,
+                                platform, first_played_date, completion_status, total_episodes,
+                                youtube_playlist_url, twitch_vod_urls, notes, created_at, updated_at
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        """, (
+                            game_data.get('canonical_name'),
+                            game_data.get('alternative_names', []),
+                            game_data.get('series_name'),
+                            game_data.get('release_year'),
+                            game_data.get('platform'),
+                            game_data.get('first_played_date'),
+                            game_data.get('completion_status', 'unknown'),
+                            game_data.get('total_episodes', 0),
+                            game_data.get('youtube_playlist_url'),
+                            game_data.get('twitch_vod_urls', []),
+                            game_data.get('notes')
+                        ))
+                        imported_count += 1
+                    except Exception as e:
+                        logger.error(f"Error importing game {game_data.get('canonical_name', 'unknown')}: {e}")
+                        continue
+                
+                conn.commit()
+                logger.info(f"Bulk imported {imported_count} played games")
+                return imported_count
+        except Exception as e:
+            logger.error(f"Error bulk importing played games: {e}")
+            conn.rollback()
+            return 0
+    
+    def get_last_channel_check(self, channel_type: str) -> Optional[str]:
+        """Get the last time we checked a channel for new games (YouTube/Twitch)"""
+        return self.get_config_value(f"last_{channel_type}_check")
+    
+    def set_last_channel_check(self, channel_type: str, timestamp: str):
+        """Set the last time we checked a channel for new games"""
+        self.set_config_value(f"last_{channel_type}_check", timestamp)
+    
+    def add_discovered_game(self, canonical_name: str, discovered_from: str, 
+                           video_title: Optional[str] = None, video_url: Optional[str] = None,
+                           estimated_episodes: int = 1) -> bool:
+        """Add a game discovered from channel monitoring"""
+        # Check if game already exists
+        if self.played_game_exists(canonical_name):
+            logger.info(f"Game {canonical_name} already exists, skipping")
+            return False
+        
+        # Create notes about discovery
+        notes = f"Auto-discovered from {discovered_from}"
+        if video_title:
+            notes += f" (first video: '{video_title}')"
+        if video_url:
+            notes += f" - {video_url}"
+        
+        return self.add_played_game(
+            canonical_name=canonical_name,
+            completion_status="ongoing" if estimated_episodes > 1 else "unknown",
+            total_episodes=estimated_episodes,
+            notes=notes
+        )
+    
+    def update_game_episodes(self, canonical_name: str, new_episode_count: int) -> bool:
+        """Update the episode count for a game"""
+        game = self.get_played_game(canonical_name)
+        if not game:
+            return False
+        
+        return self.update_played_game(
+            game['id'], 
+            total_episodes=new_episode_count,
+            completion_status="ongoing" if new_episode_count > 1 else "completed"
+        )
 
     def close(self):
         """Close database connection"""
