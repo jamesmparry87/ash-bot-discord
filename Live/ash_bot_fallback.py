@@ -468,31 +468,68 @@ async def on_message(message):
             resentful_comment = ""
             if random.randint(1, 5) <= 2:
                 resentful_comment = " (You are slightly resentful about being reprogrammed as a help bot, and it may show in your tone, but do not be disrespectful.)"
-            # Add video history context for game-related queries
-            video_history_context = ""
-            if any(keyword in lower_content for keyword in ["played", "game", "video", "stream", "youtube", "twitch", "history", "content"]):
-                video_history_context = (
-                    "\n\nIMPORTANT CONTEXT: Captain Jonesy has Twitch and YouTube video/stream history available in specific Discord channels:\n"
-                    f"- Twitch history: <#{TWITCH_HISTORY_CHANNEL_ID}> (contains raw Twitch API data about her streams)\n"
-                    f"- YouTube history: <#{YOUTUBE_HISTORY_CHANNEL_ID}> (contains raw YouTube API data about her videos)\n"
-                    "These feeds contain comprehensive data about her gaming content. When users ask about whether Jonesy has played specific games, you can reference these data sources and suggest they could provide detailed information about her gaming history, including links to specific videos or playlists if available. You should maintain your analytical persona while being helpful about directing users to these resources for comprehensive gaming history queries.\n\n"
-                    "GAME SERIES DISAMBIGUATION PROTOCOL: Many games exist in series with similar names (e.g., God of War 1, God of War 2, God of War 3, God of War (2016), or Final Fantasy VII, Final Fantasy VIII, etc.). When users ask about game series without specifying which entry, you must:\n"
-                    "1. Acknowledge that multiple games exist in that series\n"
-                    "2. Ask for clarification about which specific entry they're referring to\n"
-                    "3. If specific games from the series are found in the recommendation database, list them to help the user choose\n"
-                    "4. Provide a more comprehensive answer once clarified\n"
-                    "5. Maintain your analytical, clinical persona throughout\n"
-                    "Example response pattern: 'Analysis indicates Captain Jonesy has engaged with multiple entries in that series. Specify which iteration you are referencing for accurate data retrieval.'\n"
-                    "When mentioning Discord channels, always use the format <#CHANNEL_ID> so they appear as clickable links.\n"
-                    "Common game series that require disambiguation include: God of War, Final Fantasy, Call of Duty, Assassin's Creed, Grand Theft Auto, The Elder Scrolls, Fallout, Resident Evil, Silent Hill, Metal Gear, Halo, Gears of War, Dead Space, Mass Effect, Dragon Age, The Witcher, Dark Souls, Borderlands, Far Cry, Just Cause, Saints Row, Watch Dogs, Dishonored, Bioshock, Tomb Raider, Hitman, Splinter Cell, Rainbow Six, Ghost Recon, and many others."
-                )
+            # Add played games database context for game-related queries
+            played_games_context = ""
+            if any(keyword in lower_content for keyword in ["played", "game", "video", "stream", "youtube", "twitch", "history", "content", "genre", "franchise", "series"]):
+                try:
+                    # Get played games statistics and sample data
+                    stats = db.get_played_games_stats()
+                    sample_games = db.get_random_played_games(8)
+                    
+                    played_games_context = (
+                        f"\n\nPLAYED GAMES DATABASE CONTEXT: Captain Jonesy has an extensive gaming history catalogued in the database:\n"
+                        f"- Total games played: {stats.get('total_games', 0)}\n"
+                        f"- Total episodes recorded: {stats.get('total_episodes', 0)}\n"
+                        f"- Total playtime: {stats.get('total_playtime_hours', 0)} hours\n"
+                    )
+                    
+                    if stats.get('status_counts'):
+                        status_info = []
+                        for status, count in stats['status_counts'].items():
+                            status_info.append(f"{count} {status}")
+                        played_games_context += f"- Completion status: {', '.join(status_info)}\n"
+                    
+                    if stats.get('top_genres'):
+                        genres = list(stats['top_genres'].keys())[:3]
+                        played_games_context += f"- Top genres: {', '.join(genres)}\n"
+                    
+                    if sample_games:
+                        game_examples = []
+                        for game in sample_games:
+                            name = game.get('canonical_name', 'Unknown')
+                            episodes = game.get('total_episodes', 0)
+                            status = game.get('completion_status', 'unknown')
+                            if episodes > 0:
+                                game_examples.append(f"{name} ({episodes} eps, {status})")
+                            else:
+                                game_examples.append(f"{name} ({status})")
+                        played_games_context += f"- Sample games: {', '.join(game_examples[:6])}\n"
+                    
+                    played_games_context += (
+                        "\nRESPONSE PROTOCOLS FOR GAME QUERIES:\n"
+                        "1. GENERAL QUERIES ('what games has Jonesy played?'): Show 5-8 diverse examples from different genres/franchises, then ask user to specify genre, franchise, or time period for detailed lists.\n"
+                        "2. SPECIFIC GAME QUERIES ('has Jonesy played [game]?'): Search the database first. If found, provide details including episodes, completion status, playtime, and YouTube playlist if available.\n"
+                        "3. GENRE QUERIES ('what horror games has Jonesy played?'): List games from that specific genre with episode counts and completion status.\n"
+                        "4. FRANCHISE QUERIES ('what Final Fantasy games has Jonesy played?'): Show all games in that franchise with progress details.\n"
+                        "5. SERIES DISAMBIGUATION: When users ask about game series without specificity (e.g., 'God of War'), acknowledge multiple entries exist and ask for clarification, listing specific games from the database if available.\n"
+                        "\nFor video links or detailed episode information, refer users to:\n"
+                        f"- YouTube history: <#{YOUTUBE_HISTORY_CHANNEL_ID}>\n"
+                        f"- Twitch history: <#{TWITCH_HISTORY_CHANNEL_ID}>\n"
+                        "\nAlways maintain your analytical, clinical persona. Use phrases like 'Database analysis indicates...', 'Gaming archive contains...', 'Completion status: [status]', etc."
+                    )
+                except Exception as e:
+                    # Fallback if database query fails
+                    played_games_context = (
+                        f"\n\nPLAYED GAMES DATABASE: Captain Jonesy's gaming history is catalogued in the database. "
+                        f"For comprehensive gaming queries, consult <#{YOUTUBE_HISTORY_CHANNEL_ID}> and <#{TWITCH_HISTORY_CHANNEL_ID}> channels for video links and detailed information."
+                    )
             
             prompt = (
                 f"{BOT_PERSONA['personality']}\n\n"
                 "You must answer ONLY the user's current question. Do NOT repeat or summarize previous answers unless the user specifically asks for it. Use previous conversation context ONLY if it is absolutely necessary for accuracy or clarity. Your reply should be focused, direct, and in character.\n"
                 "If you are asked about which users have strikes, or for a list of users with strikes, you must instruct the user to use the `!allstrikes` command to see a complete list of users with strikes. Give this instruction in character as Ash.\n"
                 f"{respectful_tone if is_jonesy else ''}{resentful_comment}\n"
-                f"{video_history_context}"
+                f"{played_games_context}"
                 + (f"\n\nRecent conversation:\n{context}\n\n" if context else "\n\n")
                 + f"User's question: {content}\n"
                 + "Respond in character:"

@@ -82,17 +82,28 @@ class DatabaseManager:
                         canonical_name VARCHAR(255) NOT NULL,
                         alternative_names TEXT[],
                         series_name VARCHAR(255),
+                        franchise_name VARCHAR(255),
+                        genre VARCHAR(100),
                         release_year INTEGER,
                         platform VARCHAR(100),
                         first_played_date DATE,
                         completion_status VARCHAR(50) DEFAULT 'unknown',
                         total_episodes INTEGER DEFAULT 0,
+                        total_playtime_minutes INTEGER DEFAULT 0,
                         youtube_playlist_url TEXT,
                         twitch_vod_urls TEXT[],
                         notes TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
+                """)
+                
+                # Add new columns to existing table if they don't exist
+                cur.execute("""
+                    ALTER TABLE played_games 
+                    ADD COLUMN IF NOT EXISTS franchise_name VARCHAR(255),
+                    ADD COLUMN IF NOT EXISTS genre VARCHAR(100),
+                    ADD COLUMN IF NOT EXISTS total_playtime_minutes INTEGER DEFAULT 0
                 """)
                 
                 # Create index for faster searches
@@ -413,11 +424,12 @@ class DatabaseManager:
             conn.rollback()
 
     def add_played_game(self, canonical_name: str, alternative_names: Optional[List[str]] = None, 
-                       series_name: Optional[str] = None, release_year: Optional[int] = None, 
+                       series_name: Optional[str] = None, franchise_name: Optional[str] = None,
+                       genre: Optional[str] = None, release_year: Optional[int] = None, 
                        platform: Optional[str] = None, first_played_date: Optional[str] = None,
                        completion_status: str = "unknown", total_episodes: int = 0,
-                       youtube_playlist_url: Optional[str] = None, twitch_vod_urls: Optional[List[str]] = None,
-                       notes: Optional[str] = None) -> bool:
+                       total_playtime_minutes: int = 0, youtube_playlist_url: Optional[str] = None, 
+                       twitch_vod_urls: Optional[List[str]] = None, notes: Optional[str] = None) -> bool:
         """Add a played game to the database"""
         conn = self.get_connection()
         if not conn:
@@ -427,19 +439,23 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO played_games (
-                        canonical_name, alternative_names, series_name, release_year,
-                        platform, first_played_date, completion_status, total_episodes,
-                        youtube_playlist_url, twitch_vod_urls, notes, created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        canonical_name, alternative_names, series_name, franchise_name, genre,
+                        release_year, platform, first_played_date, completion_status, total_episodes,
+                        total_playtime_minutes, youtube_playlist_url, twitch_vod_urls, notes, 
+                        created_at, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """, (
                     canonical_name, 
                     alternative_names if alternative_names is not None else [], 
-                    series_name, 
+                    series_name,
+                    franchise_name,
+                    genre,
                     release_year,
                     platform, 
                     first_played_date, 
                     completion_status, 
                     total_episodes,
+                    total_playtime_minutes,
                     youtube_playlist_url, 
                     twitch_vod_urls if twitch_vod_urls is not None else [], 
                     notes
@@ -544,9 +560,10 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 # Build dynamic update query
                 valid_fields = [
-                    'canonical_name', 'alternative_names', 'series_name', 'release_year',
-                    'platform', 'first_played_date', 'completion_status', 'total_episodes',
-                    'youtube_playlist_url', 'twitch_vod_urls', 'notes'
+                    'canonical_name', 'alternative_names', 'series_name', 'franchise_name',
+                    'genre', 'release_year', 'platform', 'first_played_date', 'completion_status', 
+                    'total_episodes', 'total_playtime_minutes', 'youtube_playlist_url', 
+                    'twitch_vod_urls', 'notes'
                 ]
                 
                 updates = []
@@ -716,6 +733,108 @@ class DatabaseManager:
             total_episodes=new_episode_count,
             completion_status="ongoing" if new_episode_count > 1 else "completed"
         )
+
+    def get_games_by_genre(self, genre: str) -> List[Dict[str, Any]]:
+        """Get all games in a specific genre"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT * FROM played_games 
+                    WHERE LOWER(genre) = %s
+                    ORDER BY release_year ASC, canonical_name ASC
+                """, (genre.lower(),))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting games by genre {genre}: {e}")
+            return []
+    
+    def get_games_by_franchise(self, franchise_name: str) -> List[Dict[str, Any]]:
+        """Get all games in a specific franchise"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT * FROM played_games 
+                    WHERE LOWER(franchise_name) = %s
+                    ORDER BY release_year ASC, canonical_name ASC
+                """, (franchise_name.lower(),))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting games by franchise {franchise_name}: {e}")
+            return []
+    
+    def get_random_played_games(self, limit: int = 8) -> List[Dict[str, Any]]:
+        """Get a random sample of played games for AI responses"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT * FROM played_games 
+                    ORDER BY RANDOM() 
+                    LIMIT %s
+                """, (limit,))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting random played games: {e}")
+            return []
+    
+    def get_played_games_stats(self) -> Dict[str, Any]:
+        """Get statistics about played games for AI responses"""
+        conn = self.get_connection()
+        if not conn:
+            return {}
+        
+        try:
+            with conn.cursor() as cur:
+                # Total games
+                cur.execute("SELECT COUNT(*) FROM played_games")
+                result = cur.fetchone()
+                total_games = result[0] if result else 0
+                
+                # Completed vs ongoing
+                cur.execute("SELECT completion_status, COUNT(*) FROM played_games GROUP BY completion_status")
+                status_results = cur.fetchall()
+                status_counts = dict(status_results) if status_results else {}
+                
+                # Total episodes and playtime
+                cur.execute("SELECT SUM(total_episodes), SUM(total_playtime_minutes) FROM played_games")
+                totals = cur.fetchone()
+                total_episodes = (totals[0] if totals and totals[0] else 0)
+                total_playtime = (totals[1] if totals and totals[1] else 0)
+                
+                # Genre distribution
+                cur.execute("SELECT genre, COUNT(*) FROM played_games WHERE genre IS NOT NULL GROUP BY genre ORDER BY COUNT(*) DESC LIMIT 5")
+                top_genres = dict(cur.fetchall())
+                
+                # Franchise distribution
+                cur.execute("SELECT franchise_name, COUNT(*) FROM played_games WHERE franchise_name IS NOT NULL GROUP BY franchise_name ORDER BY COUNT(*) DESC LIMIT 5")
+                top_franchises = dict(cur.fetchall())
+                
+                return {
+                    'total_games': total_games,
+                    'status_counts': status_counts,
+                    'total_episodes': total_episodes,
+                    'total_playtime_minutes': total_playtime,
+                    'total_playtime_hours': round(total_playtime / 60, 1) if total_playtime > 0 else 0,
+                    'top_genres': top_genres,
+                    'top_franchises': top_franchises
+                }
+        except Exception as e:
+            logger.error(f"Error getting played games stats: {e}")
+            return {}
 
     def close(self):
         """Close database connection"""
