@@ -2,7 +2,7 @@
 import difflib
 import os
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import sys
 import platform
 import re
@@ -11,6 +11,7 @@ import atexit
 import logging
 import asyncio
 from typing import Optional, Any, List, Dict, Union
+from datetime import datetime, time
 
 # Import database manager
 from database import DatabaseManager
@@ -223,10 +224,52 @@ async def error_check(ctx):
 async def busy_check(ctx):
     await ctx.send(BUSY_MESSAGE)
 
+# --- Scheduled Tasks ---
+@tasks.loop(time=time(12, 0))  # Run at 12:00 PM (midday) every day
+async def scheduled_games_update():
+    """Automatically update ongoing games data every Sunday at midday"""
+    # Only run on Sundays (weekday 6)
+    if datetime.now().weekday() != 6:
+        return
+    
+    print("🔄 Starting scheduled games update (Sunday midday)")
+    
+    mod_channel = None
+    try:
+        # Get mod alert channel for notifications
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print("❌ Guild not found for scheduled update")
+            return
+        
+        mod_channel = guild.get_channel(MOD_ALERT_CHANNEL_ID)
+        if not isinstance(mod_channel, discord.TextChannel):
+            print("❌ Mod channel not found for scheduled update")
+            return
+        
+        await mod_channel.send("🤖 **Scheduled Update Initiated:** Beginning automatic refresh of ongoing games data. Analysis commencing...")
+        
+        # Update only ongoing games with fresh metadata
+        updated_count = await refresh_ongoing_games_metadata()
+        
+        if updated_count > 0:
+            await mod_channel.send(f"✅ **Scheduled Update Complete:** Successfully refreshed metadata for {updated_count} ongoing games. Database synchronization maintained.")
+        else:
+            await mod_channel.send("📊 **Scheduled Update Complete:** No ongoing games required updates. All data current.")
+            
+    except Exception as e:
+        print(f"❌ Scheduled update error: {e}")
+        if mod_channel and isinstance(mod_channel, discord.TextChannel):
+            await mod_channel.send(f"❌ **Scheduled Update Failed:** {str(e)}")
+
 # --- Event Handlers ---
 @bot.event
 async def on_ready():
     print(f'Bot is ready. Logged in as {bot.user}')
+    # Start the scheduled task
+    if not scheduled_games_update.is_running():
+        scheduled_games_update.start()
+        print("✅ Scheduled games update task started (Sunday midday)")
 
 @bot.event
 async def on_message(message):
@@ -1610,7 +1653,7 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
                     
                     await asyncio.sleep(0.1)  # Rate limiting
             
-            # Process playlists to extract game data
+            # Process playlists to extract game data with accurate playtime
             for playlist in all_playlists:
                 playlist_title = playlist['snippet']['title']
                 playlist_id = playlist['id']
@@ -1637,30 +1680,50 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
                     elif video_count > 1 and completion_status == 'unknown':
                         completion_status = 'ongoing'  # Multiple videos, no completion marker
                     
-                    # Get first video from playlist for date information
+                    # Get accurate playtime by fetching video durations
+                    total_playtime_minutes = 0
                     first_video_date = None
                     playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
                     
                     try:
-                        # Get first video from playlist
+                        # Get all videos from playlist with their durations
                         playlist_items_url = f"https://www.googleapis.com/youtube/v3/playlistItems"
                         playlist_params = {
                             'part': 'snippet',
                             'playlistId': playlist_id,
-                            'maxResults': 1,
+                            'maxResults': 50,
                             'key': youtube_api_key
                         }
                         
+                        video_ids = []
                         async with session.get(playlist_items_url, params=playlist_params) as response:
                             if response.status == 200:
                                 playlist_data = await response.json()
-                                if playlist_data.get('items'):
-                                    first_video_date = playlist_data['items'][0]['snippet']['publishedAt'][:10]
-                    except Exception:
-                        pass  # Continue without date if API call fails
-                    
-                    # Calculate estimated playtime (rough estimate: 30 min per episode)
-                    estimated_playtime = video_count * 30
+                                items = playlist_data.get('items', [])
+                                if items:
+                                    first_video_date = items[0]['snippet']['publishedAt'][:10]
+                                    video_ids = [item['snippet']['resourceId']['videoId'] for item in items]
+                        
+                        # Get video durations
+                        if video_ids:
+                            videos_url = f"https://www.googleapis.com/youtube/v3/videos"
+                            videos_params = {
+                                'part': 'contentDetails',
+                                'id': ','.join(video_ids[:50]),  # API limit
+                                'key': youtube_api_key
+                            }
+                            
+                            async with session.get(videos_url, params=videos_params) as response:
+                                if response.status == 200:
+                                    videos_data = await response.json()
+                                    for video in videos_data.get('items', []):
+                                        duration = video['contentDetails']['duration']
+                                        duration_minutes = parse_youtube_duration(duration) // 60
+                                        total_playtime_minutes += duration_minutes
+                    except Exception as e:
+                        # Fallback to estimate if API calls fail
+                        total_playtime_minutes = video_count * 30
+                        print(f"Failed to get accurate playtime for {game_name}: {e}")
                     
                     game_data = {
                         'canonical_name': game_name,
@@ -1671,10 +1734,10 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
                         'first_played_date': first_video_date,
                         'completion_status': completion_status,
                         'total_episodes': video_count,
-                        'total_playtime_minutes': estimated_playtime,
+                        'total_playtime_minutes': total_playtime_minutes,
                         'youtube_playlist_url': playlist_url,
                         'twitch_vod_urls': [],
-                        'notes': f"Auto-imported from YouTube playlist '{playlist_title}'. {video_count} episodes.",
+                        'notes': f"Auto-imported from YouTube playlist '{playlist_title}'. {video_count} episodes, {total_playtime_minutes//60}h {total_playtime_minutes%60}m total.",
                         'genre': None  # Will be enhanced by AI
                     }
                     
@@ -2105,6 +2168,112 @@ def parse_twitch_duration(duration: str) -> int:
         total_seconds += int(second_match.group(1))
     
     return total_seconds
+
+async def refresh_ongoing_games_metadata() -> int:
+    """Refresh metadata for ongoing games by fetching updated episode counts and playtime"""
+    try:
+        # Get all ongoing games from the database
+        all_games = db.get_all_played_games()
+        ongoing_games = [game for game in all_games if game.get('completion_status') == 'ongoing']
+        
+        if not ongoing_games:
+            return 0
+        
+        updated_count = 0
+        youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+        
+        if not youtube_api_key or not AIOHTTP_AVAILABLE or aiohttp is None:
+            return 0
+        
+        async with aiohttp.ClientSession() as session:
+            for game in ongoing_games:
+                try:
+                    playlist_url = game.get('youtube_playlist_url')
+                    if not playlist_url:
+                        continue
+                    
+                    # Extract playlist ID from URL
+                    playlist_id_match = re.search(r'list=([^&]+)', playlist_url)
+                    if not playlist_id_match:
+                        continue
+                    
+                    playlist_id = playlist_id_match.group(1)
+                    
+                    # Get current video count and playtime
+                    playlist_url_api = f"https://www.googleapis.com/youtube/v3/playlists"
+                    params = {
+                        'part': 'contentDetails',
+                        'id': playlist_id,
+                        'key': youtube_api_key
+                    }
+                    
+                    async with session.get(playlist_url_api, params=params) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if data.get('items'):
+                                current_video_count = data['items'][0]['contentDetails']['itemCount']
+                                
+                                # Only update if video count has changed
+                                if current_video_count != game.get('total_episodes', 0):
+                                    # Get accurate playtime
+                                    total_playtime_minutes = 0
+                                    
+                                    # Get video IDs from playlist
+                                    playlist_items_url = f"https://www.googleapis.com/youtube/v3/playlistItems"
+                                    playlist_params = {
+                                        'part': 'snippet',
+                                        'playlistId': playlist_id,
+                                        'maxResults': 50,
+                                        'key': youtube_api_key
+                                    }
+                                    
+                                    video_ids = []
+                                    async with session.get(playlist_items_url, params=playlist_params) as response:
+                                        if response.status == 200:
+                                            playlist_data = await response.json()
+                                            items = playlist_data.get('items', [])
+                                            video_ids = [item['snippet']['resourceId']['videoId'] for item in items]
+                                    
+                                    # Get video durations
+                                    if video_ids:
+                                        videos_url = f"https://www.googleapis.com/youtube/v3/videos"
+                                        videos_params = {
+                                            'part': 'contentDetails',
+                                            'id': ','.join(video_ids[:50]),  # API limit
+                                            'key': youtube_api_key
+                                        }
+                                        
+                                        async with session.get(videos_url, params=videos_params) as response:
+                                            if response.status == 200:
+                                                videos_data = await response.json()
+                                                for video in videos_data.get('items', []):
+                                                    duration = video['contentDetails']['duration']
+                                                    duration_minutes = parse_youtube_duration(duration) // 60
+                                                    total_playtime_minutes += duration_minutes
+                                    
+                                    # Update the game in database
+                                    success = db.update_played_game(
+                                        game['id'],
+                                        total_episodes=current_video_count,
+                                        total_playtime_minutes=total_playtime_minutes
+                                    )
+                                    
+                                    if success:
+                                        updated_count += 1
+                                        print(f"Updated {game['canonical_name']}: {game.get('total_episodes', 0)} → {current_video_count} episodes")
+                    
+                    # Rate limiting
+                    await asyncio.sleep(0.1)
+                    
+                except Exception as e:
+                    print(f"Error updating {game.get('canonical_name', 'unknown')}: {e}")
+                    continue
+        
+        return updated_count
+        
+    except Exception as e:
+        print(f"Error in refresh_ongoing_games_metadata: {e}")
+        return 0
 
 # --- Game Commands ---
 @bot.command(name="addgame")
