@@ -1532,6 +1532,17 @@ def extract_game_from_title(title: str) -> str:
     """Extract game name from video title using common patterns"""
     title = title.strip()
     
+    # Handle "First Time Playing" pattern specifically
+    # Example: "Rat Fans - First Time Playing: A Plague Tale: Innocence"
+    first_time_pattern = r'^.*?-\s*first\s+time\s+playing:\s*(.+?)(?:\s*-.*)?$'
+    first_time_match = re.match(first_time_pattern, title, re.IGNORECASE)
+    if first_time_match:
+        game_name = first_time_match.group(1).strip()
+        # Clean up any trailing separators or episode indicators
+        game_name = re.sub(r'\s*[-|#]\s*.*$', '', game_name)
+        if len(game_name) > 3:
+            return game_name
+    
     # Common patterns for game titles in videos (order matters - most specific first)
     patterns = [
         r'^([^|]+?)\s*\|\s*',           # "Game Name | Episode"
@@ -1548,19 +1559,22 @@ def extract_game_from_title(title: str) -> str:
         match = re.match(pattern, title, re.IGNORECASE)
         if match:
             game_name = match.group(1).strip()
+            
             # Clean up common prefixes/suffixes
-            game_name = re.sub(r'\s*(let\'s play|gameplay|walkthrough|playthrough)\s*', '', game_name, flags=re.IGNORECASE)
+            game_name = re.sub(r'\s*(let\'s play|gameplay|walkthrough|playthrough|first time playing)\s*', '', game_name, flags=re.IGNORECASE)
             game_name = game_name.strip()
             
             # Filter out common non-game words and ensure minimum length
             if (len(game_name) > 3 and 
-                not any(word in game_name.lower() for word in ['stream', 'live', 'chat', 'vod', 'highlight', 'reaction', 'review']) and
+                not any(word in game_name.lower() for word in ['stream', 'live', 'chat', 'vod', 'highlight', 'reaction', 'review', 'rat fans']) and
                 not re.match(r'^\d+$', game_name)):  # Not just numbers
                 return game_name
     
     # If no pattern matches, try to extract first meaningful words
     # Remove common video prefixes first
-    clean_title = re.sub(r'^(let\'s play|gameplay|walkthrough|playthrough)\s+', '', title, flags=re.IGNORECASE)
+    clean_title = re.sub(r'^(let\'s play|gameplay|walkthrough|playthrough|first time playing)\s+', '', title, flags=re.IGNORECASE)
+    # Also remove channel names or common prefixes
+    clean_title = re.sub(r'^(rat fans|jonesyspacecat)\s*[-:]?\s*', '', clean_title, flags=re.IGNORECASE)
     words = clean_title.split()
     
     if len(words) >= 2:
@@ -1569,7 +1583,7 @@ def extract_game_from_title(title: str) -> str:
             if len(words) >= word_count:
                 potential_game = ' '.join(words[:word_count])
                 if (len(potential_game) > 3 and 
-                    not any(word in potential_game.lower() for word in ['stream', 'live', 'chat', 'vod', 'highlight'])):
+                    not any(word in potential_game.lower() for word in ['stream', 'live', 'chat', 'vod', 'highlight', 'first time'])):
                     return potential_game
     
     return ""
