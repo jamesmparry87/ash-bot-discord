@@ -2302,8 +2302,9 @@ If you want to add any other comments, you can discuss the list in ⁠🎮game-c
         # Create one continuous list
         game_lines = []
         for i, game in enumerate(games, 1):
-            # Truncate long names/reasons to fit in embed
+            # Truncate long names/reasons to fit in embed and apply Title Case
             name = game['name'][:40] + "..." if len(game['name']) > 40 else game['name']
+            name = name.title()  # Convert to Title Case
             reason = game['reason'][:60] + "..." if len(game['reason']) > 60 else game['reason']
             
             # Don't show contributor twice - if reason already contains "Suggested by", don't add "by" again
@@ -2437,8 +2438,9 @@ async def list_games(ctx):
         # Create one continuous list
         game_lines = []
         for i, game in enumerate(games, 1):
-            # Truncate long names/reasons to fit in embed
+            # Truncate long names/reasons to fit in embed and apply Title Case
             name = game['name'][:40] + "..." if len(game['name']) > 40 else game['name']
+            name = name.title()  # Convert to Title Case
             reason = game['reason'][:60] + "..." if len(game['reason']) > 60 else game['reason']
             
             # Don't show contributor twice - if reason already contains "Suggested by", don't add "by" again
