@@ -3,7 +3,6 @@ import difflib
 import os
 import discord
 from discord.ext import commands
-from database import db
 import sys
 import platform
 import re
@@ -12,6 +11,10 @@ import atexit
 import logging
 import asyncio
 from typing import Optional, Any, List, Dict, Union
+
+# Import database manager
+from database import DatabaseManager
+db = DatabaseManager()
 
 # Try to import aiohttp, handle if not available
 try:
@@ -1560,6 +1563,416 @@ def extract_game_from_title(title: str) -> str:
     
     return ""
 
+async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, Any]]:
+    """Fetch comprehensive game data from YouTube channel with full metadata"""
+    youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+    if not youtube_api_key:
+        raise Exception("YOUTUBE_API_KEY not configured")
+    
+    if not AIOHTTP_AVAILABLE or aiohttp is None:
+        raise Exception("aiohttp module not available")
+    
+    games_data = []
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Get channel uploads playlist
+            url = f"https://www.googleapis.com/youtube/v3/channels"
+            params = {
+                'part': 'contentDetails',
+                'id': channel_id,
+                'key': youtube_api_key
+            }
+            
+            async with session.get(url, params=params) as response:
+                if response.status != 200:
+                    raise Exception(f"YouTube API error: {response.status}")
+                
+                data = await response.json()
+                if not data.get('items'):
+                    raise Exception("Channel not found")
+                
+                uploads_playlist_id = data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+            
+            # Get all videos from uploads playlist
+            all_videos = []
+            next_page_token = None
+            
+            while len(all_videos) < 1000:  # Limit to prevent excessive API calls
+                url = f"https://www.googleapis.com/youtube/v3/playlistItems"
+                params = {
+                    'part': 'snippet',
+                    'playlistId': uploads_playlist_id,
+                    'maxResults': 50,
+                    'key': youtube_api_key
+                }
+                
+                if next_page_token:
+                    params['pageToken'] = next_page_token
+                
+                async with session.get(url, params=params) as response:
+                    if response.status != 200:
+                        break
+                    
+                    data = await response.json()
+                    all_videos.extend(data.get('items', []))
+                    
+                    next_page_token = data.get('nextPageToken')
+                    if not next_page_token:
+                        break
+                    
+                    await asyncio.sleep(0.1)  # Rate limiting
+            
+            # Group videos by game series
+            game_series = {}
+            for video in all_videos:
+                title = video['snippet']['title']
+                game_name = extract_game_from_title(title)
+                
+                if game_name:
+                    # Normalize game name for grouping
+                    normalized_name = game_name.strip().title()
+                    
+                    if normalized_name not in game_series:
+                        game_series[normalized_name] = {
+                            'videos': [],
+                            'first_played_date': None,
+                            'total_episodes': 0,
+                            'total_duration_seconds': 0
+                        }
+                    
+                    game_series[normalized_name]['videos'].append({
+                        'title': title,
+                        'published_at': video['snippet']['publishedAt'],
+                        'video_id': video['snippet']['resourceId']['videoId']
+                    })
+            
+            # Get detailed video information for duration calculation
+            for game_name, series_info in game_series.items():
+                video_ids = [v['video_id'] for v in series_info['videos'][:50]]  # Limit to first 50 episodes
+                
+                if video_ids:
+                    # Get video durations
+                    url = f"https://www.googleapis.com/youtube/v3/videos"
+                    params = {
+                        'part': 'contentDetails',
+                        'id': ','.join(video_ids),
+                        'key': youtube_api_key
+                    }
+                    
+                    async with session.get(url, params=params) as response:
+                        if response.status == 200:
+                            duration_data = await response.json()
+                            total_seconds = 0
+                            
+                            for video in duration_data.get('items', []):
+                                duration = video['contentDetails']['duration']
+                                # Parse ISO 8601 duration (PT1H23M45S)
+                                duration_seconds = parse_youtube_duration(duration)
+                                total_seconds += duration_seconds
+                            
+                            series_info['total_duration_seconds'] = total_seconds
+                
+                # Sort videos by date and get metadata
+                series_info['videos'].sort(key=lambda x: x['published_at'])
+                series_info['first_played_date'] = series_info['videos'][0]['published_at'][:10] if series_info['videos'] else None
+                series_info['total_episodes'] = len(series_info['videos'])
+                
+                # Create comprehensive game data
+                game_data = {
+                    'canonical_name': game_name,
+                    'alternative_names': [],
+                    'series_name': game_name,  # Will be enhanced by AI
+                    'release_year': None,  # Will be enhanced by AI
+                    'platform': None,  # Will be enhanced by AI
+                    'first_played_date': series_info['first_played_date'],
+                    'completion_status': 'completed' if series_info['total_episodes'] > 1 else 'unknown',
+                    'total_episodes': series_info['total_episodes'],
+                    'total_playtime_minutes': series_info['total_duration_seconds'] // 60,
+                    'youtube_playlist_url': f"https://www.youtube.com/playlist?list={uploads_playlist_id}",
+                    'twitch_vod_urls': [],
+                    'notes': f"Auto-imported from YouTube. {series_info['total_episodes']} episodes found.",
+                    'genre': None  # Will be enhanced by AI
+                }
+                
+                games_data.append(game_data)
+    
+    except Exception as e:
+        raise Exception(f"YouTube comprehensive fetch error: {str(e)}")
+    
+    return games_data
+
+async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]]:
+    """Fetch comprehensive game data from Twitch channel with full metadata"""
+    twitch_client_id = os.getenv('TWITCH_CLIENT_ID')
+    twitch_client_secret = os.getenv('TWITCH_CLIENT_SECRET')
+    
+    if not twitch_client_id or not twitch_client_secret:
+        raise Exception("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET not configured")
+    
+    if not AIOHTTP_AVAILABLE or aiohttp is None:
+        raise Exception("aiohttp module not available")
+    
+    games_data = []
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Get OAuth token
+            token_url = "https://id.twitch.tv/oauth2/token"
+            token_data = {
+                'client_id': twitch_client_id,
+                'client_secret': twitch_client_secret,
+                'grant_type': 'client_credentials'
+            }
+            
+            async with session.post(token_url, data=token_data) as response:
+                if response.status != 200:
+                    raise Exception(f"Twitch OAuth error: {response.status}")
+                
+                token_response = await response.json()
+                access_token = token_response['access_token']
+            
+            headers = {
+                'Client-ID': twitch_client_id,
+                'Authorization': f'Bearer {access_token}'
+            }
+            
+            # Get user ID
+            user_url = f"https://api.twitch.tv/helix/users?login={username}"
+            async with session.get(user_url, headers=headers) as response:
+                if response.status != 200:
+                    raise Exception(f"Twitch user lookup error: {response.status}")
+                
+                user_data = await response.json()
+                if not user_data.get('data'):
+                    raise Exception("Twitch user not found")
+                
+                user_id = user_data['data'][0]['id']
+            
+            # Get all videos (multiple pages)
+            all_videos = []
+            cursor = None
+            
+            while len(all_videos) < 500:  # Limit to prevent excessive API calls
+                videos_url = f"https://api.twitch.tv/helix/videos"
+                params = {
+                    'user_id': user_id,
+                    'first': 100,
+                    'type': 'all'
+                }
+                
+                if cursor:
+                    params['after'] = cursor
+                
+                async with session.get(videos_url, headers=headers, params=params) as response:
+                    if response.status != 200:
+                        break
+                    
+                    videos_data = await response.json()
+                    videos = videos_data.get('data', [])
+                    
+                    if not videos:
+                        break
+                    
+                    all_videos.extend(videos)
+                    
+                    # Get cursor for next page
+                    pagination = videos_data.get('pagination', {})
+                    cursor = pagination.get('cursor')
+                    
+                    if not cursor:
+                        break
+                    
+                    await asyncio.sleep(0.1)  # Rate limiting
+            
+            # Group videos by game series
+            game_series = {}
+            for video in all_videos:
+                title = video['title']
+                game_name = extract_game_from_title(title)
+                
+                if game_name:
+                    # Normalize game name for grouping
+                    normalized_name = game_name.strip().title()
+                    
+                    if normalized_name not in game_series:
+                        game_series[normalized_name] = {
+                            'videos': [],
+                            'first_played_date': None,
+                            'total_episodes': 0,
+                            'total_duration_seconds': 0,
+                            'vod_urls': []
+                        }
+                    
+                    # Parse duration (format: "1h23m45s" or "23m45s" or "45s")
+                    duration_str = video.get('duration', '0s')
+                    duration_seconds = parse_twitch_duration(duration_str)
+                    
+                    game_series[normalized_name]['videos'].append({
+                        'title': title,
+                        'created_at': video['created_at'],
+                        'url': video['url'],
+                        'duration_seconds': duration_seconds
+                    })
+                    
+                    game_series[normalized_name]['vod_urls'].append(video['url'])
+                    game_series[normalized_name]['total_duration_seconds'] += duration_seconds
+            
+            # Create comprehensive game data
+            for game_name, series_info in game_series.items():
+                # Sort videos by date and get metadata
+                series_info['videos'].sort(key=lambda x: x['created_at'])
+                series_info['first_played_date'] = series_info['videos'][0]['created_at'][:10] if series_info['videos'] else None
+                series_info['total_episodes'] = len(series_info['videos'])
+                
+                game_data = {
+                    'canonical_name': game_name,
+                    'alternative_names': [],
+                    'series_name': game_name,  # Will be enhanced by AI
+                    'release_year': None,  # Will be enhanced by AI
+                    'platform': None,  # Will be enhanced by AI
+                    'first_played_date': series_info['first_played_date'],
+                    'completion_status': 'completed' if series_info['total_episodes'] > 1 else 'unknown',
+                    'total_episodes': series_info['total_episodes'],
+                    'total_playtime_minutes': series_info['total_duration_seconds'] // 60,
+                    'youtube_playlist_url': None,
+                    'twitch_vod_urls': series_info['vod_urls'][:10],  # Limit to first 10 VODs
+                    'notes': f"Auto-imported from Twitch. {series_info['total_episodes']} VODs found.",
+                    'genre': None  # Will be enhanced by AI
+                }
+                
+                games_data.append(game_data)
+    
+    except Exception as e:
+        raise Exception(f"Twitch comprehensive fetch error: {str(e)}")
+    
+    return games_data
+
+async def enhance_games_with_ai(games_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Use AI to enhance game metadata with genre, series info, and release years"""
+    if not ai_enabled or not gemini_model:
+        return games_data
+    
+    enhanced_games = []
+    
+    # Process games in batches to avoid token limits
+    batch_size = 10
+    for i in range(0, len(games_data), batch_size):
+        batch = games_data[i:i + batch_size]
+        game_names = [game['canonical_name'] for game in batch]
+        
+        prompt = f"""You are a gaming database expert. For each game listed below, provide the following information in JSON format:
+
+Games to analyze: {', '.join(game_names)}
+
+For each game, provide:
+- genre: Primary genre (Action, RPG, Strategy, Horror, Platformer, etc.)
+- series_name: Game series/franchise name (e.g., "God of War" for "God of War (2018)")
+- release_year: Year the game was released
+- platform: Primary platform (PC, PlayStation, Xbox, Nintendo Switch, etc.)
+
+Respond with a JSON object where each key is the exact game name and the value contains the metadata:
+
+{{
+  "Game Name": {{
+    "genre": "Genre",
+    "series_name": "Series Name", 
+    "release_year": 2023,
+    "platform": "Platform"
+  }}
+}}
+
+Only include games you can identify with confidence. If unsure about any field, use null."""
+        
+        try:
+            response = gemini_model.generate_content(prompt)  # type: ignore
+            if response and hasattr(response, 'text') and response.text:
+                # Parse AI response
+                import json
+                try:
+                    ai_data = json.loads(response.text.strip())
+                    
+                    # Apply AI enhancements to batch
+                    for game in batch:
+                        game_name = game['canonical_name']
+                        if game_name in ai_data:
+                            ai_info = ai_data[game_name]
+                            
+                            if ai_info.get('genre'):
+                                game['genre'] = ai_info['genre']
+                            if ai_info.get('series_name'):
+                                game['series_name'] = ai_info['series_name']
+                            if ai_info.get('release_year'):
+                                game['release_year'] = ai_info['release_year']
+                            if ai_info.get('platform'):
+                                game['platform'] = ai_info['platform']
+                        
+                        enhanced_games.append(game)
+                
+                except json.JSONDecodeError:
+                    # If AI response isn't valid JSON, just add games without enhancement
+                    enhanced_games.extend(batch)
+            else:
+                enhanced_games.extend(batch)
+                
+        except Exception as e:
+            print(f"AI enhancement error for batch: {e}")
+            enhanced_games.extend(batch)
+        
+        # Rate limiting for AI calls
+        await asyncio.sleep(1)
+    
+    return enhanced_games
+
+def parse_youtube_duration(duration: str) -> int:
+    """Parse YouTube ISO 8601 duration format (PT1H23M45S) to seconds"""
+    import re
+    
+    # Remove PT prefix
+    duration = duration.replace('PT', '')
+    
+    # Extract hours, minutes, seconds
+    hours = 0
+    minutes = 0
+    seconds = 0
+    
+    hour_match = re.search(r'(\d+)H', duration)
+    if hour_match:
+        hours = int(hour_match.group(1))
+    
+    minute_match = re.search(r'(\d+)M', duration)
+    if minute_match:
+        minutes = int(minute_match.group(1))
+    
+    second_match = re.search(r'(\d+)S', duration)
+    if second_match:
+        seconds = int(second_match.group(1))
+    
+    return hours * 3600 + minutes * 60 + seconds
+
+def parse_twitch_duration(duration: str) -> int:
+    """Parse Twitch duration format (1h23m45s) to seconds"""
+    import re
+    
+    total_seconds = 0
+    
+    # Extract hours
+    hour_match = re.search(r'(\d+)h', duration)
+    if hour_match:
+        total_seconds += int(hour_match.group(1)) * 3600
+    
+    # Extract minutes
+    minute_match = re.search(r'(\d+)m', duration)
+    if minute_match:
+        total_seconds += int(minute_match.group(1)) * 60
+    
+    # Extract seconds
+    second_match = re.search(r'(\d+)s', duration)
+    if second_match:
+        total_seconds += int(second_match.group(1))
+    
+    return total_seconds
+
 # --- Game Commands ---
 @bot.command(name="addgame")
 async def add_game(ctx, *, entry: str):
@@ -2207,51 +2620,121 @@ async def remove_played_game_cmd(ctx, *, game_name: str):
 
 @bot.command(name="bulkimportplayedgames")
 @commands.has_permissions(manage_messages=True)
-async def bulk_import_played_games_cmd(ctx):
-    """Import played games from a predefined sample dataset"""
+async def bulk_import_played_games_cmd(ctx, youtube_channel_id: Optional[str] = None, twitch_username: Optional[str] = None):
+    """Import played games from YouTube and Twitch APIs with full metadata"""
+    
+    # Hardcoded values for Captain Jonesy's channels
+    if not youtube_channel_id:
+        youtube_channel_id = "UCPoUxLHeTnE9SUDAkqfJzDQ"  # Captain Jonesy's YouTube channel
+    if not twitch_username:
+        twitch_username = "jonesyspacecat"  # Captain Jonesy's Twitch username
+    
+    await ctx.send("🔄 **Initiating comprehensive gaming history analysis from YouTube and Twitch APIs...**")
+    
     try:
-        # Sample data for initial population
-        sample_games = [
-            {
-                'canonical_name': 'God of War (2018)',
-                'alternative_names': ['God of War 4', 'GoW 2018'],
-                'series_name': 'God of War',
-                'release_year': 2018,
-                'platform': 'PlayStation 4',
-                'completion_status': 'completed',
-                'total_episodes': 15,
-                'notes': 'Full playthrough with side content'
-            },
-            {
-                'canonical_name': 'God of War: Ragnarök',
-                'alternative_names': ['God of War Ragnarok', 'GoW Ragnarok'],
-                'series_name': 'God of War',
-                'release_year': 2022,
-                'platform': 'PlayStation 5',
-                'completion_status': 'completed',
-                'total_episodes': 12,
-                'notes': 'Complete story playthrough'
-            },
-            {
-                'canonical_name': 'The Last of Us Part II',
-                'alternative_names': ['TLOU2', 'The Last of Us 2'],
-                'series_name': 'The Last of Us',
-                'release_year': 2020,
-                'platform': 'PlayStation 4',
-                'completion_status': 'completed',
-                'total_episodes': 18,
-                'notes': 'Full story completion'
-            }
-        ]
+        # Check API availability
+        if not AIOHTTP_AVAILABLE:
+            await ctx.send("❌ **System malfunction:** aiohttp module not available. Cannot fetch data from external APIs.")
+            return
         
-        await ctx.send(f"🔄 **Importing sample played games data...** ({len(sample_games)} games)")
+        youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+        twitch_client_id = os.getenv('TWITCH_CLIENT_ID')
+        twitch_client_secret = os.getenv('TWITCH_CLIENT_SECRET')
         
-        imported_count = db.bulk_import_played_games(sample_games)
+        if not youtube_api_key:
+            await ctx.send("⚠️ **YouTube API key not configured.** Skipping YouTube data collection.")
+        if not twitch_client_id or not twitch_client_secret:
+            await ctx.send("⚠️ **Twitch API credentials not configured.** Skipping Twitch data collection.")
         
-        if imported_count > 0:
-            await ctx.send(f"✅ **Import complete:** Successfully imported {imported_count} played games to the database.")
-        else:
-            await ctx.send("❌ **Import failed:** No games were imported. Check database connection.")
+        if not youtube_api_key and not (twitch_client_id and twitch_client_secret):
+            await ctx.send("❌ **No API credentials available.** Cannot proceed with data collection.")
+            return
+        
+        # Fetch comprehensive game data from both platforms
+        all_games_data = []
+        
+        # YouTube data collection
+        if youtube_api_key:
+            await ctx.send("📺 **Analyzing YouTube gaming archive...**")
+            try:
+                youtube_games = await fetch_comprehensive_youtube_games(youtube_channel_id)
+                all_games_data.extend(youtube_games)
+                await ctx.send(f"📺 **YouTube analysis complete:** {len(youtube_games)} game series identified")
+            except Exception as e:
+                await ctx.send(f"⚠️ **YouTube API error:** {str(e)}")
+        
+        # Twitch data collection
+        if twitch_client_id and twitch_client_secret:
+            await ctx.send("🎮 **Analyzing Twitch gaming archive...**")
+            try:
+                twitch_games = await fetch_comprehensive_twitch_games(twitch_username)
+                # Merge with YouTube data (avoid duplicates)
+                for twitch_game in twitch_games:
+                    # Check if game already exists from YouTube
+                    existing_game = None
+                    for yt_game in all_games_data:
+                        if yt_game['canonical_name'].lower() == twitch_game['canonical_name'].lower():
+                            existing_game = yt_game
+                            break
+                    
+                    if existing_game:
+                        # Merge Twitch data into existing YouTube game
+                        if twitch_game.get('twitch_vod_urls'):
+                            existing_game['twitch_vod_urls'] = twitch_game['twitch_vod_urls']
+                        if twitch_game.get('total_playtime_minutes', 0) > 0:
+                            existing_game['total_playtime_minutes'] += twitch_game['total_playtime_minutes']
+                    else:
+                        # Add as new game
+                        all_games_data.append(twitch_game)
+                
+                await ctx.send(f"🎮 **Twitch analysis complete:** {len(twitch_games)} game series identified")
+            except Exception as e:
+                await ctx.send(f"⚠️ **Twitch API error:** {str(e)}")
+        
+        if not all_games_data:
+            await ctx.send("❌ **No gaming data retrieved.** Check API credentials and channel/username.")
+            return
+        
+        # Use AI to enhance metadata
+        if ai_enabled and gemini_model:
+            await ctx.send("🧠 **Enhancing metadata using AI analysis...**")
+            try:
+                enhanced_games = await enhance_games_with_ai(all_games_data)
+                all_games_data = enhanced_games
+                await ctx.send("✅ **AI enhancement complete:** Genre and series data populated")
+            except Exception as e:
+                await ctx.send(f"⚠️ **AI enhancement error:** {str(e)}")
+        
+        # Show preview
+        await ctx.send(f"📋 **Import Preview** ({len(all_games_data)} games discovered):")
+        preview_games = all_games_data[:8]  # Show first 8 games
+        for i, game in enumerate(preview_games, 1):
+            episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get('total_episodes', 0) > 0 else ""
+            playtime = f" [{game.get('total_playtime_minutes', 0)//60}h {game.get('total_playtime_minutes', 0)%60}m]" if game.get('total_playtime_minutes', 0) > 0 else ""
+            genre = f" - {game.get('genre', 'Unknown')}" if game.get('genre') else ""
+            await ctx.send(f"{i}. **{game['canonical_name']}**{episodes}{playtime}{genre}")
+        
+        if len(all_games_data) > 8:
+            await ctx.send(f"... and {len(all_games_data) - 8} more games")
+        
+        await ctx.send(f"\n⚠️ **WARNING**: This will add {len(all_games_data)} games to the played games database. Type `CONFIRM IMPORT` to proceed or anything else to cancel.")
+        
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+        
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=60.0)
+            if msg.content == "CONFIRM IMPORT":
+                imported_count = db.bulk_import_played_games(all_games_data)
+                await ctx.send(f"✅ **Import complete:** Successfully imported {imported_count} played games with comprehensive metadata to the database.")
+                
+                # Show final statistics
+                stats = db.get_played_games_stats()
+                await ctx.send(f"📊 **Database Statistics:**\n• Total games: {stats.get('total_games', 0)}\n• Total episodes: {stats.get('total_episodes', 0)}\n• Total playtime: {stats.get('total_playtime_hours', 0)} hours")
+            else:
+                await ctx.send("❌ **Import cancelled.** No games were added to the database.")
+        except asyncio.TimeoutError:
+            await ctx.send("❌ **Import timed out.** No games were added to the database.")
             
     except Exception as e:
         await ctx.send(f"❌ **Import error:** {str(e)}")

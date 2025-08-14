@@ -649,7 +649,7 @@ class DatabaseManager:
         return self.get_played_game(name) is not None
     
     def bulk_import_played_games(self, games_data: List[Dict[str, Any]]) -> int:
-        """Bulk import played games data"""
+        """Bulk import played games data with upsert logic (insert or update)"""
         conn = self.get_connection()
         if not conn:
             return 0
@@ -659,32 +659,94 @@ class DatabaseManager:
                 imported_count = 0
                 for game_data in games_data:
                     try:
-                        cur.execute("""
-                            INSERT INTO played_games (
-                                canonical_name, alternative_names, series_name, release_year,
-                                platform, first_played_date, completion_status, total_episodes,
-                                youtube_playlist_url, twitch_vod_urls, notes, created_at, updated_at
-                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                        """, (
-                            game_data.get('canonical_name'),
-                            game_data.get('alternative_names', []),
-                            game_data.get('series_name'),
-                            game_data.get('release_year'),
-                            game_data.get('platform'),
-                            game_data.get('first_played_date'),
-                            game_data.get('completion_status', 'unknown'),
-                            game_data.get('total_episodes', 0),
-                            game_data.get('youtube_playlist_url'),
-                            game_data.get('twitch_vod_urls', []),
-                            game_data.get('notes')
-                        ))
-                        imported_count += 1
+                        canonical_name = game_data.get('canonical_name')
+                        if not canonical_name:
+                            continue
+                        
+                        # Check if game already exists
+                        existing_game = self.get_played_game(canonical_name)
+                        
+                        if existing_game:
+                            # Update existing game, preserving existing data where new data is empty
+                            update_fields = {}
+                            
+                            # Only update fields that have new data or are empty in existing record
+                            for field in ['alternative_names', 'series_name', 'genre', 'release_year', 
+                                        'platform', 'first_played_date', 'completion_status', 
+                                        'total_episodes', 'total_playtime_minutes', 'youtube_playlist_url', 
+                                        'twitch_vod_urls', 'notes']:
+                                new_value = game_data.get(field)
+                                existing_value = existing_game.get(field)
+                                
+                                # Update if new value exists and either existing is empty/null or new has more data
+                                if new_value is not None:
+                                    if field == 'alternative_names' or field == 'twitch_vod_urls':
+                                        # For arrays, merge unique values
+                                        if isinstance(new_value, list) and isinstance(existing_value, list):
+                                            merged = list(set(existing_value + new_value))
+                                            if merged != existing_value:
+                                                update_fields[field] = merged
+                                        elif isinstance(new_value, list) and new_value:
+                                            update_fields[field] = new_value
+                                    elif field == 'total_episodes' or field == 'total_playtime_minutes':
+                                        # For numeric fields, use the higher value
+                                        if isinstance(new_value, int) and isinstance(existing_value, int):
+                                            if new_value > existing_value:
+                                                update_fields[field] = new_value
+                                        elif isinstance(new_value, int) and new_value > 0:
+                                            update_fields[field] = new_value
+                                    elif field == 'notes':
+                                        # For notes, append if different
+                                        if isinstance(new_value, str) and new_value.strip():
+                                            if not existing_value or new_value not in existing_value:
+                                                if existing_value:
+                                                    update_fields[field] = f"{existing_value} | {new_value}"
+                                                else:
+                                                    update_fields[field] = new_value
+                                    else:
+                                        # For other fields, update if existing is empty or new value is different
+                                        if not existing_value or (new_value != existing_value and str(new_value).strip()):
+                                            update_fields[field] = new_value
+                            
+                            # Apply updates if any
+                            if update_fields:
+                                self.update_played_game(existing_game['id'], **update_fields)
+                                logger.info(f"Updated existing game: {canonical_name}")
+                            
+                            imported_count += 1
+                        else:
+                            # Insert new game
+                            cur.execute("""
+                                INSERT INTO played_games (
+                                    canonical_name, alternative_names, series_name, genre, release_year,
+                                    platform, first_played_date, completion_status, total_episodes,
+                                    total_playtime_minutes, youtube_playlist_url, twitch_vod_urls, notes, 
+                                    created_at, updated_at
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            """, (
+                                canonical_name,
+                                game_data.get('alternative_names', []),
+                                game_data.get('series_name'),
+                                game_data.get('genre'),
+                                game_data.get('release_year'),
+                                game_data.get('platform'),
+                                game_data.get('first_played_date'),
+                                game_data.get('completion_status', 'unknown'),
+                                game_data.get('total_episodes', 0),
+                                game_data.get('total_playtime_minutes', 0),
+                                game_data.get('youtube_playlist_url'),
+                                game_data.get('twitch_vod_urls', []),
+                                game_data.get('notes')
+                            ))
+                            logger.info(f"Inserted new game: {canonical_name}")
+                            imported_count += 1
+                            
                     except Exception as e:
                         logger.error(f"Error importing game {game_data.get('canonical_name', 'unknown')}: {e}")
                         continue
                 
                 conn.commit()
-                logger.info(f"Bulk imported {imported_count} played games")
+                logger.info(f"Bulk imported/updated {imported_count} played games")
                 return imported_count
         except Exception as e:
             logger.error(f"Error bulk importing played games: {e}")
