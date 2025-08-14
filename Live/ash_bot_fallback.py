@@ -286,13 +286,31 @@ async def on_message(message):
 
     if message.channel.id == VIOLATION_CHANNEL_ID:
         for user in message.mentions:
-            count = db.add_user_strike(user.id)
-            mod_channel = bot.get_channel(MOD_ALERT_CHANNEL_ID)
-            # Only send if mod_channel is a TextChannel
-            if isinstance(mod_channel, discord.TextChannel):
-                await mod_channel.send(f"📝 Strike added to {user.mention}. Total strikes: **{count}**")
-                if count == 3:
-                    await mod_channel.send(f"⚠️ {user.mention} has received **3 strikes**. I can't lie to you about your chances, but you have my sympathies.")
+            try:
+                # Debug logging
+                print(f"DEBUG: Adding strike to user {user.id} ({user.name})")
+                old_count = db.get_user_strikes(user.id)
+                print(f"DEBUG: User {user.id} had {old_count} strikes before")
+                
+                count = db.add_user_strike(user.id)
+                print(f"DEBUG: User {user.id} now has {count} strikes after adding")
+                
+                # Verify the strike was actually added
+                verify_count = db.get_user_strikes(user.id)
+                print(f"DEBUG: Verification query shows {verify_count} strikes for user {user.id}")
+                
+                mod_channel = bot.get_channel(MOD_ALERT_CHANNEL_ID)
+                # Only send if mod_channel is a TextChannel
+                if isinstance(mod_channel, discord.TextChannel):
+                    await mod_channel.send(f"📝 Strike added to {user.mention}. Total strikes: **{count}**")
+                    if count == 3:
+                        await mod_channel.send(f"⚠️ {user.mention} has received **3 strikes**. I can't lie to you about your chances, but you have my sympathies.")
+                else:
+                    print(f"DEBUG: Could not send to mod channel - channel type: {type(mod_channel)}")
+            except Exception as e:
+                print(f"ERROR: Failed to add strike to user {user.id}: {e}")
+                import traceback
+                traceback.print_exc()
     await bot.process_commands(message)
 
     # Pineapple on pizza reprimand
