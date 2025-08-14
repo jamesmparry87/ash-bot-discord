@@ -1564,7 +1564,7 @@ def extract_game_from_title(title: str) -> str:
     return ""
 
 async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, Any]]:
-    """Fetch comprehensive game data from YouTube channel with full metadata"""
+    """Fetch comprehensive game data from YouTube channel using playlists as primary source"""
     youtube_api_key = os.getenv('YOUTUBE_API_KEY')
     if not youtube_api_key:
         raise Exception("YOUTUBE_API_KEY not configured")
@@ -1576,37 +1576,19 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
     
     try:
         async with aiohttp.ClientSession() as session:
-            # Get channel uploads playlist
-            url = f"https://www.googleapis.com/youtube/v3/channels"
+            # STEP 1: Get all playlists from the channel (primary source)
+            url = f"https://www.googleapis.com/youtube/v3/playlists"
             params = {
-                'part': 'contentDetails',
-                'id': channel_id,
+                'part': 'snippet,contentDetails',
+                'channelId': channel_id,
+                'maxResults': 50,
                 'key': youtube_api_key
             }
             
-            async with session.get(url, params=params) as response:
-                if response.status != 200:
-                    raise Exception(f"YouTube API error: {response.status}")
-                
-                data = await response.json()
-                if not data.get('items'):
-                    raise Exception("Channel not found")
-                
-                uploads_playlist_id = data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
-            
-            # Get all videos from uploads playlist
-            all_videos = []
+            all_playlists = []
             next_page_token = None
             
-            while len(all_videos) < 1000:  # Limit to prevent excessive API calls
-                url = f"https://www.googleapis.com/youtube/v3/playlistItems"
-                params = {
-                    'part': 'snippet',
-                    'playlistId': uploads_playlist_id,
-                    'maxResults': 50,
-                    'key': youtube_api_key
-                }
-                
+            while True:
                 if next_page_token:
                     params['pageToken'] = next_page_token
                 
@@ -1615,90 +1597,241 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
                         break
                     
                     data = await response.json()
-                    all_videos.extend(data.get('items', []))
+                    playlists = data.get('items', [])
                     
+                    if not playlists:
+                        break
+                    
+                    all_playlists.extend(playlists)
                     next_page_token = data.get('nextPageToken')
+                    
                     if not next_page_token:
                         break
                     
                     await asyncio.sleep(0.1)  # Rate limiting
             
-            # Group videos by game series
-            game_series = {}
-            for video in all_videos:
-                title = video['snippet']['title']
-                game_name = extract_game_from_title(title)
+            # Process playlists to extract game data
+            for playlist in all_playlists:
+                playlist_title = playlist['snippet']['title']
+                playlist_id = playlist['id']
+                video_count = playlist['contentDetails']['itemCount']
                 
-                if game_name:
-                    # Normalize game name for grouping
-                    normalized_name = game_name.strip().title()
+                # Skip non-game playlists (common playlist names to ignore)
+                skip_keywords = [
+                    'shorts', 'stream', 'live', 'compilation', 'highlight', 'reaction',
+                    'music', 'song', 'trailer', 'announcement', 'update', 'news',
+                    'vlog', 'irl', 'chat', 'q&a', 'qa', 'discussion', 'review'
+                ]
+                
+                if any(keyword in playlist_title.lower() for keyword in skip_keywords):
+                    continue
+                
+                # Extract game name from playlist title
+                game_name = extract_game_from_playlist_title(playlist_title)
+                
+                if game_name and video_count > 0:
+                    # Determine completion status from playlist title
+                    completion_status = 'completed' if '[completed]' in playlist_title.lower() else 'unknown'
+                    if video_count == 1:
+                        completion_status = 'unknown'  # Single video might be a one-off
+                    elif video_count > 1 and completion_status == 'unknown':
+                        completion_status = 'ongoing'  # Multiple videos, no completion marker
                     
-                    if normalized_name not in game_series:
-                        game_series[normalized_name] = {
-                            'videos': [],
-                            'first_played_date': None,
-                            'total_episodes': 0,
-                            'total_duration_seconds': 0
+                    # Get first video from playlist for date information
+                    first_video_date = None
+                    playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+                    
+                    try:
+                        # Get first video from playlist
+                        playlist_items_url = f"https://www.googleapis.com/youtube/v3/playlistItems"
+                        playlist_params = {
+                            'part': 'snippet',
+                            'playlistId': playlist_id,
+                            'maxResults': 1,
+                            'key': youtube_api_key
                         }
+                        
+                        async with session.get(playlist_items_url, params=playlist_params) as response:
+                            if response.status == 200:
+                                playlist_data = await response.json()
+                                if playlist_data.get('items'):
+                                    first_video_date = playlist_data['items'][0]['snippet']['publishedAt'][:10]
+                    except Exception:
+                        pass  # Continue without date if API call fails
                     
-                    game_series[normalized_name]['videos'].append({
-                        'title': title,
-                        'published_at': video['snippet']['publishedAt'],
-                        'video_id': video['snippet']['resourceId']['videoId']
-                    })
+                    # Calculate estimated playtime (rough estimate: 30 min per episode)
+                    estimated_playtime = video_count * 30
+                    
+                    game_data = {
+                        'canonical_name': game_name,
+                        'alternative_names': [],
+                        'series_name': game_name,  # Will be enhanced by AI
+                        'release_year': None,  # Will be enhanced by AI
+                        'platform': None,  # Will be enhanced by AI
+                        'first_played_date': first_video_date,
+                        'completion_status': completion_status,
+                        'total_episodes': video_count,
+                        'total_playtime_minutes': estimated_playtime,
+                        'youtube_playlist_url': playlist_url,
+                        'twitch_vod_urls': [],
+                        'notes': f"Auto-imported from YouTube playlist '{playlist_title}'. {video_count} episodes.",
+                        'genre': None  # Will be enhanced by AI
+                    }
+                    
+                    games_data.append(game_data)
             
-            # Get detailed video information for duration calculation
-            for game_name, series_info in game_series.items():
-                video_ids = [v['video_id'] for v in series_info['videos'][:50]]  # Limit to first 50 episodes
-                
-                if video_ids:
-                    # Get video durations
-                    url = f"https://www.googleapis.com/youtube/v3/videos"
+            # STEP 2: If no playlists found or very few games, fall back to video parsing
+            if len(games_data) < 10:  # Threshold for fallback
+                # Fallback to parsing individual videos from uploads playlist
+                try:
+                    # Get channel uploads playlist
+                    url = f"https://www.googleapis.com/youtube/v3/channels"
                     params = {
                         'part': 'contentDetails',
-                        'id': ','.join(video_ids),
+                        'id': channel_id,
                         'key': youtube_api_key
                     }
                     
                     async with session.get(url, params=params) as response:
                         if response.status == 200:
-                            duration_data = await response.json()
-                            total_seconds = 0
-                            
-                            for video in duration_data.get('items', []):
-                                duration = video['contentDetails']['duration']
-                                # Parse ISO 8601 duration (PT1H23M45S)
-                                duration_seconds = parse_youtube_duration(duration)
-                                total_seconds += duration_seconds
-                            
-                            series_info['total_duration_seconds'] = total_seconds
+                            data = await response.json()
+                            if data.get('items'):
+                                uploads_playlist_id = data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+                                
+                                # Get videos from uploads playlist
+                                fallback_games = await parse_videos_for_games(session, uploads_playlist_id, youtube_api_key)
+                                games_data.extend(fallback_games)
+                except Exception as e:
+                    print(f"Fallback video parsing failed: {e}")
+    
+    except Exception as e:
+        raise Exception(f"YouTube comprehensive fetch error: {str(e)}")
+    
+    return games_data
+
+def extract_game_from_playlist_title(playlist_title: str) -> str:
+    """Extract game name from YouTube playlist title"""
+    title = playlist_title.strip()
+    
+    # Remove common playlist indicators
+    title = re.sub(r'\s*\[completed\]', '', title, flags=re.IGNORECASE)
+    title = re.sub(r'\s*\(completed\)', '', title, flags=re.IGNORECASE)
+    title = re.sub(r'\s*-\s*completed', '', title, flags=re.IGNORECASE)
+    
+    # Remove common prefixes
+    title = re.sub(r'^(let\'s play|gameplay|walkthrough|playthrough)\s+', '', title, flags=re.IGNORECASE)
+    
+    # Clean up the title
+    title = title.strip()
+    
+    # Filter out obvious non-game playlists
+    non_game_indicators = [
+        'stream', 'live', 'compilation', 'highlight', 'reaction',
+        'music', 'song', 'trailer', 'announcement', 'update', 'news',
+        'vlog', 'irl', 'chat', 'q&a', 'qa', 'discussion', 'review'
+    ]
+    
+    title_lower = title.lower()
+    if any(indicator in title_lower for indicator in non_game_indicators):
+        return ""
+    
+    # Return the cleaned title if it looks like a game name
+    if len(title) > 2 and not re.match(r'^\d+$', title):
+        return title
+    
+    return ""
+
+async def parse_videos_for_games(session, uploads_playlist_id: str, youtube_api_key: str) -> List[Dict[str, Any]]:
+    """Parse individual videos to extract game data (fallback method)"""
+    games_data = []
+    game_series = {}
+    
+    try:
+        # Get videos from uploads playlist (last 200 videos)
+        next_page_token = None
+        video_count = 0
+        max_videos = 200
+        
+        while video_count < max_videos:
+            url = f"https://www.googleapis.com/youtube/v3/playlistItems"
+            params = {
+                'part': 'snippet',
+                'playlistId': uploads_playlist_id,
+                'maxResults': min(50, max_videos - video_count),
+                'key': youtube_api_key
+            }
+            
+            if next_page_token:
+                params['pageToken'] = next_page_token
+            
+            async with session.get(url, params=params) as response:
+                if response.status != 200:
+                    break
                 
-                # Sort videos by date and get metadata
-                series_info['videos'].sort(key=lambda x: x['published_at'])
-                series_info['first_played_date'] = series_info['videos'][0]['published_at'][:10] if series_info['videos'] else None
-                series_info['total_episodes'] = len(series_info['videos'])
+                data = await response.json()
                 
-                # Create comprehensive game data
+                for item in data.get('items', []):
+                    title = item['snippet']['title']
+                    published_at = item['snippet']['publishedAt'][:10]
+                    
+                    # Extract game name from video title
+                    game_name = extract_game_from_title(title)
+                    if game_name:
+                        # Normalize game name for grouping
+                        normalized_name = game_name.strip().title()
+                        
+                        if normalized_name not in game_series:
+                            game_series[normalized_name] = {
+                                'episodes': [],
+                                'first_played_date': published_at,
+                                'total_episodes': 0
+                            }
+                        
+                        game_series[normalized_name]['episodes'].append({
+                            'title': title,
+                            'published_at': published_at
+                        })
+                        game_series[normalized_name]['total_episodes'] += 1
+                        
+                        # Update first played date if this video is earlier
+                        if published_at < game_series[normalized_name]['first_played_date']:
+                            game_series[normalized_name]['first_played_date'] = published_at
+                
+                video_count += len(data.get('items', []))
+                next_page_token = data.get('nextPageToken')
+                
+                if not next_page_token:
+                    break
+                
+                # Rate limiting
+                await asyncio.sleep(0.1)
+        
+        # Convert grouped games to game data format
+        for game_name, series_info in game_series.items():
+            if series_info['total_episodes'] >= 2:  # Only include games with multiple episodes
+                completion_status = 'ongoing' if series_info['total_episodes'] > 1 else 'unknown'
+                estimated_playtime = series_info['total_episodes'] * 30
+                
                 game_data = {
                     'canonical_name': game_name,
                     'alternative_names': [],
-                    'series_name': game_name,  # Will be enhanced by AI
-                    'release_year': None,  # Will be enhanced by AI
-                    'platform': None,  # Will be enhanced by AI
+                    'series_name': game_name,
+                    'release_year': None,
+                    'platform': None,
                     'first_played_date': series_info['first_played_date'],
-                    'completion_status': 'completed' if series_info['total_episodes'] > 1 else 'unknown',
+                    'completion_status': completion_status,
                     'total_episodes': series_info['total_episodes'],
-                    'total_playtime_minutes': series_info['total_duration_seconds'] // 60,
-                    'youtube_playlist_url': f"https://www.youtube.com/playlist?list={uploads_playlist_id}",
+                    'total_playtime_minutes': estimated_playtime,
+                    'youtube_playlist_url': None,
                     'twitch_vod_urls': [],
-                    'notes': f"Auto-imported from YouTube. {series_info['total_episodes']} episodes found.",
-                    'genre': None  # Will be enhanced by AI
+                    'notes': f"Auto-imported from YouTube videos. {series_info['total_episodes']} episodes found.",
+                    'genre': None
                 }
                 
                 games_data.append(game_data)
     
     except Exception as e:
-        raise Exception(f"YouTube comprehensive fetch error: {str(e)}")
+        print(f"Video parsing error: {e}")
     
     return games_data
 
