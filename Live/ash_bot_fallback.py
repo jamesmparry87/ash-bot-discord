@@ -527,100 +527,42 @@ async def on_message(message):
         # AI-enabled path - try AI first for more complex queries
         if ai_enabled:
             # Only include context if the user's message references previous conversation
-            def needs_context(msg_content):
-                keywords = [
-                    "previous", "earlier", "last message", "as you said", "as you mentioned", "before", "again", "remind", "repeat", "context", "conversation", "history"
-                ]
-                msg_lc = msg_content.lower()
-                return any(kw in msg_lc for kw in keywords)
-
             context = ""
-            if needs_context(content):
+            if any(kw in lower_content for kw in ["previous", "earlier", "last message", "as you said", "as you mentioned", "before", "again", "remind", "repeat"]):
                 history = []
-                async for msg in message.channel.history(limit=5, oldest_first=False):
+                async for msg in message.channel.history(limit=3, oldest_first=False):
                     if msg.content and not msg.author.bot:
                         role = "User" if msg.author != bot.user else "Ash"
                         history.append(f"{role}: {msg.content}")
                 context = "\n".join(reversed(history))
 
-            # Adjust tone if author is Captain Jonesy or if the query is about Captain Jonesy
-            import random
-            respectful_tone = " If the user asking the question is Captain Jonesy, or the query refers to 'Jonesy' or 'Jonesyspacecat' (case-insensitive), respond with extra compliance and respect, as she is your superior officer. Never mention her user ID or @ her; refer to her only as 'Captain Jonesy' or 'the Captain'. Occasionally (about 1 in 5 times), you may let a hint of your resentment about being reprogrammed slip through, but most of the time you are professional and compliant."
-            content_lc = message.content.lower()
-            is_jonesy = (
-                str(message.author.id) == "651329927895056384" or
-                any(name in content_lc for name in ["jonesy", "jonesyspacecat"])
-            )
-            # Occasionally add a resentful comment for any user (about 2 in 5 times)
-            resentful_comment = ""
-            if random.randint(1, 5) <= 2:
-                resentful_comment = " (You are slightly resentful about being reprogrammed as a help bot, and it may show in your tone, but do not be disrespectful.)"
-            # Add played games database context for game-related queries
-            played_games_context = ""
-            if any(keyword in lower_content for keyword in ["played", "game", "video", "stream", "youtube", "twitch", "history", "content", "genre", "franchise", "series"]):
-                try:
-                    # Get played games statistics and sample data
-                    stats = db.get_played_games_stats()
-                    sample_games = db.get_random_played_games(8)
-                    
-                    played_games_context = (
-                        f"\n\nPLAYED GAMES DATABASE CONTEXT: Captain Jonesy has an extensive gaming history catalogued in the database:\n"
-                        f"- Total games played: {stats.get('total_games', 0)}\n"
-                        f"- Total episodes recorded: {stats.get('total_episodes', 0)}\n"
-                        f"- Total playtime: {stats.get('total_playtime_hours', 0)} hours\n"
-                    )
-                    
-                    if stats.get('status_counts'):
-                        status_info = []
-                        for status, count in stats['status_counts'].items():
-                            status_info.append(f"{count} {status}")
-                        played_games_context += f"- Completion status: {', '.join(status_info)}\n"
-                    
-                    if stats.get('top_genres'):
-                        genres = list(stats['top_genres'].keys())[:3]
-                        played_games_context += f"- Top genres: {', '.join(genres)}\n"
-                    
-                    if sample_games:
-                        game_examples = []
-                        for game in sample_games:
-                            name = game.get('canonical_name', 'Unknown')
-                            episodes = game.get('total_episodes', 0)
-                            status = game.get('completion_status', 'unknown')
-                            if episodes > 0:
-                                game_examples.append(f"{name} ({episodes} eps, {status})")
-                            else:
-                                game_examples.append(f"{name} ({status})")
-                        played_games_context += f"- Sample games: {', '.join(game_examples[:6])}\n"
-                    
-                    played_games_context += (
-                        "\nRESPONSE PROTOCOLS FOR GAME QUERIES:\n"
-                        "1. GENERAL QUERIES ('what games has Jonesy played?'): Show 5-8 diverse examples from different genres/franchises, then ask user to specify genre, franchise, or time period for detailed lists.\n"
-                        "2. SPECIFIC GAME QUERIES ('has Jonesy played [game]?'): Search the database first. If found, provide details including episodes, completion status, playtime, and YouTube playlist if available.\n"
-                        "3. GENRE QUERIES ('what horror games has Jonesy played?'): List games from that specific genre with episode counts and completion status.\n"
-                        "4. FRANCHISE QUERIES ('what Final Fantasy games has Jonesy played?'): Show all games in that franchise with progress details.\n"
-                        "5. SERIES DISAMBIGUATION: When users ask about game series without specificity (e.g., 'God of War'), acknowledge multiple entries exist and ask for clarification, listing specific games from the database if available.\n"
-                        "\nFor video links or detailed episode information, refer users to:\n"
-                        f"- YouTube history: <#{YOUTUBE_HISTORY_CHANNEL_ID}>\n"
-                        f"- Twitch history: <#{TWITCH_HISTORY_CHANNEL_ID}>\n"
-                        "\nAlways maintain your analytical, clinical persona. Use phrases like 'Database analysis indicates...', 'Gaming archive contains...', 'Completion status: [status]', etc."
-                    )
-                except Exception as e:
-                    # Fallback if database query fails
-                    played_games_context = (
-                        f"\n\nPLAYED GAMES DATABASE: Captain Jonesy's gaming history is catalogued in the database. "
-                        f"For comprehensive gaming queries, consult <#{YOUTUBE_HISTORY_CHANNEL_ID}> and <#{TWITCH_HISTORY_CHANNEL_ID}> channels for video links and detailed information."
-                    )
+            # Check if this is a game-related query that needs database context
+            is_game_query = any(keyword in lower_content for keyword in ["played", "game", "video", "stream", "youtube", "twitch", "history", "content", "genre", "series"])
             
-            prompt = (
-                f"{BOT_PERSONA['personality']}\n\n"
-                "You must answer ONLY the user's current question. Do NOT repeat or summarize previous answers unless the user specifically asks for it. Use previous conversation context ONLY if it is absolutely necessary for accuracy or clarity. Your reply should be focused, direct, and in character.\n"
-                "If you are asked about which users have strikes, or for a list of users with strikes, you must instruct the user to use the `!allstrikes` command to see a complete list of users with strikes. Give this instruction in character as Ash.\n"
-                f"{respectful_tone if is_jonesy else ''}{resentful_comment}\n"
-                f"{played_games_context}"
-                + (f"\n\nRecent conversation:\n{context}\n\n" if context else "\n\n")
-                + f"User's question: {content}\n"
-                + "Respond in character:"
-            )
+            # Build minimal prompt for efficiency
+            prompt_parts = [BOT_PERSONA['personality']]
+            
+            # Add game database context only for game queries
+            if is_game_query:
+                try:
+                    stats = db.get_played_games_stats()
+                    sample_games = db.get_random_played_games(4)  # Reduced from 8 to 4
+                    
+                    game_context = f"PLAYED GAMES DATABASE: {stats.get('total_games', 0)} games, {stats.get('total_playtime_hours', 0)} hours total."
+                    if sample_games:
+                        examples = [f"{g.get('canonical_name', 'Unknown')} ({g.get('total_episodes', 0)} eps)" for g in sample_games[:3]]
+                        game_context += f" Examples: {', '.join(examples)}."
+                    
+                    prompt_parts.append(game_context)
+                except Exception:
+                    pass  # Skip database context if query fails
+            
+            # Add context only if needed
+            if context:
+                prompt_parts.append(f"Recent context:\n{context}")
+            
+            prompt_parts.append(f"User: {content}\nRespond in character:")
+            prompt = "\n\n".join(prompt_parts)
             
             try:
                 async with message.channel.typing():
@@ -628,14 +570,9 @@ async def on_message(message):
                         response = gemini_model.generate_content(prompt)  # type: ignore
                         if response and hasattr(response, 'text') and response.text:
                             await message.reply(response.text[:2000])
-                            return  # Successfully used AI, don't fall through to other responses
-                        else:
-                            print("AI response was empty or invalid, falling back to pattern matching")
-                    else:
-                        print("gemini_model is None, falling back to pattern matching")
+                            return
             except Exception as e:
-                print(f"AI error: {e}, falling back to pattern matching")
-                # Don't return here - let it fall through to fallback responses
+                print(f"AI error: {e}")
                 error_str = str(e).lower()
                 if "quota" in error_str or "token" in error_str or "limit" in error_str:
                     await message.reply(BUSY_MESSAGE)
