@@ -533,22 +533,17 @@ async def on_message(message):
                 if played_game:
                     # Game found in played games database
                     episodes = f" across {played_game.get('total_episodes', 0)} episodes" if played_game.get('total_episodes', 0) > 0 else ""
-                    playtime_minutes = played_game.get('total_playtime_minutes', 0)
-                    playtime = f" ({playtime_minutes//60}h {playtime_minutes%60}m total)" if playtime_minutes > 0 else ""
                     status = played_game.get('completion_status', 'unknown')
-                    platform = f" on {played_game.get('platform')}" if played_game.get('platform') else ""
-                    year = f" ({played_game.get('release_year')})" if played_game.get('release_year') else ""
                     
                     status_text = {
-                        'completed': 'Mission completed',
-                        'ongoing': 'Mission ongoing',
-                        'dropped': 'Mission terminated',
-                        'unknown': 'Mission status unknown'
-                    }.get(status, 'Mission status unknown')
+                        'completed': 'and completed the game',
+                        'ongoing': 'and the mission is ongoing',
+                        'dropped': 'but terminated the mission',
+                        'unknown': 'with mission status unknown'
+                    }.get(status, 'with mission status unknown')
                     
-                    playlist_info = f" YouTube playlist available in <#{YOUTUBE_HISTORY_CHANNEL_ID}>." if played_game.get('youtube_playlist_url') else ""
-                    
-                    await message.reply(f"Affirmative. Captain Jonesy has engaged '{played_game['canonical_name']}'{year}{platform}{episodes}{playtime}. {status_text}.{playlist_info}")
+                    # Simplified response with offer for more details
+                    await message.reply(f"Affirmative. Captain Jonesy has played '{played_game['canonical_name']}'{episodes}, {status_text}. Do you require the link to the YouTube playlist or have any additional queries?")
                 else:
                     # Game not found in played games database
                     game_title = game_name.title()
