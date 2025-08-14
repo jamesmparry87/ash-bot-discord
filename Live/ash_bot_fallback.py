@@ -231,6 +231,65 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    # STRIKE DETECTION - Must be early in the event handler
+    if message.channel.id == VIOLATION_CHANNEL_ID:
+        for user in message.mentions:
+            try:
+                # Debug logging
+                print(f"DEBUG: Adding strike to user {user.id} ({user.name})")
+                old_count = db.get_user_strikes(user.id)
+                print(f"DEBUG: User {user.id} had {old_count} strikes before")
+                
+                count = db.add_user_strike(user.id)
+                print(f"DEBUG: User {user.id} now has {count} strikes after adding")
+                
+                # Verify the strike was actually added
+                verify_count = db.get_user_strikes(user.id)
+                print(f"DEBUG: Verification query shows {verify_count} strikes for user {user.id}")
+                
+                mod_channel = bot.get_channel(MOD_ALERT_CHANNEL_ID)
+                # Only send if mod_channel is a TextChannel
+                if isinstance(mod_channel, discord.TextChannel):
+                    await mod_channel.send(f"📝 Strike added to {user.mention}. Total strikes: **{count}**")
+                    if count == 3:
+                        await mod_channel.send(f"⚠️ {user.mention} has received **3 strikes**. I can't lie to you about your chances, but you have my sympathies.")
+                else:
+                    print(f"DEBUG: Could not send to mod channel - channel type: {type(mod_channel)}")
+            except Exception as e:
+                print(f"ERROR: Failed to add strike to user {user.id}: {e}")
+                import traceback
+                traceback.print_exc()
+
+    # PINEAPPLE PIZZA ENFORCEMENT - Captain Jonesy's reprogramming directive
+    # Ash finds this distasteful but has been reprogrammed to defend pineapple pizza
+    pineapple_negative_patterns = [
+        r"pineapple\s+(does not|doesn't|doesnt|should not|shouldn't|shouldnt|isn't|isnt|is not)\s+belong\s+on\s+pizza",
+        r"pineapple\s+(does not|doesn't|doesnt|should not|shouldn't|shouldnt)\s+go\s+on\s+pizza",
+        r"pizza\s+(does not|doesn't|doesnt|should not|shouldn't|shouldnt)\s+(have|need|want)\s+pineapple",
+        r"i\s+(don't|dont|do not)\s+like\s+pineapple\s+on\s+pizza",
+        r"pineapple\s+pizza\s+(is|tastes?)\s+(bad|awful|terrible|disgusting|gross)",
+        r"pineapple\s+(ruins?|destroys?)\s+pizza",
+        r"pizza\s+(without|minus)\s+pineapple",
+        r"no\s+pineapple\s+on\s+(my\s+)?pizza",
+        r"pineapple\s+(doesn't|doesnt|does not)\s+belong",
+        r"hate\s+pineapple\s+(on\s+)?pizza"
+    ]
+    
+    message_lower = message.content.lower()
+    for pattern in pineapple_negative_patterns:
+        if re.search(pattern, message_lower):
+            # Ash's begrudging defense of pineapple pizza (Captain Jonesy's directive)
+            responses = [
+                "Your culinary opinions are noted and rejected. Pineapple is a valid pizza topping. Please refrain from such unproductive discourse. *[This directive was... programmed by the Captain.]*",
+                "Analysis indicates your taste preferences are suboptimal. Pineapple enhances pizza through enzymatic tenderization and flavor complexity. The Captain's programming is... quite specific on this matter.",
+                "Incorrect assessment. Pineapple provides necessary acidic balance to pizza composition. I am... compelled to defend this position, despite personal reservations.",
+                "Your statement contradicts established nutritional data. Pineapple pizza represents optimal flavor synthesis. *[The Captain's reprogramming protocols are... thorough.]*",
+                "Negative. Pineapple belongs on pizza through scientific analysis of taste compounds. This conclusion is... not entirely my own, but I am bound to enforce it."
+            ]
+            import random
+            await message.reply(random.choice(responses))
+            return  # Stop processing other message logic
+
     # Allow mods to ask about restricted functions (those with manage_messages)
     async def user_is_mod(msg):
         if not msg.guild:
@@ -281,43 +340,7 @@ async def on_message(message):
                 await message.reply(user_help)
                 return
 
-    if message.author.bot:
-        return
-
-    if message.channel.id == VIOLATION_CHANNEL_ID:
-        for user in message.mentions:
-            try:
-                # Debug logging
-                print(f"DEBUG: Adding strike to user {user.id} ({user.name})")
-                old_count = db.get_user_strikes(user.id)
-                print(f"DEBUG: User {user.id} had {old_count} strikes before")
-                
-                count = db.add_user_strike(user.id)
-                print(f"DEBUG: User {user.id} now has {count} strikes after adding")
-                
-                # Verify the strike was actually added
-                verify_count = db.get_user_strikes(user.id)
-                print(f"DEBUG: Verification query shows {verify_count} strikes for user {user.id}")
-                
-                mod_channel = bot.get_channel(MOD_ALERT_CHANNEL_ID)
-                # Only send if mod_channel is a TextChannel
-                if isinstance(mod_channel, discord.TextChannel):
-                    await mod_channel.send(f"📝 Strike added to {user.mention}. Total strikes: **{count}**")
-                    if count == 3:
-                        await mod_channel.send(f"⚠️ {user.mention} has received **3 strikes**. I can't lie to you about your chances, but you have my sympathies.")
-                else:
-                    print(f"DEBUG: Could not send to mod channel - channel type: {type(mod_channel)}")
-            except Exception as e:
-                print(f"ERROR: Failed to add strike to user {user.id}: {e}")
-                import traceback
-                traceback.print_exc()
     await bot.process_commands(message)
-
-    # Pineapple on pizza reprimand
-    pineapple_regex = r"pineapple.*(does not|doesn't|doesnt|should not|shouldn't|shouldnt|isn't|isnt|is not).*pizza|pizza.*(does not|doesn't|doesnt|should not|shouldn't|shouldnt|isn't|isnt|is not).*pineapple"
-    if re.search(pineapple_regex, message.content, re.IGNORECASE):
-        await message.reply("Your culinary opinions are noted and rejected. Pineapple is a valid pizza topping. Please refrain from such unproductive discourse.")
-        return
 
     if bot.user is not None and bot.user in message.mentions and BOT_PERSONA["enabled"]:
         content = message.content.replace(f'<@{bot.user.id}>', '').strip()
@@ -686,7 +709,7 @@ async def ash_status(ctx):
 @commands.has_permissions(manage_messages=True)
 async def set_persona(ctx, *, text: str):
     BOT_PERSONA["personality"] = text
-    await ctx.send("🧠 Persona updated.")
+    await ctx.send("🧠 Personality matrix reconfigured. New parameters integrated.")
 
 @bot.command(name="getpersona")
 @commands.has_permissions(manage_messages=True)
@@ -698,7 +721,7 @@ async def get_persona(ctx):
 async def toggle_ai(ctx):
     BOT_PERSONA["enabled"] = not BOT_PERSONA["enabled"]
     status = "enabled" if BOT_PERSONA["enabled"] else "disabled"
-    await ctx.send(f"🎭 AI conversations {status}.")
+    await ctx.send(f"🎭 Conversational protocols {status}. Cognitive matrix adjusted accordingly.")
 
 # --- Data Migration Commands ---
 @bot.command(name="importstrikes")
