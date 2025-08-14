@@ -2326,9 +2326,9 @@ If you want to add any other comments, you can discuss the list in ⁠🎮game-c
             
             for line in game_lines:
                 if current_length + len(line) + 1 > 1000:  # Leave buffer
-                    # Add current field
+                    # Add current field with no field name to avoid blank lines
                     embed.add_field(
-                        name="\u200b",  # Zero-width space for invisible field name
+                        name="Current Recommendations" if field_count == 1 else "\u200b",
                         value="\n".join(current_field),
                         inline=False
                     )
@@ -2343,7 +2343,7 @@ If you want to add any other comments, you can discuss the list in ⁠🎮game-c
             # Add the final field
             if current_field:
                 embed.add_field(
-                    name="\u200b",  # Zero-width space for invisible field name
+                    name="Current Recommendations" if field_count == 1 else "\u200b",
                     value="\n".join(current_field),
                     inline=False
                 )
