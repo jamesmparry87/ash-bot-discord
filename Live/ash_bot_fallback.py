@@ -422,7 +422,7 @@ async def on_message(message):
                 await message.reply(f"🧾 {user.name} has {count} strike(s). I advise caution.")
                 return
 
-        # Check for specific game lookup queries (these need database access)
+        # Check for specific game lookup queries (these need played games database access)
         game_query_patterns = [
             r"has\s+jonesy\s+played\s+(.+?)[\?\.]?$",
             r"did\s+jonesy\s+play\s+(.+?)[\?\.]?$",
@@ -430,6 +430,14 @@ async def on_message(message):
             r"did\s+captain\s+jonesy\s+play\s+(.+?)[\?\.]?$",
             r"has\s+jonesyspacecat\s+played\s+(.+?)[\?\.]?$",
             r"did\s+jonesyspacecat\s+play\s+(.+?)[\?\.]?$"
+        ]
+        
+        # Check for recommendation queries (these need recommendations database access)
+        recommendation_query_patterns = [
+            r"is\s+(.+?)\s+recommended[\?\.]?$",
+            r"has\s+(.+?)\s+been\s+recommended[\?\.]?$",
+            r"who\s+recommended\s+(.+?)[\?\.]?$",
+            r"what.*recommend.*(.+?)[\?\.]?$"
         ]
         
         # Common game series that need disambiguation
@@ -444,6 +452,30 @@ async def on_message(message):
             "kingdom hearts", "persona", "shin megami tensei", "tales of", "fire emblem", "advance wars"
         ]
         
+        # Handle recommendation queries first
+        for pattern in recommendation_query_patterns:
+            match = re.search(pattern, lower_content)
+            if match:
+                game_name = match.group(1).strip()
+                
+                # Search in recommendations database
+                games = db.get_all_games()
+                found_game = None
+                for game in games:
+                    if game_name.lower() in game['name'].lower() or game['name'].lower() in game_name.lower():
+                        found_game = game
+                        break
+                
+                if found_game:
+                    contributor = f" (suggested by {found_game['added_by']})" if found_game['added_by'] and found_game['added_by'].strip() else ""
+                    game_title = found_game['name'].title()
+                    await message.reply(f"Affirmative. '{game_title}' is catalogued in our recommendation database{contributor}. The suggestion has been logged for mission consideration.")
+                else:
+                    game_title = game_name.title()
+                    await message.reply(f"Negative. '{game_title}' is not present in our recommendation database. No records of this title being suggested for mission parameters.")
+                return
+        
+        # Handle played games queries
         for pattern in game_query_patterns:
             match = re.search(pattern, lower_content)
             if match:
@@ -471,57 +503,56 @@ async def on_message(message):
                             break
                 
                 if is_series_query:
-                    # Get games from database first
-                    games = db.get_all_games()
+                    # Get games from PLAYED GAMES database for series disambiguation
+                    played_games = db.get_all_played_games()
                     
-                    # This looks like a series query - find all games in this series from our database
+                    # Find all games in this series from played games database
                     series_games = []
-                    for game in games:
-                        game_lower = game['name'].lower()
+                    for game in played_games:
+                        game_lower = game['canonical_name'].lower()
+                        series_lower = game.get('series_name', '').lower()
                         # Check if this game belongs to the detected series
                         for series in game_series_keywords:
-                            if series in game_name_lower and series in game_lower:
-                                series_games.append(game['name'])
+                            if series in game_name_lower and (series in game_lower or series in series_lower):
+                                episodes = f" ({game.get('total_episodes', 0)} episodes)" if game.get('total_episodes', 0) > 0 else ""
+                                status = game.get('completion_status', 'unknown')
+                                series_games.append(f"'{game['canonical_name']}'{episodes} - {status}")
                                 break
                     
                     # Create disambiguation response with specific games if found
                     if series_games:
-                        games_list = ", ".join([f"'{game}'" for game in series_games])
-                        await message.reply(f"Analysis indicates multiple entries exist in the '{game_name.title()}' series. My data archives contain the following iterations: {games_list}. Specify which particular entry you are referencing for accurate data retrieval. Precision is essential for proper analysis.")
+                        games_list = ", ".join(series_games)
+                        await message.reply(f"Database analysis indicates multiple entries exist in the '{game_name.title()}' series. Captain Jonesy's gaming archives contain: {games_list}. Specify which particular iteration you are referencing for detailed mission data.")
                     else:
-                        await message.reply(f"Analysis indicates multiple entries exist in the '{game_name.title()}' series. My data archives contain various iterations with distinct identifiers. Specify which particular entry you are referencing for accurate data retrieval. Precision is essential for proper analysis.")
+                        await message.reply(f"Database scan complete. No entries found for '{game_name.title()}' series in Captain Jonesy's gaming archives. Either the series has not been engaged or requires more specific designation for accurate retrieval.")
                     return
                 
-                games = db.get_all_games()
+                # Search for the game in PLAYED GAMES database
+                played_game = db.get_played_game(game_name)
                 
-                # Search for the game in recommendations
-                found_game = None
-                for game in games:
-                    if game_name.lower() in game['name'].lower() or game['name'].lower() in game_name.lower():
-                        found_game = game
-                        break
-                
-                # If not found, try fuzzy matching
-                if not found_game:
-                    import difflib
-                    game_names = [game['name'].lower() for game in games]
-                    matches = difflib.get_close_matches(game_name.lower(), game_names, n=1, cutoff=0.6)
-                    if matches:
-                        match_name = matches[0]
-                        for game in games:
-                            if game['name'].lower() == match_name:
-                                found_game = game
-                                break
-                
-                if found_game:
-                    # Game is in recommendations list
-                    contributor = f" (suggested by {found_game['added_by']})" if found_game['added_by'] and found_game['added_by'].strip() else ""
-                    game_title = found_game['name'].title()
-                    await message.reply(f"Analysis complete. '{game_title}' is catalogued in our recommendation database{contributor}. However, I have no data on whether Captain Jonesy has actually engaged with this title. My surveillance protocols do not extend to her gaming activities.")
+                if played_game:
+                    # Game found in played games database
+                    episodes = f" across {played_game.get('total_episodes', 0)} episodes" if played_game.get('total_episodes', 0) > 0 else ""
+                    playtime_minutes = played_game.get('total_playtime_minutes', 0)
+                    playtime = f" ({playtime_minutes//60}h {playtime_minutes%60}m total)" if playtime_minutes > 0 else ""
+                    status = played_game.get('completion_status', 'unknown')
+                    platform = f" on {played_game.get('platform')}" if played_game.get('platform') else ""
+                    year = f" ({played_game.get('release_year')})" if played_game.get('release_year') else ""
+                    
+                    status_text = {
+                        'completed': 'Mission completed',
+                        'ongoing': 'Mission ongoing',
+                        'dropped': 'Mission terminated',
+                        'unknown': 'Mission status unknown'
+                    }.get(status, 'Mission status unknown')
+                    
+                    playlist_info = f" YouTube playlist available in <#{YOUTUBE_HISTORY_CHANNEL_ID}>." if played_game.get('youtube_playlist_url') else ""
+                    
+                    await message.reply(f"Affirmative. Captain Jonesy has engaged '{played_game['canonical_name']}'{year}{platform}{episodes}{playtime}. {status_text}.{playlist_info}")
                 else:
-                    # Game not found in recommendations
+                    # Game not found in played games database
                     game_title = game_name.title()
-                    await message.reply(f"'{game_title}' is not present in our recommendation database. I have no records of this title being suggested or discussed. My observational data is limited to catalogued recommendations.")
+                    await message.reply(f"Database analysis complete. No records of Captain Jonesy engaging '{game_title}' found in gaming archives. Mission parameters indicate this title has not been processed.")
                 return
 
         # AI-enabled path - try AI first for more complex queries
