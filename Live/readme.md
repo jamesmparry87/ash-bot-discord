@@ -32,16 +32,18 @@ A Discord moderation and AI assistant bot featuring strike tracking, game recomm
 - `!addplayedgame <Game Name> | series:Series | year:2023 | platform:PC | status:completed | episodes:12 | notes:Additional info` - Add played game with metadata
 - `!listplayedgames [series_name]` - List all played games, optionally filtered by series
 - `!searchplayedgames <query>` - Search played games by name, series, or notes
-- `!gameinfo <game_name>` - Get detailed information about a specific played game
-- `!updateplayedgame <game_name> status:completed | episodes:15 | notes:New info` - Update game details
+- `!gameinfo <game_name_or_id>` - Get detailed information about a specific played game (accepts game name or database ID)
+- `!updateplayedgame <game_name_or_id> status:completed | episodes:15 | notes:New info` - Update game details (accepts game name or database ID)
 - `!removeplayedgame <game_name>` - Remove a played game (with confirmation)
 - `!fixcanonicalname <current_name> <new_canonical_name>` - Fix game name formatting
 - `!addaltname <game_name> <alternative_name>` - Add alternative name for better search
 - `!removealtname <game_name> <alternative_name>` - Remove alternative name
+- `!setaltnames <game_name> <name1, name2, name3>` - Set all alternative names for a game (comma-separated)
 
 #### Game Import System
 
 - `!bulkimportplayedgames` - Import games from YouTube playlists and Twitch VODs with accurate playtime data
+- `!updateplayedgames` - Update existing played games with AI-enhanced metadata (genre, alternative names, series info, release years)
 - `!cleanplayedgames` - Remove already-played games from recommendations using API analysis
 
 #### Bot Status & Analytics
@@ -368,3 +370,4 @@ If upgrading from an older version:
 ---
 
 **Ready to deploy?** Push your code to GitHub, connect to Railway, add your environment variables, and your bot will be live with automatic scheduled updates and comprehensive game management capabilities.
+                                                                                                                                                                                                                                                                                                                                            

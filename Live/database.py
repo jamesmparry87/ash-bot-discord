@@ -482,48 +482,66 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 name_lower = name.lower().strip()
                 
-                # Search canonical name first
+                # Search canonical name first (exact match)
                 cur.execute("""
                     SELECT * FROM played_games 
-                    WHERE LOWER(canonical_name) = %s
+                    WHERE LOWER(TRIM(canonical_name)) = %s
                 """, (name_lower,))
                 result = cur.fetchone()
                 
                 if result:
+                    logger.debug(f"Found game by exact canonical name match: {name}")
                     return dict(result)
                 
                 # Search alternative names
                 cur.execute("""
                     SELECT * FROM played_games 
-                    WHERE %s = ANY(SELECT LOWER(unnest(alternative_names)))
+                    WHERE %s = ANY(SELECT LOWER(TRIM(unnest(alternative_names))))
                 """, (name_lower,))
                 result = cur.fetchone()
                 
                 if result:
+                    logger.debug(f"Found game by alternative name match: {name}")
                     return dict(result)
                 
-                # Fuzzy search on canonical names
-                cur.execute("SELECT * FROM played_games")
+                # Fuzzy search on canonical names with better matching
+                cur.execute("SELECT id, canonical_name, alternative_names FROM played_games")
                 all_games = cur.fetchall()
                 
                 import difflib
-                canonical_names = []
+                game_names_map = {}
+                
                 for game in all_games:
                     game_dict = dict(game)
                     canonical_name = game_dict.get('canonical_name')
                     if canonical_name:
-                        canonical_names.append(str(canonical_name).lower())
+                        canonical_lower = str(canonical_name).lower().strip()
+                        game_names_map[canonical_lower] = game_dict
+                        
+                        # Also add alternative names to the map
+                        alt_names = game_dict.get('alternative_names', [])
+                        if alt_names:
+                            for alt_name in alt_names:
+                                if alt_name:
+                                    alt_lower = str(alt_name).lower().strip()
+                                    game_names_map[alt_lower] = game_dict
                 
-                matches = difflib.get_close_matches(name_lower, canonical_names, n=1, cutoff=0.8)
+                # Try fuzzy matching with lower threshold for better matching
+                all_name_keys = list(game_names_map.keys())
+                matches = difflib.get_close_matches(name_lower, all_name_keys, n=1, cutoff=0.75)
                 
                 if matches:
                     match_name = matches[0]
-                    for game in all_games:
-                        game_dict = dict(game)
-                        canonical_name = game_dict.get('canonical_name')
-                        if canonical_name and str(canonical_name).lower() == match_name:
-                            return game_dict
+                    matched_game = game_names_map[match_name]
+                    logger.debug(f"Found game by fuzzy match: {name} -> {matched_game.get('canonical_name')}")
+                    
+                    # Get the full game record
+                    cur.execute("SELECT * FROM played_games WHERE id = %s", (matched_game['id'],))
+                    full_result = cur.fetchone()
+                    if full_result:
+                        return dict(full_result)
                 
+                logger.debug(f"No game found for: {name}")
                 return None
         except Exception as e:
             logger.error(f"Error getting played game {name}: {e}")
@@ -834,7 +852,7 @@ class DatabaseManager:
             return []
     
     def get_games_by_franchise(self, franchise_name: str) -> List[Dict[str, Any]]:
-        """Get all games in a specific franchise"""
+        """Get all games in a specific franchise (using series_name)"""
         conn = self.get_connection()
         if not conn:
             return []
@@ -843,7 +861,7 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT * FROM played_games 
-                    WHERE LOWER(franchise_name) = %s
+                    WHERE LOWER(series_name) = %s
                     ORDER BY release_year ASC, canonical_name ASC
                 """, (franchise_name.lower(),))
                 results = cur.fetchall()
@@ -917,6 +935,92 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting played games stats: {e}")
             return {}
+
+    def get_played_game_by_id(self, game_id: int) -> Optional[Dict[str, Any]]:
+        """Get a played game by its database ID"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM played_games WHERE id = %s", (game_id,))
+                result = cur.fetchone()
+                if result:
+                    return dict(result)
+                return None
+        except Exception as e:
+            logger.error(f"Error getting played game by ID {game_id}: {e}")
+            return None
+
+    def get_game_by_id_or_name(self, identifier: str) -> Optional[Dict[str, Any]]:
+        """Get a game by either ID (if numeric) or name"""
+        # Try to parse as ID first
+        try:
+            game_id = int(identifier)
+            return self.get_played_game_by_id(game_id)
+        except ValueError:
+            # Not a number, search by name
+            return self.get_played_game(identifier)
+
+    def debug_update_issues(self, canonical_name: str) -> Dict[str, Any]:
+        """Debug function to help identify update issues"""
+        conn = self.get_connection()
+        if not conn:
+            return {"error": "No database connection"}
+        
+        try:
+            with conn.cursor() as cur:
+                debug_info = {
+                    "search_name": canonical_name,
+                    "search_name_lower": canonical_name.lower().strip(),
+                    "found_games": [],
+                    "exact_matches": [],
+                    "fuzzy_matches": []
+                }
+                
+                # Get all games for comparison
+                cur.execute("SELECT id, canonical_name, alternative_names FROM played_games")
+                all_games = cur.fetchall()
+                
+                for game in all_games:
+                    game_dict = dict(game)
+                    game_canonical = game_dict.get('canonical_name', '')
+                    game_alt_names = game_dict.get('alternative_names', [])
+                    
+                    debug_info["found_games"].append({
+                        "id": game_dict.get('id'),
+                        "canonical_name": game_canonical,
+                        "alternative_names": game_alt_names
+                    })
+                    
+                    # Check exact matches
+                    if game_canonical.lower().strip() == canonical_name.lower().strip():
+                        debug_info["exact_matches"].append(game_dict.get('id'))
+                    
+                    # Check alternative name matches
+                    if game_alt_names:
+                        for alt_name in game_alt_names:
+                            if alt_name and alt_name.lower().strip() == canonical_name.lower().strip():
+                                debug_info["exact_matches"].append(game_dict.get('id'))
+                
+                # Test fuzzy matching
+                import difflib
+                canonical_names = [str(dict(game)['canonical_name']).lower().strip() for game in all_games if dict(game).get('canonical_name')]
+                matches = difflib.get_close_matches(canonical_name.lower().strip(), canonical_names, n=3, cutoff=0.75)
+                debug_info["fuzzy_matches"] = matches
+                
+                # Test the actual get_played_game function
+                found_game = self.get_played_game(canonical_name)
+                debug_info["get_played_game_result"] = found_game is not None
+                if found_game:
+                    debug_info["found_game_id"] = found_game.get('id')
+                    debug_info["found_game_name"] = found_game.get('canonical_name')
+                
+                return debug_info
+        except Exception as e:
+            logger.error(f"Error in debug_update_issues: {e}")
+            return {"error": str(e)}
 
     def close(self):
         """Close database connection"""

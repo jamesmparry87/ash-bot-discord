@@ -3614,6 +3614,134 @@ async def set_alternative_names_cmd(ctx, game_name: str, *, alternative_names: s
     except Exception as e:
         await ctx.send(f"❌ **Alternative names setting error:** {str(e)}")
 
+@bot.command(name="testupdategame")
+@commands.has_permissions(manage_messages=True)
+async def test_update_game_cmd(ctx, game_id: str, field: str, *, value: str):
+    """Test updating a single game field by ID without AI calls. Usage: !testupdategame 1 genre Action"""
+    try:
+        # Validate game ID is numeric
+        if not game_id.isdigit():
+            await ctx.send("❌ **Invalid game ID:** Please provide a numeric game ID (e.g., 1, 2, 3)")
+            return
+        
+        game_id_int = int(game_id)
+        
+        # Find the game by ID
+        game = db.get_played_game_by_id(game_id_int)
+        if not game:
+            await ctx.send(f"🔍 **Game not found:** No game with ID {game_id} exists in the database.")
+            return
+        
+        # Validate field name
+        valid_fields = [
+            'genre', 'series_name', 'platform', 'completion_status', 
+            'notes', 'release_year', 'total_episodes', 'total_playtime_minutes'
+        ]
+        
+        if field.lower() not in valid_fields:
+            await ctx.send(f"❌ **Invalid field:** '{field}' is not a valid field. Valid fields: {', '.join(valid_fields)}")
+            return
+        
+        # Convert value to appropriate type
+        update_value = value
+        if field.lower() in ['release_year', 'total_episodes', 'total_playtime_minutes']:
+            try:
+                update_value = int(value)
+            except ValueError:
+                await ctx.send(f"❌ **Invalid value:** '{value}' is not a valid number for field '{field}'")
+                return
+        
+        # Show current and new values
+        current_value = game.get(field.lower(), 'None')
+        await ctx.send(f"🔍 **Game:** {game['canonical_name']} (ID: {game_id})\n📝 **Field:** {field}\n📊 **Current value:** {current_value}\n📊 **New value:** {update_value}")
+        
+        # Perform the update
+        update_data = {field.lower(): update_value}
+        success = db.update_played_game(game_id_int, **update_data)
+        
+        if success:
+            await ctx.send(f"✅ **Update successful:** {field} updated from '{current_value}' to '{update_value}'")
+            
+            # Verify the update by reading the game again
+            updated_game = db.get_played_game_by_id(game_id_int)
+            if updated_game:
+                verified_value = updated_game.get(field.lower(), 'None')
+                if str(verified_value) == str(update_value):
+                    await ctx.send(f"✅ **Verification successful:** Database now shows {field} = '{verified_value}'")
+                else:
+                    await ctx.send(f"⚠️ **Verification warning:** Expected '{update_value}' but database shows '{verified_value}'")
+            else:
+                await ctx.send("⚠️ **Verification failed:** Could not re-read game from database")
+        else:
+            await ctx.send(f"❌ **Update failed:** Database update operation returned false. Check database permissions and connection.")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Test update error:** {str(e)}")
+
+@bot.command(name="debuggame")
+@commands.has_permissions(manage_messages=True)
+async def debug_game_cmd(ctx, game_id: str):
+    """Debug a specific game's database record and update capabilities"""
+    try:
+        if not game_id.isdigit():
+            await ctx.send("❌ **Invalid game ID:** Please provide a numeric game ID")
+            return
+        
+        game_id_int = int(game_id)
+        
+        # Get the game
+        game = db.get_played_game_by_id(game_id_int)
+        if not game:
+            await ctx.send(f"🔍 **Game not found:** No game with ID {game_id} exists in the database.")
+            return
+        
+        # Show detailed game information
+        debug_info = f"🔍 **Game Debug Information:**\n"
+        debug_info += f"• **ID:** {game.get('id')}\n"
+        debug_info += f"• **Canonical Name:** {game.get('canonical_name')}\n"
+        debug_info += f"• **Series:** {game.get('series_name', 'None')}\n"
+        debug_info += f"• **Genre:** {game.get('genre', 'None')}\n"
+        debug_info += f"• **Release Year:** {game.get('release_year', 'None')}\n"
+        debug_info += f"• **Platform:** {game.get('platform', 'None')}\n"
+        debug_info += f"• **Status:** {game.get('completion_status', 'None')}\n"
+        debug_info += f"• **Episodes:** {game.get('total_episodes', 0)}\n"
+        debug_info += f"• **Playtime:** {game.get('total_playtime_minutes', 0)} minutes\n"
+        debug_info += f"• **Alt Names:** {game.get('alternative_names', [])}\n"
+        debug_info += f"• **Created:** {game.get('created_at', 'None')}\n"
+        debug_info += f"• **Updated:** {game.get('updated_at', 'None')}\n"
+        
+        await ctx.send(debug_info)
+        
+        # Test database connection and permissions
+        conn = db.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    # Test if we can read the specific game
+                    cur.execute("SELECT canonical_name FROM played_games WHERE id = %s", (game_id_int,))
+                    result = cur.fetchone()
+                    if result:
+                        await ctx.send(f"✅ **Database read test:** Successfully read game '{result[0]}'")
+                    else:
+                        await ctx.send("❌ **Database read test:** Failed to read game")
+                    
+                    # Test if we can perform a harmless update (set updated_at to current time)
+                    cur.execute("UPDATE played_games SET updated_at = CURRENT_TIMESTAMP WHERE id = %s", (game_id_int,))
+                    rows_affected = cur.rowcount
+                    await ctx.send(f"✅ **Database update test:** {rows_affected} row(s) affected by timestamp update")
+                    
+                    # Rollback the test update
+                    conn.rollback()
+                    await ctx.send("✅ **Test update rolled back:** No permanent changes made")
+                    
+            except Exception as db_error:
+                await ctx.send(f"❌ **Database test error:** {str(db_error)}")
+        else:
+            await ctx.send("❌ **Database connection failed:** Cannot test update capabilities")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Debug error:** {str(e)}")
+
 # --- Cleanup ---
 def cleanup():
     try:
