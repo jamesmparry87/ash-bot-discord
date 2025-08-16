@@ -2149,140 +2149,216 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
 async def enhance_games_with_ai(games_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Use AI to enhance game metadata with genre, series info, alternative names, and release years"""
     if not ai_enabled:
+        print("AI not enabled, returning games without enhancement")
         return games_data
     
     enhanced_games = []
     
     # Process games in batches to avoid token limits
-    batch_size = 8  # Reduced batch size for more detailed prompts
+    batch_size = 3  # Smaller batch size for better success rate
     for i in range(0, len(games_data), batch_size):
         batch = games_data[i:i + batch_size]
         game_names = [game['canonical_name'] for game in batch]
         
-        prompt = f"""You are a gaming database expert. For each game listed below, provide comprehensive metadata in JSON format:
+        # Simplified, more direct prompt
+        prompt = f"""Analyze these video games and provide metadata in JSON format:
 
-Games to analyze: {', '.join(game_names)}
+{', '.join(game_names)}
 
 For each game, provide:
-- genre: Primary genre (Action, RPG, Strategy, Horror, Platformer, Puzzle, Racing, Sports, etc.)
-- series_name: Game series/franchise name (e.g., "God of War" for "God of War (2018)", "Final Fantasy" for "Final Fantasy VII")
-- release_year: Year the game was originally released
-- alternative_names: Array of common alternative names, abbreviations, or subtitles (e.g., ["FF7", "Final Fantasy 7"] for "Final Fantasy VII")
+- genre: Main genre (Action, RPG, Adventure, etc.)
+- series_name: Franchise name (e.g., "Batman" for "Batman: Arkham Origins")
+- release_year: Original release year
+- alternative_names: Common abbreviations/alternate names
 
-Important guidelines:
-- For series_name, use the main franchise name, not the specific game title
-- For alternative_names, include common abbreviations, alternate spellings, and how fans typically refer to the game
-- Be specific with genres (use "Action-Adventure" instead of just "Action" if appropriate)
-- Only include information you're confident about
-
-Respond with a JSON object:
-
+Example for "Batman: Arkham Origins":
 {{
-  "Game Name": {{
-    "genre": "Genre",
-    "series_name": "Series Name", 
-    "release_year": 2023,
-    "alternative_names": ["Alt Name 1", "Alt Name 2"]
+  "Batman: Arkham Origins": {{
+    "genre": "Action-Adventure",
+    "series_name": "Batman: Arkham",
+    "release_year": 2013,
+    "alternative_names": ["Arkham Origins", "Batman AO"]
   }}
 }}
 
-Only include games you can identify with confidence. If unsure about any field, use null."""
+Respond with valid JSON only. Include all games listed above."""
         
         try:
-            # Try primary AI first
             response = None
+            response_text = ""
+            
+            # Try primary AI first
             if primary_ai == "gemini" and gemini_model is not None:
                 try:
+                    print(f"Trying Gemini AI for games: {game_names}")
                     response = gemini_model.generate_content(prompt)  # type: ignore
+                    if response and hasattr(response, 'text') and response.text:
+                        response_text = response.text.strip()
+                        print(f"Gemini response received: {len(response_text)} characters")
                 except Exception as e:
                     print(f"Gemini AI enhancement error: {e}")
                     # Try Claude backup if available
                     if backup_ai == "claude" and claude_client is not None:
                         try:
+                            print(f"Trying Claude backup for games: {game_names}")
                             response = claude_client.messages.create(  # type: ignore
                                 model="claude-3-haiku-20240307",
-                                max_tokens=2000,
+                                max_tokens=1500,
                                 messages=[{"role": "user", "content": prompt}]
                             )
+                            if response and hasattr(response, 'content') and response.content:
+                                content_list = response.content  # type: ignore
+                                if content_list and len(content_list) > 0:
+                                    first_content = content_list[0]  # type: ignore
+                                    if hasattr(first_content, 'text'):
+                                        response_text = first_content.text.strip()  # type: ignore
+                                        print(f"Claude response received: {len(response_text)} characters")
                         except Exception as claude_e:
                             print(f"Claude backup AI enhancement error: {claude_e}")
             
             elif primary_ai == "claude" and claude_client is not None:
                 try:
+                    print(f"Trying Claude AI for games: {game_names}")
                     response = claude_client.messages.create(  # type: ignore
                         model="claude-3-haiku-20240307",
-                        max_tokens=2000,
+                        max_tokens=1500,
                         messages=[{"role": "user", "content": prompt}]
                     )
+                    if response and hasattr(response, 'content') and response.content:
+                        content_list = response.content  # type: ignore
+                        if content_list and len(content_list) > 0:
+                            first_content = content_list[0]  # type: ignore
+                            if hasattr(first_content, 'text'):
+                                response_text = first_content.text.strip()  # type: ignore
+                                print(f"Claude response received: {len(response_text)} characters")
                 except Exception as e:
                     print(f"Claude AI enhancement error: {e}")
                     # Try Gemini backup if available
                     if backup_ai == "gemini" and gemini_model is not None:
                         try:
+                            print(f"Trying Gemini backup for games: {game_names}")
                             response = gemini_model.generate_content(prompt)  # type: ignore
+                            if response and hasattr(response, 'text') and response.text:
+                                response_text = response.text.strip()
+                                print(f"Gemini response received: {len(response_text)} characters")
                         except Exception as gemini_e:
                             print(f"Gemini backup AI enhancement error: {gemini_e}")
             
-            if response:
-                # Parse AI response based on which AI was used
-                response_text = ""
-                if hasattr(response, 'text') and response.text:
-                    response_text = response.text
-                elif hasattr(response, 'content') and response.content: # type: ignore
-                    # Handle Claude response format
-                    try:
-                        content_list = response.content  # type: ignore
-                        if content_list and len(content_list) > 0:
-                            first_content = content_list[0]  # type: ignore
-                            if hasattr(first_content, 'text'):
-                                response_text = first_content.text  # type: ignore
-                    except (AttributeError, IndexError, TypeError):
-                        response_text = ""
+            if response_text:
+                print(f"Raw AI response: {response_text[:200]}...")
                 
-                if response_text:
-                    # Parse AI response
-                    import json
-                    try:
-                        ai_data = json.loads(response_text.strip())
-                        
-                        # Apply AI enhancements to batch
-                        for game in batch:
-                            game_name = game['canonical_name']
-                            if game_name in ai_data:
-                                ai_info = ai_data[game_name]
-                                
-                                if ai_info.get('genre'):
-                                    game['genre'] = ai_info['genre']
-                                if ai_info.get('series_name'):
-                                    game['series_name'] = ai_info['series_name']
-                                if ai_info.get('release_year'):
-                                    game['release_year'] = ai_info['release_year']
-                                if ai_info.get('alternative_names') and isinstance(ai_info['alternative_names'], list):
-                                    # Merge with existing alternative names
-                                    existing_alt_names = game.get('alternative_names', []) or []
-                                    new_alt_names = ai_info['alternative_names']
-                                    merged_alt_names = list(set(existing_alt_names + new_alt_names))
-                                    if merged_alt_names:
-                                        game['alternative_names'] = merged_alt_names
-                            
-                            enhanced_games.append(game)
+                # Clean up response text - remove markdown code blocks if present
+                if response_text.startswith('```json'):
+                    response_text = response_text[7:]
+                if response_text.startswith('```'):
+                    response_text = response_text[3:]
+                if response_text.endswith('```'):
+                    response_text = response_text[:-3]
+                response_text = response_text.strip()
+                
+                # Parse AI response
+                import json
+                try:
+                    ai_data = json.loads(response_text)
+                    print(f"Successfully parsed JSON with {len(ai_data)} games")
                     
-                    except json.JSONDecodeError as e:
-                        print(f"JSON parsing error in AI enhancement: {e}")
-                        # If AI response isn't valid JSON, just add games without enhancement
+                    # Apply AI enhancements to batch
+                    for game in batch:
+                        game_name = game['canonical_name']
+                        print(f"Processing game: {game_name}")
+                        
+                        # Try exact match first
+                        ai_info = ai_data.get(game_name)
+                        
+                        # If no exact match, try case-insensitive match
+                        if not ai_info:
+                            for ai_game_name, ai_game_data in ai_data.items():
+                                if ai_game_name.lower() == game_name.lower():
+                                    ai_info = ai_game_data
+                                    break
+                        
+                        if ai_info:
+                            print(f"Found AI data for {game_name}: {ai_info}")
+                            
+                            if ai_info.get('genre'):
+                                game['genre'] = ai_info['genre']
+                                print(f"Set genre: {ai_info['genre']}")
+                            if ai_info.get('series_name'):
+                                game['series_name'] = ai_info['series_name']
+                                print(f"Set series: {ai_info['series_name']}")
+                            if ai_info.get('release_year'):
+                                game['release_year'] = ai_info['release_year']
+                                print(f"Set year: {ai_info['release_year']}")
+                            if ai_info.get('alternative_names') and isinstance(ai_info['alternative_names'], list):
+                                # Merge with existing alternative names
+                                existing_alt_names = game.get('alternative_names', []) or []
+                                new_alt_names = ai_info['alternative_names']
+                                merged_alt_names = list(set(existing_alt_names + new_alt_names))
+                                if merged_alt_names:
+                                    game['alternative_names'] = merged_alt_names
+                                    print(f"Set alt names: {merged_alt_names}")
+                        else:
+                            print(f"No AI data found for {game_name}")
+                        
+                        enhanced_games.append(game)
+                
+                except json.JSONDecodeError as e:
+                    print(f"JSON parsing error in AI enhancement: {e}")
+                    print(f"Failed to parse: {response_text}")
+                    # Try to extract JSON from response if it's embedded in text
+                    import re
+                    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                    if json_match:
+                        try:
+                            ai_data = json.loads(json_match.group())
+                            print(f"Successfully extracted and parsed JSON with {len(ai_data)} games")
+                            
+                            # Apply enhancements (same logic as above)
+                            for game in batch:
+                                game_name = game['canonical_name']
+                                ai_info = ai_data.get(game_name)
+                                
+                                if not ai_info:
+                                    for ai_game_name, ai_game_data in ai_data.items():
+                                        if ai_game_name.lower() == game_name.lower():
+                                            ai_info = ai_game_data
+                                            break
+                                
+                                if ai_info:
+                                    if ai_info.get('genre'):
+                                        game['genre'] = ai_info['genre']
+                                    if ai_info.get('series_name'):
+                                        game['series_name'] = ai_info['series_name']
+                                    if ai_info.get('release_year'):
+                                        game['release_year'] = ai_info['release_year']
+                                    if ai_info.get('alternative_names') and isinstance(ai_info['alternative_names'], list):
+                                        existing_alt_names = game.get('alternative_names', []) or []
+                                        new_alt_names = ai_info['alternative_names']
+                                        merged_alt_names = list(set(existing_alt_names + new_alt_names))
+                                        if merged_alt_names:
+                                            game['alternative_names'] = merged_alt_names
+                                
+                                enhanced_games.append(game)
+                        except json.JSONDecodeError:
+                            print("Failed to extract JSON from response, adding games without enhancement")
+                            enhanced_games.extend(batch)
+                    else:
+                        print("No JSON found in response, adding games without enhancement")
                         enhanced_games.extend(batch)
-                else:
-                    enhanced_games.extend(batch)
             else:
+                print("No response text received from AI")
                 enhanced_games.extend(batch)
                 
         except Exception as e:
-            print(f"AI enhancement error for batch: {e}")
+            print(f"AI enhancement error for batch {game_names}: {e}")
+            import traceback
+            traceback.print_exc()
             enhanced_games.extend(batch)
         
         # Rate limiting for AI calls
         await asyncio.sleep(1)
     
+    print(f"Enhanced {len(enhanced_games)} games total")
     return enhanced_games
 
 def parse_youtube_duration(duration: str) -> int:
