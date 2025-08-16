@@ -3018,8 +3018,9 @@ async def game_info_cmd(ctx, *, identifier: str):
 
 @bot.command(name="updateplayedgame")
 @commands.has_permissions(manage_messages=True)
-async def update_played_game_cmd(ctx, identifier: str, *, updates: str):
-    """Update a played game's information (by name or ID). Format: status:completed | episodes:15 | notes:New info"""
+async def update_played_game_cmd(ctx, identifier: str, *, updates: Optional[str] = None):
+    """Update a played game's information (by name or ID). Format: status:completed | episodes:15 | notes:New info
+    If no updates are provided, will refresh metadata using AI enhancement."""
     try:
         # Find the game first
         game = get_game_by_id_or_name(identifier)
@@ -3028,9 +3029,117 @@ async def update_played_game_cmd(ctx, identifier: str, *, updates: str):
             await ctx.send(f"🔍 **Game not found:** {id_or_name} '{identifier}' is not in the played games database.")
             return
         
+        # If no updates provided, do AI metadata refresh
+        if not updates or updates.strip() == "":
+            await ctx.send(f"🧠 **Initiating AI metadata refresh for '{game['canonical_name']}'...**")
+            
+            if not ai_enabled:
+                await ctx.send("❌ **AI system offline.** Cannot enhance metadata without AI capabilities.")
+                return
+            
+            # Check what fields need updating
+            needs_update = False
+            missing_fields = []
+            
+            if not game.get('genre') or game.get('genre', '').strip() == '':
+                needs_update = True
+                missing_fields.append("genre")
+            if not game.get('alternative_names') or len(game.get('alternative_names', [])) == 0:
+                needs_update = True
+                missing_fields.append("alternative_names")
+            if not game.get('series_name') or game.get('series_name', '').strip() == '':
+                needs_update = True
+                missing_fields.append("series_name")
+            if not game.get('release_year'):
+                needs_update = True
+                missing_fields.append("release_year")
+            
+            if not needs_update:
+                await ctx.send(f"✅ **'{game['canonical_name']}' already has complete metadata.** No updates needed.")
+                return
+            
+            await ctx.send(f"📊 **Missing fields detected:** {', '.join(missing_fields)}")
+            
+            # Convert to format expected by enhance_games_with_ai
+            game_data = [{
+                'canonical_name': game['canonical_name'],
+                'alternative_names': game.get('alternative_names', []) or [],
+                'series_name': game.get('series_name'),
+                'genre': game.get('genre'),
+                'release_year': game.get('release_year'),
+                'db_id': game['id']
+            }]
+            
+            # Use AI to enhance the game
+            enhanced_games = await enhance_games_with_ai(game_data)
+            
+            if enhanced_games and len(enhanced_games) > 0:
+                enhanced_game = enhanced_games[0]
+                
+                # Prepare update data with only the enhanced fields
+                ai_update_data = {}
+                
+                if enhanced_game.get('genre') and enhanced_game['genre'] != game.get('genre'):
+                    ai_update_data['genre'] = enhanced_game['genre']
+                if enhanced_game.get('series_name') and enhanced_game['series_name'] != game.get('series_name'):
+                    ai_update_data['series_name'] = enhanced_game['series_name']
+                if enhanced_game.get('release_year') and enhanced_game['release_year'] != game.get('release_year'):
+                    ai_update_data['release_year'] = enhanced_game['release_year']
+                if enhanced_game.get('alternative_names') and enhanced_game['alternative_names'] != game.get('alternative_names', []):
+                    ai_update_data['alternative_names'] = enhanced_game['alternative_names']
+                
+                if ai_update_data:
+                    # Apply AI updates using the same bulk import method that works reliably
+                    complete_game_data = {
+                        'canonical_name': enhanced_game['canonical_name'],
+                        'alternative_names': enhanced_game.get('alternative_names', game.get('alternative_names', [])),
+                        'series_name': enhanced_game.get('series_name', game.get('series_name')),
+                        'genre': enhanced_game.get('genre', game.get('genre')),
+                        'release_year': enhanced_game.get('release_year', game.get('release_year')),
+                        'platform': game.get('platform'),
+                        'first_played_date': game.get('first_played_date'),
+                        'completion_status': game.get('completion_status', 'unknown'),
+                        'total_episodes': game.get('total_episodes', 0),
+                        'total_playtime_minutes': game.get('total_playtime_minutes', 0),
+                        'youtube_playlist_url': game.get('youtube_playlist_url'),
+                        'twitch_vod_urls': game.get('twitch_vod_urls', []),
+                        'notes': game.get('notes')
+                    }
+                    
+                    # Use bulk import method for reliable updates
+                    updated_count = db.bulk_import_played_games([complete_game_data])
+                    
+                    if updated_count > 0:
+                        updated_fields = list(ai_update_data.keys())
+                        await ctx.send(f"✅ **AI metadata refresh complete:** '{game['canonical_name']}' enhanced with {', '.join(updated_fields)}")
+                        
+                        # Show the enhanced data
+                        enhanced_info = []
+                        if ai_update_data.get('genre'):
+                            enhanced_info.append(f"**Genre:** {ai_update_data['genre']}")
+                        if ai_update_data.get('series_name'):
+                            enhanced_info.append(f"**Series:** {ai_update_data['series_name']}")
+                        if ai_update_data.get('release_year'):
+                            enhanced_info.append(f"**Year:** {ai_update_data['release_year']}")
+                        if ai_update_data.get('alternative_names'):
+                            alt_names = ', '.join(ai_update_data['alternative_names'])
+                            enhanced_info.append(f"**Alt Names:** {alt_names}")
+                        
+                        if enhanced_info:
+                            await ctx.send(f"📊 **Enhanced metadata:**\n• " + "\n• ".join(enhanced_info))
+                    else:
+                        await ctx.send(f"❌ **Update failed:** Unable to apply AI enhancements to '{game['canonical_name']}'.")
+                else:
+                    await ctx.send(f"ℹ️ **No enhancements available:** AI could not provide additional metadata for '{game['canonical_name']}'.")
+            else:
+                await ctx.send(f"❌ **AI enhancement failed:** Unable to process metadata for '{game['canonical_name']}'.")
+            
+            return
+        
+        # Manual updates path (existing functionality)
         # Parse updates
         update_data = {}
-        parts = [part.strip() for part in updates.split('|')]
+        parts = [part.strip() for part in updates.split('|')] if updates else []
         
         for part in parts:
             if ':' in part:

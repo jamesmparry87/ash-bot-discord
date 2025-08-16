@@ -33,7 +33,7 @@ A Discord moderation and AI assistant bot featuring strike tracking, game recomm
 - `!listplayedgames [series_name]` - List all played games, optionally filtered by series
 - `!searchplayedgames <query>` - Search played games by name, series, or notes
 - `!gameinfo <game_name_or_id>` - Get detailed information about a specific played game (accepts game name or database ID)
-- `!updateplayedgame <game_name_or_id> status:completed | episodes:15 | notes:New info` - Update game details (accepts game name or database ID)
+- `!updateplayedgame <game_name_or_id> status:completed | episodes:15 | notes:New info` - Update individual game details (accepts game name or database ID)
 - `!removeplayedgame <game_name>` - Remove a played game (with confirmation)
 - `!fixcanonicalname <current_name> <new_canonical_name>` - Fix game name formatting
 - `!addaltname <game_name> <alternative_name>` - Add alternative name for better search
@@ -258,6 +258,83 @@ The bot recognizes major game series for disambiguation:
 - **Sports**: FIFA, Madden, NBA 2K
 - **Fighting**: Mortal Kombat, Street Fighter, Tekken
 - **Nintendo**: Super Mario, The Legend of Zelda, Pokémon, Metroid
+
+### Individual Game Updates
+
+The `!updateplayedgame` command allows precise updates to individual game records using either the game name or database ID:
+
+#### Command Format
+
+```text
+!updateplayedgame <game_name_or_id> field1:value1 | field2:value2 | field3:value3
+```
+
+#### Available Update Fields
+
+- `status:completed` - Update completion status (completed, ongoing, dropped, unknown)
+- `episodes:15` - Update total episode count (numeric)
+- `notes:New information` - Update or append notes
+- `platform:PC` - Update gaming platform
+- `year:2023` - Update release year (numeric)
+- `series:Series Name` - Update series/franchise name
+- `youtube:https://youtube.com/playlist?list=...` - Update YouTube playlist URL
+
+#### Examples
+
+**Update by Game Name:**
+
+```text
+!updateplayedgame "God of War (2018)" status:completed | episodes:25 | notes:Excellent Norse mythology adaptation
+```
+
+**Update by Database ID:**
+
+```text
+!updateplayedgame 42 status:ongoing | episodes:12 | platform:PlayStation 5
+```
+
+**Single Field Update:**
+
+```text
+!updateplayedgame "Dark Souls" status:completed
+```
+
+**Multiple Field Update:**
+
+```text
+!updateplayedgame "Final Fantasy VII" status:completed | episodes:30 | year:1997 | platform:PC | notes:Classic JRPG masterpiece
+```
+
+#### Automatic Metadata Refresh
+
+When used without any field updates (e.g., `!updateplayedgame 42` or `!updateplayedgame "Dark Souls"`), the command will automatically:
+
+- **Analyze missing metadata** - Checks for missing genre, alternative names, series info, and release year
+- **Use AI enhancement** - Applies the same AI analysis as `!updateplayedgames` but for a single game
+- **Show detailed results** - Displays exactly what metadata was enhanced
+- **Preserve existing data** - Only fills in missing fields, doesn't overwrite existing information
+
+This is perfect for:
+
+- **Testing AI enhancement** on individual games before running the full batch update
+- **Debugging database issues** by updating one game at a time
+- **Filling gaps** in specific games after manual database edits
+- **Verifying** that the enhancement logic works correctly
+
+**Manual vs. Automatic Updates:**
+
+- `!updateplayedgame 42 status:completed | notes:Great game` - Manual field updates only
+- `!updateplayedgame 42` - Automatic AI metadata refresh for missing fields
+- `!updateplayedgames` - AI metadata refresh for all games with missing metadata
+
+#### Benefits of ID-Based Updates
+
+- **Precision**: No ambiguity with similar game names
+- **Database Integration**: Works seamlessly with manual PostgreSQL edits
+- **Efficiency**: Faster lookups for frequently updated games
+- **Consistency**: Reliable updates even after canonical name changes
+
+To find a game's ID, use `!gameinfo <game_name>` - the ID is shown in the footer.
 
 ### AI Response Protocols
 
