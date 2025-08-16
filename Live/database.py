@@ -865,28 +865,30 @@ class DatabaseManager:
         try:
             with conn.cursor() as cur:
                 # Total games
-                cur.execute("SELECT COUNT(*) FROM played_games")
+                cur.execute("SELECT COUNT(*) as count FROM played_games")
                 result = cur.fetchone()
-                total_games = result[0] if result else 0
+                total_games = int(result['count']) if result else 0  # type: ignore
                 
                 # Completed vs ongoing
-                cur.execute("SELECT completion_status, COUNT(*) FROM played_games GROUP BY completion_status")
+                cur.execute("SELECT completion_status, COUNT(*) as count FROM played_games GROUP BY completion_status")
                 status_results = cur.fetchall()
-                status_counts = dict(status_results) if status_results else {}
+                status_counts = {str(row['completion_status']): int(row['count']) for row in status_results} if status_results else {}  # type: ignore
                 
                 # Total episodes and playtime
-                cur.execute("SELECT SUM(total_episodes), SUM(total_playtime_minutes) FROM played_games")
+                cur.execute("SELECT COALESCE(SUM(total_episodes), 0) as episodes, COALESCE(SUM(total_playtime_minutes), 0) as playtime FROM played_games")
                 totals = cur.fetchone()
-                total_episodes = (totals[0] if totals and totals[0] else 0)
-                total_playtime = (totals[1] if totals and totals[1] else 0)
+                total_episodes = int(totals['episodes']) if totals else 0  # type: ignore
+                total_playtime = int(totals['playtime']) if totals else 0  # type: ignore
                 
                 # Genre distribution
-                cur.execute("SELECT genre, COUNT(*) FROM played_games WHERE genre IS NOT NULL GROUP BY genre ORDER BY COUNT(*) DESC LIMIT 5")
-                top_genres = dict(cur.fetchall())
+                cur.execute("SELECT genre, COUNT(*) as count FROM played_games WHERE genre IS NOT NULL GROUP BY genre ORDER BY COUNT(*) DESC LIMIT 5")
+                genre_results = cur.fetchall()
+                top_genres = {str(row['genre']): int(row['count']) for row in genre_results} if genre_results else {}  # type: ignore
                 
                 # Series distribution (replacing franchise)
-                cur.execute("SELECT series_name, COUNT(*) FROM played_games WHERE series_name IS NOT NULL GROUP BY series_name ORDER BY COUNT(*) DESC LIMIT 5")
-                top_series = dict(cur.fetchall())
+                cur.execute("SELECT series_name, COUNT(*) as count FROM played_games WHERE series_name IS NOT NULL GROUP BY series_name ORDER BY COUNT(*) DESC LIMIT 5")
+                series_results = cur.fetchall()
+                top_series = {str(row['series_name']): int(row['count']) for row in series_results} if series_results else {}  # type: ignore
                 
                 return {
                     'total_games': total_games,

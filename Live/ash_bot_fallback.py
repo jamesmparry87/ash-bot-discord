@@ -2141,68 +2141,131 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
     return games_data
 
 async def enhance_games_with_ai(games_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Use AI to enhance game metadata with genre, series info, and release years"""
-    if not ai_enabled or not gemini_model:
+    """Use AI to enhance game metadata with genre, series info, alternative names, and release years"""
+    if not ai_enabled:
         return games_data
     
     enhanced_games = []
     
     # Process games in batches to avoid token limits
-    batch_size = 10
+    batch_size = 8  # Reduced batch size for more detailed prompts
     for i in range(0, len(games_data), batch_size):
         batch = games_data[i:i + batch_size]
         game_names = [game['canonical_name'] for game in batch]
         
-        prompt = f"""You are a gaming database expert. For each game listed below, provide the following information in JSON format:
+        prompt = f"""You are a gaming database expert. For each game listed below, provide comprehensive metadata in JSON format:
 
 Games to analyze: {', '.join(game_names)}
 
 For each game, provide:
-- genre: Primary genre (Action, RPG, Strategy, Horror, Platformer, etc.)
-- series_name: Game series/franchise name (e.g., "God of War" for "God of War (2018)")
-- release_year: Year the game was released
-- platform: Primary platform (PC, PlayStation, Xbox, Nintendo Switch, etc.)
+- genre: Primary genre (Action, RPG, Strategy, Horror, Platformer, Puzzle, Racing, Sports, etc.)
+- series_name: Game series/franchise name (e.g., "God of War" for "God of War (2018)", "Final Fantasy" for "Final Fantasy VII")
+- release_year: Year the game was originally released
+- alternative_names: Array of common alternative names, abbreviations, or subtitles (e.g., ["FF7", "Final Fantasy 7"] for "Final Fantasy VII")
 
-Respond with a JSON object where each key is the exact game name and the value contains the metadata:
+Important guidelines:
+- For series_name, use the main franchise name, not the specific game title
+- For alternative_names, include common abbreviations, alternate spellings, and how fans typically refer to the game
+- Be specific with genres (use "Action-Adventure" instead of just "Action" if appropriate)
+- Only include information you're confident about
+
+Respond with a JSON object:
 
 {{
   "Game Name": {{
     "genre": "Genre",
     "series_name": "Series Name", 
     "release_year": 2023,
-    "platform": "Platform"
+    "alternative_names": ["Alt Name 1", "Alt Name 2"]
   }}
 }}
 
 Only include games you can identify with confidence. If unsure about any field, use null."""
         
         try:
-            response = gemini_model.generate_content(prompt)  # type: ignore
-            if response and hasattr(response, 'text') and response.text:
-                # Parse AI response
-                import json
+            # Try primary AI first
+            response = None
+            if primary_ai == "gemini" and gemini_model is not None:
                 try:
-                    ai_data = json.loads(response.text.strip())
-                    
-                    # Apply AI enhancements to batch
-                    for game in batch:
-                        game_name = game['canonical_name']
-                        if game_name in ai_data:
-                            ai_info = ai_data[game_name]
-                            
-                            if ai_info.get('genre'):
-                                game['genre'] = ai_info['genre']
-                            if ai_info.get('series_name'):
-                                game['series_name'] = ai_info['series_name']
-                            if ai_info.get('release_year'):
-                                game['release_year'] = ai_info['release_year']
-                            if ai_info.get('platform'):
-                                game['platform'] = ai_info['platform']
-                        
-                        enhanced_games.append(game)
+                    response = gemini_model.generate_content(prompt)  # type: ignore
+                except Exception as e:
+                    print(f"Gemini AI enhancement error: {e}")
+                    # Try Claude backup if available
+                    if backup_ai == "claude" and claude_client is not None:
+                        try:
+                            response = claude_client.messages.create(  # type: ignore
+                                model="claude-3-haiku-20240307",
+                                max_tokens=2000,
+                                messages=[{"role": "user", "content": prompt}]
+                            )
+                        except Exception as claude_e:
+                            print(f"Claude backup AI enhancement error: {claude_e}")
+            
+            elif primary_ai == "claude" and claude_client is not None:
+                try:
+                    response = claude_client.messages.create(  # type: ignore
+                        model="claude-3-haiku-20240307",
+                        max_tokens=2000,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                except Exception as e:
+                    print(f"Claude AI enhancement error: {e}")
+                    # Try Gemini backup if available
+                    if backup_ai == "gemini" and gemini_model is not None:
+                        try:
+                            response = gemini_model.generate_content(prompt)  # type: ignore
+                        except Exception as gemini_e:
+                            print(f"Gemini backup AI enhancement error: {gemini_e}")
+            
+            if response:
+                # Parse AI response based on which AI was used
+                response_text = ""
+                if hasattr(response, 'text') and response.text:
+                    response_text = response.text
+                elif hasattr(response, 'content') and response.content: # type: ignore
+                    # Handle Claude response format
+                    try:
+                        content_list = response.content  # type: ignore
+                        if content_list and len(content_list) > 0:
+                            first_content = content_list[0]  # type: ignore
+                            if hasattr(first_content, 'text'):
+                                response_text = first_content.text  # type: ignore
+                    except (AttributeError, IndexError, TypeError):
+                        response_text = ""
                 
-                except json.JSONDecodeError:
-                    # If AI response isn't valid JSON, just add games without enhancement
+                if response_text:
+                    # Parse AI response
+                    import json
+                    try:
+                        ai_data = json.loads(response_text.strip())
+                        
+                        # Apply AI enhancements to batch
+                        for game in batch:
+                            game_name = game['canonical_name']
+                            if game_name in ai_data:
+                                ai_info = ai_data[game_name]
+                                
+                                if ai_info.get('genre'):
+                                    game['genre'] = ai_info['genre']
+                                if ai_info.get('series_name'):
+                                    game['series_name'] = ai_info['series_name']
+                                if ai_info.get('release_year'):
+                                    game['release_year'] = ai_info['release_year']
+                                if ai_info.get('alternative_names') and isinstance(ai_info['alternative_names'], list):
+                                    # Merge with existing alternative names
+                                    existing_alt_names = game.get('alternative_names', []) or []
+                                    new_alt_names = ai_info['alternative_names']
+                                    merged_alt_names = list(set(existing_alt_names + new_alt_names))
+                                    if merged_alt_names:
+                                        game['alternative_names'] = merged_alt_names
+                            
+                            enhanced_games.append(game)
+                    
+                    except json.JSONDecodeError as e:
+                        print(f"JSON parsing error in AI enhancement: {e}")
+                        # If AI response isn't valid JSON, just add games without enhancement
+                        enhanced_games.extend(batch)
+                else:
                     enhanced_games.extend(batch)
             else:
                 enhanced_games.extend(batch)
@@ -3251,6 +3314,175 @@ async def remove_alternative_name_cmd(ctx, game_name: str, *, alternative_name: 
             
     except Exception as e:
         await ctx.send(f"❌ **Alternative name removal error:** {str(e)}")
+
+@bot.command(name="updateplayedgames")
+@commands.has_permissions(manage_messages=True)
+async def update_played_games_cmd(ctx):
+    """Update existing played games to fill in missing fields using AI enhancement"""
+    try:
+        await ctx.send("🔄 **Initiating metadata enhancement for existing played games...**")
+        
+        # Get all played games from database
+        all_games = db.get_all_played_games()
+        
+        if not all_games:
+            await ctx.send("❌ **No played games found in database.** Use `!bulkimportplayedgames` to import games first.")
+            return
+        
+        # Filter games that need updates (missing genre, alternative_names, or series_name)
+        games_needing_updates = []
+        for game in all_games:
+            needs_update = False
+            
+            # Check for missing or empty fields
+            if not game.get('genre') or game.get('genre', '').strip() == '':
+                needs_update = True
+            if not game.get('alternative_names') or len(game.get('alternative_names', [])) == 0:
+                needs_update = True
+            if not game.get('series_name') or game.get('series_name', '').strip() == '':
+                needs_update = True
+            if not game.get('release_year'):
+                needs_update = True
+            
+            if needs_update:
+                games_needing_updates.append(game)
+        
+        if not games_needing_updates:
+            await ctx.send("✅ **All games already have complete metadata.** No updates needed.")
+            return
+        
+        await ctx.send(f"📊 **Analysis complete:** {len(games_needing_updates)} out of {len(all_games)} games need metadata updates.")
+        
+        # Show preview of games to be updated
+        preview_msg = f"🔍 **Games requiring updates:**\n"
+        for i, game in enumerate(games_needing_updates[:10], 1):
+            missing_fields = []
+            if not game.get('genre'):
+                missing_fields.append("genre")
+            if not game.get('alternative_names') or len(game.get('alternative_names', [])) == 0:
+                missing_fields.append("alt_names")
+            if not game.get('series_name'):
+                missing_fields.append("series")
+            if not game.get('release_year'):
+                missing_fields.append("year")
+            
+            preview_msg += f"{i}. **{game['canonical_name']}** (missing: {', '.join(missing_fields)})\n"
+        
+        if len(games_needing_updates) > 10:
+            preview_msg += f"... and {len(games_needing_updates) - 10} more games\n"
+        
+        preview_msg += f"\n⚠️ **Confirmation required:** This will use AI to enhance metadata for {len(games_needing_updates)} games. Type `CONFIRM UPDATE` to proceed or anything else to cancel."
+        
+        await ctx.send(preview_msg)
+        
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+        
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=60.0)
+            if msg.content == "CONFIRM UPDATE":
+                if not ai_enabled:
+                    await ctx.send("❌ **AI system offline.** Cannot enhance metadata without AI capabilities.")
+                    return
+                
+                await ctx.send("🧠 **AI enhancement initiated.** Processing games in batches...")
+                
+                # Convert database games to the format expected by enhance_games_with_ai
+                games_data = []
+                for game in games_needing_updates:
+                    game_data = {
+                        'canonical_name': game['canonical_name'],
+                        'alternative_names': game.get('alternative_names', []) or [],
+                        'series_name': game.get('series_name'),
+                        'genre': game.get('genre'),
+                        'release_year': game.get('release_year'),
+                        'db_id': game['id']  # Store database ID for updates
+                    }
+                    games_data.append(game_data)
+                
+                # Use AI to enhance the games
+                enhanced_games = await enhance_games_with_ai(games_data)
+                
+                # Apply updates to database
+                updated_count = 0
+                for enhanced_game in enhanced_games:
+                    db_id = enhanced_game.get('db_id')
+                    if not db_id:
+                        continue
+                    
+                    # Prepare update data (only include fields that were enhanced)
+                    update_data = {}
+                    
+                    if enhanced_game.get('genre'):
+                        update_data['genre'] = enhanced_game['genre']
+                    if enhanced_game.get('series_name'):
+                        update_data['series_name'] = enhanced_game['series_name']
+                    if enhanced_game.get('release_year'):
+                        update_data['release_year'] = enhanced_game['release_year']
+                    if enhanced_game.get('alternative_names') and len(enhanced_game['alternative_names']) > 0:
+                        update_data['alternative_names'] = enhanced_game['alternative_names']
+                    
+                    # Apply updates if any
+                    if update_data:
+                        success = db.update_played_game(db_id, **update_data)
+                        if success:
+                            updated_count += 1
+                
+                await ctx.send(f"✅ **Metadata enhancement complete:** Successfully updated {updated_count} games with enhanced metadata.")
+                
+                # Show final statistics
+                stats = db.get_played_games_stats()
+                await ctx.send(f"📊 **Updated Database Statistics:**\n• Total games: {stats.get('total_games', 0)}\n• Total episodes: {stats.get('total_episodes', 0)}\n• Total playtime: {stats.get('total_playtime_hours', 0)} hours")
+                
+            else:
+                await ctx.send("❌ **Update cancelled.** No games were modified.")
+        except asyncio.TimeoutError:
+            await ctx.send("❌ **Update timed out.** No games were modified.")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Update error:** {str(e)}")
+
+@bot.command(name="setaltnames")
+@commands.has_permissions(manage_messages=True)
+async def set_alternative_names_cmd(ctx, game_name: str, *, alternative_names: str):
+    """Set alternative names for a played game. Use comma-separated format: name1, name2, name3"""
+    try:
+        # Find the game first
+        game = db.get_played_game(game_name)
+        if not game:
+            await ctx.send(f"🔍 **Game not found:** '{game_name}' is not in the played games database.")
+            return
+        
+        # Parse alternative names from comma-separated string
+        alt_names_list = [name.strip() for name in alternative_names.split(',') if name.strip()]
+        
+        if not alt_names_list:
+            await ctx.send("⚠️ **No valid alternative names provided.** Use comma-separated format: name1, name2, name3")
+            return
+        
+        # Show preview
+        await ctx.send(f"📝 **Setting alternative names for '{game['canonical_name']}':**\n• {chr(10).join(alt_names_list)}\n\n⚠️ **This will replace all existing alternative names.** Type `CONFIRM SET` to proceed or anything else to cancel.")
+        
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+        
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=30.0)
+            if msg.content == "CONFIRM SET":
+                # Update the game with the new alternative names
+                success = db.update_played_game(game['id'], alternative_names=alt_names_list)
+                
+                if success:
+                    await ctx.send(f"✅ **Alternative names updated:** '{game['canonical_name']}' now has {len(alt_names_list)} alternative names:\n• {chr(10).join(alt_names_list)}")
+                else:
+                    await ctx.send(f"❌ **Update failed:** Unable to set alternative names for '{game['canonical_name']}'. System malfunction detected.")
+            else:
+                await ctx.send("❌ **Operation cancelled:** No changes were made to alternative names.")
+        except asyncio.TimeoutError:
+            await ctx.send("❌ **Operation timed out:** No changes were made to alternative names.")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Alternative names setting error:** {str(e)}")
 
 # --- Cleanup ---
 def cleanup():
