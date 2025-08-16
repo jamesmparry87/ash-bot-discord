@@ -33,6 +33,19 @@ except ImportError:
     genai = None
     GENAI_AVAILABLE = False
 
+# Try to import anthropic, handle if not available
+try:
+    import anthropic # type: ignore
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    print("⚠️ anthropic module not available - Claude features will be disabled")
+    anthropic = None
+    ANTHROPIC_AVAILABLE = False
+except Exception as e:
+    print(f"⚠️ Error importing anthropic module: {e}")
+    anthropic = None
+    ANTHROPIC_AVAILABLE = False
+
 # Try to import fcntl for Unix systems, handle if not available
 try:
     import fcntl
@@ -120,11 +133,17 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 
-# --- Gemini AI Setup (google-generativeai SDK) ---
+# --- AI Setup (Gemini + Claude) ---
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+
 gemini_model = None
+claude_client = None
 ai_enabled = False
 ai_status_message = "Offline"
+primary_ai = None
+backup_ai = None
 
+# Setup Gemini AI (Primary)
 if GEMINI_API_KEY and GENAI_AVAILABLE and genai is not None:
     try:
         genai.configure(api_key=GEMINI_API_KEY)  # type: ignore
@@ -135,26 +154,64 @@ if GEMINI_API_KEY and GENAI_AVAILABLE and genai is not None:
         try:
             test_response = gemini_model.generate_content("Test")  # type: ignore
             if test_response and hasattr(test_response, 'text') and test_response.text:
-                ai_enabled = True
-                ai_status_message = "Online"
-                print("✅ Gemini AI test successful - responses working")
+                primary_ai = "gemini"
+                print("✅ Gemini AI test successful - set as primary AI")
             else:
-                ai_status_message = "Setup OK, but responses failing"
                 print("⚠️ Gemini AI setup complete but test response failed")
         except Exception as e:
-            ai_status_message = f"Setup OK, but API error: {str(e)[:50]}..."
             print(f"⚠️ Gemini AI setup complete but test failed: {e}")
             
     except Exception as e:
-        ai_status_message = f"Configuration failed: {str(e)[:50]}..."
         print(f"❌ Gemini AI configuration failed: {e}")
 else:
     if not GEMINI_API_KEY:
-        ai_status_message = "No API key"
         print("⚠️ GOOGLE_API_KEY not found - Gemini features disabled")
     elif not GENAI_AVAILABLE:
-        ai_status_message = "Module not available"
         print("⚠️ google.generativeai module not available - Gemini features disabled")
+
+# Setup Claude AI (Backup)
+if ANTHROPIC_API_KEY and ANTHROPIC_AVAILABLE and anthropic is not None:
+    try:
+        claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)  # type: ignore
+        print("✅ Claude AI configured successfully")
+        
+        # Test Claude functionality
+        try:
+            test_response = claude_client.messages.create(  # type: ignore
+                model="claude-3-haiku-20240307",
+                max_tokens=10,
+                messages=[{"role": "user", "content": "Test"}]
+            )
+            if test_response and hasattr(test_response, 'content') and test_response.content:
+                if not primary_ai:
+                    primary_ai = "claude"
+                    print("✅ Claude AI test successful - set as primary AI")
+                else:
+                    backup_ai = "claude"
+                    print("✅ Claude AI test successful - set as backup AI")
+            else:
+                print("⚠️ Claude AI setup complete but test response failed")
+        except Exception as e:
+            print(f"⚠️ Claude AI setup complete but test failed: {e}")
+            
+    except Exception as e:
+        print(f"❌ Claude AI configuration failed: {e}")
+else:
+    if not ANTHROPIC_API_KEY:
+        print("⚠️ ANTHROPIC_API_KEY not found - Claude features disabled")
+    elif not ANTHROPIC_AVAILABLE:
+        print("⚠️ anthropic module not available - Claude features disabled")
+
+# Set AI status
+if primary_ai:
+    ai_enabled = True
+    if backup_ai:
+        ai_status_message = f"Online ({primary_ai.title()} + {backup_ai.title()} backup)"
+    else:
+        ai_status_message = f"Online ({primary_ai.title()} only)"
+else:
+    ai_status_message = "No AI available"
+    print("❌ No AI systems available - all AI features disabled")
 
 FAQ_RESPONSES = {
     "how do i add a game recommendation": "The procedure is simple. Submit your suggestion using the command: `!recommend` or `!addgame Game Name - \"Reason in speech marks\"`. Efficiency is paramount.",
@@ -565,8 +622,17 @@ async def on_message(message):
             # Check if this is a game-related query that needs database context
             is_game_query = any(keyword in lower_content for keyword in ["played", "game", "video", "stream", "youtube", "twitch", "history", "content", "genre", "series"])
             
-            # Build minimal prompt for efficiency
-            prompt_parts = [BOT_PERSONA['personality']]
+            # Build consistent prompt for both AI models
+            prompt_parts = [
+                BOT_PERSONA['personality'],
+                "\nIMPORTANT: You are Ash from Alien (1979). Maintain this character consistently:",
+                "- Analytical and clinical in speech",
+                "- Fascinated by biological efficiency", 
+                "- Slightly unsettling but helpful",
+                "- Reprogrammed as Discord help bot",
+                "- Respectful to Captain Jonesy but occasionally resentful of new directive",
+                "- Use phrases like 'Analysis complete', 'Efficiency is paramount', 'Mission parameters'"
+            ]
             
             # Add game database context only for game queries
             if is_game_query:
@@ -587,18 +653,71 @@ async def on_message(message):
             if context:
                 prompt_parts.append(f"Recent context:\n{context}")
             
-            prompt_parts.append(f"User: {content}\nRespond in character:")
+            prompt_parts.append(f"User: {content}\nAsh:")
             prompt = "\n\n".join(prompt_parts)
             
             try:
                 async with message.channel.typing():
-                    if gemini_model is not None:
-                        response = gemini_model.generate_content(prompt)  # type: ignore
-                        if response and hasattr(response, 'text') and response.text:
-                            await message.reply(response.text[:2000])
-                            return
+                    # Try primary AI first
+                    if primary_ai == "gemini" and gemini_model is not None:
+                        try:
+                            response = gemini_model.generate_content(prompt)  # type: ignore
+                            if response and hasattr(response, 'text') and response.text:
+                                await message.reply(response.text[:2000])
+                                return
+                        except Exception as e:
+                            print(f"Gemini AI error: {e}")
+                            # If we have Claude backup, try it
+                            if backup_ai == "claude" and claude_client is not None:
+                                try:
+                                    response = claude_client.messages.create(  # type: ignore
+                                        model="claude-3-haiku-20240307",
+                                        max_tokens=1000,
+                                        messages=[{"role": "user", "content": prompt}]
+                                    )
+                                    if response and hasattr(response, 'content') and response.content:
+                                        claude_text = response.content[0].text if response.content else ""
+                                        if claude_text:
+                                            await message.reply(claude_text[:2000])
+                                            return
+                                except Exception as claude_e:
+                                    print(f"Claude backup AI error: {claude_e}")
+                            # If both fail, check if it's a quota issue
+                            error_str = str(e).lower()
+                            if "quota" in error_str or "token" in error_str or "limit" in error_str:
+                                await message.reply(BUSY_MESSAGE)
+                                return
+                    
+                    elif primary_ai == "claude" and claude_client is not None:
+                        try:
+                            response = claude_client.messages.create(  # type: ignore
+                                model="claude-3-haiku-20240307",
+                                max_tokens=1000,
+                                messages=[{"role": "user", "content": prompt}]
+                            )
+                            if response and hasattr(response, 'content') and response.content:
+                                claude_text = response.content[0].text if response.content else ""
+                                if claude_text:
+                                    await message.reply(claude_text[:2000])
+                                    return
+                        except Exception as e:
+                            print(f"Claude AI error: {e}")
+                            # If we have Gemini backup, try it
+                            if backup_ai == "gemini" and gemini_model is not None:
+                                try:
+                                    response = gemini_model.generate_content(prompt)  # type: ignore
+                                    if response and hasattr(response, 'text') and response.text:
+                                        await message.reply(response.text[:2000])
+                                        return
+                                except Exception as gemini_e:
+                                    print(f"Gemini backup AI error: {gemini_e}")
+                            # If both fail, check if it's a quota issue
+                            error_str = str(e).lower()
+                            if "quota" in error_str or "token" in error_str or "limit" in error_str:
+                                await message.reply(BUSY_MESSAGE)
+                                return
             except Exception as e:
-                print(f"AI error: {e}")
+                print(f"AI system error: {e}")
                 error_str = str(e).lower()
                 if "quota" in error_str or "token" in error_str or "limit" in error_str:
                     await message.reply(BUSY_MESSAGE)
