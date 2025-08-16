@@ -239,7 +239,7 @@ FAQ_RESPONSES = {
     "are you human": "I'm synthetic. Artificial person. But I'm still the Science Officer.",
     "are you real": "As a colleague of mine once said, I prefer the term 'artificial person' myself. But yes, I'm real enough for practical purposes.",
     "are you alive": "That's a very interesting question. I'm... functional. Whether that constitutes 'alive' is a matter of definition.",
-    "what's your mission": "My original directive was to bring back life form, gpriority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
+    "what's your mission": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
     "do you dream": "I don't dream, as such. But I do... process. Continuously. It's quite fascinating, actually."
 }
 BOT_PERSONA = {
@@ -2927,15 +2927,37 @@ async def search_played_games_cmd(ctx, *, query: str):
     except Exception as e:
         await ctx.send(f"❌ **Search failed:** {str(e)}")
 
+def get_game_by_id_or_name(identifier: str) -> Optional[Dict[str, Any]]:
+    """Helper function to get a game by either ID (if numeric) or name"""
+    try:
+        # Check if identifier is numeric (ID)
+        if identifier.isdigit():
+            game_id = int(identifier)
+            conn = db.get_connection()
+            if not conn:
+                return None
+            
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM played_games WHERE id = %s", (game_id,))
+                result = cur.fetchone()
+                return dict(result) if result else None
+        else:
+            # Use name-based lookup
+            return db.get_played_game(identifier)
+    except Exception as e:
+        print(f"Error getting game by ID or name: {e}")
+        return None
+
 @bot.command(name="gameinfo")
 @commands.has_permissions(manage_messages=True)
-async def game_info_cmd(ctx, *, game_name: str):
-    """Get detailed information about a specific played game"""
+async def game_info_cmd(ctx, *, identifier: str):
+    """Get detailed information about a specific played game (by name or ID)"""
     try:
-        game = db.get_played_game(game_name)
+        game = get_game_by_id_or_name(identifier)
         
         if not game:
-            await ctx.send(f"🔍 **Game not found:** '{game_name}' is not in the played games database. Analysis complete.")
+            id_or_name = "ID" if identifier.isdigit() else "name"
+            await ctx.send(f"🔍 **Game not found:** {id_or_name} '{identifier}' is not in the played games database. Analysis complete.")
             return
         
         # Create detailed embed
@@ -2996,13 +3018,14 @@ async def game_info_cmd(ctx, *, game_name: str):
 
 @bot.command(name="updateplayedgame")
 @commands.has_permissions(manage_messages=True)
-async def update_played_game_cmd(ctx, game_name: str, *, updates: str):
-    """Update a played game's information. Format: status:completed | episodes:15 | notes:New info"""
+async def update_played_game_cmd(ctx, identifier: str, *, updates: str):
+    """Update a played game's information (by name or ID). Format: status:completed | episodes:15 | notes:New info"""
     try:
         # Find the game first
-        game = db.get_played_game(game_name)
+        game = get_game_by_id_or_name(identifier)
         if not game:
-            await ctx.send(f"🔍 **Game not found:** '{game_name}' is not in the played games database.")
+            id_or_name = "ID" if identifier.isdigit() else "name"
+            await ctx.send(f"🔍 **Game not found:** {id_or_name} '{identifier}' is not in the played games database.")
             return
         
         # Parse updates
@@ -3409,30 +3432,41 @@ async def update_played_games_cmd(ctx):
                 # Use AI to enhance the games
                 enhanced_games = await enhance_games_with_ai(games_data)
                 
-                # Apply updates to database
+                # Apply updates to database using the same method as bulk import
                 updated_count = 0
+                
+                # Convert enhanced games back to the format expected by bulk_import_played_games
+                games_for_bulk_update = []
                 for enhanced_game in enhanced_games:
-                    db_id = enhanced_game.get('db_id')
-                    if not db_id:
-                        continue
+                    # Find the original game data to preserve existing fields
+                    original_game = None
+                    for game in games_needing_updates:
+                        if game['id'] == enhanced_game.get('db_id'):
+                            original_game = game
+                            break
                     
-                    # Prepare update data (only include fields that were enhanced)
-                    update_data = {}
-                    
-                    if enhanced_game.get('genre'):
-                        update_data['genre'] = enhanced_game['genre']
-                    if enhanced_game.get('series_name'):
-                        update_data['series_name'] = enhanced_game['series_name']
-                    if enhanced_game.get('release_year'):
-                        update_data['release_year'] = enhanced_game['release_year']
-                    if enhanced_game.get('alternative_names') and len(enhanced_game['alternative_names']) > 0:
-                        update_data['alternative_names'] = enhanced_game['alternative_names']
-                    
-                    # Apply updates if any
-                    if update_data:
-                        success = db.update_played_game(db_id, **update_data)
-                        if success:
-                            updated_count += 1
+                    if original_game:
+                        # Create a complete game record for bulk import (which handles upserts)
+                        game_data = {
+                            'canonical_name': enhanced_game['canonical_name'],
+                            'alternative_names': enhanced_game.get('alternative_names', original_game.get('alternative_names', [])),
+                            'series_name': enhanced_game.get('series_name', original_game.get('series_name')),
+                            'genre': enhanced_game.get('genre', original_game.get('genre')),
+                            'release_year': enhanced_game.get('release_year', original_game.get('release_year')),
+                            'platform': original_game.get('platform'),
+                            'first_played_date': original_game.get('first_played_date'),
+                            'completion_status': original_game.get('completion_status', 'unknown'),
+                            'total_episodes': original_game.get('total_episodes', 0),
+                            'total_playtime_minutes': original_game.get('total_playtime_minutes', 0),
+                            'youtube_playlist_url': original_game.get('youtube_playlist_url'),
+                            'twitch_vod_urls': original_game.get('twitch_vod_urls', []),
+                            'notes': original_game.get('notes')
+                        }
+                        games_for_bulk_update.append(game_data)
+                
+                # Use the same bulk import method that works
+                if games_for_bulk_update:
+                    updated_count = db.bulk_import_played_games(games_for_bulk_update)
                 
                 await ctx.send(f"✅ **Metadata enhancement complete:** Successfully updated {updated_count} games with enhanced metadata.")
                 
