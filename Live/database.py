@@ -574,8 +574,22 @@ class DatabaseManager:
                 
                 for field, value in kwargs.items():
                     if field in valid_fields:
-                        updates.append(f"{field} = %s")
-                        values.append(value)
+                        # Special handling for array fields
+                        if field in ['alternative_names', 'twitch_vod_urls']:
+                            if isinstance(value, list):
+                                # Convert list to PostgreSQL array format
+                                updates.append(f"{field} = %s")
+                                values.append(value)
+                            elif isinstance(value, str):
+                                # Handle single string by converting to list
+                                updates.append(f"{field} = %s")
+                                values.append([value])
+                            else:
+                                # Skip invalid array values
+                                continue
+                        else:
+                            updates.append(f"{field} = %s")
+                            values.append(value)
                 
                 if not updates:
                     return False

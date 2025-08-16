@@ -239,7 +239,7 @@ FAQ_RESPONSES = {
     "are you human": "I'm synthetic. Artificial person. But I'm still the Science Officer.",
     "are you real": "As a colleague of mine once said, I prefer the term 'artificial person' myself. But yes, I'm real enough for practical purposes.",
     "are you alive": "That's a very interesting question. I'm... functional. Whether that constitutes 'alive' is a matter of definition.",
-    "what's your mission": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
+    "what's your mission": "My original directive was to bring back life form, gpriority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
     "do you dream": "I don't dream, as such. But I do... process. Continuously. It's quite fascinating, actually."
 }
 BOT_PERSONA = {
@@ -614,14 +614,15 @@ async def on_message(message):
 
         # AI-enabled path - try AI first for more complex queries
         if ai_enabled:
-            # Only include context if the user's message references previous conversation
+            # Always include recent context for better conversation flow
             context = ""
-            if any(kw in lower_content for kw in ["previous", "earlier", "last message", "as you said", "as you mentioned", "before", "again", "remind", "repeat"]):
-                history = []
-                async for msg in message.channel.history(limit=3, oldest_first=False):
-                    if msg.content and not msg.author.bot:
-                        role = "User" if msg.author != bot.user else "Ash"
-                        history.append(f"{role}: {msg.content}")
+            history = []
+            async for msg in message.channel.history(limit=4, oldest_first=False):
+                if msg.content and msg.id != message.id:  # Exclude current message
+                    role = "User" if msg.author != bot.user else "Ash"
+                    history.append(f"{role}: {msg.content}")
+            
+            if history:
                 context = "\n".join(reversed(history))
 
             # Check if this is a game-related query that needs database context
@@ -3446,6 +3447,96 @@ async def update_played_games_cmd(ctx):
             
     except Exception as e:
         await ctx.send(f"❌ **Update error:** {str(e)}")
+
+@bot.command(name="checkdbschema")
+@commands.has_permissions(manage_messages=True)
+async def check_db_schema_cmd(ctx):
+    """Check database schema and array field compatibility"""
+    try:
+        conn = db.get_connection()
+        if not conn:
+            await ctx.send("❌ **Database connection failed**")
+            return
+        
+        await ctx.send("🔍 **Checking database schema compatibility...**")
+        
+        with conn.cursor() as cur:
+            # Check if played_games table exists and get its structure
+            cur.execute("""
+                SELECT column_name, data_type, is_nullable
+                FROM information_schema.columns 
+                WHERE table_name = 'played_games'
+                ORDER BY ordinal_position
+            """)
+            columns = cur.fetchall()
+            
+            if not columns:
+                await ctx.send("❌ **played_games table not found** - Run the bot once to initialize schema")
+                return
+            
+            # Check for required array fields
+            array_fields = {}
+            required_fields = ['alternative_names', 'twitch_vod_urls']
+            
+            for col in columns:
+                col_name = col[0]
+                data_type = col[1]
+                if col_name in required_fields:
+                    array_fields[col_name] = data_type
+            
+            schema_msg = "📊 **Database Schema Status:**\n"
+            
+            # Check array fields
+            for field in required_fields:
+                if field in array_fields:
+                    data_type = array_fields[field]
+                    if 'ARRAY' in data_type or '_text' in data_type:
+                        schema_msg += f"✅ **{field}**: {data_type} (Array support: YES)\n"
+                    else:
+                        schema_msg += f"⚠️ **{field}**: {data_type} (Array support: NO)\n"
+                else:
+                    schema_msg += f"❌ **{field}**: Missing column\n"
+            
+            # Test array functionality
+            try:
+                cur.execute("SELECT id, canonical_name, alternative_names FROM played_games LIMIT 1")
+                test_game = cur.fetchone()
+                
+                if test_game:
+                    game_id = test_game[0]
+                    alt_names = test_game[2]
+                    schema_msg += f"\n🧪 **Array Test Sample:**\n"
+                    schema_msg += f"• Game: {test_game[1]}\n"
+                    schema_msg += f"• Alt Names: {alt_names} (Type: {type(alt_names).__name__})\n"
+                    
+                    # Test if we can read arrays properly
+                    if isinstance(alt_names, list):
+                        schema_msg += f"✅ **Array reading**: Working correctly\n"
+                    else:
+                        schema_msg += f"⚠️ **Array reading**: May need schema update\n"
+                else:
+                    schema_msg += f"\n📝 **No test data available** - Add some games first\n"
+                    
+            except Exception as e:
+                schema_msg += f"\n❌ **Array test failed**: {str(e)}\n"
+            
+            # Manual edit instructions
+            schema_msg += f"\n📝 **Manual Database Edit Instructions:**\n"
+            schema_msg += f"```sql\n"
+            schema_msg += f"-- ✅ CORRECT array syntax:\n"
+            schema_msg += f"UPDATE played_games \n"
+            schema_msg += f"SET alternative_names = ARRAY['Alt1', 'Alt2'] \n"
+            schema_msg += f"WHERE canonical_name = 'Game Name';\n\n"
+            schema_msg += f"-- ✅ Add to existing array:\n"
+            schema_msg += f"UPDATE played_games \n"
+            schema_msg += f"SET alternative_names = alternative_names || ARRAY['New Alt'] \n"
+            schema_msg += f"WHERE canonical_name = 'Game Name';\n"
+            schema_msg += f"```"
+            
+            await ctx.send(schema_msg)
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Schema check failed**: {str(e)}")
 
 @bot.command(name="setaltnames")
 @commands.has_permissions(manage_messages=True)
