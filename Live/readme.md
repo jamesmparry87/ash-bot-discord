@@ -124,7 +124,7 @@ Users can ask Ash about games using natural language with smart series disambigu
 3. **Configure Environment Variables**
    Set these environment variables in Railway:
 
-   ```bash
+   ```text
    # Required
    DISCORD_TOKEN=your_discord_bot_token_here
    GOOGLE_API_KEY=your_google_ai_api_key_here
