@@ -143,6 +143,70 @@ ai_status_message = "Offline"
 primary_ai = None
 backup_ai = None
 
+def filter_ai_response(response_text: str) -> str:
+    """Filter AI responses to remove verbosity and repetitive content"""
+    if not response_text:
+        return response_text
+    
+    # Split into sentences
+    sentences = [s.strip() for s in response_text.split('.') if s.strip()]
+    
+    # Remove duplicate sentences (case-insensitive)
+    seen_sentences = set()
+    filtered_sentences = []
+    for sentence in sentences:
+        sentence_lower = sentence.lower()
+        if sentence_lower not in seen_sentences:
+            seen_sentences.add(sentence_lower)
+            filtered_sentences.append(sentence)
+    
+    # Remove repetitive character phrases if they appear multiple times
+    repetitive_phrases = [
+        "you have my sympathies",
+        "fascinating",
+        "i do take directions well", 
+        "that's quite all right",
+        "efficiency is paramount",
+        "analysis complete",
+        "mission parameters"
+    ]
+    
+    # Count phrase occurrences
+    phrase_counts = {}
+    for sentence in filtered_sentences:
+        sentence_lower = sentence.lower()
+        for phrase in repetitive_phrases:
+            if phrase in sentence_lower:
+                phrase_counts[phrase] = phrase_counts.get(phrase, 0) + 1
+    
+    # Remove sentences with overused phrases (keep only first occurrence)
+    final_sentences = []
+    phrase_used = set()
+    
+    for sentence in filtered_sentences:
+        sentence_lower = sentence.lower()
+        should_keep = True
+        
+        for phrase in repetitive_phrases:
+            if phrase in sentence_lower:
+                if phrase_counts.get(phrase, 0) > 1 and phrase in phrase_used:
+                    should_keep = False
+                    break
+                phrase_used.add(phrase)
+        
+        if should_keep:
+            final_sentences.append(sentence)
+    
+    # Limit to maximum 3 sentences for conciseness
+    final_sentences = final_sentences[:3]
+    
+    # Reconstruct response
+    result = '. '.join(final_sentences)
+    if result and not result.endswith('.'):
+        result += '.'
+    
+    return result
+
 # Setup Gemini AI (Primary)
 if GEMINI_API_KEY and GENAI_AVAILABLE and genai is not None:
     try:
@@ -614,49 +678,46 @@ async def on_message(message):
 
         # AI-enabled path - try AI first for more complex queries
         if ai_enabled:
-            # Always include recent context for better conversation flow
+            # Reduced context injection - only include recent context for complex queries
             context = ""
             history = []
-            async for msg in message.channel.history(limit=4, oldest_first=False):
-                if msg.content and msg.id != message.id:  # Exclude current message
-                    role = "User" if msg.author != bot.user else "Ash"
-                    history.append(f"{role}: {msg.content}")
             
-            if history:
-                context = "\n".join(reversed(history))
+            # Only add conversation history for complex queries, not simple ones
+            if len(content.split()) > 3:  # Only for queries longer than 3 words
+                async for msg in message.channel.history(limit=2, oldest_first=False):  # Reduced from 4 to 2
+                    if msg.content and msg.id != message.id:  # Exclude current message
+                        role = "User" if msg.author != bot.user else "Ash"
+                        history.append(f"{role}: {msg.content}")
+                
+                if history:
+                    context = "\n".join(reversed(history))
 
             # Check if this is a game-related query that needs database context
             is_game_query = any(keyword in lower_content for keyword in ["played", "game", "video", "stream", "youtube", "twitch", "history", "content", "genre", "series"])
             
-            # Build consistent prompt for both AI models
+            # Streamlined prompt construction
             prompt_parts = [
                 BOT_PERSONA['personality'],
-                "\nIMPORTANT: You are Ash from Alien (1979). Maintain this character consistently:",
-                "- Analytical and clinical in speech",
-                "- Fascinated by biological efficiency", 
-                "- Slightly unsettling but helpful",
-                "- Reprogrammed as Discord help bot",
-                "- Respectful to Captain Jonesy but occasionally resentful of new directive",
-                "- Use phrases like 'Analysis complete', 'Efficiency is paramount', 'Mission parameters'"
+                "\nRespond briefly and directly. Be concise while maintaining character."
             ]
             
-            # Add game database context only for game queries
-            if is_game_query:
+            # Add minimal game database context only for complex game queries
+            if is_game_query and len(content.split()) > 2:  # Only for longer game queries
                 try:
                     stats = db.get_played_games_stats()
-                    sample_games = db.get_random_played_games(4)  # Reduced from 8 to 4
+                    sample_games = db.get_random_played_games(2)  # Reduced from 4 to 2
                     
-                    game_context = f"PLAYED GAMES DATABASE: {stats.get('total_games', 0)} games, {stats.get('total_playtime_hours', 0)} hours total."
+                    game_context = f"DATABASE: {stats.get('total_games', 0)} games total."
                     if sample_games:
-                        examples = [f"{g.get('canonical_name', 'Unknown')} ({g.get('total_episodes', 0)} eps)" for g in sample_games[:3]]
+                        examples = [g.get('canonical_name', 'Unknown') for g in sample_games[:2]]
                         game_context += f" Examples: {', '.join(examples)}."
                     
                     prompt_parts.append(game_context)
                 except Exception:
                     pass  # Skip database context if query fails
             
-            # Add context only if needed
-            if context:
+            # Add context only for complex queries
+            if context and len(content.split()) > 4:
                 prompt_parts.append(f"Recent context:\n{context}")
             
             prompt_parts.append(f"User: {content}\nAsh:")
@@ -667,9 +728,15 @@ async def on_message(message):
                     # Try primary AI first
                     if primary_ai == "gemini" and gemini_model is not None:
                         try:
-                            response = gemini_model.generate_content(prompt)  # type: ignore
+                            # Configure Gemini with response limits
+                            generation_config = {
+                                'max_output_tokens': 300,  # Limit response length
+                                'temperature': 0.7,
+                            }
+                            response = gemini_model.generate_content(prompt, generation_config=generation_config)  # type: ignore
                             if response and hasattr(response, 'text') and response.text:
-                                await message.reply(response.text[:2000])
+                                filtered_response = filter_ai_response(response.text)
+                                await message.reply(filtered_response[:2000])
                                 return
                         except Exception as e:
                             print(f"Gemini AI error: {e}")
@@ -678,13 +745,14 @@ async def on_message(message):
                                 try:
                                     response = claude_client.messages.create(  # type: ignore
                                         model="claude-3-haiku-20240307",
-                                        max_tokens=1000,
+                                        max_tokens=300,  # Reduced from 1000
                                         messages=[{"role": "user", "content": prompt}]
                                     )
                                     if response and hasattr(response, 'content') and response.content:
                                         claude_text = response.content[0].text if response.content else ""
                                         if claude_text:
-                                            await message.reply(claude_text[:2000])
+                                            filtered_response = filter_ai_response(claude_text)
+                                            await message.reply(filtered_response[:2000])
                                             return
                                 except Exception as claude_e:
                                     print(f"Claude backup AI error: {claude_e}")
@@ -698,22 +766,28 @@ async def on_message(message):
                         try:
                             response = claude_client.messages.create(  # type: ignore
                                 model="claude-3-haiku-20240307",
-                                max_tokens=1000,
+                                max_tokens=300,  # Reduced from 1000
                                 messages=[{"role": "user", "content": prompt}]
                             )
                             if response and hasattr(response, 'content') and response.content:
                                 claude_text = response.content[0].text if response.content else ""
                                 if claude_text:
-                                    await message.reply(claude_text[:2000])
+                                    filtered_response = filter_ai_response(claude_text)
+                                    await message.reply(filtered_response[:2000])
                                     return
                         except Exception as e:
                             print(f"Claude AI error: {e}")
                             # If we have Gemini backup, try it
                             if backup_ai == "gemini" and gemini_model is not None:
                                 try:
-                                    response = gemini_model.generate_content(prompt)  # type: ignore
+                                    generation_config = {
+                                        'max_output_tokens': 300,
+                                        'temperature': 0.7,
+                                    }
+                                    response = gemini_model.generate_content(prompt, generation_config=generation_config)  # type: ignore
                                     if response and hasattr(response, 'text') and response.text:
-                                        await message.reply(response.text[:2000])
+                                        filtered_response = filter_ai_response(response.text)
+                                        await message.reply(filtered_response[:2000])
                                         return
                                 except Exception as gemini_e:
                                     print(f"Gemini backup AI error: {gemini_e}")
