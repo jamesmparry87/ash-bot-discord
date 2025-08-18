@@ -810,7 +810,8 @@ async def on_message(message):
             # Streamlined prompt construction
             prompt_parts = [
                 BOT_PERSONA['personality'],
-                "\nRespond briefly and directly. Be concise while maintaining character."
+                "\nRespond briefly and directly. Be concise while maintaining character.",
+                "\nIMPORTANT: Use characteristic phrases like 'That's quite all right', 'You have my sympathies', 'Fascinating' sparingly - only about 40% of the time to avoid repetition while preserving persona authenticity."
             ]
             
             # Add minimal game database context only for complex game queries
@@ -827,6 +828,79 @@ async def on_message(message):
                     prompt_parts.append(game_context)
                 except Exception:
                     pass  # Skip database context if query fails
+            
+            # Enhanced context for follow-up questions about game lists
+            follow_up_patterns = [
+                r"what\s+are\s+the\s+(\d+)\s+more",
+                r"what\s+are\s+the\s+other\s+(\d+)",
+                r"what\s+are\s+the\s+remaining\s+(\d+)",
+                r"show\s+me\s+the\s+(\d+)\s+more",
+                r"list\s+the\s+(\d+)\s+more",
+                r"what\s+about\s+the\s+(\d+)\s+more"
+            ]
+            
+            is_follow_up = any(re.search(pattern, lower_content) for pattern in follow_up_patterns)
+            
+            if is_follow_up:
+                # Check recent conversation for genre/series context
+                recent_genre_context = None
+                async for msg in message.channel.history(limit=5, oldest_first=False):
+                    if msg.author == bot.user and "archives contain:" in msg.content.lower():
+                        # Extract the genre/series from the previous response
+                        if "horror games" in msg.content.lower():
+                            recent_genre_context = "horror"
+                        elif "action games" in msg.content.lower():
+                            recent_genre_context = "action"
+                        elif "rpg games" in msg.content.lower():
+                            recent_genre_context = "rpg"
+                        elif "adventure games" in msg.content.lower():
+                            recent_genre_context = "adventure"
+                        elif "puzzle games" in msg.content.lower():
+                            recent_genre_context = "puzzle"
+                        elif "strategy games" in msg.content.lower():
+                            recent_genre_context = "strategy"
+                        elif "racing games" in msg.content.lower():
+                            recent_genre_context = "racing"
+                        elif "sports games" in msg.content.lower():
+                            recent_genre_context = "sports"
+                        elif "fighting games" in msg.content.lower():
+                            recent_genre_context = "fighting"
+                        elif "platformer games" in msg.content.lower():
+                            recent_genre_context = "platformer"
+                        elif "shooter games" in msg.content.lower():
+                            recent_genre_context = "shooter"
+                        elif "simulation games" in msg.content.lower():
+                            recent_genre_context = "simulation"
+                        # Check for series mentions
+                        elif " series" in msg.content.lower():
+                            series_match = re.search(r"(\w+(?:\s+\w+)*)\s+series", msg.content.lower())
+                            if series_match:
+                                recent_genre_context = f"series:{series_match.group(1)}"
+                        break
+                
+                if recent_genre_context:
+                    try:
+                        if recent_genre_context.startswith("series:"):
+                            series_name = recent_genre_context[7:]
+                            all_games = db.get_all_played_games(series_name)
+                        else:
+                            all_games = db.get_games_by_genre_flexible(recent_genre_context)
+                        
+                        if all_games and len(all_games) > 8:
+                            remaining_games = all_games[8:]  # Skip first 8 that were already shown
+                            game_list = []
+                            for game in remaining_games:
+                                episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get('total_episodes', 0) > 0 else ""
+                                status = game.get('completion_status', 'unknown')
+                                status_emoji = {'completed': '✅', 'ongoing': '🔄', 'dropped': '❌', 'unknown': '❓'}.get(status, '❓')
+                                game_list.append(f"{status_emoji} {game['canonical_name']}{episodes}")
+                            
+                            games_text = ", ".join(game_list)
+                            context_type = "series" if recent_genre_context.startswith("series:") else "genre"
+                            await message.reply(f"The remaining {recent_genre_context.replace('series:', '')} games in Captain Jonesy's archives: {games_text}.")
+                            return
+                    except Exception as e:
+                        print(f"Error in follow-up context: {e}")
             
             # Add context only for complex queries
             if context and len(content.split()) > 4:
