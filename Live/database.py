@@ -76,12 +76,12 @@ class DatabaseManager:
                     )
                 """)
                 
-                # Create played_games table
+                # Create played_games table with proper data types for manual editing
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS played_games (
                         id SERIAL PRIMARY KEY,
                         canonical_name VARCHAR(255) NOT NULL,
-                        alternative_names TEXT[],
+                        alternative_names TEXT,
                         series_name VARCHAR(255),
                         genre VARCHAR(100),
                         release_year INTEGER,
@@ -91,12 +91,48 @@ class DatabaseManager:
                         total_episodes INTEGER DEFAULT 0,
                         total_playtime_minutes INTEGER DEFAULT 0,
                         youtube_playlist_url TEXT,
-                        twitch_vod_urls TEXT[],
+                        twitch_vod_urls TEXT,
                         notes TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
+                
+                # Migrate existing array columns to TEXT format for manual editing
+                try:
+                    cur.execute("""
+                        DO $$ 
+                        BEGIN
+                            -- Check if alternative_names is still an array type
+                            IF EXISTS (
+                                SELECT 1 FROM information_schema.columns 
+                                WHERE table_name = 'played_games' 
+                                AND column_name = 'alternative_names' 
+                                AND data_type = 'ARRAY'
+                            ) THEN
+                                -- Convert array to comma-separated text
+                                ALTER TABLE played_games 
+                                ALTER COLUMN alternative_names TYPE TEXT 
+                                USING array_to_string(alternative_names, ',');
+                            END IF;
+                            
+                            -- Check if twitch_vod_urls is still an array type
+                            IF EXISTS (
+                                SELECT 1 FROM information_schema.columns 
+                                WHERE table_name = 'played_games' 
+                                AND column_name = 'twitch_vod_urls' 
+                                AND data_type = 'ARRAY'
+                            ) THEN
+                                -- Convert array to comma-separated text
+                                ALTER TABLE played_games 
+                                ALTER COLUMN twitch_vod_urls TYPE TEXT 
+                                USING array_to_string(twitch_vod_urls, ',');
+                            END IF;
+                        END $$;
+                    """)
+                except Exception as migration_error:
+                    logger.warning(f"Array migration warning: {migration_error}")
+                    # Continue with table creation even if migration fails
                 
                 # Add new columns to existing table if they don't exist (remove franchise_name)
                 cur.execute("""
@@ -442,6 +478,10 @@ class DatabaseManager:
         
         try:
             with conn.cursor() as cur:
+                # Convert lists to comma-separated strings for TEXT fields
+                alt_names_str = ','.join(alternative_names) if alternative_names else ''
+                vod_urls_str = ','.join(twitch_vod_urls) if twitch_vod_urls else ''
+                
                 cur.execute("""
                     INSERT INTO played_games (
                         canonical_name, alternative_names, series_name, genre,
@@ -451,7 +491,7 @@ class DatabaseManager:
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """, (
                     canonical_name, 
-                    alternative_names if alternative_names is not None else [], 
+                    alt_names_str,
                     series_name,
                     genre,
                     release_year,
@@ -461,7 +501,7 @@ class DatabaseManager:
                     total_episodes,
                     total_playtime_minutes,
                     youtube_playlist_url, 
-                    twitch_vod_urls if twitch_vod_urls is not None else [], 
+                    vod_urls_str,
                     notes
                 ))
                 conn.commit()
@@ -490,19 +530,26 @@ class DatabaseManager:
                 result = cur.fetchone()
                 
                 if result:
+                    result_dict = dict(result)
+                    # Convert TEXT fields back to lists for compatibility
+                    result_dict = self._convert_text_to_arrays(result_dict)
                     logger.debug(f"Found game by exact canonical name match: {name}")
-                    return dict(result)
+                    return result_dict
                 
-                # Search alternative names
+                # Search alternative names (now stored as comma-separated TEXT)
                 cur.execute("""
                     SELECT * FROM played_games 
-                    WHERE %s = ANY(SELECT LOWER(TRIM(unnest(alternative_names))))
+                    WHERE alternative_names IS NOT NULL 
+                    AND alternative_names != ''
+                    AND %s = ANY(string_to_array(LOWER(alternative_names), ','))
                 """, (name_lower,))
                 result = cur.fetchone()
                 
                 if result:
+                    result_dict = dict(result)
+                    result_dict = self._convert_text_to_arrays(result_dict)
                     logger.debug(f"Found game by alternative name match: {name}")
-                    return dict(result)
+                    return result_dict
                 
                 # Fuzzy search on canonical names with better matching
                 cur.execute("SELECT id, canonical_name, alternative_names FROM played_games")
@@ -518,13 +565,13 @@ class DatabaseManager:
                         canonical_lower = str(canonical_name).lower().strip()
                         game_names_map[canonical_lower] = game_dict
                         
-                        # Also add alternative names to the map
-                        alt_names = game_dict.get('alternative_names', [])
-                        if alt_names:
+                        # Also add alternative names to the map (handle TEXT format)
+                        alt_names_text = game_dict.get('alternative_names', '')
+                        if alt_names_text and isinstance(alt_names_text, str):
+                            alt_names = [name.strip() for name in alt_names_text.split(',') if name.strip()]
                             for alt_name in alt_names:
-                                if alt_name:
-                                    alt_lower = str(alt_name).lower().strip()
-                                    game_names_map[alt_lower] = game_dict
+                                alt_lower = alt_name.lower().strip()
+                                game_names_map[alt_lower] = game_dict
                 
                 # Try fuzzy matching with lower threshold for better matching
                 all_name_keys = list(game_names_map.keys())
@@ -539,13 +586,35 @@ class DatabaseManager:
                     cur.execute("SELECT * FROM played_games WHERE id = %s", (matched_game['id'],))
                     full_result = cur.fetchone()
                     if full_result:
-                        return dict(full_result)
+                        result_dict = dict(full_result)
+                        result_dict = self._convert_text_to_arrays(result_dict)
+                        return result_dict
                 
                 logger.debug(f"No game found for: {name}")
                 return None
         except Exception as e:
             logger.error(f"Error getting played game {name}: {e}")
             return None
+    
+    def _convert_text_to_arrays(self, game_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert TEXT fields back to arrays for backward compatibility"""
+        # Convert alternative_names from TEXT to list
+        if 'alternative_names' in game_dict and isinstance(game_dict['alternative_names'], str):
+            alt_names_text = game_dict['alternative_names']
+            if alt_names_text:
+                game_dict['alternative_names'] = [name.strip() for name in alt_names_text.split(',') if name.strip()]
+            else:
+                game_dict['alternative_names'] = []
+        
+        # Convert twitch_vod_urls from TEXT to list
+        if 'twitch_vod_urls' in game_dict and isinstance(game_dict['twitch_vod_urls'], str):
+            vod_urls_text = game_dict['twitch_vod_urls']
+            if vod_urls_text:
+                game_dict['twitch_vod_urls'] = [url.strip() for url in vod_urls_text.split(',') if url.strip()]
+            else:
+                game_dict['twitch_vod_urls'] = []
+        
+        return game_dict
     
     def get_all_played_games(self, series_name: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all played games, optionally filtered by series"""
@@ -786,6 +855,182 @@ class DatabaseManager:
                 return imported_count
         except Exception as e:
             logger.error(f"Error bulk importing played games: {e}")
+            conn.rollback()
+            return 0
+
+    def deduplicate_played_games(self) -> int:
+        """Find and merge duplicate games with identical canonical names"""
+        conn = self.get_connection()
+        if not conn:
+            return 0
+        
+        try:
+            with conn.cursor() as cur:
+                # Find games with duplicate canonical names
+                cur.execute("""
+                    SELECT canonical_name, COUNT(*) as count
+                    FROM played_games 
+                    GROUP BY LOWER(TRIM(canonical_name))
+                    HAVING COUNT(*) > 1
+                    ORDER BY COUNT(*) DESC
+                """)
+                duplicates = cur.fetchall()
+                
+                if not duplicates:
+                    logger.info("No duplicate games found")
+                    return 0
+                
+                merged_count = 0
+                
+                for duplicate in duplicates:
+                    canonical_name = duplicate[0]
+                    duplicate_count = duplicate[1]
+                    
+                    logger.info(f"Processing {duplicate_count} duplicates of '{canonical_name}'")
+                    
+                    # Get all games with this canonical name (case-insensitive)
+                    cur.execute("""
+                        SELECT * FROM played_games 
+                        WHERE LOWER(TRIM(canonical_name)) = LOWER(TRIM(%s))
+                        ORDER BY created_at ASC
+                    """, (canonical_name,))
+                    
+                    duplicate_games = cur.fetchall()
+                    
+                    if len(duplicate_games) < 2:
+                        continue
+                    
+                    # Keep the first game (oldest) as the master record
+                    master_game = dict(duplicate_games[0])
+                    games_to_merge = [dict(game) for game in duplicate_games[1:]]
+                    
+                    # Merge data from all duplicates into the master record
+                    merged_data = {
+                        'alternative_names': master_game.get('alternative_names', []) or [],
+                        'series_name': master_game.get('series_name'),
+                        'genre': master_game.get('genre'),
+                        'release_year': master_game.get('release_year'),
+                        'platform': master_game.get('platform'),
+                        'first_played_date': master_game.get('first_played_date'),
+                        'completion_status': master_game.get('completion_status', 'unknown'),
+                        'total_episodes': master_game.get('total_episodes', 0),
+                        'total_playtime_minutes': master_game.get('total_playtime_minutes', 0),
+                        'youtube_playlist_url': master_game.get('youtube_playlist_url'),
+                        'twitch_vod_urls': master_game.get('twitch_vod_urls', []) or [],
+                        'notes': master_game.get('notes', '')
+                    }
+                    
+                    # Merge data from duplicates
+                    for duplicate_game in games_to_merge:
+                        # Merge alternative names
+                        if duplicate_game.get('alternative_names'):
+                            if isinstance(duplicate_game['alternative_names'], str):
+                                # Handle TEXT format
+                                alt_names = [name.strip() for name in duplicate_game['alternative_names'].split(',') if name.strip()]
+                            else:
+                                # Handle list format
+                                alt_names = duplicate_game['alternative_names']
+                            
+                            merged_data['alternative_names'] = list(set(merged_data['alternative_names'] + alt_names))
+                        
+                        # Merge Twitch VOD URLs
+                        if duplicate_game.get('twitch_vod_urls'):
+                            if isinstance(duplicate_game['twitch_vod_urls'], str):
+                                # Handle TEXT format
+                                vod_urls = [url.strip() for url in duplicate_game['twitch_vod_urls'].split(',') if url.strip()]
+                            else:
+                                # Handle list format
+                                vod_urls = duplicate_game['twitch_vod_urls']
+                            
+                            merged_data['twitch_vod_urls'] = list(set(merged_data['twitch_vod_urls'] + vod_urls))
+                        
+                        # Use non-empty values from duplicates
+                        for field in ['series_name', 'genre', 'platform', 'youtube_playlist_url']:
+                            if not merged_data.get(field) and duplicate_game.get(field):
+                                merged_data[field] = duplicate_game[field]
+                        
+                        # Use earliest first_played_date
+                        if duplicate_game.get('first_played_date'):
+                            if not merged_data['first_played_date'] or duplicate_game['first_played_date'] < merged_data['first_played_date']:
+                                merged_data['first_played_date'] = duplicate_game['first_played_date']
+                        
+                        # Use latest release_year if master doesn't have one
+                        if not merged_data.get('release_year') and duplicate_game.get('release_year'):
+                            merged_data['release_year'] = duplicate_game['release_year']
+                        
+                        # Sum episodes and playtime
+                        merged_data['total_episodes'] += duplicate_game.get('total_episodes', 0)
+                        merged_data['total_playtime_minutes'] += duplicate_game.get('total_playtime_minutes', 0)
+                        
+                        # Merge notes
+                        if duplicate_game.get('notes') and duplicate_game['notes'].strip():
+                            if merged_data['notes']:
+                                if duplicate_game['notes'] not in merged_data['notes']:
+                                    merged_data['notes'] += f" | {duplicate_game['notes']}"
+                            else:
+                                merged_data['notes'] = duplicate_game['notes']
+                        
+                        # Use most advanced completion status
+                        status_priority = {'unknown': 0, 'ongoing': 1, 'dropped': 2, 'completed': 3}
+                        current_priority = status_priority.get(merged_data['completion_status'], 0)
+                        duplicate_priority = status_priority.get(duplicate_game.get('completion_status', 'unknown'), 0)
+                        if duplicate_priority > current_priority:
+                            merged_data['completion_status'] = duplicate_game['completion_status']
+                    
+                    # Convert lists to TEXT format for database storage
+                    alt_names_str = ','.join(merged_data['alternative_names']) if merged_data['alternative_names'] else ''
+                    vod_urls_str = ','.join(merged_data['twitch_vod_urls']) if merged_data['twitch_vod_urls'] else ''
+                    
+                    # Update the master record with merged data
+                    cur.execute("""
+                        UPDATE played_games SET
+                            alternative_names = %s,
+                            series_name = %s,
+                            genre = %s,
+                            release_year = %s,
+                            platform = %s,
+                            first_played_date = %s,
+                            completion_status = %s,
+                            total_episodes = %s,
+                            total_playtime_minutes = %s,
+                            youtube_playlist_url = %s,
+                            twitch_vod_urls = %s,
+                            notes = %s,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = %s
+                    """, (
+                        alt_names_str,
+                        merged_data['series_name'],
+                        merged_data['genre'],
+                        merged_data['release_year'],
+                        merged_data['platform'],
+                        merged_data['first_played_date'],
+                        merged_data['completion_status'],
+                        merged_data['total_episodes'],
+                        merged_data['total_playtime_minutes'],
+                        merged_data['youtube_playlist_url'],
+                        vod_urls_str,
+                        merged_data['notes'],
+                        master_game['id']
+                    ))
+                    
+                    # Delete the duplicate records
+                    duplicate_ids = [game['id'] for game in games_to_merge]
+                    if duplicate_ids:
+                        cur.execute("""
+                            DELETE FROM played_games 
+                            WHERE id = ANY(%s)
+                        """, (duplicate_ids,))
+                    
+                    merged_count += len(games_to_merge)
+                    logger.info(f"Merged {len(games_to_merge)} duplicates of '{canonical_name}' into master record (ID: {master_game['id']})")
+                
+                conn.commit()
+                logger.info(f"Deduplication complete: merged {merged_count} duplicate records")
+                return merged_count
+                
+        except Exception as e:
+            logger.error(f"Error during deduplication: {e}")
             conn.rollback()
             return 0
     

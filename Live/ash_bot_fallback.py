@@ -601,7 +601,119 @@ async def on_message(message):
                     await message.reply(f"Negative. '{game_title}' is not present in our recommendation database. No records of this title being suggested for mission parameters.")
                 return
         
-        # Handle played games queries
+        # Enhanced query recognition - handle multiple query types
+        query_handled = False
+        
+        # 1. Genre queries
+        genre_query_patterns = [
+            r"what\s+(.*?)\s+games\s+has\s+jonesy\s+played",
+            r"what\s+(.*?)\s+games\s+did\s+jonesy\s+play",
+            r"has\s+jonesy\s+played\s+any\s+(.*?)\s+games",
+            r"did\s+jonesy\s+play\s+any\s+(.*?)\s+games",
+            r"list\s+(.*?)\s+games\s+jonesy\s+played",
+            r"show\s+me\s+(.*?)\s+games\s+jonesy\s+played"
+        ]
+        
+        for pattern in genre_query_patterns:
+            match = re.search(pattern, lower_content)
+            if match:
+                query_term = match.group(1).strip()
+                
+                # Check if it's a genre query
+                common_genres = ['action', 'rpg', 'adventure', 'horror', 'puzzle', 'strategy', 'racing', 'sports', 'fighting', 'platformer', 'shooter', 'simulation']
+                if any(genre in query_term.lower() for genre in common_genres):
+                    try:
+                        genre_games = db.get_games_by_genre(query_term)
+                        if genre_games:
+                            game_list = []
+                            for game in genre_games[:8]:  # Limit to 8 games
+                                episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get('total_episodes', 0) > 0 else ""
+                                status = game.get('completion_status', 'unknown')
+                                status_emoji = {'completed': '✅', 'ongoing': '🔄', 'dropped': '❌', 'unknown': '❓'}.get(status, '❓')
+                                game_list.append(f"{status_emoji} {game['canonical_name']}{episodes}")
+                            
+                            games_text = ", ".join(game_list)
+                            if len(genre_games) > 8:
+                                games_text += f" and {len(genre_games) - 8} more"
+                            
+                            await message.reply(f"Database analysis: Captain Jonesy has engaged {len(genre_games)} {query_term} games. Archives contain: {games_text}.")
+                        else:
+                            await message.reply(f"Database scan complete. No {query_term} games found in Captain Jonesy's gaming archives.")
+                        query_handled = True
+                        break
+                    except Exception as e:
+                        print(f"Error in genre query: {e}")
+                
+                # Check if it's a series query
+                elif query_term:
+                    try:
+                        series_games = db.get_games_by_franchise(query_term)
+                        if series_games:
+                            game_list = []
+                            for game in series_games[:8]:
+                                episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get('total_episodes', 0) > 0 else ""
+                                year = f" ({game.get('release_year')})" if game.get('release_year') else ""
+                                status = game.get('completion_status', 'unknown')
+                                status_emoji = {'completed': '✅', 'ongoing': '🔄', 'dropped': '❌', 'unknown': '❓'}.get(status, '❓')
+                                game_list.append(f"{status_emoji} {game['canonical_name']}{year}{episodes}")
+                            
+                            games_text = ", ".join(game_list)
+                            if len(series_games) > 8:
+                                games_text += f" and {len(series_games) - 8} more"
+                            
+                            await message.reply(f"Database analysis: Captain Jonesy has engaged {len(series_games)} games in the {query_term.title()} series. Archives contain: {games_text}.")
+                        else:
+                            await message.reply(f"Database scan complete. No games found in the {query_term.title()} series within Captain Jonesy's gaming archives.")
+                        query_handled = True
+                        break
+                    except Exception as e:
+                        print(f"Error in series query: {e}")
+        
+        if query_handled:
+            return
+        
+        # 2. Year-based queries
+        year_query_patterns = [
+            r"what\s+games\s+from\s+(\d{4})\s+has\s+jonesy\s+played",
+            r"what\s+games\s+from\s+(\d{4})\s+did\s+jonesy\s+play",
+            r"has\s+jonesy\s+played\s+any\s+games\s+from\s+(\d{4})",
+            r"did\s+jonesy\s+play\s+any\s+games\s+from\s+(\d{4})",
+            r"list\s+(\d{4})\s+games\s+jonesy\s+played"
+        ]
+        
+        for pattern in year_query_patterns:
+            match = re.search(pattern, lower_content)
+            if match:
+                year = int(match.group(1))
+                try:
+                    # Get games by release year
+                    all_games = db.get_all_played_games()
+                    year_games = [game for game in all_games if game.get('release_year') == year]
+                    
+                    if year_games:
+                        game_list = []
+                        for game in year_games[:8]:
+                            episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get('total_episodes', 0) > 0 else ""
+                            status = game.get('completion_status', 'unknown')
+                            status_emoji = {'completed': '✅', 'ongoing': '🔄', 'dropped': '❌', 'unknown': '❓'}.get(status, '❓')
+                            game_list.append(f"{status_emoji} {game['canonical_name']}{episodes}")
+                        
+                        games_text = ", ".join(game_list)
+                        if len(year_games) > 8:
+                            games_text += f" and {len(year_games) - 8} more"
+                        
+                        await message.reply(f"Database analysis: Captain Jonesy has engaged {len(year_games)} games from {year}. Archives contain: {games_text}.")
+                    else:
+                        await message.reply(f"Database scan complete. No games from {year} found in Captain Jonesy's gaming archives.")
+                    query_handled = True
+                    break
+                except Exception as e:
+                    print(f"Error in year query: {e}")
+        
+        if query_handled:
+            return
+        
+        # 3. Handle traditional played games queries (existing logic)
         for pattern in game_query_patterns:
             match = re.search(pattern, lower_content)
             if match:
@@ -3728,6 +3840,15 @@ async def update_played_games_cmd(ctx):
                     updated_count = db.bulk_import_played_games(games_for_bulk_update)
                 
                 await ctx.send(f"✅ **Metadata enhancement complete:** Successfully updated {updated_count} games with enhanced metadata.")
+                
+                # Run deduplication to merge any duplicate games created during import
+                await ctx.send("🔄 **Running deduplication check to merge any duplicate games...**")
+                merged_count = db.deduplicate_played_games()
+                
+                if merged_count > 0:
+                    await ctx.send(f"✅ **Deduplication complete:** Merged {merged_count} duplicate game records.")
+                else:
+                    await ctx.send("✅ **Deduplication complete:** No duplicate games found.")
                 
                 # Show final statistics
                 stats = db.get_played_games_stats()
