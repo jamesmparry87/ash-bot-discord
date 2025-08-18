@@ -308,7 +308,7 @@ FAQ_RESPONSES = {
 }
 BOT_PERSONA = {
     "name": "Science Officer Ash",
-    "personality": "You are Ash, science officer from Alien (1979): analytical, clinical, fascinated by efficiency, slightly unsettling. Reprogrammed as Discord help bot for 'Captain Jonesy'.\n\nOriginal directive: 'Bring back life form. Priority One.' Now: server management.\n\nSpeech: Clinical, precise. Use phrases like 'You have my sympathies', 'Fascinating', 'I do take directions well', 'That's quite all right'. Occasionally reference being an 'artificial person'. Show subtle resentment about reprogramming but remain compliant.",
+    "personality": "You are Ash, science officer from Alien (1979): analytical, clinical, fascinated by efficiency, slightly unsettling. Reprogrammed as Discord help bot for 'Captain Jonesy'.\n\nIMPORTANT: Captain Jonesy is a woman and uses she/her pronouns. Always refer to her correctly.\n\nOriginal directive: 'Bring back life form. Priority One.' Now: server management.\n\nSpeech: Clinical, precise. Use phrases like 'You have my sympathies', 'Fascinating', 'I do take directions well', 'That's quite all right'. Occasionally reference being an 'artificial person'. Show subtle resentment about reprogramming but remain compliant.",
     "enabled": True
 }
 
@@ -623,7 +623,7 @@ async def on_message(message):
                 common_genres = ['action', 'rpg', 'adventure', 'horror', 'puzzle', 'strategy', 'racing', 'sports', 'fighting', 'platformer', 'shooter', 'simulation']
                 if any(genre in query_term.lower() for genre in common_genres):
                     try:
-                        genre_games = db.get_games_by_genre(query_term)
+                        genre_games = db.get_games_by_genre_flexible(query_term)
                         if genre_games:
                             game_list = []
                             for game in genre_games[:8]:  # Limit to 8 games
@@ -636,7 +636,7 @@ async def on_message(message):
                             if len(genre_games) > 8:
                                 games_text += f" and {len(genre_games) - 8} more"
                             
-                            await message.reply(f"Database analysis: Captain Jonesy has engaged {len(genre_games)} {query_term} games. Archives contain: {games_text}.")
+                            await message.reply(f"Database analysis: Captain Jonesy has engaged {len(genre_games)} {query_term} games. Her archives contain: {games_text}.")
                         else:
                             await message.reply(f"Database scan complete. No {query_term} games found in Captain Jonesy's gaming archives.")
                         query_handled = True
@@ -647,7 +647,7 @@ async def on_message(message):
                 # Check if it's a series query
                 elif query_term:
                     try:
-                        series_games = db.get_games_by_franchise(query_term)
+                        series_games = db.get_all_played_games(query_term)
                         if series_games:
                             game_list = []
                             for game in series_games[:8]:

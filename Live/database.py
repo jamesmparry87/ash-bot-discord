@@ -1096,6 +1096,35 @@ class DatabaseManager:
             logger.error(f"Error getting games by genre {genre}: {e}")
             return []
     
+    def get_games_by_genre_flexible(self, genre_query: str) -> List[Dict[str, Any]]:
+        """Get all games matching genre with flexible matching (e.g., 'horror' matches 'survival-horror')"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            with conn.cursor() as cur:
+                # Use LIKE with wildcards for flexible matching
+                genre_pattern = f"%{genre_query.lower()}%"
+                cur.execute("""
+                    SELECT * FROM played_games 
+                    WHERE LOWER(genre) LIKE %s
+                    ORDER BY release_year ASC, canonical_name ASC
+                """, (genre_pattern,))
+                results = cur.fetchall()
+                
+                # Convert to list of dicts and apply text-to-array conversion
+                games = []
+                for row in results:
+                    game_dict = dict(row)
+                    game_dict = self._convert_text_to_arrays(game_dict)
+                    games.append(game_dict)
+                
+                return games
+        except Exception as e:
+            logger.error(f"Error getting games by flexible genre {genre_query}: {e}")
+            return []
+    
     def get_games_by_franchise(self, franchise_name: str) -> List[Dict[str, Any]]:
         """Get all games in a specific franchise (using series_name)"""
         conn = self.get_connection()
