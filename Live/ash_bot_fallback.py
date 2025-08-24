@@ -198,9 +198,9 @@ def filter_ai_response(response_text: str) -> str:
         
         if should_keep:
             final_sentences.append(sentence)
-    
-    # Limit to maximum 3 sentences for conciseness
-    final_sentences = final_sentences[:3]
+
+    # Limit to maximum 4 sentences for conciseness
+    final_sentences = final_sentences[:4]
     
     # Reconstruct response
     result = '. '.join(final_sentences)
