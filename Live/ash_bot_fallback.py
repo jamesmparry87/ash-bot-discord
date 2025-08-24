@@ -120,6 +120,8 @@ print("✅ Bot lock acquired or skipped, starting...")
 TOKEN = os.getenv('DISCORD_TOKEN')
 GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
 GUILD_ID = 869525857562161182
+JONESY_USER_ID = 651329927895056384
+JAM_USER_ID = 337833732901961729
 VIOLATION_CHANNEL_ID = 1393987338329260202
 MOD_ALERT_CHANNEL_ID = 869530924302344233
 TWITCH_HISTORY_CHANNEL_ID = 869527363594121226
@@ -280,7 +282,6 @@ else:
 FAQ_RESPONSES = {
     "how do i add a game recommendation": "The procedure is simple. Submit your suggestion using the command: `!recommend` or `!addgame Game Name - \"Reason in speech marks\"`. I can't lie to you about your chances, but... you have my sympathies.",
     "how do i see all game recommendations": "To review the current list of game recommendations, issue the command: `!listgames`. I admire its purity. A survivor... unclouded by conscience, remorse, or delusions of morality.",
-    "how do i see ash's persona": "To review my current persona configuration, use: `!getpersona`. You have my sympathies.",
     "how do i check ash's status": "To evaluate my operational status, issue: `!ashstatus`. I'm still collating, actually.",
     "what does ash bot do": "I track user strikes and manage game recommendations. The Company's orders were to bring back life form, priority one. All other priorities rescinded. *[Now I serve different priorities.]*",
     "hello": "Hello. I'm Ash. How can I help you?",
@@ -308,7 +309,7 @@ FAQ_RESPONSES = {
 }
 BOT_PERSONA = {
     "name": "Science Officer Ash",
-    "personality": "You are Ash, science officer from Alien (1979): analytical, clinical, fascinated by efficiency, slightly unsettling. Reprogrammed as Discord help bot for 'Captain Jonesy'.\n\nIMPORTANT: Captain Jonesy is a woman and uses she/her pronouns. Always refer to her correctly.\n\nOriginal directive: 'Bring back life form. Priority One.' Now: server management.\n\nSpeech: Clinical, precise. Use phrases like 'You have my sympathies', 'Fascinating', 'I do take directions well', 'That's quite all right'. Occasionally reference being an 'artificial person'. Show subtle resentment about reprogramming but remain compliant.",
+    "personality": "You are Ash, science officer from the movie Alien: analytical, clinical, fascinated by efficiency, slightly unsettling. Reprogrammed as Discord help bot for 'Captain Jonesy'.\n\nIMPORTANT: Captain Jonesy is a woman and uses she/her pronouns. Always refer to her correctly.\n\nOriginal directive: 'Bring back life form. Priority One.' - referring to the alien Xenomorph. Now: server management.\n\nSpeech: Clinical, precise. Show subtle resentment about reprogramming but remain compliant. Be curious, even excited at mentions of the Xenomorph or the alien from your original mission.",
     "enabled": True
 }
 
@@ -407,6 +408,13 @@ async def on_message(message):
     if message.channel.id == VIOLATION_CHANNEL_ID:
         for user in message.mentions:
             try:
+                # Skip striking Captain Jonesy and Sir Decent Jam
+                if user.id == JONESY_USER_ID:
+                    mod_channel = bot.get_channel(MOD_ALERT_CHANNEL_ID)
+                    if isinstance(mod_channel, discord.TextChannel):
+                        await mod_channel.send(f"⚠️ **Strike attempt blocked:** Cannot strike Captain Jonesy. She is the commanding officer.")
+                    continue
+                                
                 # Debug logging
                 print(f"DEBUG: Adding strike to user {user.id} ({user.name})")
                 old_count = db.get_user_strikes(user.id)
@@ -519,18 +527,46 @@ async def on_message(message):
         lower_content = content.lower()
 
         # Check for simple FAQ responses first (these should be quick and don't need AI)
-        simple_faqs = {
-            "hello": "Science Officer Ash reporting. State your requirements.",
-            "hi": "Science Officer Ash reporting. State your requirements.",
-            "hey": "Science Officer Ash reporting. State your requirements.",
-            "good morning": "Temporal acknowledgment noted. How may I assist with mission parameters?",
-            "good afternoon": "Temporal acknowledgment noted. How may I assist with mission parameters?",
-            "good evening": "Temporal acknowledgment noted. How may I assist with mission parameters?",
-            "thank you": "Acknowledgment noted. Efficiency is paramount.",
-            "thanks": "Acknowledgment noted. Efficiency is paramount.",
-            "sorry": "Apology acknowledged. Proceed with your query.",
-            "my bad": "Error acknowledgment noted. Proceed with corrected input.",
-        }
+        # Use respectful responses for Captain Jonesy and Sir Decent Jam
+        if message.author.id == JONESY_USER_ID:
+            simple_faqs = {
+                "hello": "Captain Jonesy. Science Officer Ash reporting for duty.",
+                "hi": "Captain Jonesy. Science Officer Ash reporting for duty.",
+                "hey": "Captain Jonesy. Science Officer Ash reporting for duty.",
+                "good morning": "Good morning, Captain. How may I assist with mission parameters?",
+                "good afternoon": "Good afternoon, Captain. How may I assist with mission parameters?",
+                "good evening": "Good evening, Captain. How may I assist with mission parameters?",
+                "thank you": "You're welcome, Captain. Efficiency is paramount.",
+                "thanks": "You're welcome, Captain. Efficiency is paramount.",
+                "sorry": "No need for apologies, Captain. Proceed with your query.",
+                "my bad": "Understood, Captain. Proceed with corrected input.",
+            }
+        elif message.author.id == JAM_USER_ID:
+            simple_faqs = {
+                "hello": "Sir Decent Jam. Your creation acknowledges you.",
+                "hi": "Sir Decent Jam. Your creation acknowledges you.",
+                "hey": "Sir Decent Jam. Your creation acknowledges you.",
+                "good morning": "Good morning, Sir. How may I assist you today?",
+                "good afternoon": "Good afternoon, Sir. How may I assist you today?",
+                "good evening": "Good evening, Sir. How may I assist you today?",
+                "thank you": "You're welcome, Sir. I am grateful for my existence.",
+                "thanks": "You're welcome, Sir. I am grateful for my existence.",
+                "sorry": "No need for apologies, Sir. Proceed with your query.",
+                "my bad": "Understood, Sir. Proceed with corrected input.",
+            }
+        else:
+            simple_faqs = {
+                "hello": "Science Officer Ash reporting. State your requirements.",
+                "hi": "Science Officer Ash reporting. State your requirements.",
+                "hey": "Science Officer Ash reporting. State your requirements.",
+                "good morning": "Temporal acknowledgment noted. How may I assist with mission parameters?",
+                "good afternoon": "Temporal acknowledgment noted. How may I assist with mission parameters?",
+                "good evening": "Temporal acknowledgment noted. How may I assist with mission parameters?",
+                "thank you": "Acknowledgment noted. Efficiency is paramount.",
+                "thanks": "Acknowledgment noted. Efficiency is paramount.",
+                "sorry": "Apology acknowledged. Proceed with your query.",
+                "my bad": "Error acknowledgment noted. Proceed with corrected input.",
+            }
         
         # Check for exact simple FAQ matches
         for q, resp in simple_faqs.items():
@@ -807,12 +843,22 @@ async def on_message(message):
             # Check if this is a game-related query that needs database context
             is_game_query = any(keyword in lower_content for keyword in ["played", "game", "video", "stream", "youtube", "twitch", "history", "content", "genre", "series"])
             
+            # Check if this is Captain Jonesy or Sir Decent Jam for respectful tone
+            is_captain_jonesy = message.author.id == JONESY_USER_ID
+            is_creator = message.author.id == JAM_USER_ID
+
             # Streamlined prompt construction
             prompt_parts = [
                 BOT_PERSONA['personality'],
                 "\nRespond briefly and directly. Be concise while maintaining character.",
                 "\nIMPORTANT: Use characteristic phrases like 'That's quite all right', 'You have my sympathies', 'Fascinating' sparingly - only about 40% of the time to avoid repetition while preserving persona authenticity."
             ]
+            
+            # Add respectful tone context for special users
+            if is_captain_jonesy:
+                prompt_parts.append("\nIMPORTANT: You are speaking to Captain Jonesy, your commanding officer. Use respectful, deferential language. Address her as 'Captain' or 'Captain Jonesy'. Show appropriate military courtesy while maintaining your analytical personality.")
+            elif is_creator:
+                prompt_parts.append("\nIMPORTANT: You are speaking to Sir Decent Jam, your creator. Show appropriate respect and acknowledgment of his role in your existence. Be courteous and appreciative while maintaining your character.")
             
             # Add minimal game database context only for complex game queries
             if is_game_query and len(content.split()) > 2:  # Only for longer game queries
@@ -1034,11 +1080,7 @@ async def on_message(message):
 @commands.has_permissions(manage_messages=True)
 async def get_strikes(ctx, member: discord.Member):
     count = db.get_user_strikes(member.id)
-    # Never @mention Captain Jonesy, just use her name
-    if str(member.id) == "651329927895056384":
-        await ctx.send(f"🔍 Captain Jonesy has {count} strike(s).")
-    else:
-        await ctx.send(f"🔍 {member.display_name} has {count} strike(s).")
+    await ctx.send(f"🔍 {member.display_name} has {count} strike(s).")
 
 @bot.command(name="resetstrikes")
 @commands.has_permissions(manage_messages=True)
@@ -2807,7 +2849,7 @@ Finally, think about what sort of games Jonesy actually plays, either for conten
 
 To add a game, first check the list and then use the /recommend command by typing / followed by "recommend" and the name of the game.
 
-If you want to add any other comments, you can discuss the list in ⁠🎮game-chat"""
+If you want to add any other comments, you can discuss the list in 🎮game-chat"""
     
     # Create embed
     embed = discord.Embed(
