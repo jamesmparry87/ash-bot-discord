@@ -640,7 +640,150 @@ async def on_message(message):
         # Enhanced query recognition - handle multiple query types
         query_handled = False
         
-        # 1. Genre queries
+        # 1. Statistical queries (highest priority)
+        statistical_patterns = [
+            r"what\s+game\s+series\s+.*most\s+minutes",
+            r"what\s+game\s+series\s+.*most\s+playtime",
+            r"what\s+game\s+.*highest\s+average.*per\s+episode",
+            r"what\s+game\s+.*longest.*per\s+episode",
+            r"what\s+game\s+.*took.*longest.*complete",
+            r"which\s+game\s+.*most\s+episodes",
+            r"which\s+game\s+.*longest.*complete",
+            r"what.*game.*most.*playtime",
+            r"which.*series.*most.*playtime",
+            r"what.*game.*shortest.*episodes",
+            r"which.*game.*fastest.*complete",
+            r"what.*game.*most.*time",
+            r"which.*game.*took.*most.*time"
+        ]
+        
+        for pattern in statistical_patterns:
+            match = re.search(pattern, lower_content)
+            if match:
+                try:
+                    if "most minutes" in lower_content or "most playtime" in lower_content:
+                        if "series" in lower_content:
+                            # Handle series playtime query
+                            series_stats = db.get_series_by_total_playtime()
+                            if series_stats:
+                                top_series = series_stats[0]
+                                total_hours = round(top_series['total_playtime_minutes'] / 60, 1)
+                                game_count = top_series['game_count']
+                                series_name = top_series['series_name']
+                                
+                                response = f"Database analysis complete. The series with maximum temporal investment: '{series_name}' with {total_hours} hours across {game_count} games. "
+                                
+                                # Add conversational follow-up
+                                if len(series_stats) > 1:
+                                    second_series = series_stats[1]
+                                    second_hours = round(second_series['total_playtime_minutes'] / 60, 1)
+                                    response += f"Fascinating - this significantly exceeds the second-ranked '{second_series['series_name']}' series at {second_hours} hours. I could analyze her complete franchise chronology or compare series completion patterns if you require additional data."
+                                else:
+                                    response += "I could examine her complete gaming franchise analysis or compare series engagement patterns if you require additional mission data."
+                                
+                                await message.reply(response)
+                            else:
+                                await message.reply("Database analysis complete. Insufficient playtime data available for series ranking. Mission parameters require more comprehensive temporal logging.")
+                        else:
+                            # Handle individual game playtime query
+                            games_by_playtime = db.get_longest_completion_games()
+                            if games_by_playtime:
+                                top_game = games_by_playtime[0]
+                                total_hours = round(top_game['total_playtime_minutes'] / 60, 1)
+                                episodes = top_game['total_episodes']
+                                game_name = top_game['canonical_name']
+                                
+                                response = f"Database analysis indicates '{game_name}' demonstrates maximum temporal investment: {total_hours} hours across {episodes} episodes. "
+                                
+                                # Add conversational follow-up
+                                if len(games_by_playtime) > 1:
+                                    response += f"Would you like me to analyze her other marathon gaming sessions or compare completion patterns for lengthy {top_game.get('genre', 'similar')} games?"
+                                else:
+                                    response += "I can provide comparative analysis of her completion efficiency trends if you require additional data."
+                                
+                                await message.reply(response)
+                            else:
+                                await message.reply("Database analysis complete. Insufficient playtime data available for individual game ranking. Temporal logging requires enhancement.")
+                    
+                    elif "highest average" in lower_content and "per episode" in lower_content:
+                        # Handle average episode length query
+                        avg_stats = db.get_games_by_average_episode_length()
+                        if avg_stats:
+                            top_game = avg_stats[0]
+                            avg_minutes = top_game['avg_minutes_per_episode']
+                            game_name = top_game['canonical_name']
+                            episodes = top_game['total_episodes']
+                            
+                            response = f"Statistical analysis indicates '{game_name}' demonstrates highest temporal density per episode: {avg_minutes} minutes average across {episodes} episodes. "
+                            
+                            # Add conversational follow-up
+                            if len(avg_stats) > 1:
+                                response += f"Intriguing patterns emerge when comparing this to her other extended gaming sessions. I could analyze episode length distributions or examine pacing preferences across different genres if you require deeper analysis."
+                            else:
+                                response += "I can examine her episode pacing patterns or compare temporal efficiency across different game types if additional analysis is required."
+                            
+                            await message.reply(response)
+                        else:
+                            await message.reply("Database analysis complete. Insufficient episode duration data for statistical ranking. Mission parameters require enhanced temporal metrics.")
+                    
+                    elif "most episodes" in lower_content:
+                        # Handle episode count query
+                        episode_stats = db.get_games_by_episode_count('DESC')
+                        if episode_stats:
+                            top_game = episode_stats[0]
+                            episodes = top_game['total_episodes']
+                            game_name = top_game['canonical_name']
+                            status = top_game['completion_status']
+                            
+                            response = f"Database confirms '{game_name}' holds maximum episode count: {episodes} episodes, status: {status}. "
+                            
+                            # Add conversational follow-up
+                            if status == 'completed':
+                                response += f"Remarkable commitment detected - this represents her most extensive completed gaming engagement. I could track her progress against typical completion metrics for similar marathon titles or analyze her sustained engagement patterns."
+                            else:
+                                response += f"Mission status: {status}. I can provide comparative analysis of her other extended gaming commitments or examine engagement sustainability patterns if you require additional data."
+                            
+                            await message.reply(response)
+                        else:
+                            await message.reply("Database analysis complete. No episode data available for ranking. Mission logging requires enhancement.")
+                    
+                    elif "longest" in lower_content and "complete" in lower_content:
+                        # Handle longest completion games
+                        completion_stats = db.get_longest_completion_games()
+                        if completion_stats:
+                            top_game = completion_stats[0]
+                            if top_game['total_playtime_minutes'] > 0:
+                                hours = round(top_game['total_playtime_minutes'] / 60, 1)
+                                episodes = top_game['total_episodes']
+                                game_name = top_game['canonical_name']
+                                
+                                response = f"Analysis indicates '{game_name}' required maximum completion time: {hours} hours across {episodes} episodes. "
+                                
+                                # Add conversational follow-up
+                                response += f"Fascinating efficiency metrics detected. Would you like me to investigate her completion timeline patterns or compare this against other {top_game.get('genre', 'similar')} gaming commitments?"
+                            else:
+                                # Fall back to episode count if no playtime data
+                                episodes = top_game['total_episodes']
+                                game_name = top_game['canonical_name']
+                                response = f"Database indicates '{game_name}' required maximum episodes for completion: {episodes} episodes. I could analyze her completion efficiency trends or examine episode-based commitment patterns if additional data is required."
+                            
+                            await message.reply(response)
+                        else:
+                            await message.reply("Database analysis complete. No completed games with sufficient temporal data for ranking. Mission completion logging requires enhancement.")
+                    
+                    query_handled = True
+                    break
+                    
+                except Exception as e:
+                    print(f"Error in statistical query: {e}")
+                    await message.reply("Database analysis encountered an anomaly. Statistical processing systems require recalibration.")
+                    query_handled = True
+                    break
+        
+        if query_handled:
+            return
+        
+        # 2. Genre queries
         genre_query_patterns = [
             r"what\s+(.*?)\s+games\s+has\s+jonesy\s+played",
             r"what\s+(.*?)\s+games\s+did\s+jonesy\s+play",
@@ -805,19 +948,68 @@ async def on_message(message):
                 played_game = db.get_played_game(game_name)
                 
                 if played_game:
-                    # Game found in played games database
+                    # Game found in played games database - enhanced response with conversational follow-ups
                     episodes = f" across {played_game.get('total_episodes', 0)} episodes" if played_game.get('total_episodes', 0) > 0 else ""
                     status = played_game.get('completion_status', 'unknown')
                     
                     status_text = {
-                        'completed': 'and completed the game',
-                        'ongoing': 'and the mission is ongoing',
-                        'dropped': 'but terminated the mission',
-                        'unknown': 'with mission status unknown'
-                    }.get(status, 'with mission status unknown')
+                        'completed': 'completed',
+                        'ongoing': 'ongoing',
+                        'dropped': 'terminated',
+                        'unknown': 'status unknown'
+                    }.get(status, 'status unknown')
                     
-                    # Simplified response with offer for more details
-                    await message.reply(f"Affirmative. Captain Jonesy has played '{played_game['canonical_name']}'{episodes}, {status_text}. Do you require the link to the YouTube playlist or have any additional queries?")
+                    # Base response
+                    response = f"Affirmative. Captain Jonesy has played '{played_game['canonical_name']}'{episodes}, {status_text}. "
+                    
+                    # Add contextual follow-up suggestions based on game properties
+                    try:
+                        # Get ranking context for interesting facts
+                        ranking_context = db.get_ranking_context(played_game['canonical_name'], 'all')
+                        
+                        # Series-based suggestions
+                        if played_game.get('series_name') and played_game['series_name'] != played_game['canonical_name']:
+                            series_games = db.get_all_played_games(played_game['series_name'])
+                            if len(series_games) > 1:
+                                response += f"This marks her engagement with the {played_game['series_name']} franchise. I could analyze her complete {played_game['series_name']} chronology or compare this series against her other gaming preferences if you require additional data."
+                            else:
+                                response += f"I can examine her complete gaming franchise analysis or compare series engagement patterns if you require additional mission data."
+                        
+                        # High episode count suggestions
+                        elif played_game.get('total_episodes', 0) > 15:
+                            if ranking_context and not ranking_context.get('error'):
+                                episode_rank = ranking_context.get('rankings', {}).get('episodes', {}).get('rank', 0)
+                                if episode_rank <= 5:
+                                    response += f"Fascinating - this ranks #{episode_rank} in her episode count metrics. I could analyze her other marathon gaming sessions or compare completion patterns for lengthy {played_game.get('genre', 'similar')} games if you require deeper analysis."
+                                else:
+                                    response += f"This represents a significant gaming commitment with {played_game['total_episodes']} episodes. Would you like me to investigate her completion timeline patterns or examine her sustained engagement metrics?"
+                            else:
+                                response += f"This represents a significant gaming commitment. I could analyze her other extended gaming sessions or examine completion efficiency patterns if additional data is required."
+                        
+                        # Recent/ongoing game suggestions
+                        elif status == 'ongoing':
+                            response += f"Mission status: ongoing. I can track her progress against typical completion metrics for similar titles or analyze her current gaming rotation if you require mission updates."
+                        
+                        # Completed game suggestions with interesting stats
+                        elif status == 'completed' and played_game.get('total_episodes', 0) > 0:
+                            if played_game['total_episodes'] <= 8:
+                                response += f"Efficient completion detected - this falls within optimal episode range for focused gaming sessions. I can provide comparative analysis of similar pacing games or her completion efficiency trends if you require additional data."
+                            else:
+                                response += f"Comprehensive completion achieved across {played_game['total_episodes']} episodes. Would you like me to investigate her completion timeline analysis or compare this against other {played_game.get('genre', 'similar')} gaming commitments?"
+                        
+                        # Default follow-up for other cases
+                        else:
+                            if played_game.get('youtube_playlist_url'):
+                                response += "I can provide the YouTube playlist link or analyze additional mission parameters if you require further data."
+                            else:
+                                response += "Additional mission parameters available upon request."
+                    
+                    except Exception as e:
+                        # Fallback if ranking context fails
+                        print(f"Error generating follow-up suggestions: {e}")
+                        response += "Additional mission parameters available upon request."
+                    
+                    await message.reply(response)
                 else:
                     # Game not found in played games database
                     game_title = game_name.title()

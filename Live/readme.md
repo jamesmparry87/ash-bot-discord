@@ -9,10 +9,34 @@ A Discord moderation and AI assistant bot featuring strike tracking, game recomm
 - `!addgame <name> - <reason>` - Add game recommendation
 - `!recommend <name> - <reason>` - Add game recommendation (alias)
 - `!listgames` - List all game recommendations
-- Ask Ash: `@Ashbot Has Jonesy played [game name]?` - Query played games database
-- Ask Ash: `@Ashbot What games has Jonesy played?` - Get examples from played games database
-- Ask Ash: `@Ashbot What horror games has Jonesy played?` - Query by genre
-- Ask Ash: `@Ashbot What Final Fantasy games has Jonesy played?` - Query by franchise/series
+
+#### Natural Language Queries (Ask Ash)
+
+**Game Lookup Queries:**
+
+- `@Ashbot Has Jonesy played [game name]?` - Query played games database with smart follow-up suggestions
+- `@Ashbot What games has Jonesy played?` - Get examples from played games database
+
+**Genre & Series Queries:**
+
+- `@Ashbot What horror games has Jonesy played?` - Query by genre with completion status
+- `@Ashbot What Final Fantasy games has Jonesy played?` - Query by franchise/series with progress details
+
+**Statistical Analysis Queries (NEW):**
+
+- `@Ashbot What game series has Jonesy played for the most minutes?` - Series playtime rankings
+- `@Ashbot What game has the highest average playtime per episode?` - Episode efficiency analysis
+- `@Ashbot Which game has the most episodes?` - Episode count rankings
+- `@Ashbot What game took the longest to complete?` - Completion time analysis
+- `@Ashbot What game series has the most playtime?` - Series time investment analysis
+
+**Enhanced Conversational Features:**
+
+- Smart follow-up suggestions based on game properties
+- Series-based recommendations for franchise games
+- Episode count insights for marathon gaming sessions
+- Progress tracking suggestions for ongoing games
+- Completion efficiency analysis for finished games
 
 ### Moderator Commands (Requires "Manage Messages" permission)
 
@@ -70,16 +94,29 @@ The bot automatically updates ongoing games every **Sunday at 12:00 PM (midday)*
 - Sends status notifications to mod channel
 - Preserves manually edited information
 
-### Intelligent Game Queries
+### Intelligent Game Queries & Statistical Analysis
 
-Users can ask Ash about games using natural language with smart series disambiguation:
+Users can ask Ash about games using natural language with smart series disambiguation and advanced analytics:
 
-**Examples:**
+**Game Lookup Examples:**
 
 - `@Ashbot Has Jonesy played God of War?` → Bot asks for clarification between different entries
-- `@Ashbot Has Jonesy played God of War 2018?` → Specific answer with episode count and completion status
-- `@Ashbot What Final Fantasy games has Jonesy played?` → Lists all FF games with progress details
-- `@Ashbot What horror games has Jonesy played?` → Genre-based query with completion status
+- `@Ashbot Has Jonesy played God of War 2018?` → Specific answer with episode count, completion status, and contextual follow-up suggestions
+- `@Ashbot What Final Fantasy games has Jonesy played?` → Lists all FF games with progress details and series insights
+- `@Ashbot What horror games has Jonesy played?` → Genre-based query with completion status and genre statistics
+
+**Statistical Analysis Examples (NEW):**
+
+- `@Ashbot What game series has Jonesy played for the most minutes?` → "Database analysis complete. The series with maximum temporal investment: 'Batman: Arkham' with 45.2 hours across 3 games. Fascinating - this significantly exceeds the second-ranked 'Mass Effect' series at 32.1 hours. I could analyze her complete franchise chronology or compare series completion patterns if you require additional data."
+- `@Ashbot What game has the highest average playtime per episode?` → "Statistical analysis indicates 'Persona 5' demonstrates highest temporal density per episode: 67.3 minutes average across 45 episodes. Intriguing patterns emerge when comparing this to her other extended gaming sessions."
+- `@Ashbot Which game has the most episodes?` → "Database confirms 'Dark Souls III' holds maximum episode count: 52 episodes, status: completed. Remarkable commitment detected - this represents her most extensive completed gaming engagement."
+
+**Enhanced Conversational Follow-ups:**
+
+- **Series Analysis**: "I could analyze her complete [Series] chronology or compare series completion patterns..."
+- **Episode Insights**: "This ranks #2 in her episode count metrics. I could analyze her other marathon gaming sessions..."
+- **Completion Tracking**: "Mission status: ongoing. I can track her progress against typical completion metrics..."
+- **Efficiency Analysis**: "Efficient completion detected - this falls within optimal episode range for focused gaming sessions..."
 
 ### Gameplay History Import System
 
@@ -98,6 +135,287 @@ Users can ask Ash about games using natural language with smart series disambigu
 
 ---
 
+## Technical File Overview
+
+### Project Structure
+
+```text
+Live/
+├── ash_bot_fallback.py    # Main bot file
+├── database.py            # Database operations
+├── data_migration.py      # Data migration utilities
+├── main.py               # Alternative entry point
+├── testai.py             # AI testing utilities
+├── requirements.txt       # Python dependencies
+├── Procfile              # Railway deployment config
+├── railway.toml          # Railway build settings
+├── runtime.txt           # Python version specification
+├── start.sh              # Startup script
+├── bot.lock              # Single instance lock file
+├── .env.example          # Environment variables template
+└── README.md             # This file
+
+# Root directory files
+../
+├── ash_bot_final.py       # Legacy bot version
+├── ash_bot.py            # Original bot version
+├── readme.md             # Root readme
+├── .gitignore            # Git ignore rules
+└── .gitattributes        # Git attributes
+```
+
+### Core Bot Files
+
+#### `ash_bot_fallback.py` (Main Bot)
+
+**Primary bot implementation with comprehensive features:**
+
+- **Discord Event Handling**: Message processing, command routing, automatic strike detection
+- **AI Integration**: Dual AI system (Google Gemini + Claude Anthropic) with fallback mechanisms
+- **Statistical Query Engine**: Advanced pattern matching for gaming analytics queries
+- **Conversational Follow-ups**: Context-aware suggestions based on game properties
+- **Game Database Integration**: Natural language queries with series disambiguation
+- **Scheduled Tasks**: Automatic Sunday updates for ongoing games metadata
+- **Command System**: 40+ commands for moderation, game management, and analytics
+- **Error Handling**: Comprehensive error recovery and user feedback
+- **Personality System**: Ash character implementation with configurable responses
+- **Captain Jonesy Integration**: Recognizes server owner (ID: 51329927895056384) for special permissions
+
+**Key Features:**
+
+- Cross-platform locking system for single instance deployment
+- Rate limiting and quota management for external APIs
+- Intelligent game series recognition and disambiguation
+- Real-time strike tracking with automatic channel monitoring
+- AI response filtering to prevent repetitive character phrases
+
+#### `database.py` (Database Layer)
+
+**Comprehensive PostgreSQL database management:**
+
+- **Connection Management**: Robust connection handling with retry logic and error recovery
+- **Schema Management**: Automatic table creation and migration handling
+- **Strike System**: User strike tracking with bulk operations and individual queries
+- **Game Recommendations**: Community suggestion system with fuzzy matching and duplicate detection
+- **Played Games Database**: Advanced gaming history with metadata, alternative names, and series grouping
+- **Statistical Analytics**: 15+ analytical functions for gaming insights and rankings
+- **Data Import/Export**: Bulk operations for migration and API data integration
+- **Search Capabilities**: Full-text search across multiple fields with ranking algorithms
+
+**Database Tables:**
+
+- `strikes`: User moderation tracking
+- `game_recommendations`: Community game suggestions
+- `played_games`: Comprehensive gaming history with 15+ metadata fields
+- `bot_config`: Persistent bot configuration storage
+
+**Advanced Features:**
+
+- Array field handling for alternative names and VOD URLs
+- Fuzzy matching algorithms for game name recognition
+- Deduplication logic for merging duplicate game records
+- Temporal data analysis for gaming patterns and trends
+
+### Utility and Configuration Files
+
+#### `data_migration.py` (Migration Tools)
+
+**Data migration and parsing utilities:**
+
+- **Game List Parser**: Converts text-based game lists to structured database format
+- **Sample Data**: Predefined game collections for testing and initial population
+- **Format Conversion**: Handles various input formats (comma-separated, bulleted lists, etc.)
+- **Validation Logic**: Ensures data integrity during migration processes
+
+#### `main.py` (Alternative Entry Point)
+
+**Secondary bot entry point:**
+
+- Alternative startup configuration
+- Development testing environment
+- Backup execution path
+- Simplified deployment option
+
+#### `testai.py` (AI Testing)
+
+**AI system testing and validation:**
+
+- **Model Testing**: Validates AI API connections and response quality
+- **Token Usage Monitoring**: Tracks API usage and costs
+- **Response Analysis**: Tests AI response filtering and character consistency
+- **Fallback Testing**: Validates backup AI system functionality
+
+#### `requirements.txt` (Dependencies)
+
+**Python package specifications:**
+
+```text
+discord.py>=2.3.0          # Discord API integration
+psycopg2-binary>=2.9.0     # PostgreSQL database driver
+google-generativeai>=0.3.0 # Google Gemini AI integration
+anthropic>=0.7.0           # Claude AI integration
+aiohttp>=3.8.0             # Async HTTP client for API calls
+```
+
+#### `Procfile` (Railway Deployment)
+
+**Process definition for Railway.app:**
+
+```text
+web: python ash_bot_fallback.py
+```
+
+Defines the main process for cloud deployment with automatic restart capabilities.
+
+#### `railway.toml` (Build Configuration)
+
+**Railway-specific build settings:**
+
+- Python version specification
+- Build command configuration
+- Environment variable handling
+- Deployment optimization settings
+
+#### `runtime.txt` (Python Version)
+
+**Python version specification for deployment:**
+
+```text
+python-3.11.0
+```
+
+Ensures consistent Python version across development and production environments.
+
+#### `start.sh` (Startup Script)
+
+**Shell script for bot initialization:**
+
+- Environment validation
+- Database connection testing
+- Graceful startup with error handling
+- Process monitoring setup
+
+### Configuration and Environment Files
+
+#### `.env.example` (Environment Template)
+
+**Template for required environment variables:**
+
+```text
+# Required
+DISCORD_TOKEN=your_discord_bot_token_here
+GOOGLE_API_KEY=your_google_ai_api_key_here
+DATABASE_URL=postgresql://user:pass@host:port/db
+
+# Optional
+ANTHROPIC_API_KEY=your_claude_api_key_here
+YOUTUBE_API_KEY=your_youtube_api_key_here
+TWITCH_CLIENT_ID=your_twitch_client_id_here
+TWITCH_CLIENT_SECRET=your_twitch_client_secret_here
+```
+
+#### `bot.lock` (Instance Lock)
+
+**Single instance enforcement:**
+
+- Prevents multiple bot instances
+- Cross-platform compatibility
+- Automatic cleanup on shutdown
+- Process ID tracking
+
+### Legacy and Archive Files
+
+#### `ash_bot_final.py` (Legacy Version)
+
+**Previous stable bot version:**
+
+- Maintained for rollback capabilities
+- Contains earlier implementation patterns
+- Reference for feature migration
+- Backup for critical deployments
+
+#### `ash_bot.py` (Original Version)
+
+**Initial bot implementation:**
+
+- Basic command structure
+- Simple database operations
+- Original personality implementation
+- Historical reference for development progression
+
+### Root Directory Files
+
+#### `readme.md` (Root Documentation)
+
+**Project overview and quick start guide:**
+
+- High-level project description
+- Basic setup instructions
+- Link to detailed documentation
+- Contribution guidelines
+
+#### `.gitignore` (Git Exclusions)
+
+**Version control exclusions:**
+
+- Environment files (.env)
+- Python cache files (_pycache_)
+- Database files (*.db)
+- Log files (*.log)
+- IDE configuration files
+
+#### `.gitattributes` (Git Attributes)
+
+**Git handling specifications:**
+
+- Line ending normalization
+- Binary file identification
+- Merge strategy definitions
+- Language detection overrides
+
+## Architecture Overview
+
+### System Architecture
+
+```text
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Discord API   │◄──►│  ash_bot_fallback │◄──►│   PostgreSQL    │
+└─────────────────┘    │      .py         │    │   Database      │
+                       └──────────────────┘    └─────────────────┘
+                              │
+                              ▼
+                       ┌──────────────────┐
+                       │   database.py    │
+                       └──────────────────┘
+                              │
+                    ┌─────────┼─────────┐
+                    ▼         ▼         ▼
+            ┌──────────┐ ┌──────────┐ ┌──────────┐
+            │Google AI │ │YouTube   │ │Twitch    │
+            │(Gemini)  │ │Data API  │ │Helix API │
+            └──────────┘ └──────────┘ └──────────┘
+```
+
+### Data Flow
+
+1. **User Input** → Discord message processing
+2. **Command Routing** → Appropriate handler function
+3. **Database Query** → PostgreSQL via database.py
+4. **AI Enhancement** → Google Gemini or Claude (if needed)
+5. **Response Generation** → Formatted Discord message
+6. **Logging & Analytics** → Database updates and monitoring
+
+### Key Design Patterns
+
+- **Singleton Pattern**: Single bot instance enforcement
+- **Factory Pattern**: AI client creation and management
+- **Observer Pattern**: Discord event handling
+- **Repository Pattern**: Database abstraction layer
+- **Strategy Pattern**: Multiple AI provider support
+- **Command Pattern**: Discord command system
+
+---
+
 ## Setup & Deployment
 
 ### Railway.app Deployment
@@ -113,15 +431,18 @@ Users can ask Ash about games using natural language with smart series disambigu
 #### Deployment Steps
 
 1. **Connect Repository**
+
    - Fork or clone this repository to your GitHub account
    - Connect your GitHub repository to Railway
 
 2. **Add PostgreSQL Database**
+
    - In your Railway project, click "New Service"
    - Select "Database" → "PostgreSQL"
    - Railway will automatically provide a `DATABASE_URL` environment variable
 
 3. **Configure Environment Variables**
+
    Set these environment variables in Railway:
 
    ```text
@@ -137,23 +458,11 @@ Users can ask Ash about games using natural language with smart series disambigu
    ```
 
 4. **Deploy**
+
    - Railway will automatically detect the Python project
    - It will install dependencies from `requirements.txt`
    - The bot will start using the `Procfile` configuration
    - Scheduled tasks will automatically begin running
-
-### Project Structure
-
-```text
-Live/
-├── ash_bot_fallback.py    # Main bot file
-├── database.py            # Database operations
-├── data_migration.py      # Data migration utilities
-├── requirements.txt       # Python dependencies
-├── Procfile              # Railway deployment config
-├── railway.toml          # Railway build settings
-└── README.md             # This file
-```
 
 ### Database Schema
 
@@ -193,6 +502,7 @@ Update these IDs in `ash_bot_fallback.py`:
 - `MOD_ALERT_CHANNEL_ID`: Channel for moderation alerts and scheduled update notifications
 - `TWITCH_HISTORY_CHANNEL_ID`: Channel for Twitch history data
 - `YOUTUBE_HISTORY_CHANNEL_ID`: Channel for YouTube history data
+- `CAPTAIN_JONESY_ID`: Server owner user ID (51329927895056384)
 
 #### Bot Permissions
 
@@ -206,245 +516,4 @@ Required Discord permissions:
 
 ---
 
-## Usage Guide
-
-### Setting Up Game Database
-
-#### Step 1: Comprehensive Game Import
-
-```text
-!bulkimportplayedgames
-```
-
-This command:
-
-- Fetches from YouTube playlists (primary source) - each playlist = one game series
-- Calculates accurate playtime from real video durations
-- Enhances with AI metadata (genre, series, release year, platform)
-- Merges Twitch data intelligently to avoid duplicates
-- Provides detailed preview before import
-
-#### Step 2: Clean Recommendations
-
-```text
-!cleanplayedgames
-```
-
-Automatically removes games from recommendations that have already been played:
-
-- Smart title analysis extracts game names from video titles
-- Fuzzy matching with 75% similarity threshold for accurate matching
-- Preview before removal shows what will be removed with confidence scores
-- Confirmation required to prevent accidental deletions
-
-#### Step 3: Verify and Test
-
-```text
-!listplayedgames
-!dbstats
-@Ashbot What games has Jonesy played?
-```
-
-### Game Series Disambiguation
-
-The bot recognizes major game series for disambiguation:
-
-- **Action**: God of War, Devil May Cry, Bayonetta
-- **RPG**: Final Fantasy, The Elder Scrolls, Fallout, Mass Effect, Dragon Age, The Witcher, Dark Souls, Persona
-- **FPS**: Call of Duty, Battlefield, Halo, Rainbow Six, Ghost Recon
-- **Adventure**: Assassin's Creed, Tomb Raider, Uncharted
-- **Horror**: Resident Evil, Silent Hill, Dead Space
-- **Racing**: Need for Speed, Gran Turismo, Forza
-- **Sports**: FIFA, Madden, NBA 2K
-- **Fighting**: Mortal Kombat, Street Fighter, Tekken
-- **Nintendo**: Super Mario, The Legend of Zelda, Pokémon, Metroid
-
-### Individual Game Updates
-
-The `!updateplayedgame` command allows precise updates to individual game records using either the game name or database ID:
-
-#### Command Format
-
-```text
-!updateplayedgame <game_name_or_id> field1:value1 | field2:value2 | field3:value3
-```
-
-#### Available Update Fields
-
-- `status:completed` - Update completion status (completed, ongoing, dropped, unknown)
-- `episodes:15` - Update total episode count (numeric)
-- `notes:New information` - Update or append notes
-- `platform:PC` - Update gaming platform
-- `year:2023` - Update release year (numeric)
-- `series:Series Name` - Update series/franchise name
-- `youtube:https://youtube.com/playlist?list=...` - Update YouTube playlist URL
-
-#### Examples
-
-**Update by Game Name:**
-
-```text
-!updateplayedgame "God of War (2018)" status:completed | episodes:25 | notes:Excellent Norse mythology adaptation
-```
-
-**Update by Database ID:**
-
-```text
-!updateplayedgame 42 status:ongoing | episodes:12 | platform:PlayStation 5
-```
-
-**Single Field Update:**
-
-```text
-!updateplayedgame "Dark Souls" status:completed
-```
-
-**Multiple Field Update:**
-
-```text
-!updateplayedgame "Final Fantasy VII" status:completed | episodes:30 | year:1997 | platform:PC | notes:Classic JRPG masterpiece
-```
-
-#### Automatic Metadata Refresh
-
-When used without any field updates (e.g., `!updateplayedgame 42` or `!updateplayedgame "Dark Souls"`), the command will automatically:
-
-- **Analyze missing metadata** - Checks for missing genre, alternative names, series info, and release year
-- **Use AI enhancement** - Applies the same AI analysis as `!updateplayedgames` but for a single game
-- **Show detailed results** - Displays exactly what metadata was enhanced
-- **Preserve existing data** - Only fills in missing fields, doesn't overwrite existing information
-
-This is perfect for:
-
-- **Testing AI enhancement** on individual games before running the full batch update
-- **Debugging database issues** by updating one game at a time
-- **Filling gaps** in specific games after manual database edits
-- **Verifying** that the enhancement logic works correctly
-
-**Manual vs. Automatic Updates:**
-
-- `!updateplayedgame 42 status:completed | notes:Great game` - Manual field updates only
-- `!updateplayedgame 42` - Automatic AI metadata refresh for missing fields
-- `!updateplayedgames` - AI metadata refresh for all games with missing metadata
-
-#### Benefits of ID-Based Updates
-
-- **Precision**: No ambiguity with similar game names
-- **Database Integration**: Works seamlessly with manual PostgreSQL edits
-- **Efficiency**: Faster lookups for frequently updated games
-- **Consistency**: Reliable updates even after canonical name changes
-
-To find a game's ID, use `!gameinfo <game_name>` - the ID is shown in the footer.
-
-### AI Response Protocols
-
-1. **General Queries** (`"what games has Jonesy played?"`): Shows diverse examples, asks user to specify genre or franchise for detailed lists
-2. **Specific Game Queries** (`"has Jonesy played Dark Souls?"`): Searches database first, provides details including episodes, completion status, playtime
-3. **Genre Queries** (`"what horror games has Jonesy played?"`): Lists games from specific genre with episode counts and completion status
-4. **Franchise Queries** (`"what Final Fantasy games has Jonesy played?"`): Shows all games in franchise with progress details
-5. **Series Disambiguation** (`"has Jonesy played God of War?"`): Acknowledges multiple entries exist, lists specific games from database, asks for clarification
-
----
-
-## Advanced Administration
-
-### Data Management Commands (Admin Only)
-
-#### Bulk Operations
-
-- `!bulkimportgames` - Import game recommendations from migration script
-- `!bulkimportplayedgames` - Comprehensive game import with AI enhancement
-- `!cleanplayedgames` - Remove already-played games using API analysis
-- `!clearallgames` - Clear all game recommendations (with confirmation)
-- `!importstrikes` - Import strikes from strikes.json file
-- `!clearallstrikes` - Clear all strike records (with confirmation)
-
-#### Debugging Commands
-
-- `!debugstrikes` - Debug strikes database issues
-- `!teststrikes` - Test individual strike queries
-- `!addteststrikes` - Add test strike data
-- `!fixgamereasons` - Fix game recommendation reason formatting
-- `!listmodels` - List available Gemini AI models
-
-### API Integration
-
-#### YouTube Data API v3
-
-- Playlist analysis for game series detection
-- Video duration fetching for accurate playtime calculation
-- Rate limiting with automatic delays
-- Fallback mechanisms for video parsing if playlists unavailable
-
-#### Twitch Helix API
-
-- VOD analysis for comprehensive Twitch gaming history
-- Duration parsing for accurate playtime from Twitch format (1h23m45s)
-- Smart merging with YouTube data without duplicates
-- Graceful handling of API limitations
-
-#### AI Enhancement (Google Gemini)
-
-- Batch processing for efficient metadata enhancement
-- Genre classification and series recognition
-- Automatic detection of release years and platforms
-- Optimized token usage for cost efficiency
-
-### Monitoring & Maintenance
-
-#### Automatic Monitoring
-
-- Scheduled health checks every Sunday at midday
-- Database integrity validation of game data
-- API status monitoring and quota tracking
-- Comprehensive error logging and notifications
-
-#### Manual Monitoring Tools
-
-- `!ashstatus` - Bot operational status
-- `!dbstats` - Database statistics and health
-- `!debugstrikes` - Strike system diagnostics
-- `!listmodels` - AI model availability
-
-### Troubleshooting
-
-#### Common Issues
-
-1. **Scheduled Updates Not Running**: Check bot uptime, verify `YOUTUBE_API_KEY` is configured, ensure mod alert channel is accessible
-2. **Game Import Issues**: Verify API credentials, check API quotas and rate limits, review error messages in bot responses
-3. **AI Features Not Working**: Verify `GOOGLE_API_KEY` is set, check Google AI API quota/billing, monitor for rate limiting (bot will use fallback responses automatically)
-4. **Database Performance Issues**: Monitor Railway database metrics, check for connection pool exhaustion, review query performance in logs
-
-### Security & Best Practices
-
-- All secrets stored securely in Railway environment variables
-- Regular rotation of API keys recommended
-- Moderator commands properly restricted by Discord permissions
-- All user inputs sanitized and validated
-- Comprehensive error handling prevents crashes
-- Respects all external API limits and quotas
-
----
-
-## Migration Guide
-
-### From Previous Versions
-
-If upgrading from an older version:
-
-1. The bot will automatically update database schema as needed
-2. Run `!bulkimportplayedgames` to get enhanced metadata for existing games
-3. Verify scheduled tasks are working with `!ashstatus`
-4. Ensure YouTube and Twitch API keys are configured for full functionality
-
-### Data Preservation
-
-- Existing games data is preserved during updates
-- Strike records remain intact during schema updates
-- Game recommendations list is preserved
-- Bot settings and persona configurations are maintained
-
----
-
 **Ready to deploy?** Push your code to GitHub, connect to Railway, add your environment variables, and your bot will be live with automatic scheduled updates and comprehensive game management capabilities.
-                                                                                                                                                                                                                                                                                                                                            

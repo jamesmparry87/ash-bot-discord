@@ -1296,6 +1296,294 @@ class DatabaseManager:
             logger.error(f"Error in debug_update_issues: {e}")
             return {"error": str(e)}
 
+    def get_series_by_total_playtime(self) -> List[Dict[str, Any]]:
+        """Get game series ranked by total playtime"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT 
+                        series_name,
+                        COUNT(*) as game_count,
+                        SUM(total_playtime_minutes) as total_playtime_minutes,
+                        SUM(total_episodes) as total_episodes,
+                        ROUND(AVG(total_playtime_minutes), 1) as avg_playtime_per_game
+                    FROM played_games 
+                    WHERE series_name IS NOT NULL 
+                    AND series_name != ''
+                    AND total_playtime_minutes > 0
+                    GROUP BY series_name
+                    ORDER BY SUM(total_playtime_minutes) DESC
+                    LIMIT 10
+                """)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting series by playtime: {e}")
+            return []
+    
+    def get_games_by_average_episode_length(self) -> List[Dict[str, Any]]:
+        """Get games ranked by average minutes per episode"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT 
+                        canonical_name,
+                        series_name,
+                        total_episodes,
+                        total_playtime_minutes,
+                        ROUND(total_playtime_minutes::float / NULLIF(total_episodes, 0), 1) as avg_minutes_per_episode,
+                        completion_status
+                    FROM played_games 
+                    WHERE total_episodes > 0 
+                    AND total_playtime_minutes > 0
+                    ORDER BY (total_playtime_minutes::float / NULLIF(total_episodes, 0)) DESC
+                    LIMIT 15
+                """)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting games by average episode length: {e}")
+            return []
+    
+    def get_longest_completion_games(self) -> List[Dict[str, Any]]:
+        """Get games that took longest to complete (by episodes or time)"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT 
+                        canonical_name,
+                        series_name,
+                        total_episodes,
+                        total_playtime_minutes,
+                        completion_status,
+                        genre
+                    FROM played_games 
+                    WHERE completion_status = 'completed'
+                    AND (total_episodes > 0 OR total_playtime_minutes > 0)
+                    ORDER BY 
+                        total_playtime_minutes DESC,
+                        total_episodes DESC
+                    LIMIT 10
+                """)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting longest completion games: {e}")
+            return []
+    
+    def get_games_by_episode_count(self, order: str = 'DESC') -> List[Dict[str, Any]]:
+        """Get games ranked by episode count"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            with conn.cursor() as cur:
+                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
+                cur.execute(f"""
+                    SELECT 
+                        canonical_name,
+                        series_name,
+                        total_episodes,
+                        total_playtime_minutes,
+                        completion_status,
+                        genre
+                    FROM played_games 
+                    WHERE total_episodes > 0
+                    ORDER BY total_episodes {order_clause}
+                    LIMIT 15
+                """)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting games by episode count: {e}")
+            return []
+    
+    def get_genre_statistics(self) -> List[Dict[str, Any]]:
+        """Get comprehensive genre statistics"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT 
+                        genre,
+                        COUNT(*) as game_count,
+                        SUM(total_episodes) as total_episodes,
+                        SUM(total_playtime_minutes) as total_playtime_minutes,
+                        ROUND(AVG(total_playtime_minutes), 1) as avg_playtime_per_game,
+                        COUNT(CASE WHEN completion_status = 'completed' THEN 1 END) as completed_count,
+                        ROUND(
+                            COUNT(CASE WHEN completion_status = 'completed' THEN 1 END)::float / COUNT(*) * 100, 
+                            1
+                        ) as completion_rate
+                    FROM played_games 
+                    WHERE genre IS NOT NULL 
+                    AND genre != ''
+                    GROUP BY genre
+                    ORDER BY SUM(total_playtime_minutes) DESC
+                """)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting genre statistics: {e}")
+            return []
+    
+    def get_temporal_gaming_data(self, year: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get gaming data by year or all years"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            with conn.cursor() as cur:
+                if year:
+                    cur.execute("""
+                        SELECT 
+                            canonical_name,
+                            series_name,
+                            genre,
+                            release_year,
+                            first_played_date,
+                            total_episodes,
+                            completion_status
+                        FROM played_games 
+                        WHERE release_year = %s
+                        ORDER BY first_played_date ASC, canonical_name ASC
+                    """, (year,))
+                else:
+                    cur.execute("""
+                        SELECT 
+                            release_year,
+                            COUNT(*) as games_played,
+                            SUM(total_episodes) as total_episodes,
+                            SUM(total_playtime_minutes) as total_playtime_minutes
+                        FROM played_games 
+                        WHERE release_year IS NOT NULL
+                        GROUP BY release_year
+                        ORDER BY release_year DESC
+                    """)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting temporal gaming data: {e}")
+            return []
+    
+    def compare_games(self, game1_name: str, game2_name: str) -> Dict[str, Any]:
+        """Compare two games directly"""
+        game1 = self.get_played_game(game1_name)
+        game2 = self.get_played_game(game2_name)
+        
+        if not game1 or not game2:
+            return {
+                'error': 'One or both games not found',
+                'game1_found': game1 is not None,
+                'game2_found': game2 is not None
+            }
+        
+        return {
+            'game1': {
+                'name': game1['canonical_name'],
+                'series': game1.get('series_name'),
+                'episodes': game1.get('total_episodes', 0),
+                'playtime_minutes': game1.get('total_playtime_minutes', 0),
+                'playtime_hours': round(game1.get('total_playtime_minutes', 0) / 60, 1),
+                'status': game1.get('completion_status'),
+                'genre': game1.get('genre')
+            },
+            'game2': {
+                'name': game2['canonical_name'],
+                'series': game2.get('series_name'),
+                'episodes': game2.get('total_episodes', 0),
+                'playtime_minutes': game2.get('total_playtime_minutes', 0),
+                'playtime_hours': round(game2.get('total_playtime_minutes', 0) / 60, 1),
+                'status': game2.get('completion_status'),
+                'genre': game2.get('genre')
+            },
+            'comparison': {
+                'episode_difference': game1.get('total_episodes', 0) - game2.get('total_episodes', 0),
+                'playtime_difference_minutes': game1.get('total_playtime_minutes', 0) - game2.get('total_playtime_minutes', 0),
+                'longer_game': game1['canonical_name'] if game1.get('total_playtime_minutes', 0) > game2.get('total_playtime_minutes', 0) else game2['canonical_name'],
+                'more_episodes': game1['canonical_name'] if game1.get('total_episodes', 0) > game2.get('total_episodes', 0) else game2['canonical_name']
+            }
+        }
+    
+    def get_ranking_context(self, game_name: str, metric: str = 'playtime') -> Dict[str, Any]:
+        """Get where a specific game ranks in various metrics"""
+        game = self.get_played_game(game_name)
+        if not game:
+            return {'error': 'Game not found'}
+        
+        conn = self.get_connection()
+        if not conn:
+            return {'error': 'Database connection failed'}
+        
+        try:
+            with conn.cursor() as cur:
+                context = {
+                    'game_name': game['canonical_name'],
+                    'rankings': {}
+                }
+                
+                # Playtime ranking
+                if metric in ['playtime', 'all']:
+                    cur.execute("""
+                        SELECT COUNT(*) + 1 as rank
+                        FROM played_games 
+                        WHERE total_playtime_minutes > %s
+                    """, (game.get('total_playtime_minutes', 0),))
+                    result = cur.fetchone()
+                    playtime_rank = int(result['rank']) if result else 0  # type: ignore
+                    
+                    cur.execute("SELECT COUNT(*) as total FROM played_games WHERE total_playtime_minutes > 0")
+                    total_result = cur.fetchone()
+                    total_with_playtime = int(total_result['total']) if total_result else 0  # type: ignore
+                    
+                    context['rankings']['playtime'] = {
+                        'rank': playtime_rank,
+                        'total': total_with_playtime,
+                        'percentile': round((1 - (playtime_rank - 1) / max(total_with_playtime, 1)) * 100, 1) if total_with_playtime > 0 else 0
+                    }
+                
+                # Episode count ranking
+                if metric in ['episodes', 'all']:
+                    cur.execute("""
+                        SELECT COUNT(*) + 1 as rank
+                        FROM played_games 
+                        WHERE total_episodes > %s
+                    """, (game.get('total_episodes', 0),))
+                    result = cur.fetchone()
+                    episode_rank = int(result['rank']) if result else 0  # type: ignore
+                    
+                    cur.execute("SELECT COUNT(*) as total FROM played_games WHERE total_episodes > 0")
+                    total_result = cur.fetchone()
+                    total_with_episodes = int(total_result['total']) if total_result else 0  # type: ignore
+                    
+                    context['rankings']['episodes'] = {
+                        'rank': episode_rank,
+                        'total': total_with_episodes,
+                        'percentile': round((1 - (episode_rank - 1) / max(total_with_episodes, 1)) * 100, 1) if total_with_episodes > 0 else 0
+                    }
+                
+                return context
+        except Exception as e:
+            logger.error(f"Error getting ranking context: {e}")
+            return {'error': str(e)}
+
     def close(self):
         """Close database connection"""
         if self.connection and not self.connection.closed:
