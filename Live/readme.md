@@ -517,3 +517,5 @@ Required Discord permissions:
 ---
 
 **Ready to deploy?** Push your code to GitHub, connect to Railway, add your environment variables, and your bot will be live with automatic scheduled updates and comprehensive game management capabilities.
+
+TEST
