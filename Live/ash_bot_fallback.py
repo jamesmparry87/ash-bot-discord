@@ -209,64 +209,52 @@ def filter_ai_response(response_text: str) -> str:
     
     return result
 
-# Setup Gemini AI (Primary)
-if GEMINI_API_KEY and GENAI_AVAILABLE and genai is not None:
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)  # type: ignore
-        gemini_model = genai.GenerativeModel('gemini-1.5-flash')  # type: ignore
-        print("✅ Gemini AI configured successfully")
-        
-        # Test AI functionality with a simple prompt
-        try:
-            test_response = gemini_model.generate_content("Test")  # type: ignore
-            if test_response and hasattr(test_response, 'text') and test_response.text:
-                primary_ai = "gemini"
-                print("✅ Gemini AI test successful - set as primary AI")
-            else:
-                print("⚠️ Gemini AI setup complete but test response failed")
-        except Exception as e:
-            print(f"⚠️ Gemini AI setup complete but test failed: {e}")
-            
-    except Exception as e:
-        print(f"❌ Gemini AI configuration failed: {e}")
-else:
-    if not GEMINI_API_KEY:
-        print("⚠️ GOOGLE_API_KEY not found - Gemini features disabled")
-    elif not GENAI_AVAILABLE:
-        print("⚠️ google.generativeai module not available - Gemini features disabled")
+def setup_ai_provider(name: str, api_key: Optional[str], module: Optional[Any], is_available: bool) -> bool:
+    """Initializes and tests an AI provider (Gemini or Claude)."""
+    if not api_key:
+        print(f"⚠️ {name.upper()}_API_KEY not found - {name.title()} features disabled")
+        return False
+    if not is_available or module is None:
+        print(f"⚠️ {name} module not available - {name.title()} features disabled")
+        return False
 
-# Setup Claude AI (Backup)
-if ANTHROPIC_API_KEY and ANTHROPIC_AVAILABLE and anthropic is not None:
     try:
-        claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)  # type: ignore
-        print("✅ Claude AI configured successfully")
-        
-        # Test Claude functionality
-        try:
-            test_response = claude_client.messages.create(  # type: ignore
+        if name == "gemini":
+            global gemini_model
+            module.configure(api_key=api_key)
+            gemini_model = module.GenerativeModel('gemini-1.5-flash')
+            test_response = gemini_model.generate_content("Test")
+            if test_response and hasattr(test_response, 'text') and test_response.text:
+                print(f"✅ Gemini AI test successful")
+                return True
+        elif name == "claude":
+            global claude_client
+            claude_client = module.Anthropic(api_key=api_key)
+            test_response = claude_client.messages.create(
                 model="claude-3-haiku-20240307",
                 max_tokens=10,
                 messages=[{"role": "user", "content": "Test"}]
             )
             if test_response and hasattr(test_response, 'content') and test_response.content:
-                if not primary_ai:
-                    primary_ai = "claude"
-                    print("✅ Claude AI test successful - set as primary AI")
-                else:
-                    backup_ai = "claude"
-                    print("✅ Claude AI test successful - set as backup AI")
-            else:
-                print("⚠️ Claude AI setup complete but test response failed")
-        except Exception as e:
-            print(f"⚠️ Claude AI setup complete but test failed: {e}")
-            
+                print(f"✅ Claude AI test successful")
+                return True
+
+        print(f"⚠️ {name.title()} AI setup complete but test response failed")
+        return False
     except Exception as e:
-        print(f"❌ Claude AI configuration failed: {e}")
-else:
-    if not ANTHROPIC_API_KEY:
-        print("⚠️ ANTHROPIC_API_KEY not found - Claude features disabled")
-    elif not ANTHROPIC_AVAILABLE:
-        print("⚠️ anthropic module not available - Claude features disabled")
+        print(f"❌ {name.title()} AI configuration failed: {e}")
+        return False
+
+# Setup AI providers
+gemini_ok = setup_ai_provider("gemini", GEMINI_API_KEY, genai, GENAI_AVAILABLE)
+claude_ok = setup_ai_provider("claude", ANTHROPIC_API_KEY, anthropic, ANTHROPIC_AVAILABLE)
+
+if gemini_ok:
+    primary_ai = "gemini"
+    if claude_ok:
+        backup_ai = "claude"
+elif claude_ok:
+    primary_ai = "claude"
 
 # Set AI status
 if primary_ai:
