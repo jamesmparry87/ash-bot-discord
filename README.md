@@ -182,7 +182,7 @@ In honor of his life and legacy, if you find this project enjoyable, or if you c
 
 You can make a donation and learn more through the link below:
 
-link::https://www.parkinson.org/how-to-help?hl=en-GB[Donate to The Parkinson's Foundation]
+[Donate to The Parkinson's Foundation](https://www.parkinson.org/how-to-help?hl=en-GB)
 
 Thank you for helping to honor his memory.
 
