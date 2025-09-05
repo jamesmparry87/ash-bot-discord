@@ -85,7 +85,7 @@ jobs:
     - name: Run command tests
       env:
         DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
-        DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}  # pyright: ignore
+        DISCORD_TOKEN: ${{ secrets.TEST_DISCORD_TOKEN }}  # pyright: ignore
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}  # pyright: ignore
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # pyright: ignore
       run: |
@@ -102,7 +102,7 @@ jobs:
     - name: Run all tests with coverage
       env:
         DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
-        DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}  # pyright: ignore
+        DISCORD_TOKEN: ${{ secrets.TEST_DISCORD_TOKEN }}  # pyright: ignore
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}  # pyright: ignore
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # pyright: ignore
         YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}  # pyright: ignore
@@ -126,7 +126,7 @@ jobs:
     - name: Validate bot can start (smoke test)
       env:
         DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
-        DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}  # pyright: ignore
+        DISCORD_TOKEN: ${{ secrets.TEST_DISCORD_TOKEN }}  # pyright: ignore
         TEST_MODE: true
       run: |
         cd Live

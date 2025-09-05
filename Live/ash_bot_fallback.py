@@ -4426,14 +4426,16 @@ atexit.register(cleanup)
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
-# Ensure TOKEN is set before running the bot
-if not TOKEN:
-    print("❌ DISCORD_TOKEN environment variable not set. Exiting.")
-    sys.exit(1)
+# Only run the bot if this script is executed directly (not imported)
+if __name__ == "__main__":
+    # Ensure TOKEN is set before running the bot
+    if not TOKEN:
+        print("❌ DISCORD_TOKEN environment variable not set. Exiting.")
+        sys.exit(1)
 
-try:
-    bot.run(TOKEN)
-except KeyboardInterrupt:
-    print("\n🛑 Bot stopped by user")
-finally:
-    cleanup()
+    try:
+        bot.run(TOKEN)
+    except KeyboardInterrupt:
+        print("\n🛑 Bot stopped by user")
+    finally:
+        cleanup()

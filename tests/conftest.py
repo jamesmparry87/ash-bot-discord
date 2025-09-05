@@ -55,7 +55,7 @@ def setup_test_env(monkeypatch):
         monkeypatch.setenv(key, value)
 
 @pytest.fixture
-async def mock_db() -> AsyncGenerator[MagicMock, None]:
+def mock_db() -> MagicMock:
     """Create a mock database manager for testing."""
     db = MagicMock(spec=DatabaseManager)
     
@@ -82,12 +82,13 @@ async def mock_db() -> AsyncGenerator[MagicMock, None]:
     db.add_played_game.return_value = True
     db.update_played_game.return_value = True
     db.remove_played_game.return_value = {'id': 1, 'canonical_name': 'Test Game'}
+    db.search_played_games.return_value = []
     
     # Mock config methods
     db.get_config_value.return_value = None
     db.set_config_value.return_value = None
     
-    yield db
+    return db
 
 @pytest.fixture
 async def mock_discord_bot() -> AsyncGenerator[Union[MagicMock, Any], None]:
@@ -103,8 +104,17 @@ async def mock_discord_bot() -> AsyncGenerator[Union[MagicMock, Any], None]:
     bot.user.id = 12345
     bot.user.name = "TestBot"
     bot.get_guild.return_value = MagicMock()
-    bot.get_channel.return_value = MagicMock()
-    bot.fetch_user.return_value = AsyncMock()
+    
+    # Mock channels with async methods
+    mock_channel = MagicMock()
+    mock_channel.send = AsyncMock()
+    mock_channel.fetch_message = AsyncMock()
+    mock_channel.edit = AsyncMock()
+    bot.get_channel.return_value = mock_channel
+    
+    # Mock fetch_user as AsyncMock
+    bot.fetch_user = AsyncMock()
+    bot.process_commands = AsyncMock()
     
     yield bot
 
@@ -123,7 +133,12 @@ def mock_discord_context() -> MagicMock:
     # Mock guild and channel
     ctx.guild = MagicMock()
     ctx.guild.id = 869525857562161182  # Same as production for testing
-    ctx.guild.get_channel.return_value = MagicMock()
+    
+    # Mock channel with async send method
+    mock_channel = MagicMock()
+    mock_channel.send = AsyncMock()
+    mock_channel.fetch_message = AsyncMock()
+    ctx.guild.get_channel.return_value = mock_channel
     
     ctx.channel = MagicMock()
     ctx.channel.id = 123456789
@@ -151,8 +166,32 @@ def mock_discord_message() -> MagicMock:
     
     message.channel = MagicMock()
     message.channel.id = 123456789
-    message.channel.history = AsyncMock()
-    message.channel.typing = AsyncMock()
+    
+    # Create async iterator mock for history()
+    class MockAsyncIterator:
+        def __init__(self, items):
+            self.items = items
+            self.index = 0
+            
+        def __aiter__(self):
+            return self
+            
+        async def __anext__(self):
+            if self.index >= len(self.items):
+                raise StopAsyncIteration
+            item = self.items[self.index]
+            self.index += 1
+            return item
+    
+    # Mock history to return async iterator
+    mock_history_messages = []  # Empty history for tests
+    message.channel.history = MagicMock(return_value=MockAsyncIterator(mock_history_messages))
+    
+    # Create proper async context manager mock for typing()
+    typing_context = AsyncMock()
+    typing_context.__aenter__ = AsyncMock(return_value=typing_context)
+    typing_context.__aexit__ = AsyncMock(return_value=None)
+    message.channel.typing = MagicMock(return_value=typing_context)
     
     # Mock content and methods
     message.content = "Test message"

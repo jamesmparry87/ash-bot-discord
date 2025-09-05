@@ -599,19 +599,25 @@ class DatabaseManager:
     def _convert_text_to_arrays(self, game_dict: Dict[str, Any]) -> Dict[str, Any]:
         """Convert TEXT fields back to arrays for backward compatibility"""
         # Convert alternative_names from TEXT to list
-        if 'alternative_names' in game_dict and isinstance(game_dict['alternative_names'], str):
-            alt_names_text = game_dict['alternative_names']
-            if alt_names_text:
-                game_dict['alternative_names'] = [name.strip() for name in alt_names_text.split(',') if name.strip()]
-            else:
+        if 'alternative_names' in game_dict:
+            if isinstance(game_dict['alternative_names'], str):
+                alt_names_text = game_dict['alternative_names']
+                if alt_names_text:
+                    game_dict['alternative_names'] = [name.strip() for name in alt_names_text.split(',') if name.strip()]
+                else:
+                    game_dict['alternative_names'] = []
+            elif game_dict['alternative_names'] is None:
                 game_dict['alternative_names'] = []
         
         # Convert twitch_vod_urls from TEXT to list
-        if 'twitch_vod_urls' in game_dict and isinstance(game_dict['twitch_vod_urls'], str):
-            vod_urls_text = game_dict['twitch_vod_urls']
-            if vod_urls_text:
-                game_dict['twitch_vod_urls'] = [url.strip() for url in vod_urls_text.split(',') if url.strip()]
-            else:
+        if 'twitch_vod_urls' in game_dict:
+            if isinstance(game_dict['twitch_vod_urls'], str):
+                vod_urls_text = game_dict['twitch_vod_urls']
+                if vod_urls_text:
+                    game_dict['twitch_vod_urls'] = [url.strip() for url in vod_urls_text.split(',') if url.strip()]
+                else:
+                    game_dict['twitch_vod_urls'] = []
+            elif game_dict['twitch_vod_urls'] is None:
                 game_dict['twitch_vod_urls'] = []
         
         return game_dict
