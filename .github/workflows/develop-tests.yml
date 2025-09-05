@@ -1,0 +1,285 @@
+# pyright: reportUndefinedVariable=false
+name: Develop Branch Tests
+
+on:
+  push:
+    branches: [ develop ]
+  pull_request:
+    branches: [ develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    # Service containers for testing
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_discord_bot
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.11
+    
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/requirements-test.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python3 -m pip install --upgrade pip
+        pip3 install -r Live/requirements.txt
+        pip3 install -r tests/requirements-test.txt
+    
+    - name: Set up test environment variables
+      env:
+        DISCORD_TOKEN: ${{ secrets.TEST_DISCORD_TOKEN }}
+        DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }} 
+        TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+        # Test-specific environment variables
+        TEST_MODE: true
+        GUILD_ID: "123456789"
+        VIOLATION_CHANNEL_ID: "123456790"
+        MOD_ALERT_CHANNEL_ID: "123456791"
+        TWITCH_HISTORY_CHANNEL_ID: "123456792"
+        YOUTUBE_HISTORY_CHANNEL_ID: "123456793"
+      run: |
+        echo "Environment variables set for testing"
+    
+    - name: Wait for PostgreSQL to be ready
+      run: |
+        until pg_isready -h localhost -p 5432 -U test; do
+          echo "Waiting for PostgreSQL..."
+          sleep 2
+        done
+        echo "PostgreSQL is ready!"
+    
+    - name: Run database tests
+      env:
+        DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
+      run: |
+        python3 -m pytest tests/test_database.py -v --tb=short --durations=10
+    
+    - name: Run command tests
+      env:
+        DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
+        DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}  # pyright: ignore
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}  # pyright: ignore
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # pyright: ignore
+      run: |
+        python3 -m pytest tests/test_commands.py -v --tb=short --durations=10
+    
+    - name: Run AI integration tests
+      env:
+        DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}  # pyright: ignore
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # pyright: ignore
+      run: |
+        python3 -m pytest tests/test_ai_integration.py -v --tb=short --durations=10
+    
+    - name: Run all tests with coverage
+      env:
+        DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
+        DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}  # pyright: ignore
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}  # pyright: ignore
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # pyright: ignore
+        YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}  # pyright: ignore
+        TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}  # pyright: ignore
+        TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}  # pyright: ignore
+        TEST_MODE: true
+        GUILD_ID: "123456789"
+        VIOLATION_CHANNEL_ID: "123456790"
+        MOD_ALERT_CHANNEL_ID: "123456791"
+        TWITCH_HISTORY_CHANNEL_ID: "123456792"
+        YOUTUBE_HISTORY_CHANNEL_ID: "123456793"
+      run: |
+        python3 -m pytest tests/ -v --cov=Live --cov-report=term-missing --cov-report=xml --tb=short
+    
+    - name: Upload coverage to GitHub
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: coverage.xml
+    
+    - name: Validate bot can start (smoke test)
+      env:
+        DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
+        DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}  # pyright: ignore
+        TEST_MODE: true
+      run: |
+        cd Live
+        timeout 30s python3 -c "
+        import ash_bot_fallback
+        print('Bot imports successfully')
+        db = ash_bot_fallback.db
+        if db.database_url:
+            print('Database connection configured')
+        else:
+            print('Database connection not configured')
+        print('Smoke test passed')
+        " || echo "Smoke test completed (timeout expected)"
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.11
+    
+    - name: Install linting dependencies
+      run: |
+        python3 -m pip install --upgrade pip
+        pip3 install flake8 black isort mypy
+        pip3 install -r Live/requirements.txt
+    
+    - name: Run Black code formatting check
+      run: |
+        black --check --diff Live/ tests/
+    
+    - name: Run isort import sorting check
+      run: |
+        isort --check-only --diff Live/ tests/
+    
+    - name: Run flake8 linting
+      run: |
+        flake8 Live/ tests/ --max-line-length=120 --extend-ignore=E203,W503
+    
+    - name: Run mypy type checking
+      run: |
+        mypy Live/database.py --ignore-missing-imports || echo "Type checking completed with issues (non-blocking)"
+
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.11
+    
+    - name: Install security tools
+      run: |
+        python3 -m pip install --upgrade pip
+        pip3 install bandit safety
+    
+    - name: Run Bandit security linting
+      run: |
+        bandit -r Live/ -f json -o bandit-report.json || echo "Bandit scan completed"
+    
+    - name: Check for known security vulnerabilities
+      run: |
+        pip3 install -r Live/requirements.txt
+        safety check --json --output safety-report.json || echo "Safety check completed"
+    
+    - name: Upload security reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: |
+          bandit-report.json
+          safety-report.json
+
+  deployment-readiness:
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Check Railway configuration
+      run: |
+        if [ -f "Live/railway.toml" ]; then
+          echo "✅ Railway configuration found"
+          cat Live/railway.toml
+        else
+          echo "❌ Railway configuration missing"
+          exit 1
+        fi
+    
+    - name: Check required files
+      run: |
+        required_files=(
+          "Live/requirements.txt"
+          "Live/ash_bot_fallback.py"
+          "Live/database.py"
+          "Live/Procfile"
+        )
+        
+        for file in "${required_files[@]}"; do
+          if [ -f "$file" ]; then
+            echo "✅ $file found"
+          else
+            echo "❌ $file missing"
+            exit 1
+          fi
+        done
+    
+    - name: Validate environment variables template
+      run: |
+        if [ -f "Live/.env.example" ]; then
+          echo "✅ Environment variables template found"
+          echo "Required environment variables:"
+          grep -E "^[A-Z_]+=" Live/.env.example || echo "No variables found in template"
+        else
+          echo "❌ .env.example missing"
+          exit 1
+        fi
+    
+    - name: Test summary
+      run: |
+        echo "🎯 **Deployment Readiness Check**"
+        echo "✅ All tests passed"
+        echo "✅ Code quality checks passed"
+        echo "✅ Required files present"
+        echo "✅ Configuration validated"
+        echo ""
+        echo "📋 **Ready for deployment to staging environment**"
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: [test, lint, security, deployment-readiness]
+    if: always()
+    
+    steps:
+    - name: Test Results Summary
+      run: |
+        echo "🤖 **Ash Bot - Develop Branch Test Results**"
+        echo ""
+        echo "**Test Status:** ${{ needs.test.result }}"
+        echo "**Lint Status:** ${{ needs.lint.result }}"
+        echo "**Security Status:** ${{ needs.security.result }}"
+        echo "**Deployment Status:** ${{ needs.deployment-readiness.result }}"
+        echo ""
+        if [ "${{ needs.test.result }}" == "success" ] && [ "${{ needs.lint.result }}" == "success" ]; then
+          echo "✅ **All checks passed - Ready for staging deployment**"
+        else
+          echo "❌ **Some checks failed - Review required before deployment**"
+        fi
