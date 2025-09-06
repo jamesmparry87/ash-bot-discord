@@ -866,12 +866,17 @@ async def on_message(message):
     # Allow mods to ask about restricted functions (those with manage_messages)
     async def user_is_mod(msg):
         if not msg.guild:
-            return False
+            return False  # No mod permissions in DMs
         perms = msg.author.guild_permissions
         return perms.manage_messages
 
-    # Only respond to help requests when the bot is mentioned
-    if bot.user is not None and bot.user in message.mentions:
+    # Determine if we should respond to this message
+    is_dm = message.guild is None
+    is_mentioned = bot.user is not None and bot.user in message.mentions
+    should_respond = is_dm or is_mentioned
+
+    # Respond to DMs or when mentioned in servers
+    if should_respond:
         # If a mod asks about mod commands or what the bot can do, provide a full list of mod commands and mention extra moderator powers
         if await user_is_mod(message):
             lower_content = message.content.lower()
@@ -915,8 +920,14 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-    if bot.user is not None and bot.user in message.mentions and BOT_PERSONA["enabled"]:
-        content = message.content.replace(f'<@{bot.user.id}>', '').strip()
+    # Enable AI personality for DMs or when mentioned in servers
+    should_use_ai = (is_dm or (bot.user is not None and bot.user in message.mentions)) and BOT_PERSONA["enabled"]
+    
+    if should_use_ai:
+        # Clean up mention from content if present
+        content = message.content
+        if bot.user and f'<@{bot.user.id}>' in content:
+            content = content.replace(f'<@{bot.user.id}>', '').strip()
         lower_content = content.lower()
 
         # Check for simple FAQ responses first (these should be quick and don't need AI)
