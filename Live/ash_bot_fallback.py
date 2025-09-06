@@ -921,7 +921,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
     # Enable AI personality for DMs or when mentioned in servers
-    should_use_ai = (is_dm or (bot.user is not None and bot.user in message.mentions)) and BOT_PERSONA["enabled"]
+    should_use_ai = should_respond and BOT_PERSONA["enabled"]
     
     if should_use_ai:
         # Clean up mention from content if present
