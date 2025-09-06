@@ -268,28 +268,28 @@ if [ "$RUN_LINT" = true ]; then
     pip install black isort flake8 mypy > /dev/null 2>&1
     
     echo "🔍 Checking code formatting with Black..."
-    if black --check --diff Live/ tests/ 2>/dev/null; then
+    if black --check --diff Live/ tests/; then
         print_success "Black formatting check passed"
     else
         print_warning "Black formatting issues found (run 'black Live/ tests/' to fix)"
     fi
     
     echo "🔍 Checking import sorting with isort..."
-    if isort --check-only --diff Live/ tests/ 2>/dev/null; then
+    if isort --check-only --diff Live/ tests/; then
         print_success "Import sorting check passed"
     else
         print_warning "Import sorting issues found (run 'isort Live/ tests/' to fix)"
     fi
     
     echo "🔍 Running flake8 linting..."
-    if flake8 Live/ tests/ --max-line-length=120 --extend-ignore=E203,W503 2>/dev/null; then
+    if flake8 Live/ tests/ --max-line-length=120 --extend-ignore=E203,W503; then
         print_success "Flake8 linting passed"
     else
         print_warning "Flake8 found code style issues"
     fi
     
     echo "🔍 Running mypy type checking..."
-    if mypy Live/database.py --ignore-missing-imports > /dev/null 2>&1; then
+    if mypy Live/database.py --ignore-missing-imports; then
         print_success "MyPy type checking passed"
     else
         print_warning "MyPy found type issues (non-blocking)"
@@ -305,14 +305,14 @@ if [ "$RUN_SECURITY" = true ]; then
     pip install bandit safety > /dev/null 2>&1
     
     echo "🛡️ Running Bandit security analysis..."
-    if bandit -r Live/ -f json > bandit-report.json 2>/dev/null; then
+    if bandit -r Live/ -f json > bandit-report.json; then
         print_success "Bandit security check passed"
     else
         print_warning "Bandit found potential security issues (check bandit-report.json)"
     fi
     
     echo "🛡️ Checking for known vulnerabilities with Safety..."
-    if safety check --json > safety-report.json 2>/dev/null; then
+    if safety check --json > safety-report.json; then
         print_success "Safety vulnerability check passed"
     else
         print_warning "Safety found known vulnerabilities (check safety-report.json)"
