@@ -4416,8 +4416,10 @@ async def debug_game_cmd(ctx, game_id: str):
             except Exception as db_error:
                 await ctx.send(f"❌ **Database test error:** {str(db_error)}")
         else:
-            await ctx.send("❌ **Database connection failed:** Cannot test update capabilities")
-            
+            await ctx.send(
+                "❌ **Database connection failed:** Cannot test update capabilities"
+            )
+
     except Exception as e:
         await ctx.send(f"❌ **Debug error:** {str(e)}")
 
