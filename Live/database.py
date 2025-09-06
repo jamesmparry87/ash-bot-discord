@@ -568,7 +568,7 @@ class DatabaseManager:
                         # Also add alternative names to the map (handle TEXT format)
                         alt_names_text = game_dict.get('alternative_names', '')
                         if alt_names_text and isinstance(alt_names_text, str):
-                            alt_names = [name.strip() for name in alt_names_text.split(',') if name.strip()]
+                            alt_names = self._parse_comma_separated_list(alt_names_text)
                             for alt_name in alt_names:
                                 alt_lower = alt_name.lower().strip()
                                 game_names_map[alt_lower] = game_dict
@@ -596,27 +596,25 @@ class DatabaseManager:
             logger.error(f"Error getting played game {name}: {e}")
             return None
     
+    def _parse_comma_separated_list(self, text: Optional[str]) -> List[str]:
+        """Convert a comma-separated string to a list of stripped, non-empty items"""
+        if not text or not isinstance(text, str):
+            return []
+        return [item.strip() for item in text.split(',') if item.strip()]
+    
     def _convert_text_to_arrays(self, game_dict: Dict[str, Any]) -> Dict[str, Any]:
         """Convert TEXT fields back to arrays for backward compatibility"""
         # Convert alternative_names from TEXT to list
         if 'alternative_names' in game_dict:
             if isinstance(game_dict['alternative_names'], str):
-                alt_names_text = game_dict['alternative_names']
-                if alt_names_text:
-                    game_dict['alternative_names'] = [name.strip() for name in alt_names_text.split(',') if name.strip()]
-                else:
-                    game_dict['alternative_names'] = []
+                game_dict['alternative_names'] = self._parse_comma_separated_list(game_dict['alternative_names'])
             elif game_dict['alternative_names'] is None:
                 game_dict['alternative_names'] = []
         
         # Convert twitch_vod_urls from TEXT to list
         if 'twitch_vod_urls' in game_dict:
             if isinstance(game_dict['twitch_vod_urls'], str):
-                vod_urls_text = game_dict['twitch_vod_urls']
-                if vod_urls_text:
-                    game_dict['twitch_vod_urls'] = [url.strip() for url in vod_urls_text.split(',') if url.strip()]
-                else:
-                    game_dict['twitch_vod_urls'] = []
+                game_dict['twitch_vod_urls'] = self._parse_comma_separated_list(game_dict['twitch_vod_urls'])
             elif game_dict['twitch_vod_urls'] is None:
                 game_dict['twitch_vod_urls'] = []
         
@@ -932,7 +930,7 @@ class DatabaseManager:
                         if duplicate_game.get('alternative_names'):
                             if isinstance(duplicate_game['alternative_names'], str):
                                 # Handle TEXT format
-                                alt_names = [name.strip() for name in duplicate_game['alternative_names'].split(',') if name.strip()]
+                                alt_names = self._parse_comma_separated_list(duplicate_game['alternative_names'])
                             else:
                                 # Handle list format
                                 alt_names = duplicate_game['alternative_names']
@@ -943,7 +941,7 @@ class DatabaseManager:
                         if duplicate_game.get('twitch_vod_urls'):
                             if isinstance(duplicate_game['twitch_vod_urls'], str):
                                 # Handle TEXT format
-                                vod_urls = [url.strip() for url in duplicate_game['twitch_vod_urls'].split(',') if url.strip()]
+                                vod_urls = self._parse_comma_separated_list(duplicate_game['twitch_vod_urls'])
                             else:
                                 # Handle list format
                                 vod_urls = duplicate_game['twitch_vod_urls']
