@@ -17,10 +17,10 @@ if live_path not in sys.path:
 
 # Import our modules after path setup
 try:
-    from database import DatabaseManager  # type: ignore
-
     import discord
     from discord.ext import commands
+
+    from database import DatabaseManager  # type: ignore
 except ImportError as e:
     print(f"Warning: Could not import modules: {e}")
     # Create mock types for when imports fail

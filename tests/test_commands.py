@@ -7,10 +7,9 @@ import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
-import pytest
-
 import discord
 from discord.ext import commands
+import pytest
 
 # Add the Live directory to sys.path
 live_path = os.path.join(os.path.dirname(__file__), "..", "Live")

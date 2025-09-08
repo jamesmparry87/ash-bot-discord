@@ -1,5 +1,6 @@
 import asyncio
 import atexit
+from datetime import datetime, time
 import difflib
 import logging
 import os
@@ -7,7 +8,6 @@ import platform
 import re
 import signal
 import sys
-from datetime import datetime, time
 from typing import Any, Dict, List, Match, Optional, Union
 
 import discord
