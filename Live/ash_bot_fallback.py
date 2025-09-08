@@ -10,11 +10,11 @@ import sys
 from datetime import datetime, time
 from typing import Any, Dict, List, Match, Optional, Union
 
-# Import database manager
-from database import DatabaseManager
-
 import discord
 from discord.ext import commands, tasks
+
+# Import database manager
+from database import DatabaseManager
 
 db = DatabaseManager()
 
