@@ -1,19 +1,20 @@
+import asyncio
+import atexit
 import difflib
+import logging
 import os
-import discord
-from discord.ext import commands, tasks
-import sys
 import platform
 import re
 import signal
-import atexit
-import logging
-import asyncio
-from typing import Optional, Any, List, Dict, Union, Match
+import sys
 from datetime import datetime, time
+from typing import Any, Dict, List, Match, Optional, Union
 
 # Import database manager
 from database import DatabaseManager
+
+import discord
+from discord.ext import commands, tasks
 
 db = DatabaseManager()
 
@@ -2477,8 +2478,9 @@ async def fetch_youtube_games(channel_id: str) -> List[str]:
     if not youtube_api_key:
         raise Exception("YOUTUBE_API_KEY not configured")
 
-    import aiohttp
     import asyncio
+
+    import aiohttp
 
     games = []
 
@@ -2558,8 +2560,9 @@ async def fetch_twitch_games(username: str) -> List[str]:
     if not twitch_client_id or not twitch_client_secret:
         raise Exception("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET not configured")
 
-    import aiohttp
     import asyncio
+
+    import aiohttp
 
     games = []
 

@@ -2,12 +2,13 @@
 Pytest configuration and fixtures for Discord bot testing.
 """
 
-import pytest
 import asyncio
 import os
 import sys
+from typing import Any, AsyncGenerator, Dict, Generator, List, Union
 from unittest.mock import AsyncMock, MagicMock
-from typing import AsyncGenerator, Generator, Dict, Any, List, Union
+
+import pytest
 
 # Add the Live directory to sys.path so we can import our modules
 live_path = os.path.join(os.path.dirname(__file__), "..", "Live")
@@ -17,6 +18,7 @@ if live_path not in sys.path:
 # Import our modules after path setup
 try:
     from database import DatabaseManager  # type: ignore
+
     import discord
     from discord.ext import commands
 except ImportError as e:

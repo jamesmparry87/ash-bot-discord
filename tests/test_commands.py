@@ -2,11 +2,13 @@
 Tests for Discord bot commands and functionality.
 """
 
-import pytest
 import asyncio
-from unittest.mock import MagicMock, patch, AsyncMock, call
-import sys
 import os
+import sys
+from unittest.mock import AsyncMock, MagicMock, call, patch
+
+import pytest
+
 import discord
 from discord.ext import commands
 
