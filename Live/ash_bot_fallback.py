@@ -2,13 +2,12 @@ import asyncio
 import atexit
 from datetime import datetime, time
 import difflib
-import logging
 import os
 import platform
 import re
 import signal
 import sys
-from typing import Any, Dict, List, Match, Optional, Union
+from typing import Any, Dict, List, Match, Optional
 
 import discord
 from discord.ext import commands, tasks
@@ -1410,11 +1409,6 @@ async def on_message(message):
                                 )
 
                             games_text = ", ".join(game_list)
-                            context_type = (
-                                "series"
-                                if recent_genre_context.startswith("series:")
-                                else "genre"
-                            )
                             await message.reply(
                                 f"The remaining {recent_genre_context.replace('series:', '')} games in Captain Jonesy's archives: {games_text}."
                             )
@@ -1468,9 +1462,7 @@ async def on_message(message):
                                             filtered_response = filter_ai_response(
                                                 claude_text
                                             )
-                                            await message.reply(
-                                                filtered_response[:2000]
-                                            )
+                                            await message.reply(filtered_response[:2000])
                                             return
                                 except Exception as claude_e:
                                     print(f"Claude backup AI error: {claude_e}")
@@ -2478,8 +2470,6 @@ async def fetch_youtube_games(channel_id: str) -> List[str]:
     if not youtube_api_key:
         raise Exception("YOUTUBE_API_KEY not configured")
 
-    import asyncio
-
     import aiohttp
 
     games = []
@@ -2559,8 +2549,6 @@ async def fetch_twitch_games(username: str) -> List[str]:
 
     if not twitch_client_id or not twitch_client_secret:
         raise Exception("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET not configured")
-
-    import asyncio
 
     import aiohttp
 
@@ -5189,7 +5177,6 @@ async def check_db_schema_cmd(ctx):
                 test_game = cur.fetchone()
 
                 if test_game:
-                    game_id = test_game[0]
                     alt_names = test_game[2]
                     schema_msg += f"\n🧪 **Array Test Sample:**\n"
                     schema_msg += f"• Game: {test_game[1]}\n"

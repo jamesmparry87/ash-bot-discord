@@ -2,13 +2,10 @@
 Tests for Discord bot commands and functionality.
 """
 
-import asyncio
 import os
 import sys
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import discord
-from discord.ext import commands
 import pytest
 
 # Add the Live directory to sys.path
@@ -120,9 +117,6 @@ class TestStrikeCommands:
 
         # Patch the global db instance
         with patch("ash_bot_fallback.db", mock_db):
-            # Create bot instance with mocked database
-            bot = MagicMock()
-
             # Simulate the strikes command
             await ash_bot_fallback.get_strikes(mock_discord_context, mock_discord_user)
 

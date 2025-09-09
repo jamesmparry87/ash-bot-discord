@@ -5,7 +5,7 @@ Pytest configuration and fixtures for Discord bot testing.
 import asyncio
 import os
 import sys
-from typing import Any, AsyncGenerator, Dict, Generator, List, Union
+from typing import Any, AsyncGenerator, Dict, List, Union
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

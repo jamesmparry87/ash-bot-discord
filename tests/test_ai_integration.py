@@ -2,7 +2,6 @@
 Tests for AI integration and response handling.
 """
 
-import asyncio
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
