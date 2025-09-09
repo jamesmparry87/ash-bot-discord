@@ -1462,7 +1462,9 @@ async def on_message(message):
                                             filtered_response = filter_ai_response(
                                                 claude_text
                                             )
-                                            await message.reply(filtered_response[:2000])
+                                            await message.reply(
+                                                filtered_response[:2000]
+                                            )
                                             return
                                 except Exception as claude_e:
                                     print(f"Claude backup AI error: {claude_e}")
