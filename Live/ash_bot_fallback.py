@@ -272,7 +272,7 @@ async def user_is_mod_by_id(user_id: int) -> bool:
     try:
         member = await guild.fetch_member(user_id)
         return member.guild_permissions.manage_messages
-    except:
+    except (discord.NotFound, discord.Forbidden):
         return False
 
 
