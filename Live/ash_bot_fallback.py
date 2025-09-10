@@ -300,7 +300,7 @@ async def user_is_member_by_id(user_id: int) -> bool:
         member = await guild.fetch_member(user_id)
         member_roles = [role.id for role in member.roles]
         return any(role_id in MEMBER_ROLE_IDS for role_id in member_roles)
-    except:
+    except (discord.NotFound, discord.Forbidden):
         return False
 
 
