@@ -1,0 +1,32 @@
+[tool.black]
+# Lenient Black configuration - focus on meaningful formatting, not pedantic style
+line-length = 120  # More lenient than default 88, similar to flake8 approach
+target-version = ['py38', 'py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+  | __pycache__
+  | \.pytest_cache
+  | \.venv
+  | venv
+  | env
+  | \.env
+  | node_modules
+  | archive
+)/
+'''
+# Skip string normalization to avoid unnecessary quote changes
+skip-string-normalization = true
+# Skip magic trailing comma to avoid unnecessary formatting changes
+skip-magic-trailing-comma = true
+
+[tool.isort]
+# Make isort compatible with Black
+profile = "black"
+line_length = 120
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true

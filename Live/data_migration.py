@@ -12,18 +12,12 @@ def parse_games_list(games_text: str) -> List[Dict[str, str]]:
 
     for line in lines:
         line = line.strip()
-        if (
-            not line
-            or line.lower().startswith("games list")
-            or line.lower().startswith("suggested so far")
-        ):
+        if not line or line.lower().startswith("games list") or line.lower().startswith("suggested so far"):
             continue
 
         # Check if line has " - username" format
         if " - " in line:
-            parts = line.rsplit(
-                " - ", 1
-            )  # Split from the right to handle game names with dashes
+            parts = line.rsplit(" - ", 1)  # Split from the right to handle game names with dashes
             game_name = parts[0].strip()
             username = parts[1].strip()
         else:
