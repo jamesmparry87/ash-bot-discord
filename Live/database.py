@@ -164,7 +164,14 @@ class DatabaseManager:
                 """
                 )
 
-                # Create index for faster searches
+                # Enable pg_trgm extension for fuzzy search optimization
+                try:
+                    cur.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+                    logger.info("pg_trgm extension enabled for fuzzy search optimization")
+                except Exception as trgm_error:
+                    logger.warning(f"pg_trgm extension not available: {trgm_error}")
+
+                # Create indexes for faster searches
                 cur.execute(
                     """
                     CREATE INDEX IF NOT EXISTS idx_played_games_canonical_name 
@@ -177,6 +184,30 @@ class DatabaseManager:
                     ON played_games(series_name)
                 """
                 )
+
+                # Create trigram indexes for fuzzy search (if pg_trgm is available)
+                try:
+                    cur.execute(
+                        """
+                        CREATE INDEX IF NOT EXISTS idx_played_games_canonical_trgm 
+                        ON played_games USING gin (canonical_name gin_trgm_ops)
+                    """
+                    )
+                    cur.execute(
+                        """
+                        CREATE INDEX IF NOT EXISTS idx_played_games_alt_names_trgm 
+                        ON played_games USING gin (alternative_names gin_trgm_ops)
+                    """
+                    )
+                    cur.execute(
+                        """
+                        CREATE INDEX IF NOT EXISTS idx_game_recommendations_name_trgm 
+                        ON game_recommendations USING gin (name gin_trgm_ops)
+                    """
+                    )
+                    logger.info("Trigram indexes created for optimized fuzzy search")
+                except Exception as idx_error:
+                    logger.warning(f"Could not create trigram indexes: {idx_error}")
 
                 conn.commit()
                 logger.info("Database tables initialized successfully")
@@ -316,28 +347,46 @@ class DatabaseManager:
         return self.remove_game_by_id(game_to_remove["id"])
 
     def remove_game_by_name(self, name: str) -> Optional[Dict[str, Any]]:
-        """Remove game by name (fuzzy match)"""
-        games = self.get_all_games()
-        name_lower = name.lower().strip()
+        """Remove game by name (optimized fuzzy match)"""
+        conn = self.get_connection()
+        if not conn:
+            return None
 
-        # Try exact match first
-        for game in games:
-            if game["name"].lower().strip() == name_lower:
-                return self.remove_game_by_id(game["id"])
+        try:
+            with conn.cursor() as cur:
+                name_lower = name.lower().strip()
 
-        # Try fuzzy match
-        import difflib
+                # Try exact match first (database-level)
+                cur.execute(
+                    """
+                    SELECT id FROM game_recommendations 
+                    WHERE LOWER(TRIM(name)) = %s
+                """,
+                    (name_lower,),
+                )
+                result = cur.fetchone()
+                if result:
+                    game_id = int(result["id"])  # type: ignore
+                    logger.debug(f"Found game recommendation by exact match: {name}")
+                    return self.remove_game_by_id(game_id)
 
-        game_names = [game["name"].lower() for game in games]
-        matches = difflib.get_close_matches(name_lower, game_names, n=1, cutoff=0.8)
+                # Try database-level fuzzy search using pg_trgm extension
+                trgm_result = self._fuzzy_search_recommendations_with_trgm(cur, name_lower)
+                if trgm_result:
+                    logger.debug(f"Found game recommendation by pg_trgm fuzzy match: {name}")
+                    return self.remove_game_by_id(trgm_result)
 
-        if matches:
-            match_name = matches[0]
-            for game in games:
-                if game["name"].lower() == match_name:
-                    return self.remove_game_by_id(game["id"])
+                # Fallback to optimized Python fuzzy search
+                python_result = self._fuzzy_search_recommendations_python_optimized(cur, name_lower)
+                if python_result:
+                    logger.debug(f"Found game recommendation by Python fuzzy match: {name}")
+                    return self.remove_game_by_id(python_result)
 
-        return None
+                logger.debug(f"No game recommendation found for: {name}")
+                return None
+        except Exception as e:
+            logger.error(f"Error removing game recommendation by name {name}: {e}")
+            return None
 
     def remove_game_by_id(self, game_id: int) -> Optional[Dict[str, Any]]:
         """Remove game by database ID"""
@@ -628,54 +677,17 @@ class DatabaseManager:
                     logger.debug(f"Found game by alternative name match: {name}")
                     return result_dict
 
-                # Fuzzy search on canonical names with better matching
-                cur.execute(
-                    "SELECT id, canonical_name, alternative_names FROM played_games"
-                )
-                all_games = cur.fetchall()
+                # Try database-level fuzzy search using pg_trgm extension
+                trgm_result = self._fuzzy_search_with_trgm(cur, name_lower)
+                if trgm_result:
+                    logger.debug(f"Found game by pg_trgm fuzzy match: {name}")
+                    return trgm_result
 
-                import difflib
-
-                game_names_map = {}
-
-                for game in all_games:
-                    game_dict = dict(game)
-                    canonical_name = game_dict.get("canonical_name")
-                    if canonical_name:
-                        canonical_lower = str(canonical_name).lower().strip()
-                        game_names_map[canonical_lower] = game_dict
-
-                        # Also add alternative names to the map (handle TEXT format)
-                        alt_names_text = game_dict.get("alternative_names", "")
-                        if alt_names_text and isinstance(alt_names_text, str):
-                            alt_names = self._parse_comma_separated_list(alt_names_text)
-                            for alt_name in alt_names:
-                                alt_lower = alt_name.lower().strip()
-                                game_names_map[alt_lower] = game_dict
-
-                # Try fuzzy matching with lower threshold for better matching
-                all_name_keys = list(game_names_map.keys())
-                matches = difflib.get_close_matches(
-                    name_lower, all_name_keys, n=1, cutoff=0.75
-                )
-
-                if matches:
-                    match_name = matches[0]
-                    matched_game = game_names_map[match_name]
-                    logger.debug(
-                        f"Found game by fuzzy match: {name} -> {matched_game.get('canonical_name')}"
-                    )
-
-                    # Get the full game record
-                    cur.execute(
-                        "SELECT * FROM played_games WHERE id = %s",
-                        (matched_game["id"],),
-                    )
-                    full_result = cur.fetchone()
-                    if full_result:
-                        result_dict = dict(full_result)
-                        result_dict = self._convert_text_to_arrays(result_dict)
-                        return result_dict
+                # Fallback to optimized Python fuzzy search
+                python_result = self._fuzzy_search_python_optimized(cur, name_lower)
+                if python_result:
+                    logger.debug(f"Found game by Python fuzzy match: {name}")
+                    return python_result
 
                 logger.debug(f"No game found for: {name}")
                 return None
@@ -710,6 +722,179 @@ class DatabaseManager:
                 game_dict["twitch_vod_urls"] = []
 
         return game_dict
+
+    def _fuzzy_search_with_trgm(self, cur, name_lower: str) -> Optional[Dict[str, Any]]:
+        """Database-level fuzzy search using pg_trgm extension"""
+        try:
+            # Set similarity threshold for this session
+            cur.execute("SET pg_trgm.similarity_threshold = 0.75")
+            
+            # Search canonical names with similarity scoring
+            cur.execute(
+                """
+                SELECT *, similarity(canonical_name, %s) as sim_score 
+                FROM played_games 
+                WHERE canonical_name %% %s
+                ORDER BY sim_score DESC, canonical_name
+                LIMIT 1
+            """,
+                (name_lower, name_lower),
+            )
+            result = cur.fetchone()
+            
+            if result:
+                result_dict = dict(result)
+                # Remove similarity score from final result
+                result_dict.pop('sim_score', None)
+                result_dict = self._convert_text_to_arrays(result_dict)
+                logger.debug(f"pg_trgm found match with similarity: {result.get('sim_score', 0)}")
+                return result_dict
+                
+            # If no canonical match, try alternative names
+            cur.execute(
+                """
+                SELECT *, similarity(alternative_names, %s) as sim_score 
+                FROM played_games 
+                WHERE alternative_names %% %s
+                AND alternative_names IS NOT NULL 
+                AND alternative_names != ''
+                ORDER BY sim_score DESC, canonical_name
+                LIMIT 1
+            """,
+                (name_lower, name_lower),
+            )
+            result = cur.fetchone()
+            
+            if result:
+                result_dict = dict(result)
+                result_dict.pop('sim_score', None)
+                result_dict = self._convert_text_to_arrays(result_dict)
+                logger.debug(f"pg_trgm found alt name match with similarity: {result.get('sim_score', 0)}")
+                return result_dict
+                
+        except Exception as e:
+            logger.debug(f"pg_trgm search failed, falling back to Python: {e}")
+            
+        return None
+
+    def _fuzzy_search_python_optimized(self, cur, name_lower: str) -> Optional[Dict[str, Any]]:
+        """Optimized Python-based fuzzy search as fallback"""
+        try:
+            # Get all games with full data (not just id/name) to avoid second query
+            cur.execute("SELECT * FROM played_games")
+            all_games = cur.fetchall()
+
+            if not all_games:
+                return None
+
+            import difflib
+
+            # Build name mapping for fuzzy matching
+            game_names_map = {}
+            games_by_id = {}
+
+            for game in all_games:
+                game_dict = dict(game)
+                games_by_id[game_dict["id"]] = game_dict
+                
+                canonical_name = game_dict.get("canonical_name")
+                if canonical_name:
+                    canonical_lower = str(canonical_name).lower().strip()
+                    game_names_map[canonical_lower] = game_dict["id"]
+
+                    # Also add alternative names to the map (handle TEXT format)
+                    alt_names_text = game_dict.get("alternative_names", "")
+                    if alt_names_text and isinstance(alt_names_text, str):
+                        alt_names = self._parse_comma_separated_list(alt_names_text)
+                        for alt_name in alt_names:
+                            alt_lower = alt_name.lower().strip()
+                            game_names_map[alt_lower] = game_dict["id"]
+
+            # Try fuzzy matching
+            all_name_keys = list(game_names_map.keys())
+            matches = difflib.get_close_matches(
+                name_lower, all_name_keys, n=1, cutoff=0.75
+            )
+
+            if matches:
+                match_name = matches[0]
+                matched_game_id = game_names_map[match_name]
+                game_dict = games_by_id[matched_game_id]
+                result_dict = self._convert_text_to_arrays(game_dict)
+                return result_dict
+
+        except Exception as e:
+            logger.error(f"Python fuzzy search failed: {e}")
+            
+        return None
+
+    def _fuzzy_search_recommendations_with_trgm(self, cur, name_lower: str) -> Optional[int]:
+        """Database-level fuzzy search for game recommendations using pg_trgm extension"""
+        try:
+            # Set similarity threshold for this session
+            cur.execute("SET pg_trgm.similarity_threshold = 0.8")
+            
+            # Search game recommendation names with similarity scoring
+            cur.execute(
+                """
+                SELECT id, similarity(name, %s) as sim_score 
+                FROM game_recommendations 
+                WHERE name %% %s
+                ORDER BY sim_score DESC, name
+                LIMIT 1
+            """,
+                (name_lower, name_lower),
+            )
+            result = cur.fetchone()
+            
+            if result:
+                logger.debug(f"pg_trgm found game recommendation match with similarity: {result.get('sim_score', 0)}")
+                return int(result["id"])  # type: ignore
+                
+        except Exception as e:
+            logger.debug(f"pg_trgm search for recommendations failed, falling back to Python: {e}")
+            
+        return None
+
+    def _fuzzy_search_recommendations_python_optimized(self, cur, name_lower: str) -> Optional[int]:
+        """Optimized Python-based fuzzy search for game recommendations as fallback"""
+        try:
+            # Get only id and name to minimize data transfer
+            cur.execute("SELECT id, name FROM game_recommendations")
+            all_recommendations = cur.fetchall()
+
+            if not all_recommendations:
+                return None
+
+            import difflib
+
+            # Build name mapping for fuzzy matching
+            recommendation_names_map = {}
+
+            for recommendation in all_recommendations:
+                rec_dict = dict(recommendation)
+                rec_id = rec_dict["id"]
+                rec_name = rec_dict.get("name")
+                
+                if rec_name:
+                    name_lower_clean = str(rec_name).lower().strip()
+                    recommendation_names_map[name_lower_clean] = rec_id
+
+            # Try fuzzy matching
+            all_name_keys = list(recommendation_names_map.keys())
+            matches = difflib.get_close_matches(
+                name_lower, all_name_keys, n=1, cutoff=0.8
+            )
+
+            if matches:
+                match_name = matches[0]
+                matched_rec_id = recommendation_names_map[match_name]
+                return int(matched_rec_id)
+
+        except Exception as e:
+            logger.error(f"Python fuzzy search for recommendations failed: {e}")
+            
+        return None
 
     def get_all_played_games(
         self, series_name: Optional[str] = None
@@ -881,6 +1066,28 @@ class DatabaseManager:
 
         try:
             with conn.cursor() as cur:
+                # Optimization: Batch fetch all existing games to avoid N+1 queries
+                canonical_names_to_check = [
+                    g.get('canonical_name') for g in games_data 
+                    if g.get('canonical_name')
+                ]
+                
+                if not canonical_names_to_check:
+                    return 0
+
+                # Single query to fetch all existing games
+                cur.execute(
+                    "SELECT * FROM played_games WHERE canonical_name = ANY(%s)", 
+                    (canonical_names_to_check,)
+                )
+                existing_games_list = cur.fetchall()
+                existing_games_map = {}
+                for game in existing_games_list:
+                    game_dict = dict(game)
+                    canonical_name = game_dict.get('canonical_name')
+                    if canonical_name:
+                        existing_games_map[canonical_name] = game_dict
+
                 imported_count = 0
                 for game_data in games_data:
                     try:
@@ -888,8 +1095,12 @@ class DatabaseManager:
                         if not canonical_name:
                             continue
 
-                        # Check if game already exists
-                        existing_game = self.get_played_game(canonical_name)
+                        # Fast lookup from pre-fetched map instead of individual database query
+                        existing_game = existing_games_map.get(canonical_name)
+                        
+                        # Convert TEXT fields to arrays for compatibility if game exists
+                        if existing_game:
+                            existing_game = self._convert_text_to_arrays(existing_game)
 
                         if existing_game:
                             # Update existing game, preserving existing data where new data is empty
