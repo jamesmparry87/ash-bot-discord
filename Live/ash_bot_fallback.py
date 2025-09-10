@@ -15,6 +15,7 @@ from discord.ext import commands, tasks
 
 # Import database manager
 from database import DatabaseManager
+from moderator_faq_handler import ModeratorFAQHandler
 
 db = DatabaseManager()
 
@@ -455,6 +456,16 @@ if primary_ai:
 else:
     ai_status_message = "No AI available"
     print("❌ No AI systems available - all AI features disabled")
+
+# Initialize moderator FAQ handler with dynamic values
+moderator_faq_handler = ModeratorFAQHandler(
+    violation_channel_id=VIOLATION_CHANNEL_ID,
+    members_channel_id=MEMBERS_CHANNEL_ID,
+    mod_alert_channel_id=MOD_ALERT_CHANNEL_ID,
+    jonesy_user_id=JONESY_USER_ID,
+    jam_user_id=JAM_USER_ID,
+    ai_status_message=ai_status_message,
+)
 
 FAQ_RESPONSES = {
     "how do i add a game recommendation": 'The procedure is simple. Submit your suggestion using the command: `!recommend` or `!addgame Game Name - "Reason in speech marks"`. I can\'t lie to you about your chances, but... you have my sympathies.',
@@ -1223,241 +1234,10 @@ async def on_message(message):
         if await user_is_mod(message):
             lower_content = message.content.lower()
 
-            # Enhanced FAQ system for explaining specific features
-            explain_patterns = [
-                ("explain strikes", "strike", "strike system"),
-                ("explain members", "member", "member system"),
-                ("explain database", "played games", "game database"),
-                ("explain commands", "command", "bot commands"),
-                ("explain ai", "artificial intelligence", "ai system"),
-                ("explain tiers", "user tier", "user system"),
-                ("explain import", "import system", "bulk import"),
-                ("explain statistics", "stats", "analytics"),
-                ("explain scheduled", "automatic update", "schedule"),
-                ("explain recommendations", "game rec", "rec system"),
-            ]
-
-            faq_triggered = False
-            for patterns in explain_patterns:
-                if any(pattern in lower_content for pattern in patterns):
-                    if "strike" in patterns:
-                        await message.reply(
-                            "📋 **Strike Management System Analysis**\n\n"
-                            "**Purpose:** Automatic strike tracking with manual moderation controls. I monitor the violation channel and add strikes when users are mentioned.\n\n"
-                            "**Automatic Detection:**\n"
-                            f"• **Channel:** <#{VIOLATION_CHANNEL_ID}> (VIOLATION_CHANNEL_ID)\n"
-                            "• When users are @mentioned in this channel, I automatically add strikes\n"
-                            "• Captain Jonesy cannot receive strikes (protection protocol)\n"
-                            "• I send notifications to mod alert channel for each strike added\n\n"
-                            "**Manual Commands:**\n"
-                            "• `!strikes @user` — Query user's current strike count\n"
-                            "• `!resetstrikes @user` — Reset user strikes to zero\n"
-                            "• `!allstrikes` — Display comprehensive strike report\n\n"
-                            "**Database:** PostgreSQL with persistence across restarts. Individual queries work as fallback if bulk operations fail.\n\n"
-                            "**Security:** Only users with 'Manage Messages' permission can use manual strike commands."
-                        )
-                        faq_triggered = True
-                        break
-                    elif "member" in patterns:
-                        await message.reply(
-                            "👥 **Member Interaction System Analysis**\n\n"
-                            "**Purpose:** Special privileges for YouTube Members with conversation tracking and tier-based responses.\n\n"
-                            "**Member Role IDs:**\n"
-                            "• YouTube Member: Space Cat (1018908116957548666)\n"
-                            "• YouTiube Member (1018908116957548665)\n"
-                            "• YouTube Member: Space Cat duplicate (1127604917146763424)\n"
-                            "• Space Ocelot (879344337576685598)\n\n"
-                            "**Conversation System:**\n"
-                            f"• **Unlimited** conversations in Senior Officers' Area (<#{MEMBERS_CHANNEL_ID}>)\n"
-                            "• **5 daily responses** in other channels, then encouraged to move to members area\n"
-                            "• **Daily reset** at midnight (conversation counts reset automatically)\n"
-                            "• Enhanced AI responses with more engagement than standard users\n\n"
-                            "**User Hierarchy:** Captain Jonesy → Sir Decent Jam → Moderators → Members → Standard Users\n\n"
-                            "**Edge Cases:** Users with both moderator permissions AND member roles are classified as 'moderator' tier (higher privilege takes precedence)."
-                        )
-                        faq_triggered = True
-                        break
-                    elif "database" in patterns or "played games" in patterns:
-                        await message.reply(
-                            "🎮 **Played Games Database System Analysis**\n\n"
-                            "**Purpose:** Comprehensive gaming history with metadata, statistics, and AI-powered natural language queries.\n\n"
-                            "**Key Features:**\n"
-                            "• **15+ metadata fields** per game (genre, series, platform, completion status, etc.)\n"
-                            "• **Array support** for alternative names and Twitch VOD URLs\n"
-                            "• **AI enhancement** for automatic genre/series detection\n"
-                            "• **Statistical analysis** for gaming insights and rankings\n\n"
-                            "**Management Commands:**\n"
-                            "• `!addplayedgame <name> | series:Series | year:2023 | status:completed | episodes:12`\n"
-                            "• `!listplayedgames [series]` — List games, optionally filtered by series\n"
-                            "• `!gameinfo <name_or_id>` — Detailed game information\n"
-                            "• `!updateplayedgame <name_or_id> status:completed | episodes:15`\n\n"
-                            "**Import System:**\n"
-                            "• `!bulkimportplayedgames` — YouTube playlists + Twitch VODs with real playtime\n"
-                            "• `!updateplayedgames` — AI metadata enhancement for existing games\n"
-                            "• `!cleanplayedgames` — Remove already-played games from recommendations\n\n"
-                            "**Natural Language Queries:** Users can ask 'Has Jonesy played [game]?' and get intelligent responses with follow-up suggestions."
-                        )
-                        faq_triggered = True
-                        break
-                    elif "command" in patterns:
-                        await message.reply(
-                            "⚙️ **Bot Command System Analysis**\n\n"
-                            "**Architecture:** Event-driven command processing with permission-based access control.\n\n"
-                            "**User Commands (Everyone):**\n"
-                            "• `!addgame <name> - <reason>` / `!recommend <name> - <reason>` — Add game recommendation\n"
-                            "• `!listgames` — View all game recommendations\n\n"
-                            "**Moderator Commands (Manage Messages required):**\n"
-                            "• **Strike Management:** `!strikes`, `!resetstrikes`, `!allstrikes`\n"
-                            "• **Game Management:** `!removegame`, `!addplayedgame`, `!updateplayedgame`\n"
-                            "• **Database Operations:** `!bulkimportplayedgames`, `!cleanplayedgames`\n"
-                            "• **AI Configuration:** `!setpersona`, `!toggleai`, `!ashstatus`\n\n"
-                            "**Natural Language Processing:**\n"
-                            "• Statistical queries: 'What game series has the most playtime?'\n"
-                            "• Game lookups: 'Has Jonesy played God of War?'\n"
-                            "• Genre queries: 'What horror games has Jonesy played?'\n\n"
-                            "**Permission System:** Commands check user roles and guild permissions before execution. Captain Jonesy and Sir Decent Jam have elevated access."
-                        )
-                        faq_triggered = True
-                        break
-                    elif "ai" in patterns:
-                        await message.reply(
-                            "🧠 **AI Integration System Analysis**\n\n"
-                            "**Dual AI Architecture:**\n"
-                            "• **Primary:** Google Gemini 1.5 Flash (fast, efficient)\n"
-                            "• **Backup:** Claude 3 Haiku (fallback if Gemini fails)\n"
-                            "• **Automatic failover** with quota monitoring\n\n"
-                            "**Personality System:**\n"
-                            "• **Character:** Science Officer Ash from Alien (1979)\n"
-                            "• **Configurable:** `!setpersona` to modify personality\n"
-                            "• **Response filtering** to prevent repetitive character phrases\n"
-                            "• **Tier-aware** responses based on user authority level\n\n"
-                            "**AI Features:**\n"
-                            "• **Game metadata enhancement** (genre, series, release year detection)\n"
-                            "• **Natural language query processing** for gaming statistics\n"
-                            "• **Conversation management** with context awareness\n"
-                            "• **Error handling** with graceful fallbacks to static responses\n\n"
-                            "**Configuration:**\n"
-                            f"• Current Status: {ai_status_message}\n"
-                            "• Toggle with `!toggleai` command\n"
-                            "• Rate limiting prevents quota exhaustion"
-                        )
-                        faq_triggered = True
-                        break
-                    elif "tier" in patterns or "user" in patterns:
-                        await message.reply(
-                            "👑 **User Tier System Analysis**\n\n"
-                            "**Hierarchy (Highest to Lowest):**\n\n"
-                            f"**1. Captain Jonesy (ID: {JONESY_USER_ID})**\n"
-                            "• Addressed as 'Captain' with military courtesy\n"
-                            "• Cannot receive strikes (protection protocol)\n"
-                            "• Unlimited conversation access everywhere\n\n"
-                            f"**2. Sir Decent Jam (ID: {JAM_USER_ID})**\n"
-                            "• Acknowledged as bot creator with special respect\n"
-                            "• Full command access, development privileges\n\n"
-                            "**3. Moderators (Manage Messages Permission)**\n"
-                            "• Professional courtesy and authority recognition\n"
-                            "• Full moderator command suite, unlimited conversations\n"
-                            "• Access to detailed FAQ system (this system)\n\n"
-                            "**4. Members (YouTube Member Roles)**\n"
-                            "• Enhanced conversations, more engaging responses\n"
-                            f"• Unlimited in Senior Officers' Area (<#{MEMBERS_CHANNEL_ID}>)\n"
-                            "• 5 daily responses in other channels\n\n"
-                            "**5. Standard Users**\n"
-                            "• Basic bot interactions, public commands\n"
-                            "• Can ask natural language questions about games\n\n"
-                            "**Detection Logic:** `get_user_communication_tier()` checks in hierarchy order. Higher tiers take precedence over lower ones."
-                        )
-                        faq_triggered = True
-                        break
-                    elif "import" in patterns:
-                        await message.reply(
-                            "📥 **Game Import System Analysis**\n\n"
-                            "**Purpose:** Automated import of gaming history from YouTube and Twitch with comprehensive metadata.\n\n"
-                            "**Import Sources:**\n"
-                            "• **YouTube:** Playlist-based detection with accurate video duration calculation\n"
-                            "• **Twitch:** VOD analysis with duration tracking and series grouping\n"
-                            "• **AI Enhancement:** Automatic genre, series, and release year detection\n\n"
-                            "**Commands:**\n"
-                            "• `!bulkimportplayedgames` — Full import from APIs with AI metadata\n"
-                            "• `!updateplayedgames` — AI enhancement for existing games\n"
-                            "• `!cleanplayedgames` — Remove already-played games from recommendations\n\n"
-                            "**Data Processing:**\n"
-                            "• **Smart Deduplication:** Merges YouTube + Twitch data for same games\n"
-                            "• **Completion Detection:** Automatically identifies completed vs ongoing series\n"
-                            "• **Alternative Names:** Generates searchable aliases (RE2, GoW 2018, etc.)\n"
-                            "• **Real Playtime:** Calculates actual time from video durations, not estimates\n\n"
-                            "**API Requirements:** YouTube Data API key, Twitch Client ID/Secret (optional but recommended)."
-                        )
-                        faq_triggered = True
-                        break
-                    elif "stat" in patterns or "analytic" in patterns:
-                        await message.reply(
-                            "📊 **Statistical Analysis System**\n\n"
-                            "**Purpose:** Advanced gaming analytics with natural language query processing and intelligent follow-up suggestions.\n\n"
-                            "**Query Types:**\n"
-                            "• **Playtime Analysis:** 'What game series has the most playtime?'\n"
-                            "• **Episode Rankings:** 'Which game has the most episodes?'\n"
-                            "• **Completion Metrics:** 'What game took longest to complete?'\n"
-                            "• **Efficiency Analysis:** 'What game has highest average playtime per episode?'\n\n"
-                            "**Database Functions:**\n"
-                            "• `get_series_by_total_playtime()` — Series playtime rankings\n"
-                            "• `get_longest_completion_games()` — Completion time analysis\n"
-                            "• `get_games_by_episode_count()` — Episode count statistics\n"
-                            "• `get_games_by_average_episode_length()` — Efficiency metrics\n\n"
-                            "**Enhanced Responses:**\n"
-                            "• **Contextual Follow-ups:** Suggests related queries based on results\n"
-                            "• **Comparative Analysis:** Shows rankings and differences between games\n"
-                            "• **Series Insights:** Analyzes franchise-level gaming patterns\n\n"
-                            "**Processing:** Pattern matching identifies query type, routes to appropriate database function, generates response with Ash personality."
-                        )
-                        faq_triggered = True
-                        break
-                    elif "schedule" in patterns or "automatic" in patterns:
-                        await message.reply(
-                            "⏰ **Scheduled Update System Analysis**\n\n"
-                            "**Schedule:** Every Sunday at 12:00 PM (midday) UTC\n\n"
-                            "**Purpose:** Automatically update ongoing games with fresh metadata from YouTube API.\n\n"
-                            "**Update Process:**\n"
-                            "• **Target Games:** Only games with 'ongoing' completion status\n"
-                            "• **Data Sources:** YouTube playlists for episode count and playtime\n"
-                            "• **Change Detection:** Only updates games where data has actually changed\n"
-                            "• **Preservation:** Maintains manually edited information\n\n"
-                            "**Update Logic:**\n"
-                            "1. Query database for ongoing games with YouTube playlist URLs\n"
-                            "2. Fetch current playlist metadata via YouTube API\n"
-                            "3. Compare episode counts - update only if changed\n"
-                            "4. Recalculate playtime from actual video durations\n"
-                            "5. Update database records with new metadata\n\n"
-                            f"**Notifications:** Status reports sent to <#{MOD_ALERT_CHANNEL_ID}>\n\n"
-                            "**Implementation:** `@tasks.loop(time=time(12, 0))` decorator with `scheduled_games_update()` function. Includes error handling and rate limiting."
-                        )
-                        faq_triggered = True
-                        break
-                    elif "recommend" in patterns or "rec" in patterns:
-                        await message.reply(
-                            "🎯 **Game Recommendations System Analysis**\n\n"
-                            "**Purpose:** Community-driven game suggestion system with persistent list management.\n\n"
-                            "**User Commands:**\n"
-                            "• `!addgame <name> - <reason>` / `!recommend <name> - <reason>`\n"
-                            "• `!listgames` — View all recommendations with contributor info\n\n"
-                            "**Moderator Commands:**\n"
-                            "• `!removegame <name_or_index>` — Remove recommendation by name or index\n"
-                            "• `!cleanplayedgames` — Remove already-played games from recommendations\n\n"
-                            "**Database Features:**\n"
-                            "• **Duplicate Detection:** Fuzzy matching prevents duplicate entries\n"
-                            "• **Contributor Tracking:** Records who suggested each game\n"
-                            "• **Persistent Storage:** PostgreSQL with automatic indexing\n\n"
-                            "**Smart Features:**\n"
-                            "• **Auto-Update Channel:** Persistent list in recommendations channel\n"
-                            "• **Typo Tolerance:** Fuzzy matching for game name recognition\n"
-                            "• **Batch Processing:** Can add multiple games in one command\n"
-                            "• **API Integration:** Cross-reference with played games to avoid duplicates\n\n"
-                            "**Special Handling:** Sir Decent Jam's contributions don't show contributor names (configured via user ID check)."
-                        )
-                        faq_triggered = True
-                        break
-
-            if faq_triggered:
+            # Try the new modular FAQ system first
+            faq_response = moderator_faq_handler.handle_faq_query(lower_content)
+            if faq_response:
+                await message.reply(faq_response)
                 return
 
             # Legacy mod help system (fallback for general help requests)
