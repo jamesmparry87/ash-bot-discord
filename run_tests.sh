@@ -268,10 +268,10 @@ if [ "$RUN_LINT" = true ]; then
     pip install black isort flake8 mypy > /dev/null 2>&1
     
     echo "🔍 Checking code formatting with Black..."
-    if black --check --diff Live/ tests/; then
+    if black --check --diff Live/ tests/ --config pyproject.toml; then
         print_success "Black formatting check passed"
     else
-        print_warning "Black formatting issues found (run 'black Live/ tests/' to fix)"
+        print_warning "Black formatting issues found (run 'black Live/ tests/ --config pyproject.toml' to fix)"
     fi
     
     echo "🔍 Checking import sorting with isort..."

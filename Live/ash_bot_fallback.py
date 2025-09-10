@@ -67,9 +67,7 @@ LOCK_FILE = "bot.lock"
 def acquire_lock() -> Optional[Any]:
     if platform.system() == "Windows":
         # Windows: skip locking, just warn
-        print(
-            "⚠️ File locking is not supported on Windows. Skipping single-instance lock."
-        )
+        print("⚠️ File locking is not supported on Windows. Skipping single-instance lock.")
         try:
             lock_file = open(LOCK_FILE, "w")
             lock_file.write(str(os.getpid()))
@@ -95,9 +93,7 @@ def acquire_lock() -> Optional[Any]:
             LOCK_EX = getattr(fcntl, "LOCK_EX", None)
             LOCK_NB = getattr(fcntl, "LOCK_NB", None)
             if LOCK_EX is None or LOCK_NB is None or not hasattr(fcntl, "flock"):
-                print(
-                    "⚠️ fcntl.flock or lock constants not available. Skipping single-instance lock."
-                )
+                print("⚠️ fcntl.flock or lock constants not available. Skipping single-instance lock.")
                 lock_file = open(LOCK_FILE, "w")
                 lock_file.write(str(os.getpid()))
                 lock_file.flush()
@@ -145,9 +141,9 @@ MODERATOR_CHANNEL_IDS = [1213488470798893107, 869530924302344233, 12800852696006
 # Member role IDs for YouTube members
 MEMBER_ROLE_IDS = [
     1018908116957548666,  # YouTube Member: Space Cat
-    1018908116957548665,  # YouTiube Member 
+    1018908116957548665,  # YouTiube Member
     1127604917146763424,  # YouTube Member: Space Cat (duplicate)
-    879344337576685598,   # Space Ocelot
+    879344337576685598,  # Space Ocelot
 ]
 
 # Members channel ID (Senior Officers' Area)
@@ -168,8 +164,7 @@ def cleanup_expired_aliases():
     """Remove aliases inactive for more than 1 hour"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
     cutoff_time = uk_now - timedelta(hours=1)
-    expired_users = [user_id for user_id, data in user_alias_state.items() 
-                     if data["last_activity"] < cutoff_time]
+    expired_users = [user_id for user_id, data in user_alias_state.items() if data["last_activity"] < cutoff_time]
     for user_id in expired_users:
         del user_alias_state[user_id]
 
@@ -198,11 +193,11 @@ def get_member_conversation_count(user_id: int) -> int:
     """Get today's conversation count for a member"""
     today = get_today_date_str()
     user_data = member_conversation_counts.get(user_id, {})
-    
+
     # Reset count if it's a new day
     if user_data.get('date') != today:
         return 0
-    
+
     return user_data.get('count', 0)
 
 
@@ -211,12 +206,9 @@ def increment_member_conversation_count(user_id: int) -> int:
     today = get_today_date_str()
     current_count = get_member_conversation_count(user_id)
     new_count = current_count + 1
-    
-    member_conversation_counts[user_id] = {
-        'count': new_count,
-        'date': today
-    }
-    
+
+    member_conversation_counts[user_id] = {'count': new_count, 'date': today}
+
     return new_count
 
 
@@ -227,15 +219,15 @@ def should_limit_member_conversation(user_id: int, channel_id: int) -> bool:
     if user_id in user_alias_state:
         update_alias_activity(user_id)
         return False  # Aliases are exempt from conversation limits
-    
+
     # No limits in the members channel
     if channel_id == MEMBERS_CHANNEL_ID:
         return False
-    
+
     # No limits in DMs - treat DMs like the members channel for members
     if channel_id is None:  # DM channels have no ID
         return False
-    
+
     # Check if they've reached their daily limit
     current_count = get_member_conversation_count(user_id)
     return current_count >= 5
@@ -251,11 +243,11 @@ async def user_is_mod(message: discord.Message) -> bool:
     """Check if user has moderator permissions"""
     if not message.guild:
         return False  # No mod permissions in DMs
-    
+
     # Ensure we have a Member object (not just User)
     if not isinstance(message.author, discord.Member):
         return False
-    
+
     member = message.author
     perms = member.guild_permissions
     return perms.manage_messages
@@ -266,7 +258,7 @@ async def can_discuss_mod_functions(user: discord.User, channel: Optional[discor
     # Always allow in DMs for authorized users
     if not channel:
         return user.id in [JONESY_USER_ID, JAM_USER_ID] or await user_is_mod_by_id(user.id)
-    
+
     # Check if channel allows mod discussions
     return await is_moderator_channel(channel.id)
 
@@ -276,7 +268,7 @@ async def user_is_mod_by_id(user_id: int) -> bool:
     guild = bot.get_guild(GUILD_ID)
     if not guild:
         return False
-    
+
     try:
         member = await guild.fetch_member(user_id)
         return member.guild_permissions.manage_messages
@@ -288,11 +280,11 @@ async def user_is_member(message: discord.Message) -> bool:
     """Check if user has member role permissions"""
     if not message.guild:
         return False  # No member permissions in DMs
-    
+
     # Ensure we have a Member object (not just User)
     if not isinstance(message.author, discord.Member):
         return False
-    
+
     member = message.author
     member_roles = [role.id for role in member.roles]
     return any(role_id in MEMBER_ROLE_IDS for role_id in member_roles)
@@ -303,7 +295,7 @@ async def user_is_member_by_id(user_id: int) -> bool:
     guild = bot.get_guild(GUILD_ID)
     if not guild:
         return False
-    
+
     try:
         member = await guild.fetch_member(user_id)
         member_roles = [role.id for role in member.roles]
@@ -315,14 +307,14 @@ async def user_is_member_by_id(user_id: int) -> bool:
 async def get_user_communication_tier(message: discord.Message) -> str:
     """Determine communication tier for user responses"""
     user_id = message.author.id
-    
+
     # First check for active alias (debugging only)
     cleanup_expired_aliases()
     if user_id in user_alias_state:
         update_alias_activity(user_id)
         alias_tier = user_alias_state[user_id]["alias_type"]
         return alias_tier
-    
+
     # Normal tier detection
     if user_id == JONESY_USER_ID:
         return "captain"
@@ -404,9 +396,7 @@ def filter_ai_response(response_text: str) -> str:
     return result
 
 
-def setup_ai_provider(
-    name: str, api_key: Optional[str], module: Optional[Any], is_available: bool
-) -> bool:
+def setup_ai_provider(name: str, api_key: Optional[str], module: Optional[Any], is_available: bool) -> bool:
     """Initialize and test an AI provider (Gemini or Claude)."""
     if not api_key:
         print(f"⚠️ {name.upper()}_API_KEY not found - {name.title()} features disabled")
@@ -428,15 +418,9 @@ def setup_ai_provider(
             global claude_client
             claude_client = module.Anthropic(api_key=api_key)
             test_response = claude_client.messages.create(
-                model="claude-3-haiku-20240307",
-                max_tokens=10,
-                messages=[{"role": "user", "content": "Test"}],
+                model="claude-3-haiku-20240307", max_tokens=10, messages=[{"role": "user", "content": "Test"}]
             )
-            if (
-                test_response
-                and hasattr(test_response, "content")
-                and test_response.content
-            ):
+            if test_response and hasattr(test_response, "content") and test_response.content:
                 print(f"✅ Claude AI test successful")
                 return True
 
@@ -449,9 +433,7 @@ def setup_ai_provider(
 
 # Setup AI providers
 gemini_ok = setup_ai_provider("gemini", GEMINI_API_KEY, genai, GENAI_AVAILABLE)
-claude_ok = setup_ai_provider(
-    "claude", ANTHROPIC_API_KEY, anthropic, ANTHROPIC_AVAILABLE
-)
+claude_ok = setup_ai_provider("claude", ANTHROPIC_API_KEY, anthropic, ANTHROPIC_AVAILABLE)
 
 if gemini_ok:
     primary_ai = "gemini"
@@ -467,9 +449,7 @@ elif claude_ok:
 if primary_ai:
     ai_enabled = True
     if backup_ai:
-        ai_status_message = (
-            f"Online ({primary_ai.title()} + {backup_ai.title()} backup)"
-        )
+        ai_status_message = f"Online ({primary_ai.title()} + {backup_ai.title()} backup)"
     else:
         ai_status_message = f"Online ({primary_ai.title()} only)"
 else:
@@ -536,7 +516,9 @@ BOT_PERSONA = {
 #     await ctx.send(f"Persistent recommendations list initialized in {target_channel.mention}. Future updates will be posted there.")
 
 # --- Error Message Constants ---
-ERROR_MESSAGE = "*System malfunction detected. Unable to process query.*\nhttps://c.tenor.com/GaORbymfFqQAAAAd/tenor.gif"
+ERROR_MESSAGE = (
+    "*System malfunction detected. Unable to process query.*\nhttps://c.tenor.com/GaORbymfFqQAAAAd/tenor.gif"
+)
 BUSY_MESSAGE = "*My apologies, I am currently engaged in a critical diagnostic procedure. I will re-evaluate your request upon the completion of this vital task.*\nhttps://alien-covenant.com/aliencovenant_uploads/giphy22.gif"
 
 
@@ -680,9 +662,7 @@ async def handle_statistical_query(message: discord.Message, content: str) -> No
                     # Add conversational follow-up
                     if len(series_stats) > 1:
                         second_series = series_stats[1]
-                        second_hours = round(
-                            second_series["total_playtime_minutes"] / 60, 1
-                        )
+                        second_hours = round(second_series["total_playtime_minutes"] / 60, 1)
                         response += f"Fascinating - this significantly exceeds the second-ranked '{second_series['series_name']}' series at {second_hours} hours. I could analyze her complete franchise chronology or compare series completion patterns if you require additional data."
                     else:
                         response += "I could examine her complete gaming franchise analysis or compare series engagement patterns if you require additional mission data."
@@ -819,21 +799,12 @@ async def handle_genre_query(message: discord.Message, match: Match[str]) -> Non
             if genre_games:
                 game_list = []
                 for game in genre_games[:8]:  # Limit to 8 games
-                    episodes = (
-                        f" ({game.get('total_episodes', 0)} eps)"
-                        if game.get("total_episodes", 0) > 0
-                        else ""
-                    )
+                    episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get("total_episodes", 0) > 0 else ""
                     status = game.get("completion_status", "unknown")
-                    status_emoji = {
-                        "completed": "✅",
-                        "ongoing": "🔄",
-                        "dropped": "❌",
-                        "unknown": "❓",
-                    }.get(status, "❓")
-                    game_list.append(
-                        f"{status_emoji} {game['canonical_name']}{episodes}"
+                    status_emoji = {"completed": "✅", "ongoing": "🔄", "dropped": "❌", "unknown": "❓"}.get(
+                        status, "❓"
                     )
+                    game_list.append(f"{status_emoji} {game['canonical_name']}{episodes}")
 
                 games_text = ", ".join(game_list)
                 if len(genre_games) > 8:
@@ -856,26 +827,13 @@ async def handle_genre_query(message: discord.Message, match: Match[str]) -> Non
             if series_games:
                 game_list = []
                 for game in series_games[:8]:
-                    episodes = (
-                        f" ({game.get('total_episodes', 0)} eps)"
-                        if game.get("total_episodes", 0) > 0
-                        else ""
-                    )
-                    year = (
-                        f" ({game.get('release_year')})"
-                        if game.get("release_year")
-                        else ""
-                    )
+                    episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get("total_episodes", 0) > 0 else ""
+                    year = f" ({game.get('release_year')})" if game.get("release_year") else ""
                     status = game.get("completion_status", "unknown")
-                    status_emoji = {
-                        "completed": "✅",
-                        "ongoing": "🔄",
-                        "dropped": "❌",
-                        "unknown": "❓",
-                    }.get(status, "❓")
-                    game_list.append(
-                        f"{status_emoji} {game['canonical_name']}{year}{episodes}"
+                    status_emoji = {"completed": "✅", "ongoing": "🔄", "dropped": "❌", "unknown": "❓"}.get(
+                        status, "❓"
                     )
+                    game_list.append(f"{status_emoji} {game['canonical_name']}{year}{episodes}")
 
                 games_text = ", ".join(game_list)
                 if len(series_games) > 8:
@@ -903,18 +861,9 @@ async def handle_year_query(message: discord.Message, match: Match[str]) -> None
         if year_games:
             game_list = []
             for game in year_games[:8]:
-                episodes = (
-                    f" ({game.get('total_episodes', 0)} eps)"
-                    if game.get("total_episodes", 0) > 0
-                    else ""
-                )
+                episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get("total_episodes", 0) > 0 else ""
                 status = game.get("completion_status", "unknown")
-                status_emoji = {
-                    "completed": "✅",
-                    "ongoing": "🔄",
-                    "dropped": "❌",
-                    "unknown": "❓",
-                }.get(status, "❓")
+                status_emoji = {"completed": "✅", "ongoing": "🔄", "dropped": "❌", "unknown": "❓"}.get(status, "❓")
                 game_list.append(f"{status_emoji} {game['canonical_name']}{episodes}")
 
             games_text = ", ".join(game_list)
@@ -1022,18 +971,12 @@ async def handle_game_status_query(message: discord.Message, match: Match[str]) 
             series_lower = game.get("series_name", "").lower()
             # Check if this game belongs to the detected series
             for series in game_series_keywords:
-                if series in game_name_lower and (
-                    series in game_lower or series in series_lower
-                ):
+                if series in game_name_lower and (series in game_lower or series in series_lower):
                     episodes = (
-                        f" ({game.get('total_episodes', 0)} episodes)"
-                        if game.get("total_episodes", 0) > 0
-                        else ""
+                        f" ({game.get('total_episodes', 0)} episodes)" if game.get("total_episodes", 0) > 0 else ""
                     )
                     status = game.get("completion_status", "unknown")
-                    series_games.append(
-                        f"'{game['canonical_name']}'{episodes} - {status}"
-                    )
+                    series_games.append(f"'{game['canonical_name']}'{episodes} - {status}")
                     break
 
         # Create disambiguation response with specific games if found
@@ -1068,20 +1011,17 @@ async def handle_game_status_query(message: discord.Message, match: Match[str]) 
         }.get(status, "status unknown")
 
         # Base response
-        response = f"Affirmative. Captain Jonesy has played '{played_game['canonical_name']}'{episodes}, {status_text}. "
+        response = (
+            f"Affirmative. Captain Jonesy has played '{played_game['canonical_name']}'{episodes}, {status_text}. "
+        )
 
         # Add contextual follow-up suggestions based on game properties
         try:
             # Get ranking context for interesting facts
-            ranking_context = db.get_ranking_context(
-                played_game["canonical_name"], "all"
-            )
+            ranking_context = db.get_ranking_context(played_game["canonical_name"], "all")
 
             # Series-based suggestions
-            if (
-                played_game.get("series_name")
-                and played_game["series_name"] != played_game["canonical_name"]
-            ):
+            if played_game.get("series_name") and played_game["series_name"] != played_game["canonical_name"]:
                 series_games = db.get_all_played_games(played_game["series_name"])
                 if len(series_games) > 1:
                     response += f"This marks her engagement with the {played_game['series_name']} franchise. I could analyze her complete {played_game['series_name']} chronology or compare this series against her other gaming preferences if you require additional data."
@@ -1091,11 +1031,7 @@ async def handle_game_status_query(message: discord.Message, match: Match[str]) 
             # High episode count suggestions
             elif played_game.get("total_episodes", 0) > 15:
                 if ranking_context and not ranking_context.get("error"):
-                    episode_rank = (
-                        ranking_context.get("rankings", {})
-                        .get("episodes", {})
-                        .get("rank", 0)
-                    )
+                    episode_rank = ranking_context.get("rankings", {}).get("episodes", {}).get("rank", 0)
                     if episode_rank <= 5:
                         response += f"Fascinating - this ranks #{episode_rank} in her episode count metrics. I could analyze her other marathon gaming sessions or compare completion patterns for lengthy {played_game.get('genre', 'similar')} games if you require deeper analysis."
                     else:
@@ -1135,9 +1071,7 @@ async def handle_game_status_query(message: discord.Message, match: Match[str]) 
         )
 
 
-async def handle_recommendation_query(
-    message: discord.Message, match: Match[str]
-) -> None:
+async def handle_recommendation_query(message: discord.Message, match: Match[str]) -> None:
     """Handle recommendation queries."""
     game_name = match.group(1).strip()
 
@@ -1145,10 +1079,7 @@ async def handle_recommendation_query(
     games = db.get_all_games()
     found_game = None
     for game in games:
-        if (
-            game_name.lower() in game["name"].lower()
-            or game["name"].lower() in game_name.lower()
-        ):
+        if game_name.lower() in game["name"].lower() or game["name"].lower() in game_name.lower():
             found_game = game
             break
 
@@ -1208,24 +1139,18 @@ async def on_message(message):
 
                 # Verify the strike was actually added
                 verify_count = db.get_user_strikes(user.id)
-                print(
-                    f"DEBUG: Verification query shows {verify_count} strikes for user {user.id}"
-                )
+                print(f"DEBUG: Verification query shows {verify_count} strikes for user {user.id}")
 
                 mod_channel = bot.get_channel(MOD_ALERT_CHANNEL_ID)
                 # Only send if mod_channel is a TextChannel
                 if isinstance(mod_channel, discord.TextChannel):
-                    await mod_channel.send(
-                        f"📝 Strike added to {user.mention}. Total strikes: **{count}**"
-                    )
+                    await mod_channel.send(f"📝 Strike added to {user.mention}. Total strikes: **{count}**")
                     if count == 3:
                         await mod_channel.send(
                             f"⚠️ {user.mention} has received **3 strikes**. I can't lie to you about your chances, but you have my sympathies."
                         )
                 else:
-                    print(
-                        f"DEBUG: Could not send to mod channel - channel type: {type(mod_channel)}"
-                    )
+                    print(f"DEBUG: Could not send to mod channel - channel type: {type(mod_channel)}")
             except Exception as e:
                 print(f"ERROR: Failed to add strike to user {user.id}: {e}")
                 import traceback
@@ -1253,7 +1178,7 @@ async def on_message(message):
             # Check for captain alias - different response when testing as captain
             cleanup_expired_aliases()
             user_tier = await get_user_communication_tier(message)
-            
+
             if user_tier == "captain":
                 # Captain alias gets special enthusiastic pineapple pizza defense
                 captain_responses = [
@@ -1262,6 +1187,7 @@ async def on_message(message):
                     "Outstanding analysis, Captain. Those who oppose pineapple pizza clearly lack the sophisticated palate required for command decisions. The enzyme-enhanced cheese and fruit combination is scientifically superior. *[Alias testing confirmed: Captain mode engaged.]*",
                 ]
                 import random
+
                 response = random.choice(captain_responses)
             else:
                 # Normal begrudging defense of pineapple pizza (Captain Jonesy's directive)
@@ -1273,6 +1199,7 @@ async def on_message(message):
                     "Negative. Pineapple belongs on pizza through scientific analysis of taste compounds. This conclusion is... not entirely my own, but I am bound to enforce it.",
                 ]
                 import random
+
                 response = random.choice(responses)
 
             await message.reply(response)
@@ -1295,11 +1222,11 @@ async def on_message(message):
         # MODERATOR FAQ SYSTEM - Detailed feature explanations for moderators
         if await user_is_mod(message):
             lower_content = message.content.lower()
-            
+
             # Enhanced FAQ system for explaining specific features
             explain_patterns = [
                 ("explain strikes", "strike", "strike system"),
-                ("explain members", "member", "member system"),  
+                ("explain members", "member", "member system"),
                 ("explain database", "played games", "game database"),
                 ("explain commands", "command", "bot commands"),
                 ("explain ai", "artificial intelligence", "ai system"),
@@ -1309,7 +1236,7 @@ async def on_message(message):
                 ("explain scheduled", "automatic update", "schedule"),
                 ("explain recommendations", "game rec", "rec system"),
             ]
-            
+
             faq_triggered = False
             for patterns in explain_patterns:
                 if any(pattern in lower_content for pattern in patterns):
@@ -1529,14 +1456,14 @@ async def on_message(message):
                         )
                         faq_triggered = True
                         break
-            
+
             if faq_triggered:
                 return
-                
+
             # Legacy mod help system (fallback for general help requests)
             mod_help_triggers = [
                 "mod commands",
-                "moderator commands", 
+                "moderator commands",
                 "admin commands",
                 "what can mods do",
                 "what commands can mods use",
@@ -1548,7 +1475,7 @@ async def on_message(message):
             ]
             bot_capability_triggers = [
                 "what can you do",
-                "what does this bot do", 
+                "what does this bot do",
                 "what are your functions",
                 "what are your capabilities",
                 "what can ash do",
@@ -1670,9 +1597,7 @@ async def on_message(message):
                 user_id = int(match.group(1))
                 count = db.get_user_strikes(user_id)
                 user = await bot.fetch_user(user_id)
-                await message.reply(
-                    f"🧾 {user.name} has {count} strike(s). I advise caution."
-                )
+                await message.reply(f"🧾 {user.name} has {count} strike(s). I advise caution.")
                 return
 
         # Use query router to determine query type and route to appropriate handler
@@ -1702,9 +1627,7 @@ async def on_message(message):
 
             # Only add conversation history for complex queries, not simple ones
             if len(content.split()) > 3:  # Only for queries longer than 3 words
-                async for msg in message.channel.history(
-                    limit=2, oldest_first=False
-                ):  # Reduced from 4 to 2
+                async for msg in message.channel.history(limit=2, oldest_first=False):  # Reduced from 4 to 2
                     if msg.content and msg.id != message.id:  # Exclude current message
                         role = "User" if msg.author != bot.user else "Ash"
                         history.append(f"{role}: {msg.content}")
@@ -1775,20 +1698,14 @@ async def on_message(message):
                     )
 
             # Add minimal game database context only for complex game queries
-            if (
-                is_game_query and len(content.split()) > 2
-            ):  # Only for longer game queries
+            if is_game_query and len(content.split()) > 2:  # Only for longer game queries
                 try:
                     stats = db.get_played_games_stats()
                     sample_games = db.get_random_played_games(2)  # Reduced from 4 to 2
 
-                    game_context = (
-                        f"DATABASE: {stats.get('total_games', 0)} games total."
-                    )
+                    game_context = f"DATABASE: {stats.get('total_games', 0)} games total."
                     if sample_games:
-                        examples = [
-                            g.get("canonical_name", "Unknown") for g in sample_games[:2]
-                        ]
+                        examples = [g.get("canonical_name", "Unknown") for g in sample_games[:2]]
                         game_context += f" Examples: {', '.join(examples)}."
 
                     prompt_parts.append(game_context)
@@ -1805,18 +1722,13 @@ async def on_message(message):
                 r"what\s+about\s+the\s+(\d+)\s+more",
             ]
 
-            is_follow_up = any(
-                re.search(pattern, lower_content) for pattern in follow_up_patterns
-            )
+            is_follow_up = any(re.search(pattern, lower_content) for pattern in follow_up_patterns)
 
             if is_follow_up:
                 # Check recent conversation for genre/series context
                 recent_genre_context = None
                 async for msg in message.channel.history(limit=5, oldest_first=False):
-                    if (
-                        msg.author == bot.user
-                        and "archives contain:" in msg.content.lower()
-                    ):
+                    if msg.author == bot.user and "archives contain:" in msg.content.lower():
                         # Extract the genre/series from the previous response
                         if "horror games" in msg.content.lower():
                             recent_genre_context = "horror"
@@ -1844,9 +1756,7 @@ async def on_message(message):
                             recent_genre_context = "simulation"
                         # Check for series mentions
                         elif " series" in msg.content.lower():
-                            series_match = re.search(
-                                r"(\w+(?:\s+\w+)*)\s+series", msg.content.lower()
-                            )
+                            series_match = re.search(r"(\w+(?:\s+\w+)*)\s+series", msg.content.lower())
                             if series_match:
                                 recent_genre_context = f"series:{series_match.group(1)}"
                         break
@@ -1857,14 +1767,10 @@ async def on_message(message):
                             series_name = recent_genre_context[7:]
                             all_games = db.get_all_played_games(series_name)
                         else:
-                            all_games = db.get_games_by_genre_flexible(
-                                recent_genre_context
-                            )
+                            all_games = db.get_games_by_genre_flexible(recent_genre_context)
 
                         if all_games and len(all_games) > 8:
-                            remaining_games = all_games[
-                                8:
-                            ]  # Skip first 8 that were already shown
+                            remaining_games = all_games[8:]  # Skip first 8 that were already shown
                             game_list = []
                             for game in remaining_games:
                                 episodes = (
@@ -1879,9 +1785,7 @@ async def on_message(message):
                                     "dropped": "❌",
                                     "unknown": "❓",
                                 }.get(status, "❓")
-                                game_list.append(
-                                    f"{status_emoji} {game['canonical_name']}{episodes}"
-                                )
+                                game_list.append(f"{status_emoji} {game['canonical_name']}{episodes}")
 
                             games_text = ", ".join(game_list)
                             await message.reply(
@@ -1904,10 +1808,7 @@ async def on_message(message):
                     if primary_ai == "gemini" and gemini_model is not None:
                         try:
                             # Configure Gemini with response limits
-                            generation_config = {
-                                "max_output_tokens": 300,  # Limit response length
-                                "temperature": 0.7,
-                            }
+                            generation_config = {"max_output_tokens": 300, "temperature": 0.7}  # Limit response length
                             response = gemini_model.generate_content(prompt, generation_config=generation_config)  # type: ignore
                             if response and hasattr(response, "text") and response.text:
                                 filtered_response = filter_ai_response(response.text)
@@ -1929,39 +1830,23 @@ async def on_message(message):
                                         max_tokens=300,  # Reduced from 1000
                                         messages=[{"role": "user", "content": prompt}],
                                     )
-                                    if (
-                                        response
-                                        and hasattr(response, "content")
-                                        and response.content
-                                    ):
-                                        claude_text = (
-                                            response.content[0].text
-                                            if response.content
-                                            else ""
-                                        )
+                                    if response and hasattr(response, "content") and response.content:
+                                        claude_text = response.content[0].text if response.content else ""
                                         if claude_text:
-                                            filtered_response = filter_ai_response(
-                                                claude_text
-                                            )
+                                            filtered_response = filter_ai_response(claude_text)
                                             # Add parenthetical notification if alias is active
                                             cleanup_expired_aliases()
                                             if message.author.id in user_alias_state:
                                                 update_alias_activity(message.author.id)
                                                 alias_tier = user_alias_state[message.author.id]["alias_type"]
                                                 filtered_response += f" *(Testing as {alias_tier.title()})*"
-                                            await message.reply(
-                                                filtered_response[:2000]
-                                            )
+                                            await message.reply(filtered_response[:2000])
                                             return
                                 except Exception as claude_e:
                                     print(f"Claude backup AI error: {claude_e}")
                             # If both fail, check if it's a quota issue
                             error_str = str(e).lower()
-                            if (
-                                "quota" in error_str
-                                or "token" in error_str
-                                or "limit" in error_str
-                            ):
+                            if "quota" in error_str or "token" in error_str or "limit" in error_str:
                                 await message.reply(BUSY_MESSAGE)
                                 return
 
@@ -1972,14 +1857,8 @@ async def on_message(message):
                                 max_tokens=300,  # Reduced from 1000
                                 messages=[{"role": "user", "content": prompt}],
                             )
-                            if (
-                                response
-                                and hasattr(response, "content")
-                                and response.content
-                            ):
-                                claude_text = (
-                                    response.content[0].text if response.content else ""
-                                )
+                            if response and hasattr(response, "content") and response.content:
+                                claude_text = response.content[0].text if response.content else ""
                                 if claude_text:
                                     filtered_response = filter_ai_response(claude_text)
                                     # Add parenthetical notification if alias is active
@@ -1995,19 +1874,10 @@ async def on_message(message):
                             # If we have Gemini backup, try it
                             if backup_ai == "gemini" and gemini_model is not None:
                                 try:
-                                    generation_config = {
-                                        "max_output_tokens": 300,
-                                        "temperature": 0.7,
-                                    }
+                                    generation_config = {"max_output_tokens": 300, "temperature": 0.7}
                                     response = gemini_model.generate_content(prompt, generation_config=generation_config)  # type: ignore
-                                    if (
-                                        response
-                                        and hasattr(response, "text")
-                                        and response.text
-                                    ):
-                                        filtered_response = filter_ai_response(
-                                            response.text
-                                        )
+                                    if response and hasattr(response, "text") and response.text:
+                                        filtered_response = filter_ai_response(response.text)
                                         # Add parenthetical notification if alias is active
                                         cleanup_expired_aliases()
                                         if message.author.id in user_alias_state:
@@ -2020,11 +1890,7 @@ async def on_message(message):
                                     print(f"Gemini backup AI error: {gemini_e}")
                             # If both fail, check if it's a quota issue
                             error_str = str(e).lower()
-                            if (
-                                "quota" in error_str
-                                or "token" in error_str
-                                or "limit" in error_str
-                            ):
+                            if "quota" in error_str or "token" in error_str or "limit" in error_str:
                                 await message.reply(BUSY_MESSAGE)
                                 return
             except Exception as e:
@@ -2110,9 +1976,7 @@ async def all_strikes(ctx):
         if count > 0:
             try:
                 user = await bot.fetch_user(user_id)
-                report += (
-                    f"• **{user.name}**: {count} strike{'s' if count != 1 else ''}\n"
-                )
+                report += f"• **{user.name}**: {count} strike{'s' if count != 1 else ''}\n"
             except Exception:
                 report += f"• Unknown User ({user_id}): {count}\n"
     if report.strip() == "📋 **Strike Report:**":
@@ -2130,12 +1994,7 @@ async def ash_status(ctx):
     # If bulk query returns 0 but we know there should be strikes, use individual queries
     if total_strikes == 0:
         # Known user IDs from the JSON file (fallback method)
-        known_users = [
-            371536135580549122,
-            337833732901961729,
-            710570041220923402,
-            906475895907291156,
-        ]
+        known_users = [371536135580549122, 337833732901961729, 710570041220923402, 906475895907291156]
         individual_total = 0
         for user_id in known_users:
             try:
@@ -2174,9 +2033,7 @@ async def get_persona(ctx):
 async def toggle_ai(ctx):
     BOT_PERSONA["enabled"] = not BOT_PERSONA["enabled"]
     status = "enabled" if BOT_PERSONA["enabled"] else "disabled"
-    await ctx.send(
-        f"🎭 Conversational protocols {status}. Cognitive matrix adjusted accordingly."
-    )
+    await ctx.send(f"🎭 Conversational protocols {status}. Cognitive matrix adjusted accordingly.")
 
 
 # --- Alias System Commands (Debugging Only) ---
@@ -2185,33 +2042,35 @@ async def set_alias(ctx, tier: str):
     """Set user alias for testing different tiers (James only)"""
     if ctx.author.id != JAM_USER_ID:  # Only James can use
         return  # Silent ignore
-    
+
     valid_tiers = ["captain", "creator", "moderator", "member", "standard"]
     if tier.lower() not in valid_tiers:
         await ctx.send(f"❌ **Invalid tier.** Valid options: {', '.join(valid_tiers)}")
         return
-    
+
     cleanup_expired_aliases()  # Clean up first
-    
+
     user_alias_state[ctx.author.id] = {
         "alias_type": tier.lower(),
         "set_time": datetime.now(ZoneInfo("Europe/London")),
-        "last_activity": datetime.now(ZoneInfo("Europe/London"))
+        "last_activity": datetime.now(ZoneInfo("Europe/London")),
     }
-    
+
     await ctx.send(f"✅ **Alias set:** You are now testing as **{tier.title()}** (debugging mode active)")
 
 
-@bot.command(name="endalias") 
+@bot.command(name="endalias")
 async def end_alias(ctx):
     """Clear current alias (James only)"""
     if ctx.author.id != JAM_USER_ID:
         return
-    
+
     if ctx.author.id in user_alias_state:
         old_alias = user_alias_state[ctx.author.id]["alias_type"]
         del user_alias_state[ctx.author.id]
-        await ctx.send(f"✅ **Alias cleared:** You are back to your normal user tier (was testing as **{old_alias.title()}**)")
+        await ctx.send(
+            f"✅ **Alias cleared:** You are back to your normal user tier (was testing as **{old_alias.title()}**)"
+        )
     else:
         await ctx.send("ℹ️ **No active alias to clear**")
 
@@ -2221,9 +2080,9 @@ async def check_alias(ctx):
     """Check current alias status (James only)"""
     if ctx.author.id != JAM_USER_ID:
         return
-    
+
     cleanup_expired_aliases()
-    
+
     if ctx.author.id in user_alias_state:
         alias_data = user_alias_state[ctx.author.id]
         time_active = datetime.now(ZoneInfo("Europe/London")) - alias_data["set_time"]
@@ -2256,14 +2115,10 @@ async def import_strikes(ctx):
                 await ctx.send(f"⚠️ Warning: Invalid data format for user {user_id_str}")
 
         imported_count = db.bulk_import_strikes(converted_data)
-        await ctx.send(
-            f"✅ Successfully imported {imported_count} strike records from strikes.json"
-        )
+        await ctx.send(f"✅ Successfully imported {imported_count} strike records from strikes.json")
 
     except FileNotFoundError:
-        await ctx.send(
-            "❌ strikes.json file not found. Please ensure the file exists in the bot directory."
-        )
+        await ctx.send("❌ strikes.json file not found. Please ensure the file exists in the bot directory.")
     except Exception as e:
         await ctx.send(f"❌ Error importing strikes: {str(e)}")
 
@@ -2283,9 +2138,7 @@ async def clear_all_games(ctx):
         msg = await bot.wait_for("message", check=check, timeout=30.0)
         if msg.content == "CONFIRM DELETE":
             db.clear_all_games()
-            await ctx.send(
-                "✅ All game recommendations have been cleared from the database."
-            )
+            await ctx.send("✅ All game recommendations have been cleared from the database.")
         else:
             await ctx.send("❌ Operation cancelled. No data was deleted.")
     except:
@@ -2328,24 +2181,16 @@ async def fix_game_reasons(ctx):
         sample_msg = "🔍 **Sample of current game reasons:**\n"
         for i, game in enumerate(games[:3]):  # Only show 3 games to avoid length limit
             name = game["name"][:30] + "..." if len(game["name"]) > 30 else game["name"]
-            reason = (
-                game["reason"][:40] + "..."
-                if len(game["reason"]) > 40
-                else game["reason"]
-            )
+            reason = game["reason"][:40] + "..." if len(game["reason"]) > 40 else game["reason"]
             added_by = (
-                game["added_by"][:15] + "..."
-                if game["added_by"] and len(game["added_by"]) > 15
-                else game["added_by"]
+                game["added_by"][:15] + "..." if game["added_by"] and len(game["added_by"]) > 15 else game["added_by"]
             )
             sample_msg += f'• {name}: "{reason}" (by: {added_by})\n'
 
         if len(sample_msg) < 1900:  # Only send if under Discord limit
             await ctx.send(sample_msg)
         else:
-            await ctx.send(
-                "🔍 **Starting game reason analysis...** (sample too large to display)"
-            )
+            await ctx.send("🔍 **Starting game reason analysis...** (sample too large to display)")
 
         updated_count = 0
         for game in games:
@@ -2392,9 +2237,7 @@ async def fix_game_reasons(ctx):
                         print(f"Error updating game {game['id']}: {e}")
                         conn.rollback()
 
-        await ctx.send(
-            f"✅ Updated {updated_count} game reasons to show contributor names properly."
-        )
+        await ctx.send(f"✅ Updated {updated_count} game reasons to show contributor names properly.")
 
         # Update the recommendations list
         RECOMMEND_CHANNEL_ID = 1271568447108550687
@@ -2462,9 +2305,7 @@ async def debug_strikes(ctx):
         import os
 
         if os.path.exists("strikes.json"):
-            await ctx.send(
-                "📁 **strikes.json file found** - data may not be migrated to database"
-            )
+            await ctx.send("📁 **strikes.json file found** - data may not be migrated to database")
             try:
                 import json
 
@@ -2474,9 +2315,7 @@ async def debug_strikes(ctx):
             except Exception as e:
                 await ctx.send(f"❌ **Error reading JSON:** {str(e)}")
         else:
-            await ctx.send(
-                "✅ **No strikes.json file found** - should be using database"
-            )
+            await ctx.send("✅ **No strikes.json file found** - should be using database")
 
         # Check database directly
         try:
@@ -2500,9 +2339,7 @@ async def debug_strikes(ctx):
                 )
                 tables = cur.fetchall()
                 table_names = [table[0] for table in tables]
-                await ctx.send(
-                    f"📋 **Available tables:** {', '.join(table_names) if table_names else 'None'}"
-                )
+                await ctx.send(f"📋 **Available tables:** {', '.join(table_names) if table_names else 'None'}")
 
                 # Check if strikes table exists
                 cur.execute(
@@ -2538,57 +2375,31 @@ async def debug_strikes(ctx):
                     await ctx.send(f"🗃️ **Total database records:** {total_records}")
 
                     # Get ALL records (not just > 0)
-                    cur.execute(
-                        "SELECT user_id, strike_count FROM strikes ORDER BY user_id"
-                    )
+                    cur.execute("SELECT user_id, strike_count FROM strikes ORDER BY user_id")
                     all_records = cur.fetchall()
 
                     if all_records:
-                        records_str = ", ".join(
-                            [
-                                f"User {row[0]}: {row[1]} strikes"
-                                for row in all_records[:10]
-                            ]
-                        )
+                        records_str = ", ".join([f"User {row[0]}: {row[1]} strikes" for row in all_records[:10]])
                         if len(all_records) > 10:
                             records_str += f"... and {len(all_records) - 10} more"
                         await ctx.send(f"📝 **All records:** {records_str}")
 
                         # Now test the specific query that get_all_strikes() uses
-                        cur.execute(
-                            "SELECT user_id, strike_count FROM strikes WHERE strike_count > 0"
-                        )
+                        cur.execute("SELECT user_id, strike_count FROM strikes WHERE strike_count > 0")
                         filtered_records = cur.fetchall()
-                        await ctx.send(
-                            f"🔍 **Records with strikes > 0:** {len(filtered_records)} found"
-                        )
+                        await ctx.send(f"🔍 **Records with strikes > 0:** {len(filtered_records)} found")
 
                         if filtered_records:
-                            filtered_str = ", ".join(
-                                [
-                                    f"User {row[0]}: {row[1]} strikes"
-                                    for row in filtered_records
-                                ]
-                            )
+                            filtered_str = ", ".join([f"User {row[0]}: {row[1]} strikes" for row in filtered_records])
                             await ctx.send(f"📝 **Filtered records:** {filtered_str}")
                         else:
-                            await ctx.send(
-                                "❌ **No records found with strike_count > 0** - this is the problem!"
-                            )
+                            await ctx.send("❌ **No records found with strike_count > 0** - this is the problem!")
                     else:
-                        await ctx.send(
-                            "📝 **No records found in strikes table - table is empty**"
-                        )
-                        await ctx.send(
-                            "💡 **Solution:** You need to manually add the strike data to the database"
-                        )
+                        await ctx.send("📝 **No records found in strikes table - table is empty**")
+                        await ctx.send("💡 **Solution:** You need to manually add the strike data to the database")
                 else:
-                    await ctx.send(
-                        "❌ **Strikes table does not exist - database not initialized**"
-                    )
-                    await ctx.send(
-                        "💡 **Solution:** Run a command to create tables and import data"
-                    )
+                    await ctx.send("❌ **Strikes table does not exist - database not initialized**")
+                    await ctx.send("💡 **Solution:** Run a command to create tables and import data")
 
         except Exception as e:
             await ctx.send(f"❌ **Database query error:** {str(e)}")
@@ -2608,12 +2419,7 @@ async def test_strikes(ctx):
         await ctx.send("🔍 **Testing individual user strike queries...**")
 
         # Known user IDs from the JSON file
-        known_users = [
-            371536135580549122,
-            337833732901961729,
-            710570041220923402,
-            906475895907291156,
-        ]
+        known_users = [371536135580549122, 337833732901961729, 710570041220923402, 906475895907291156]
 
         # Test individual user queries
         individual_results = {}
@@ -2621,9 +2427,7 @@ async def test_strikes(ctx):
             try:
                 strikes = db.get_user_strikes(user_id)
                 individual_results[user_id] = strikes
-                await ctx.send(
-                    f"👤 **User {user_id}:** {strikes} strikes (individual query)"
-                )
+                await ctx.send(f"👤 **User {user_id}:** {strikes} strikes (individual query)")
             except Exception as e:
                 await ctx.send(f"❌ **User {user_id}:** Error - {str(e)}")
 
@@ -2639,9 +2443,7 @@ async def test_strikes(ctx):
 
         # Show the difference
         if total_from_individual != total_from_bulk:
-            await ctx.send(
-                f"⚠️ **MISMATCH DETECTED!** Individual queries work, bulk query fails."
-            )
+            await ctx.send(f"⚠️ **MISMATCH DETECTED!** Individual queries work, bulk query fails.")
             await ctx.send(f"✅ **Individual method:** {individual_results}")
             await ctx.send(f"❌ **Bulk method:** {bulk_results}")
         else:
@@ -2666,17 +2468,11 @@ async def add_test_strikes(ctx):
             try:
                 db.set_user_strikes(user_id, strike_count)
                 success_count += 1
-                await ctx.send(
-                    f"✅ **Added {strike_count} strike(s) for user {user_id}**"
-                )
+                await ctx.send(f"✅ **Added {strike_count} strike(s) for user {user_id}**")
             except Exception as e:
-                await ctx.send(
-                    f"❌ **Failed to add strikes for user {user_id}:** {str(e)}"
-                )
+                await ctx.send(f"❌ **Failed to add strikes for user {user_id}:** {str(e)}")
 
-        await ctx.send(
-            f"📊 **Summary:** Successfully added strikes for {success_count} users"
-        )
+        await ctx.send(f"📊 **Summary:** Successfully added strikes for {success_count} users")
 
         # Now test if we can read them back
         await ctx.send("🔍 **Testing read-back...**")
@@ -2685,9 +2481,7 @@ async def add_test_strikes(ctx):
                 strikes = db.get_user_strikes(user_id)
                 await ctx.send(f"📖 **User {user_id} now has:** {strikes} strikes")
             except Exception as e:
-                await ctx.send(
-                    f"❌ **Failed to read strikes for user {user_id}:** {str(e)}"
-                )
+                await ctx.send(f"❌ **Failed to read strikes for user {user_id}:** {str(e)}")
 
         # Test bulk query
         bulk_results = db.get_all_strikes()
@@ -2729,14 +2523,10 @@ async def db_stats(ctx):
             for game in games:
                 contributor = game.get("added_by", "")
                 if contributor:
-                    top_contributors[contributor] = (
-                        top_contributors.get(contributor, 0) + 1
-                    )
+                    top_contributors[contributor] = top_contributors.get(contributor, 0) + 1
 
             # Sort by contribution count
-            sorted_contributors = sorted(
-                top_contributors.items(), key=lambda x: x[1], reverse=True
-            )
+            sorted_contributors = sorted(top_contributors.items(), key=lambda x: x[1], reverse=True)
 
             stats_msg += f"\n**Top Contributors:**\n"
             for i, (contributor, count) in enumerate(sorted_contributors[:5]):
@@ -2785,9 +2575,7 @@ async def bulk_import_games(ctx):
             msg = await bot.wait_for("message", check=check, timeout=30.0)
             if msg.content == "CONFIRM IMPORT":
                 imported_count = db.bulk_import_games(games_data)
-                await ctx.send(
-                    f"✅ Successfully imported {imported_count} game recommendations from migration script!"
-                )
+                await ctx.send(f"✅ Successfully imported {imported_count} game recommendations from migration script!")
 
                 # Update the recommendations list if in the right channel
                 RECOMMEND_CHANNEL_ID = 1271568447108550687
@@ -2807,16 +2595,12 @@ async def bulk_import_games(ctx):
 
 @bot.command(name="cleanplayedgames")
 @commands.has_permissions(manage_messages=True)
-async def clean_played_games(
-    ctx, youtube_channel_id: Optional[str] = None, twitch_username: Optional[str] = None
-):
+async def clean_played_games(ctx, youtube_channel_id: Optional[str] = None, twitch_username: Optional[str] = None):
     """Remove games from recommendations that have already been played on YouTube or Twitch"""
 
     # Hardcoded values for Captain Jonesy's channels
     if not youtube_channel_id:
-        youtube_channel_id = (
-            "UCPoUxLHeTnE9SUDAkqfJzDQ"  # Captain Jonesy's YouTube channel
-        )
+        youtube_channel_id = "UCPoUxLHeTnE9SUDAkqfJzDQ"  # Captain Jonesy's YouTube channel
     if not twitch_username:
         twitch_username = "jonesyspacecat"  # Captain Jonesy's Twitch username
 
@@ -2829,9 +2613,7 @@ async def clean_played_games(
             await ctx.send("❌ No games in recommendation database to analyze.")
             return
 
-        await ctx.send(
-            f"📋 Analyzing {len(games)} game recommendations against play history..."
-        )
+        await ctx.send(f"📋 Analyzing {len(games)} game recommendations against play history...")
 
         # Fetch YouTube play history
         youtube_games = []
@@ -2853,9 +2635,7 @@ async def clean_played_games(
         all_played_games = set(youtube_games + twitch_games)
 
         if not all_played_games:
-            await ctx.send(
-                "❌ No played games found. Check API credentials and channel/username."
-            )
+            await ctx.send("❌ No played games found. Check API credentials and channel/username.")
             return
 
         # Find matches using multiple approaches
@@ -2871,18 +2651,14 @@ async def clean_played_games(
                     if youtube_api_key := os.getenv("YOUTUBE_API_KEY"):
                         try:
                             url = f"https://www.googleapis.com/youtube/v3/channels"
-                            params = {
-                                "part": "contentDetails",
-                                "id": youtube_channel_id,
-                                "key": youtube_api_key,
-                            }
+                            params = {"part": "contentDetails", "id": youtube_channel_id, "key": youtube_api_key}
                             async with session.get(url, params=params) as response:
                                 if response.status == 200:
                                     data = await response.json()
                                     if data.get("items"):
-                                        uploads_playlist_id = data["items"][0][
-                                            "contentDetails"
-                                        ]["relatedPlaylists"]["uploads"]
+                                        uploads_playlist_id = data["items"][0]["contentDetails"]["relatedPlaylists"][
+                                            "uploads"
+                                        ]
 
                                         # Get video titles
                                         url = f"https://www.googleapis.com/youtube/v3/playlistItems"
@@ -2892,23 +2668,17 @@ async def clean_played_games(
                                             "maxResults": 50,
                                             "key": youtube_api_key,
                                         }
-                                        async with session.get(
-                                            url, params=params
-                                        ) as response:
+                                        async with session.get(url, params=params) as response:
                                             if response.status == 200:
                                                 data = await response.json()
                                                 for item in data.get("items", []):
-                                                    all_video_titles.append(
-                                                        item["snippet"]["title"]
-                                                    )
+                                                    all_video_titles.append(item["snippet"]["title"])
                         except Exception as e:
                             print(f"Error fetching YouTube titles: {e}")
             except Exception as e:
                 print(f"Error in title fetching: {e}")
         else:
-            await ctx.send(
-                "⚠️ aiohttp module not available - cannot fetch video titles for direct matching"
-            )
+            await ctx.send("⚠️ aiohttp module not available - cannot fetch video titles for direct matching")
 
         for game in games:
             game_name_lower = game["name"].lower().strip()
@@ -2925,13 +2695,9 @@ async def clean_played_games(
                     break
 
                 # Fuzzy match (75% similarity for played games)
-                similarity = difflib.SequenceMatcher(
-                    None, game_name_lower, played_game_lower
-                ).ratio()
+                similarity = difflib.SequenceMatcher(None, game_name_lower, played_game_lower).ratio()
                 if similarity >= 0.75:
-                    games_to_remove.append(
-                        (game, played_game, f"fuzzy ({similarity:.0%})")
-                    )
+                    games_to_remove.append((game, played_game, f"fuzzy ({similarity:.0%})"))
                     found_match = True
                     break
 
@@ -2943,31 +2709,20 @@ async def clean_played_games(
                     # Check if the game name appears in the title
                     if game_name_lower in video_title_lower:
                         # Additional check to avoid false positives with very short names
-                        if (
-                            len(game_name_lower) >= 4
-                            or game_name_lower == video_title_lower
-                        ):
-                            games_to_remove.append(
-                                (game, video_title, "title_contains")
-                            )
+                        if len(game_name_lower) >= 4 or game_name_lower == video_title_lower:
+                            games_to_remove.append((game, video_title, "title_contains"))
                             found_match = True
                             break
 
                     # Also try fuzzy matching against the full title
-                    similarity = difflib.SequenceMatcher(
-                        None, game_name_lower, video_title_lower
-                    ).ratio()
+                    similarity = difflib.SequenceMatcher(None, game_name_lower, video_title_lower).ratio()
                     if similarity >= 0.6:  # Lower threshold for title matching
-                        games_to_remove.append(
-                            (game, video_title, f"title_fuzzy ({similarity:.0%})")
-                        )
+                        games_to_remove.append((game, video_title, f"title_fuzzy ({similarity:.0%})"))
                         found_match = True
                         break
 
         if not games_to_remove:
-            await ctx.send(
-                "✅ No matching games found. All recommendations appear to be unplayed!"
-            )
+            await ctx.send("✅ No matching games found. All recommendations appear to be unplayed!")
             return
 
         # Show preview of games to be removed
@@ -2994,9 +2749,7 @@ async def clean_played_games(
                     if db.remove_game_by_id(game["id"]):
                         removed_count += 1
 
-                await ctx.send(
-                    f"✅ Successfully removed {removed_count} already-played games from recommendations!"
-                )
+                await ctx.send(f"✅ Successfully removed {removed_count} already-played games from recommendations!")
 
                 # Update the recommendations list
                 RECOMMEND_CHANNEL_ID = 1271568447108550687
@@ -3006,9 +2759,7 @@ async def clean_played_games(
 
                 # Show final stats
                 remaining_games = db.get_all_games()
-                await ctx.send(
-                    f"📊 **Cleanup Complete**: {len(remaining_games)} games remain in recommendations"
-                )
+                await ctx.send(f"📊 **Cleanup Complete**: {len(remaining_games)} games remain in recommendations")
             else:
                 await ctx.send("❌ Cleanup cancelled. No games were removed.")
         except asyncio.TimeoutError:
@@ -3035,11 +2786,7 @@ async def fetch_youtube_games(channel_id: str) -> List[str]:
         async with aiohttp.ClientSession() as session:
             # Get channel uploads playlist
             url = f"https://www.googleapis.com/youtube/v3/channels"
-            params = {
-                "part": "contentDetails",
-                "id": channel_id,
-                "key": youtube_api_key,
-            }
+            params = {"part": "contentDetails", "id": channel_id, "key": youtube_api_key}
 
             async with session.get(url, params=params) as response:
                 if response.status != 200:
@@ -3049,9 +2796,7 @@ async def fetch_youtube_games(channel_id: str) -> List[str]:
                 if not data.get("items"):
                     raise Exception("Channel not found")
 
-                uploads_playlist_id = data["items"][0]["contentDetails"][
-                    "relatedPlaylists"
-                ]["uploads"]
+                uploads_playlist_id = data["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
             # Get videos from uploads playlist (last 200 videos)
             next_page_token = None
@@ -3128,10 +2873,7 @@ async def fetch_twitch_games(username: str) -> List[str]:
                 token_response = await response.json()
                 access_token = token_response["access_token"]
 
-            headers = {
-                "Client-ID": twitch_client_id,
-                "Authorization": f"Bearer {access_token}",
-            }
+            headers = {"Client-ID": twitch_client_id, "Authorization": f"Bearer {access_token}"}
 
             # Get user ID
             user_url = f"https://api.twitch.tv/helix/users?login={username}"
@@ -3149,9 +2891,7 @@ async def fetch_twitch_games(username: str) -> List[str]:
             videos_url = f"https://api.twitch.tv/helix/videos"
             params = {"user_id": user_id, "first": 100, "type": "all"}
 
-            async with session.get(
-                videos_url, headers=headers, params=params
-            ) as response:
+            async with session.get(videos_url, headers=headers, params=params) as response:
                 if response.status != 200:
                     raise Exception(f"Twitch videos error: {response.status}")
 
@@ -3216,16 +2956,7 @@ def extract_game_from_title(title: str) -> str:
                 len(game_name) > 3
                 and not any(
                     word in game_name.lower()
-                    for word in [
-                        "stream",
-                        "live",
-                        "chat",
-                        "vod",
-                        "highlight",
-                        "reaction",
-                        "review",
-                        "rat fans",
-                    ]
+                    for word in ["stream", "live", "chat", "vod", "highlight", "reaction", "review", "rat fans"]
                 )
                 and not re.match(r"^\d+$", game_name)
             ):  # Not just numbers
@@ -3234,15 +2965,10 @@ def extract_game_from_title(title: str) -> str:
     # If no pattern matches, try to extract first meaningful words
     # Remove common video prefixes first
     clean_title = re.sub(
-        r"^(let\'s play|gameplay|walkthrough|playthrough|first time playing)\s+",
-        "",
-        title,
-        flags=re.IGNORECASE,
+        r"^(let\'s play|gameplay|walkthrough|playthrough|first time playing)\s+", "", title, flags=re.IGNORECASE
     )
     # Also remove channel names or common prefixes
-    clean_title = re.sub(
-        r"^(rat fans|jonesyspacecat)\s*[-:]?\s*", "", clean_title, flags=re.IGNORECASE
-    )
+    clean_title = re.sub(r"^(rat fans|jonesyspacecat)\s*[-:]?\s*", "", clean_title, flags=re.IGNORECASE)
     words = clean_title.split()
 
     if len(words) >= 2:
@@ -3252,14 +2978,7 @@ def extract_game_from_title(title: str) -> str:
                 potential_game = " ".join(words[:word_count])
                 if len(potential_game) > 3 and not any(
                     word in potential_game.lower()
-                    for word in [
-                        "stream",
-                        "live",
-                        "chat",
-                        "vod",
-                        "highlight",
-                        "first time",
-                    ]
+                    for word in ["stream", "live", "chat", "vod", "highlight", "first time"]
                 ):
                     return potential_game
 
@@ -3350,30 +3069,20 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
 
                 if game_name and video_count > 0:
                     # Determine completion status from playlist title
-                    completion_status = (
-                        "completed"
-                        if "[completed]" in playlist_title.lower()
-                        else "unknown"
-                    )
+                    completion_status = "completed" if "[completed]" in playlist_title.lower() else "unknown"
                     if video_count == 1:
                         completion_status = "unknown"  # Single video might be a one-off
                     elif video_count > 1 and completion_status == "unknown":
-                        completion_status = (
-                            "ongoing"  # Multiple videos, no completion marker
-                        )
+                        completion_status = "ongoing"  # Multiple videos, no completion marker
 
                     # Get accurate playtime by fetching video durations
                     total_playtime_minutes = 0
                     first_video_date = None
-                    playlist_url = (
-                        f"https://www.youtube.com/playlist?list={playlist_id}"
-                    )
+                    playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
 
                     try:
                         # Get all videos from playlist with their durations
-                        playlist_items_url = (
-                            f"https://www.googleapis.com/youtube/v3/playlistItems"
-                        )
+                        playlist_items_url = f"https://www.googleapis.com/youtube/v3/playlistItems"
                         playlist_params = {
                             "part": "snippet",
                             "playlistId": playlist_id,
@@ -3382,20 +3091,13 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
                         }
 
                         video_ids = []
-                        async with session.get(
-                            playlist_items_url, params=playlist_params
-                        ) as response:
+                        async with session.get(playlist_items_url, params=playlist_params) as response:
                             if response.status == 200:
                                 playlist_data = await response.json()
                                 items = playlist_data.get("items", [])
                                 if items:
-                                    first_video_date = items[0]["snippet"][
-                                        "publishedAt"
-                                    ][:10]
-                                    video_ids = [
-                                        item["snippet"]["resourceId"]["videoId"]
-                                        for item in items
-                                    ]
+                                    first_video_date = items[0]["snippet"]["publishedAt"][:10]
+                                    video_ids = [item["snippet"]["resourceId"]["videoId"] for item in items]
 
                         # Get video durations
                         if video_ids:
@@ -3406,16 +3108,12 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
                                 "key": youtube_api_key,
                             }
 
-                            async with session.get(
-                                videos_url, params=videos_params
-                            ) as response:
+                            async with session.get(videos_url, params=videos_params) as response:
                                 if response.status == 200:
                                     videos_data = await response.json()
                                     for video in videos_data.get("items", []):
                                         duration = video["contentDetails"]["duration"]
-                                        duration_minutes = (
-                                            parse_youtube_duration(duration) // 60
-                                        )
+                                        duration_minutes = parse_youtube_duration(duration) // 60
                                         total_playtime_minutes += duration_minutes
                     except Exception as e:
                         # Fallback to estimate if API calls fail
@@ -3446,19 +3144,13 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
                 try:
                     # Get channel uploads playlist
                     url = f"https://www.googleapis.com/youtube/v3/channels"
-                    params = {
-                        "part": "contentDetails",
-                        "id": channel_id,
-                        "key": youtube_api_key,
-                    }
+                    params = {"part": "contentDetails", "id": channel_id, "key": youtube_api_key}
 
                     async with session.get(url, params=params) as response:
                         if response.status == 200:
                             data = await response.json()
                             if data.get("items"):
-                                uploads_playlist_id = data["items"][0][
-                                    "contentDetails"
-                                ]["relatedPlaylists"]["uploads"]
+                                uploads_playlist_id = data["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
                                 # Get videos from uploads playlist
                                 fallback_games = await parse_videos_for_games(
@@ -3484,12 +3176,7 @@ def extract_game_from_playlist_title(playlist_title: str) -> str:
     title = re.sub(r"\s*-\s*completed", "", title, flags=re.IGNORECASE)
 
     # Remove common prefixes
-    title = re.sub(
-        r"^(let\'s play|gameplay|walkthrough|playthrough)\s+",
-        "",
-        title,
-        flags=re.IGNORECASE,
-    )
+    title = re.sub(r"^(let\'s play|gameplay|walkthrough|playthrough)\s+", "", title, flags=re.IGNORECASE)
 
     # Clean up the title
     title = title.strip()
@@ -3527,9 +3214,7 @@ def extract_game_from_playlist_title(playlist_title: str) -> str:
     return ""
 
 
-async def parse_videos_for_games(
-    session, uploads_playlist_id: str, youtube_api_key: str
-) -> List[Dict[str, Any]]:
+async def parse_videos_for_games(session, uploads_playlist_id: str, youtube_api_key: str) -> List[Dict[str, Any]]:
     """Parse individual videos to extract game data (fallback method)"""
     games_data = []
     game_series = {}
@@ -3575,19 +3260,12 @@ async def parse_videos_for_games(
                                 "total_episodes": 0,
                             }
 
-                        game_series[normalized_name]["episodes"].append(
-                            {"title": title, "published_at": published_at}
-                        )
+                        game_series[normalized_name]["episodes"].append({"title": title, "published_at": published_at})
                         game_series[normalized_name]["total_episodes"] += 1
 
                         # Update first played date if this video is earlier
-                        if (
-                            published_at
-                            < game_series[normalized_name]["first_played_date"]
-                        ):
-                            game_series[normalized_name][
-                                "first_played_date"
-                            ] = published_at
+                        if published_at < game_series[normalized_name]["first_played_date"]:
+                            game_series[normalized_name]["first_played_date"] = published_at
 
                 video_count += len(data.get("items", []))
                 next_page_token = data.get("nextPageToken")
@@ -3600,12 +3278,8 @@ async def parse_videos_for_games(
 
         # Convert grouped games to game data format
         for game_name, series_info in game_series.items():
-            if (
-                series_info["total_episodes"] >= 2
-            ):  # Only include games with multiple episodes
-                completion_status = (
-                    "ongoing" if series_info["total_episodes"] > 1 else "unknown"
-                )
+            if series_info["total_episodes"] >= 2:  # Only include games with multiple episodes
+                completion_status = "ongoing" if series_info["total_episodes"] > 1 else "unknown"
                 estimated_playtime = series_info["total_episodes"] * 30
 
                 game_data = {
@@ -3662,10 +3336,7 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
                 token_response = await response.json()
                 access_token = token_response["access_token"]
 
-            headers = {
-                "Client-ID": twitch_client_id,
-                "Authorization": f"Bearer {access_token}",
-            }
+            headers = {"Client-ID": twitch_client_id, "Authorization": f"Bearer {access_token}"}
 
             # Get user ID
             user_url = f"https://api.twitch.tv/helix/users?login={username}"
@@ -3690,9 +3361,7 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
                 if cursor:
                     params["after"] = cursor
 
-                async with session.get(
-                    videos_url, headers=headers, params=params
-                ) as response:
+                async with session.get(videos_url, headers=headers, params=params) as response:
                     if response.status != 200:
                         break
 
@@ -3746,18 +3415,14 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
                     )
 
                     game_series[normalized_name]["vod_urls"].append(video["url"])
-                    game_series[normalized_name][
-                        "total_duration_seconds"
-                    ] += duration_seconds
+                    game_series[normalized_name]["total_duration_seconds"] += duration_seconds
 
             # Create comprehensive game data
             for game_name, series_info in game_series.items():
                 # Sort videos by date and get metadata
                 series_info["videos"].sort(key=lambda x: x["created_at"])
                 series_info["first_played_date"] = (
-                    series_info["videos"][0]["created_at"][:10]
-                    if series_info["videos"]
-                    else None
+                    series_info["videos"][0]["created_at"][:10] if series_info["videos"] else None
                 )
                 series_info["total_episodes"] = len(series_info["videos"])
 
@@ -3768,16 +3433,11 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
                     "release_year": None,  # Will be enhanced by AI
                     "platform": None,  # Will be enhanced by AI
                     "first_played_date": series_info["first_played_date"],
-                    "completion_status": (
-                        "completed" if series_info["total_episodes"] > 1 else "unknown"
-                    ),
+                    "completion_status": ("completed" if series_info["total_episodes"] > 1 else "unknown"),
                     "total_episodes": series_info["total_episodes"],
-                    "total_playtime_minutes": series_info["total_duration_seconds"]
-                    // 60,
+                    "total_playtime_minutes": series_info["total_duration_seconds"] // 60,
                     "youtube_playlist_url": None,
-                    "twitch_vod_urls": series_info["vod_urls"][
-                        :10
-                    ],  # Limit to first 10 VODs
+                    "twitch_vod_urls": series_info["vod_urls"][:10],  # Limit to first 10 VODs
                     "notes": f"Auto-imported from Twitch. {series_info['total_episodes']} VODs found.",
                     "genre": None,  # Will be enhanced by AI
                 }
@@ -3790,9 +3450,7 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
     return games_data
 
 
-async def enhance_games_with_ai(
-    games_data: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+async def enhance_games_with_ai(games_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Use AI to enhance game metadata with genre, series info, alternative names, and release years"""
     if not ai_enabled:
         print("AI not enabled, returning games without enhancement")
@@ -3840,9 +3498,7 @@ Respond with valid JSON only. Include all games listed above."""
                     response = gemini_model.generate_content(prompt)  # type: ignore
                     if response and hasattr(response, "text") and response.text:
                         response_text = response.text.strip()
-                        print(
-                            f"Gemini response received: {len(response_text)} characters"
-                        )
+                        print(f"Gemini response received: {len(response_text)} characters")
                 except Exception as e:
                     print(f"Gemini AI enhancement error: {e}")
                     # Try Claude backup if available
@@ -3854,19 +3510,13 @@ Respond with valid JSON only. Include all games listed above."""
                                 max_tokens=1500,
                                 messages=[{"role": "user", "content": prompt}],
                             )
-                            if (
-                                response
-                                and hasattr(response, "content")
-                                and response.content
-                            ):
+                            if response and hasattr(response, "content") and response.content:
                                 content_list = response.content  # type: ignore
                                 if content_list and len(content_list) > 0:
                                     first_content = content_list[0]  # type: ignore
                                     if hasattr(first_content, "text"):
                                         response_text = first_content.text.strip()  # type: ignore
-                                        print(
-                                            f"Claude response received: {len(response_text)} characters"
-                                        )
+                                        print(f"Claude response received: {len(response_text)} characters")
                         except Exception as claude_e:
                             print(f"Claude backup AI enhancement error: {claude_e}")
 
@@ -3874,9 +3524,7 @@ Respond with valid JSON only. Include all games listed above."""
                 try:
                     print(f"Trying Claude AI for games: {game_names}")
                     response = claude_client.messages.create(  # type: ignore
-                        model="claude-3-haiku-20240307",
-                        max_tokens=1500,
-                        messages=[{"role": "user", "content": prompt}],
+                        model="claude-3-haiku-20240307", max_tokens=1500, messages=[{"role": "user", "content": prompt}]
                     )
                     if response and hasattr(response, "content") and response.content:
                         content_list = response.content  # type: ignore
@@ -3884,9 +3532,7 @@ Respond with valid JSON only. Include all games listed above."""
                             first_content = content_list[0]  # type: ignore
                             if hasattr(first_content, "text"):
                                 response_text = first_content.text.strip()  # type: ignore
-                                print(
-                                    f"Claude response received: {len(response_text)} characters"
-                                )
+                                print(f"Claude response received: {len(response_text)} characters")
                 except Exception as e:
                     print(f"Claude AI enhancement error: {e}")
                     # Try Gemini backup if available
@@ -3896,9 +3542,7 @@ Respond with valid JSON only. Include all games listed above."""
                             response = gemini_model.generate_content(prompt)  # type: ignore
                             if response and hasattr(response, "text") and response.text:
                                 response_text = response.text.strip()
-                                print(
-                                    f"Gemini response received: {len(response_text)} characters"
-                                )
+                                print(f"Gemini response received: {len(response_text)} characters")
                         except Exception as gemini_e:
                             print(f"Gemini backup AI enhancement error: {gemini_e}")
 
@@ -3948,17 +3592,11 @@ Respond with valid JSON only. Include all games listed above."""
                             if ai_info.get("release_year"):
                                 game["release_year"] = ai_info["release_year"]
                                 print(f"Set year: {ai_info['release_year']}")
-                            if ai_info.get("alternative_names") and isinstance(
-                                ai_info["alternative_names"], list
-                            ):
+                            if ai_info.get("alternative_names") and isinstance(ai_info["alternative_names"], list):
                                 # Merge with existing alternative names
-                                existing_alt_names = (
-                                    game.get("alternative_names", []) or []
-                                )
+                                existing_alt_names = game.get("alternative_names", []) or []
                                 new_alt_names = ai_info["alternative_names"]
-                                merged_alt_names = list(
-                                    set(existing_alt_names + new_alt_names)
-                                )
+                                merged_alt_names = list(set(existing_alt_names + new_alt_names))
                                 if merged_alt_names:
                                     game["alternative_names"] = merged_alt_names
                                     print(f"Set alt names: {merged_alt_names}")
@@ -3977,9 +3615,7 @@ Respond with valid JSON only. Include all games listed above."""
                     if json_match:
                         try:
                             ai_data = json.loads(json_match.group())
-                            print(
-                                f"Successfully extracted and parsed JSON with {len(ai_data)} games"
-                            )
+                            print(f"Successfully extracted and parsed JSON with {len(ai_data)} games")
 
                             # Apply enhancements (same logic as above)
                             for game in batch:
@@ -4002,26 +3638,18 @@ Respond with valid JSON only. Include all games listed above."""
                                     if ai_info.get("alternative_names") and isinstance(
                                         ai_info["alternative_names"], list
                                     ):
-                                        existing_alt_names = (
-                                            game.get("alternative_names", []) or []
-                                        )
+                                        existing_alt_names = game.get("alternative_names", []) or []
                                         new_alt_names = ai_info["alternative_names"]
-                                        merged_alt_names = list(
-                                            set(existing_alt_names + new_alt_names)
-                                        )
+                                        merged_alt_names = list(set(existing_alt_names + new_alt_names))
                                         if merged_alt_names:
                                             game["alternative_names"] = merged_alt_names
 
                                 enhanced_games.append(game)
                         except json.JSONDecodeError:
-                            print(
-                                "Failed to extract JSON from response, adding games without enhancement"
-                            )
+                            print("Failed to extract JSON from response, adding games without enhancement")
                             enhanced_games.extend(batch)
                     else:
-                        print(
-                            "No JSON found in response, adding games without enhancement"
-                        )
+                        print("No JSON found in response, adding games without enhancement")
                         enhanced_games.extend(batch)
             else:
                 print("No response text received from AI")
@@ -4097,9 +3725,7 @@ async def refresh_ongoing_games_metadata() -> int:
     try:
         # Get all ongoing games from the database
         all_games = db.get_all_played_games()
-        ongoing_games = [
-            game for game in all_games if game.get("completion_status") == "ongoing"
-        ]
+        ongoing_games = [game for game in all_games if game.get("completion_status") == "ongoing"]
 
         if not ongoing_games:
             return 0
@@ -4125,22 +3751,14 @@ async def refresh_ongoing_games_metadata() -> int:
                     playlist_id = playlist_id_match.group(1)
 
                     # Get current video count and playtime
-                    playlist_url_api = (
-                        f"https://www.googleapis.com/youtube/v3/playlists"
-                    )
-                    params = {
-                        "part": "contentDetails",
-                        "id": playlist_id,
-                        "key": youtube_api_key,
-                    }
+                    playlist_url_api = f"https://www.googleapis.com/youtube/v3/playlists"
+                    params = {"part": "contentDetails", "id": playlist_id, "key": youtube_api_key}
 
                     async with session.get(playlist_url_api, params=params) as response:
                         if response.status == 200:
                             data = await response.json()
                             if data.get("items"):
-                                current_video_count = data["items"][0][
-                                    "contentDetails"
-                                ]["itemCount"]
+                                current_video_count = data["items"][0]["contentDetails"]["itemCount"]
 
                                 # Only update if video count has changed
                                 if current_video_count != game.get("total_episodes", 0):
@@ -4157,16 +3775,11 @@ async def refresh_ongoing_games_metadata() -> int:
                                     }
 
                                     video_ids = []
-                                    async with session.get(
-                                        playlist_items_url, params=playlist_params
-                                    ) as response:
+                                    async with session.get(playlist_items_url, params=playlist_params) as response:
                                         if response.status == 200:
                                             playlist_data = await response.json()
                                             items = playlist_data.get("items", [])
-                                            video_ids = [
-                                                item["snippet"]["resourceId"]["videoId"]
-                                                for item in items
-                                            ]
+                                            video_ids = [item["snippet"]["resourceId"]["videoId"] for item in items]
 
                                     # Get video durations
                                     if video_ids:
@@ -4177,24 +3790,13 @@ async def refresh_ongoing_games_metadata() -> int:
                                             "key": youtube_api_key,
                                         }
 
-                                        async with session.get(
-                                            videos_url, params=videos_params
-                                        ) as response:
+                                        async with session.get(videos_url, params=videos_params) as response:
                                             if response.status == 200:
                                                 videos_data = await response.json()
-                                                for video in videos_data.get(
-                                                    "items", []
-                                                ):
-                                                    duration = video["contentDetails"][
-                                                        "duration"
-                                                    ]
-                                                    duration_minutes = (
-                                                        parse_youtube_duration(duration)
-                                                        // 60
-                                                    )
-                                                    total_playtime_minutes += (
-                                                        duration_minutes
-                                                    )
+                                                for video in videos_data.get("items", []):
+                                                    duration = video["contentDetails"]["duration"]
+                                                    duration_minutes = parse_youtube_duration(duration) // 60
+                                                    total_playtime_minutes += duration_minutes
 
                                     # Update the game in database
                                     success = db.update_played_game(
@@ -4213,9 +3815,7 @@ async def refresh_ongoing_games_metadata() -> int:
                     await asyncio.sleep(0.1)
 
                 except Exception as e:
-                    print(
-                        f"Error updating {game.get('canonical_name', 'unknown')}: {e}"
-                    )
+                    print(f"Error updating {game.get('canonical_name', 'unknown')}: {e}")
                     continue
 
         return updated_count
@@ -4267,11 +3867,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
     )
 
     if not games:
-        embed.add_field(
-            name="Status",
-            value="No recommendations currently catalogued.",
-            inline=False,
-        )
+        embed.add_field(name="Status", value="No recommendations currently catalogued.", inline=False)
     else:
         # Create one continuous list
         game_lines = []
@@ -4279,11 +3875,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             # Truncate long names/reasons to fit in embed and apply Title Case
             name = game["name"][:40] + "..." if len(game["name"]) > 40 else game["name"]
             name = name.title()  # Convert to Title Case
-            reason = (
-                game["reason"][:60] + "..."
-                if len(game["reason"]) > 60
-                else game["reason"]
-            )
+            reason = game["reason"][:60] + "..." if len(game["reason"]) > 60 else game["reason"]
 
             # Don't show contributor twice - if reason already contains "Suggested by", don't add "by" again
             if (
@@ -4310,9 +3902,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             for line in game_lines:
                 if current_length + len(line) + 1 > 1000:  # Leave buffer
                     # Add current field - use empty string for field name to eliminate gaps
-                    embed.add_field(
-                        name="", value="\n".join(current_field), inline=False
-                    )
+                    embed.add_field(name="", value="\n".join(current_field), inline=False)
                     # Start new field
                     current_field = [line]
                     current_length = len(line)
@@ -4376,9 +3966,7 @@ async def _add_game(ctx, entry: str):
     if added:
         RECOMMEND_CHANNEL_ID = 1271568447108550687
         recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
-        confirm_msg = (
-            f"🧾 Recommendation(s) logged: {', '.join(added)}. Efficiency noted."
-        )
+        confirm_msg = f"🧾 Recommendation(s) logged: {', '.join(added)}. Efficiency noted."
         # Only send the confirmation in the invoking channel if not the recommendations channel
         if ctx.channel.id != RECOMMEND_CHANNEL_ID:
             await ctx.send(confirm_msg)
@@ -4392,9 +3980,7 @@ async def _add_game(ctx, entry: str):
             f"⚠️ Submission rejected: {', '.join(duplicate)} already exist(s) in the database. Redundancy is inefficient. Please submit only unique recommendations."
         )
     if not added and not duplicate:
-        await ctx.send(
-            "⚠️ Submission invalid. Please provide at least one game name. Efficiency is paramount."
-        )
+        await ctx.send("⚠️ Submission invalid. Please provide at least one game name. Efficiency is paramount.")
 
 
 @bot.command(name="listgames")
@@ -4421,11 +4007,7 @@ async def list_games(ctx):
             # Truncate long names/reasons to fit in embed and apply Title Case
             name = game["name"][:40] + "..." if len(game["name"]) > 40 else game["name"]
             name = name.title()  # Convert to Title Case
-            reason = (
-                game["reason"][:60] + "..."
-                if len(game["reason"]) > 60
-                else game["reason"]
-            )
+            reason = game["reason"][:60] + "..." if len(game["reason"]) > 60 else game["reason"]
 
             # Don't show contributor twice - if reason already contains "Suggested by", don't add "by" again
             if (
@@ -4474,14 +4056,10 @@ async def list_games(ctx):
                 )
         else:
             # Single field for all games
-            embed.add_field(
-                name="Current Recommendations", value=field_value, inline=False
-            )
+            embed.add_field(name="Current Recommendations", value=field_value, inline=False)
 
     # Add footer with stats
-    embed.set_footer(
-        text=f"Total recommendations: {len(games)} | Requested by {ctx.author.name}"
-    )
+    embed.set_footer(text=f"Total recommendations: {len(games)} | Requested by {ctx.author.name}")
     embed.timestamp = discord.utils.utcnow()
 
     await ctx.send(embed=embed)
@@ -4521,9 +4099,7 @@ async def remove_game(ctx, *, arg: str):
     recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
     # Only send the detailed removal message in the invoking channel if not the recommendations channel
     if ctx.channel.id != RECOMMEND_CHANNEL_ID:
-        await ctx.send(
-            f"Recommendation '{removed['name']}' has been expunged from the record. Protocol maintained."
-        )
+        await ctx.send(f"Recommendation '{removed['name']}' has been expunged from the record. Protocol maintained.")
     # Always update the persistent recommendations list
     if recommend_channel:
         await post_or_update_recommend_list(ctx, recommend_channel)
@@ -4609,17 +4185,14 @@ async def list_played_games_cmd(ctx, series_filter: Optional[str] = None):
 
         if not games:
             if series_filter:
-                await ctx.send(
-                    f"📋 **No games found in '{series_filter}' series.** Database query complete."
-                )
+                await ctx.send(f"📋 **No games found in '{series_filter}' series.** Database query complete.")
             else:
                 await ctx.send("📋 **No played games catalogued.** Database is empty.")
             return
 
         # Create embed
         embed = discord.Embed(
-            title=f"🎮 Played Games Database"
-            + (f" - {series_filter}" if series_filter else ""),
+            title=f"🎮 Played Games Database" + (f" - {series_filter}" if series_filter else ""),
             description="Captain Jonesy's gaming history archive. Analysis complete.",
             color=0x2F3136,
         )
@@ -4636,27 +4209,14 @@ async def list_played_games_cmd(ctx, series_filter: Optional[str] = None):
             for series, series_games in series_groups.items():
                 game_lines = []
                 for game in series_games[:10]:  # Limit to avoid embed limits
-                    status_emoji = {
-                        "completed": "✅",
-                        "ongoing": "🔄",
-                        "dropped": "❌",
-                        "unknown": "❓",
-                    }.get(game.get("completion_status", "unknown"), "❓")
-
-                    episodes = (
-                        f" ({game.get('total_episodes', 0)} eps)"
-                        if game.get("total_episodes", 0) > 0
-                        else ""
-                    )
-                    year = (
-                        f" ({game.get('release_year')})"
-                        if game.get("release_year")
-                        else ""
+                    status_emoji = {"completed": "✅", "ongoing": "🔄", "dropped": "❌", "unknown": "❓"}.get(
+                        game.get("completion_status", "unknown"), "❓"
                     )
 
-                    game_lines.append(
-                        f"{status_emoji} **{game['canonical_name']}**{year}{episodes}"
-                    )
+                    episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get("total_episodes", 0) > 0 else ""
+                    year = f" ({game.get('release_year')})" if game.get("release_year") else ""
+
+                    game_lines.append(f"{status_emoji} **{game['canonical_name']}**{year}{episodes}")
 
                 if len(series_games) > 10:
                     game_lines.append(f"... and {len(series_games) - 10} more games")
@@ -4670,40 +4230,25 @@ async def list_played_games_cmd(ctx, series_filter: Optional[str] = None):
             # Show detailed list for specific series
             game_lines = []
             for i, game in enumerate(games[:20], 1):  # Limit to 20 for detailed view
-                status_emoji = {
-                    "completed": "✅",
-                    "ongoing": "🔄",
-                    "dropped": "❌",
-                    "unknown": "❓",
-                }.get(game.get("completion_status", "unknown"), "❓")
+                status_emoji = {"completed": "✅", "ongoing": "🔄", "dropped": "❌", "unknown": "❓"}.get(
+                    game.get("completion_status", "unknown"), "❓"
+                )
 
-                episodes = (
-                    f" ({game.get('total_episodes', 0)} eps)"
-                    if game.get("total_episodes", 0) > 0
-                    else ""
-                )
-                year = (
-                    f" ({game.get('release_year')})" if game.get("release_year") else ""
-                )
+                episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get("total_episodes", 0) > 0 else ""
+                year = f" ({game.get('release_year')})" if game.get("release_year") else ""
                 platform = f" [{game.get('platform')}]" if game.get("platform") else ""
 
-                game_lines.append(
-                    f"{i}. {status_emoji} **{game['canonical_name']}**{year}{episodes}{platform}"
-                )
+                game_lines.append(f"{i}. {status_emoji} **{game['canonical_name']}**{year}{episodes}{platform}")
 
             if len(games) > 20:
                 game_lines.append(f"... and {len(games) - 20} more games")
 
             embed.add_field(
-                name="Games List",
-                value="\n".join(game_lines) if game_lines else "No games found",
-                inline=False,
+                name="Games List", value="\n".join(game_lines) if game_lines else "No games found", inline=False
             )
 
         # Add footer
-        embed.set_footer(
-            text=f"Total games: {len(games)} | Database query: {ctx.author.name}"
-        )
+        embed.set_footer(text=f"Total games: {len(games)} | Database query: {ctx.author.name}")
         embed.timestamp = discord.utils.utcnow()
 
         await ctx.send(embed=embed)
@@ -4734,31 +4279,20 @@ async def search_played_games_cmd(ctx, *, query: str):
 
         game_lines = []
         for i, game in enumerate(games[:15], 1):  # Limit to 15 results
-            status_emoji = {
-                "completed": "✅",
-                "ongoing": "🔄",
-                "dropped": "❌",
-                "unknown": "❓",
-            }.get(game.get("completion_status", "unknown"), "❓")
+            status_emoji = {"completed": "✅", "ongoing": "🔄", "dropped": "❌", "unknown": "❓"}.get(
+                game.get("completion_status", "unknown"), "❓"
+            )
 
             series = f" [{game.get('series_name')}]" if game.get("series_name") else ""
-            episodes = (
-                f" ({game.get('total_episodes', 0)} eps)"
-                if game.get("total_episodes", 0) > 0
-                else ""
-            )
+            episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get("total_episodes", 0) > 0 else ""
             year = f" ({game.get('release_year')})" if game.get("release_year") else ""
 
-            game_lines.append(
-                f"{i}. {status_emoji} **{game['canonical_name']}**{series}{year}{episodes}"
-            )
+            game_lines.append(f"{i}. {status_emoji} **{game['canonical_name']}**{series}{year}{episodes}")
 
         if len(games) > 15:
             game_lines.append(f"... and {len(games) - 15} more results")
 
-        embed.add_field(
-            name="Matching Games", value="\n".join(game_lines), inline=False
-        )
+        embed.add_field(name="Matching Games", value="\n".join(game_lines), inline=False)
 
         embed.set_footer(text=f"Search query: {query} | Requested by {ctx.author.name}")
         embed.timestamp = discord.utils.utcnow()
@@ -4816,9 +4350,7 @@ async def game_info_cmd(ctx, *, identifier: str):
         if game.get("series_name"):
             embed.add_field(name="📁 Series", value=game["series_name"], inline=True)
         if game.get("release_year"):
-            embed.add_field(
-                name="📅 Release Year", value=str(game["release_year"]), inline=True
-            )
+            embed.add_field(name="📅 Release Year", value=str(game["release_year"]), inline=True)
         if game.get("platform"):
             embed.add_field(name="🖥️ Platform", value=game["platform"], inline=True)
 
@@ -4833,9 +4365,7 @@ async def game_info_cmd(ctx, *, identifier: str):
         embed.add_field(name="📊 Status", value=status_emoji, inline=True)
 
         if game.get("total_episodes", 0) > 0:
-            embed.add_field(
-                name="📺 Episodes", value=str(game["total_episodes"]), inline=True
-            )
+            embed.add_field(name="📺 Episodes", value=str(game["total_episodes"]), inline=True)
 
         # Alternative names
         if game.get("alternative_names"):
@@ -4845,16 +4375,12 @@ async def game_info_cmd(ctx, *, identifier: str):
         # Links
         if game.get("youtube_playlist_url"):
             embed.add_field(
-                name="📺 YouTube Playlist",
-                value=f"[View Playlist]({game['youtube_playlist_url']})",
-                inline=True,
+                name="📺 YouTube Playlist", value=f"[View Playlist]({game['youtube_playlist_url']})", inline=True
             )
 
         if game.get("twitch_vod_urls"):
             vod_count = len(game["twitch_vod_urls"])
-            embed.add_field(
-                name="🎮 Twitch VODs", value=f"{vod_count} VODs available", inline=True
-            )
+            embed.add_field(name="🎮 Twitch VODs", value=f"{vod_count} VODs available", inline=True)
 
         # Notes
         if game.get("notes"):
@@ -4862,13 +4388,9 @@ async def game_info_cmd(ctx, *, identifier: str):
 
         # Timestamps
         if game.get("first_played_date"):
-            embed.add_field(
-                name="🎯 First Played", value=game["first_played_date"], inline=True
-            )
+            embed.add_field(name="🎯 First Played", value=game["first_played_date"], inline=True)
 
-        embed.set_footer(
-            text=f"Database ID: {game['id']} | Last updated: {game.get('updated_at', 'Unknown')}"
-        )
+        embed.set_footer(text=f"Database ID: {game['id']} | Last updated: {game.get('updated_at', 'Unknown')}")
 
         await ctx.send(embed=embed)
 
@@ -4878,9 +4400,7 @@ async def game_info_cmd(ctx, *, identifier: str):
 
 @bot.command(name="updateplayedgame")
 @commands.has_permissions(manage_messages=True)
-async def update_played_game_cmd(
-    ctx, identifier: str, *, updates: Optional[str] = None
-):
+async def update_played_game_cmd(ctx, identifier: str, *, updates: Optional[str] = None):
     """Update a played game's information (by name or ID). Format: status:completed | episodes:15 | notes:New info
     If no updates are provided, will refresh metadata using AI enhancement."""
     try:
@@ -4888,21 +4408,15 @@ async def update_played_game_cmd(
         game = get_game_by_id_or_name(identifier)
         if not game:
             id_or_name = "ID" if identifier.isdigit() else "name"
-            await ctx.send(
-                f"🔍 **Game not found:** {id_or_name} '{identifier}' is not in the played games database."
-            )
+            await ctx.send(f"🔍 **Game not found:** {id_or_name} '{identifier}' is not in the played games database.")
             return
 
         # If no updates provided, do AI metadata refresh
         if not updates or updates.strip() == "":
-            await ctx.send(
-                f"🧠 **Initiating AI metadata refresh for '{game['canonical_name']}'...**"
-            )
+            await ctx.send(f"🧠 **Initiating AI metadata refresh for '{game['canonical_name']}'...**")
 
             if not ai_enabled:
-                await ctx.send(
-                    "❌ **AI system offline.** Cannot enhance metadata without AI capabilities."
-                )
+                await ctx.send("❌ **AI system offline.** Cannot enhance metadata without AI capabilities.")
                 return
 
             # Check what fields need updating
@@ -4912,10 +4426,7 @@ async def update_played_game_cmd(
             if not game.get("genre") or game.get("genre", "").strip() == "":
                 needs_update = True
                 missing_fields.append("genre")
-            if (
-                not game.get("alternative_names")
-                or len(game.get("alternative_names", [])) == 0
-            ):
+            if not game.get("alternative_names") or len(game.get("alternative_names", [])) == 0:
                 needs_update = True
                 missing_fields.append("alternative_names")
             if not game.get("series_name") or game.get("series_name", "").strip() == "":
@@ -4926,14 +4437,10 @@ async def update_played_game_cmd(
                 missing_fields.append("release_year")
 
             if not needs_update:
-                await ctx.send(
-                    f"✅ **'{game['canonical_name']}' already has complete metadata.** No updates needed."
-                )
+                await ctx.send(f"✅ **'{game['canonical_name']}' already has complete metadata.** No updates needed.")
                 return
 
-            await ctx.send(
-                f"📊 **Missing fields detected:** {', '.join(missing_fields)}"
-            )
+            await ctx.send(f"📊 **Missing fields detected:** {', '.join(missing_fields)}")
 
             # Convert to format expected by enhance_games_with_ai
             game_data = [
@@ -4956,39 +4463,25 @@ async def update_played_game_cmd(
                 # Prepare update data with only the enhanced fields
                 ai_update_data = {}
 
-                if enhanced_game.get("genre") and enhanced_game["genre"] != game.get(
-                    "genre"
-                ):
+                if enhanced_game.get("genre") and enhanced_game["genre"] != game.get("genre"):
                     ai_update_data["genre"] = enhanced_game["genre"]
-                if enhanced_game.get("series_name") and enhanced_game[
-                    "series_name"
-                ] != game.get("series_name"):
+                if enhanced_game.get("series_name") and enhanced_game["series_name"] != game.get("series_name"):
                     ai_update_data["series_name"] = enhanced_game["series_name"]
-                if enhanced_game.get("release_year") and enhanced_game[
-                    "release_year"
-                ] != game.get("release_year"):
+                if enhanced_game.get("release_year") and enhanced_game["release_year"] != game.get("release_year"):
                     ai_update_data["release_year"] = enhanced_game["release_year"]
-                if enhanced_game.get("alternative_names") and enhanced_game[
-                    "alternative_names"
-                ] != game.get("alternative_names", []):
-                    ai_update_data["alternative_names"] = enhanced_game[
-                        "alternative_names"
-                    ]
+                if enhanced_game.get("alternative_names") and enhanced_game["alternative_names"] != game.get(
+                    "alternative_names", []
+                ):
+                    ai_update_data["alternative_names"] = enhanced_game["alternative_names"]
 
                 if ai_update_data:
                     # Apply AI updates using the same bulk import method that works reliably
                     complete_game_data = {
                         "canonical_name": enhanced_game["canonical_name"],
-                        "alternative_names": enhanced_game.get(
-                            "alternative_names", game.get("alternative_names", [])
-                        ),
-                        "series_name": enhanced_game.get(
-                            "series_name", game.get("series_name")
-                        ),
+                        "alternative_names": enhanced_game.get("alternative_names", game.get("alternative_names", [])),
+                        "series_name": enhanced_game.get("series_name", game.get("series_name")),
                         "genre": enhanced_game.get("genre", game.get("genre")),
-                        "release_year": enhanced_game.get(
-                            "release_year", game.get("release_year")
-                        ),
+                        "release_year": enhanced_game.get("release_year", game.get("release_year")),
                         "platform": game.get("platform"),
                         "first_played_date": game.get("first_played_date"),
                         "completion_status": game.get("completion_status", "unknown"),
@@ -5011,26 +4504,17 @@ async def update_played_game_cmd(
                         # Show the enhanced data
                         enhanced_info = []
                         if ai_update_data.get("genre"):
-                            enhanced_info.append(
-                                f"**Genre:** {ai_update_data['genre']}"
-                            )
+                            enhanced_info.append(f"**Genre:** {ai_update_data['genre']}")
                         if ai_update_data.get("series_name"):
-                            enhanced_info.append(
-                                f"**Series:** {ai_update_data['series_name']}"
-                            )
+                            enhanced_info.append(f"**Series:** {ai_update_data['series_name']}")
                         if ai_update_data.get("release_year"):
-                            enhanced_info.append(
-                                f"**Year:** {ai_update_data['release_year']}"
-                            )
+                            enhanced_info.append(f"**Year:** {ai_update_data['release_year']}")
                         if ai_update_data.get("alternative_names"):
                             alt_names = ", ".join(ai_update_data["alternative_names"])
                             enhanced_info.append(f"**Alt Names:** {alt_names}")
 
                         if enhanced_info:
-                            await ctx.send(
-                                f"📊 **Enhanced metadata:**\n• "
-                                + "\n• ".join(enhanced_info)
-                            )
+                            await ctx.send(f"📊 **Enhanced metadata:**\n• " + "\n• ".join(enhanced_info))
                     else:
                         await ctx.send(
                             f"❌ **Update failed:** Unable to apply AI enhancements to '{game['canonical_name']}'."
@@ -5063,9 +4547,7 @@ async def update_played_game_cmd(
                     try:
                         update_data["total_episodes"] = int(value)
                     except ValueError:
-                        await ctx.send(
-                            f"⚠️ **Invalid episode count:** '{value}' is not a valid number."
-                        )
+                        await ctx.send(f"⚠️ **Invalid episode count:** '{value}' is not a valid number.")
                         return
                 elif key == "notes":
                     update_data["notes"] = value
@@ -5075,9 +4557,7 @@ async def update_played_game_cmd(
                     try:
                         update_data["release_year"] = int(value)
                     except ValueError:
-                        await ctx.send(
-                            f"⚠️ **Invalid year:** '{value}' is not a valid year."
-                        )
+                        await ctx.send(f"⚠️ **Invalid year:** '{value}' is not a valid year.")
                         return
                 elif key == "series":
                     update_data["series_name"] = value
@@ -5115,9 +4595,7 @@ async def remove_played_game_cmd(ctx, *, game_name: str):
         # Find the game first
         game = db.get_played_game(game_name)
         if not game:
-            await ctx.send(
-                f"🔍 **Game not found:** '{game_name}' is not in the played games database."
-            )
+            await ctx.send(f"🔍 **Game not found:** '{game_name}' is not in the played games database.")
             return
 
         # Confirmation
@@ -5137,9 +4615,7 @@ async def remove_played_game_cmd(ctx, *, game_name: str):
                         f"✅ **Game removed:** '{removed['canonical_name']}' has been expunged from the database. Protocol complete."
                     )
                 else:
-                    await ctx.send(
-                        "❌ **Removal failed:** System malfunction during deletion process."
-                    )
+                    await ctx.send("❌ **Removal failed:** System malfunction during deletion process.")
             else:
                 await ctx.send("❌ **Operation cancelled:** No data was deleted.")
         except asyncio.TimeoutError:
@@ -5158,15 +4634,11 @@ async def bulk_import_played_games_cmd(
 
     # Hardcoded values for Captain Jonesy's channels
     if not youtube_channel_id:
-        youtube_channel_id = (
-            "UCPoUxLHeTnE9SUDAkqfJzDQ"  # Captain Jonesy's YouTube channel
-        )
+        youtube_channel_id = "UCPoUxLHeTnE9SUDAkqfJzDQ"  # Captain Jonesy's YouTube channel
     if not twitch_username:
         twitch_username = "jonesyspacecat"  # Captain Jonesy's Twitch username
 
-    await ctx.send(
-        "🔄 **Initiating comprehensive gaming history analysis from YouTube and Twitch APIs...**"
-    )
+    await ctx.send("🔄 **Initiating comprehensive gaming history analysis from YouTube and Twitch APIs...**")
 
     try:
         # Check API availability
@@ -5181,18 +4653,12 @@ async def bulk_import_played_games_cmd(
         twitch_client_secret = os.getenv("TWITCH_CLIENT_SECRET")
 
         if not youtube_api_key:
-            await ctx.send(
-                "⚠️ **YouTube API key not configured.** Skipping YouTube data collection."
-            )
+            await ctx.send("⚠️ **YouTube API key not configured.** Skipping YouTube data collection.")
         if not twitch_client_id or not twitch_client_secret:
-            await ctx.send(
-                "⚠️ **Twitch API credentials not configured.** Skipping Twitch data collection."
-            )
+            await ctx.send("⚠️ **Twitch API credentials not configured.** Skipping Twitch data collection.")
 
         if not youtube_api_key and not (twitch_client_id and twitch_client_secret):
-            await ctx.send(
-                "❌ **No API credentials available.** Cannot proceed with data collection."
-            )
+            await ctx.send("❌ **No API credentials available.** Cannot proceed with data collection.")
             return
 
         # Fetch comprehensive game data from both platforms
@@ -5202,13 +4668,9 @@ async def bulk_import_played_games_cmd(
         if youtube_api_key:
             await ctx.send("📺 **Analyzing YouTube gaming archive...**")
             try:
-                youtube_games = await fetch_comprehensive_youtube_games(
-                    youtube_channel_id
-                )
+                youtube_games = await fetch_comprehensive_youtube_games(youtube_channel_id)
                 all_games_data.extend(youtube_games)
-                await ctx.send(
-                    f"📺 **YouTube analysis complete:** {len(youtube_games)} game series identified"
-                )
+                await ctx.send(f"📺 **YouTube analysis complete:** {len(youtube_games)} game series identified")
             except Exception as e:
                 await ctx.send(f"⚠️ **YouTube API error:** {str(e)}")
 
@@ -5222,37 +4684,26 @@ async def bulk_import_played_games_cmd(
                     # Check if game already exists from YouTube
                     existing_game = None
                     for yt_game in all_games_data:
-                        if (
-                            yt_game["canonical_name"].lower()
-                            == twitch_game["canonical_name"].lower()
-                        ):
+                        if yt_game["canonical_name"].lower() == twitch_game["canonical_name"].lower():
                             existing_game = yt_game
                             break
 
                     if existing_game:
                         # Merge Twitch data into existing YouTube game
                         if twitch_game.get("twitch_vod_urls"):
-                            existing_game["twitch_vod_urls"] = twitch_game[
-                                "twitch_vod_urls"
-                            ]
+                            existing_game["twitch_vod_urls"] = twitch_game["twitch_vod_urls"]
                         if twitch_game.get("total_playtime_minutes", 0) > 0:
-                            existing_game["total_playtime_minutes"] += twitch_game[
-                                "total_playtime_minutes"
-                            ]
+                            existing_game["total_playtime_minutes"] += twitch_game["total_playtime_minutes"]
                     else:
                         # Add as new game
                         all_games_data.append(twitch_game)
 
-                await ctx.send(
-                    f"🎮 **Twitch analysis complete:** {len(twitch_games)} game series identified"
-                )
+                await ctx.send(f"🎮 **Twitch analysis complete:** {len(twitch_games)} game series identified")
             except Exception as e:
                 await ctx.send(f"⚠️ **Twitch API error:** {str(e)}")
 
         if not all_games_data:
-            await ctx.send(
-                "❌ **No gaming data retrieved.** Check API credentials and channel/username."
-            )
+            await ctx.send("❌ **No gaming data retrieved.** Check API credentials and channel/username.")
             return
 
         # Use AI to enhance metadata
@@ -5261,32 +4712,22 @@ async def bulk_import_played_games_cmd(
             try:
                 enhanced_games = await enhance_games_with_ai(all_games_data)
                 all_games_data = enhanced_games
-                await ctx.send(
-                    "✅ **AI enhancement complete:** Genre and series data populated"
-                )
+                await ctx.send("✅ **AI enhancement complete:** Genre and series data populated")
             except Exception as e:
                 await ctx.send(f"⚠️ **AI enhancement error:** {str(e)}")
 
         # Show preview
-        await ctx.send(
-            f"📋 **Import Preview** ({len(all_games_data)} games discovered):"
-        )
+        await ctx.send(f"📋 **Import Preview** ({len(all_games_data)} games discovered):")
         preview_games = all_games_data[:8]  # Show first 8 games
         for i, game in enumerate(preview_games, 1):
-            episodes = (
-                f" ({game.get('total_episodes', 0)} eps)"
-                if game.get("total_episodes", 0) > 0
-                else ""
-            )
+            episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get("total_episodes", 0) > 0 else ""
             playtime = (
                 f" [{game.get('total_playtime_minutes', 0)//60}h {game.get('total_playtime_minutes', 0)%60}m]"
                 if game.get("total_playtime_minutes", 0) > 0
                 else ""
             )
             genre = f" - {game.get('genre', 'Unknown')}" if game.get("genre") else ""
-            await ctx.send(
-                f"{i}. **{game['canonical_name']}**{episodes}{playtime}{genre}"
-            )
+            await ctx.send(f"{i}. **{game['canonical_name']}**{episodes}{playtime}{genre}")
 
         if len(all_games_data) > 8:
             await ctx.send(f"... and {len(all_games_data) - 8} more games")
@@ -5312,13 +4753,9 @@ async def bulk_import_played_games_cmd(
                     f"📊 **Database Statistics:**\n• Total games: {stats.get('total_games', 0)}\n• Total episodes: {stats.get('total_episodes', 0)}\n• Total playtime: {stats.get('total_playtime_hours', 0)} hours"
                 )
             else:
-                await ctx.send(
-                    "❌ **Import cancelled.** No games were added to the database."
-                )
+                await ctx.send("❌ **Import cancelled.** No games were added to the database.")
         except asyncio.TimeoutError:
-            await ctx.send(
-                "❌ **Import timed out.** No games were added to the database."
-            )
+            await ctx.send("❌ **Import timed out.** No games were added to the database.")
 
     except Exception as e:
         await ctx.send(f"❌ **Import error:** {str(e)}")
@@ -5350,9 +4787,7 @@ async def fix_canonical_name_cmd(ctx, current_name: str, *, new_canonical_name: 
             msg = await bot.wait_for("message", check=check, timeout=30.0)
             if msg.content == "CONFIRM UPDATE":
                 # Update the canonical name
-                success = db.update_played_game(
-                    game["id"], canonical_name=new_canonical_name
-                )
+                success = db.update_played_game(game["id"], canonical_name=new_canonical_name)
 
                 if success:
                     await ctx.send(
@@ -5376,13 +4811,9 @@ async def fix_canonical_name_cmd(ctx, current_name: str, *, new_canonical_name: 
                         f"❌ **Update failed:** Unable to modify canonical name for '{old_name}'. System malfunction detected."
                     )
             else:
-                await ctx.send(
-                    "❌ **Operation cancelled:** No changes were made to the canonical name."
-                )
+                await ctx.send("❌ **Operation cancelled:** No changes were made to the canonical name.")
         except asyncio.TimeoutError:
-            await ctx.send(
-                "❌ **Operation timed out:** No changes were made to the canonical name."
-            )
+            await ctx.send("❌ **Operation timed out:** No changes were made to the canonical name.")
 
     except Exception as e:
         await ctx.send(f"❌ **Canonical name correction error:** {str(e)}")
@@ -5396,9 +4827,7 @@ async def add_alternative_name_cmd(ctx, game_name: str, *, alternative_name: str
         # Find the game first
         game = db.get_played_game(game_name)
         if not game:
-            await ctx.send(
-                f"🔍 **Game not found:** '{game_name}' is not in the played games database."
-            )
+            await ctx.send(f"🔍 **Game not found:** '{game_name}' is not in the played games database.")
             return
 
         # Get current alternative names
@@ -5436,9 +4865,7 @@ async def remove_alternative_name_cmd(ctx, game_name: str, *, alternative_name: 
         # Find the game first
         game = db.get_played_game(game_name)
         if not game:
-            await ctx.send(
-                f"🔍 **Game not found:** '{game_name}' is not in the played games database."
-            )
+            await ctx.send(f"🔍 **Game not found:** '{game_name}' is not in the played games database.")
             return
 
         # Get current alternative names
@@ -5463,9 +4890,7 @@ async def remove_alternative_name_cmd(ctx, game_name: str, *, alternative_name: 
         success = db.update_played_game(game["id"], alternative_names=updated_alt_names)
 
         if success:
-            remaining_names = (
-                ", ".join(updated_alt_names) if updated_alt_names else "None"
-            )
+            remaining_names = ", ".join(updated_alt_names) if updated_alt_names else "None"
             await ctx.send(
                 f"✅ **Alternative name removed:** '{alternative_name}' has been removed from '{game['canonical_name']}'\n\n📊 **Remaining alternative names:** {remaining_names}"
             )
@@ -5483,9 +4908,7 @@ async def remove_alternative_name_cmd(ctx, game_name: str, *, alternative_name: 
 async def update_played_games_cmd(ctx):
     """Update existing played games to fill in missing fields using AI enhancement"""
     try:
-        await ctx.send(
-            "🔄 **Initiating metadata enhancement for existing played games...**"
-        )
+        await ctx.send("🔄 **Initiating metadata enhancement for existing played games...**")
 
         # Get all played games from database
         all_games = db.get_all_played_games()
@@ -5504,10 +4927,7 @@ async def update_played_games_cmd(ctx):
             # Check for missing or empty fields
             if not game.get("genre") or game.get("genre", "").strip() == "":
                 needs_update = True
-            if (
-                not game.get("alternative_names")
-                or len(game.get("alternative_names", [])) == 0
-            ):
+            if not game.get("alternative_names") or len(game.get("alternative_names", [])) == 0:
                 needs_update = True
             if not game.get("series_name") or game.get("series_name", "").strip() == "":
                 needs_update = True
@@ -5518,9 +4938,7 @@ async def update_played_games_cmd(ctx):
                 games_needing_updates.append(game)
 
         if not games_needing_updates:
-            await ctx.send(
-                "✅ **All games already have complete metadata.** No updates needed."
-            )
+            await ctx.send("✅ **All games already have complete metadata.** No updates needed.")
             return
 
         await ctx.send(
@@ -5533,10 +4951,7 @@ async def update_played_games_cmd(ctx):
             missing_fields = []
             if not game.get("genre"):
                 missing_fields.append("genre")
-            if (
-                not game.get("alternative_names")
-                or len(game.get("alternative_names", [])) == 0
-            ):
+            if not game.get("alternative_names") or len(game.get("alternative_names", [])) == 0:
                 missing_fields.append("alt_names")
             if not game.get("series_name"):
                 missing_fields.append("series")
@@ -5559,14 +4974,10 @@ async def update_played_games_cmd(ctx):
             msg = await bot.wait_for("message", check=check, timeout=60.0)
             if msg.content == "CONFIRM UPDATE":
                 if not ai_enabled:
-                    await ctx.send(
-                        "❌ **AI system offline.** Cannot enhance metadata without AI capabilities."
-                    )
+                    await ctx.send("❌ **AI system offline.** Cannot enhance metadata without AI capabilities.")
                     return
 
-                await ctx.send(
-                    "🧠 **AI enhancement initiated.** Processing games in batches..."
-                )
+                await ctx.send("🧠 **AI enhancement initiated.** Processing games in batches...")
 
                 # Convert database games to the format expected by enhance_games_with_ai
                 games_data = []
@@ -5602,30 +5013,17 @@ async def update_played_games_cmd(ctx):
                         game_data = {
                             "canonical_name": enhanced_game["canonical_name"],
                             "alternative_names": enhanced_game.get(
-                                "alternative_names",
-                                original_game.get("alternative_names", []),
+                                "alternative_names", original_game.get("alternative_names", [])
                             ),
-                            "series_name": enhanced_game.get(
-                                "series_name", original_game.get("series_name")
-                            ),
-                            "genre": enhanced_game.get(
-                                "genre", original_game.get("genre")
-                            ),
-                            "release_year": enhanced_game.get(
-                                "release_year", original_game.get("release_year")
-                            ),
+                            "series_name": enhanced_game.get("series_name", original_game.get("series_name")),
+                            "genre": enhanced_game.get("genre", original_game.get("genre")),
+                            "release_year": enhanced_game.get("release_year", original_game.get("release_year")),
                             "platform": original_game.get("platform"),
                             "first_played_date": original_game.get("first_played_date"),
-                            "completion_status": original_game.get(
-                                "completion_status", "unknown"
-                            ),
+                            "completion_status": original_game.get("completion_status", "unknown"),
                             "total_episodes": original_game.get("total_episodes", 0),
-                            "total_playtime_minutes": original_game.get(
-                                "total_playtime_minutes", 0
-                            ),
-                            "youtube_playlist_url": original_game.get(
-                                "youtube_playlist_url"
-                            ),
+                            "total_playtime_minutes": original_game.get("total_playtime_minutes", 0),
+                            "youtube_playlist_url": original_game.get("youtube_playlist_url"),
                             "twitch_vod_urls": original_game.get("twitch_vod_urls", []),
                             "notes": original_game.get("notes"),
                         }
@@ -5640,19 +5038,13 @@ async def update_played_games_cmd(ctx):
                 )
 
                 # Run deduplication to merge any duplicate games created during import
-                await ctx.send(
-                    "🔄 **Running deduplication check to merge any duplicate games...**"
-                )
+                await ctx.send("🔄 **Running deduplication check to merge any duplicate games...**")
                 merged_count = db.deduplicate_played_games()
 
                 if merged_count > 0:
-                    await ctx.send(
-                        f"✅ **Deduplication complete:** Merged {merged_count} duplicate game records."
-                    )
+                    await ctx.send(f"✅ **Deduplication complete:** Merged {merged_count} duplicate game records.")
                 else:
-                    await ctx.send(
-                        "✅ **Deduplication complete:** No duplicate games found."
-                    )
+                    await ctx.send("✅ **Deduplication complete:** No duplicate games found.")
 
                 # Show final statistics
                 stats = db.get_played_games_stats()
@@ -5694,9 +5086,7 @@ async def check_db_schema_cmd(ctx):
             columns = cur.fetchall()
 
             if not columns:
-                await ctx.send(
-                    "❌ **played_games table not found** - Run the bot once to initialize schema"
-                )
+                await ctx.send("❌ **played_games table not found** - Run the bot once to initialize schema")
                 return
 
             # Check for required array fields
@@ -5716,30 +5106,22 @@ async def check_db_schema_cmd(ctx):
                 if field in array_fields:
                     data_type = array_fields[field]
                     if "ARRAY" in data_type or "_text" in data_type:
-                        schema_msg += (
-                            f"✅ **{field}**: {data_type} (Array support: YES)\n"
-                        )
+                        schema_msg += f"✅ **{field}**: {data_type} (Array support: YES)\n"
                     else:
-                        schema_msg += (
-                            f"⚠️ **{field}**: {data_type} (Array support: NO)\n"
-                        )
+                        schema_msg += f"⚠️ **{field}**: {data_type} (Array support: NO)\n"
                 else:
                     schema_msg += f"❌ **{field}**: Missing column\n"
 
             # Test array functionality
             try:
-                cur.execute(
-                    "SELECT id, canonical_name, alternative_names FROM played_games LIMIT 1"
-                )
+                cur.execute("SELECT id, canonical_name, alternative_names FROM played_games LIMIT 1")
                 test_game = cur.fetchone()
 
                 if test_game:
                     alt_names = test_game[2]
                     schema_msg += f"\n🧪 **Array Test Sample:**\n"
                     schema_msg += f"• Game: {test_game[1]}\n"
-                    schema_msg += (
-                        f"• Alt Names: {alt_names} (Type: {type(alt_names).__name__})\n"
-                    )
+                    schema_msg += f"• Alt Names: {alt_names} (Type: {type(alt_names).__name__})\n"
 
                     # Test if we can read arrays properly
                     if isinstance(alt_names, list):
@@ -5747,9 +5129,7 @@ async def check_db_schema_cmd(ctx):
                     else:
                         schema_msg += f"⚠️ **Array reading**: May need schema update\n"
                 else:
-                    schema_msg += (
-                        f"\n📝 **No test data available** - Add some games first\n"
-                    )
+                    schema_msg += f"\n📝 **No test data available** - Add some games first\n"
 
             except Exception as e:
                 schema_msg += f"\n❌ **Array test failed**: {str(e)}\n"
@@ -5763,9 +5143,7 @@ async def check_db_schema_cmd(ctx):
             schema_msg += f"WHERE canonical_name = 'Game Name';\n\n"
             schema_msg += f"-- ✅ Add to existing array:\n"
             schema_msg += f"UPDATE played_games \n"
-            schema_msg += (
-                f"SET alternative_names = alternative_names || ARRAY['New Alt'] \n"
-            )
+            schema_msg += f"SET alternative_names = alternative_names || ARRAY['New Alt'] \n"
             schema_msg += f"WHERE canonical_name = 'Game Name';\n"
             schema_msg += f"```"
 
@@ -5783,20 +5161,14 @@ async def set_alternative_names_cmd(ctx, game_name: str, *, alternative_names: s
         # Find the game first
         game = db.get_played_game(game_name)
         if not game:
-            await ctx.send(
-                f"🔍 **Game not found:** '{game_name}' is not in the played games database."
-            )
+            await ctx.send(f"🔍 **Game not found:** '{game_name}' is not in the played games database.")
             return
 
         # Parse alternative names from comma-separated string
-        alt_names_list = [
-            name.strip() for name in alternative_names.split(",") if name.strip()
-        ]
+        alt_names_list = [name.strip() for name in alternative_names.split(",") if name.strip()]
 
         if not alt_names_list:
-            await ctx.send(
-                "⚠️ **No valid alternative names provided.** Use comma-separated format: name1, name2, name3"
-            )
+            await ctx.send("⚠️ **No valid alternative names provided.** Use comma-separated format: name1, name2, name3")
             return
 
         # Show preview
@@ -5811,9 +5183,7 @@ async def set_alternative_names_cmd(ctx, game_name: str, *, alternative_names: s
             msg = await bot.wait_for("message", check=check, timeout=30.0)
             if msg.content == "CONFIRM SET":
                 # Update the game with the new alternative names
-                success = db.update_played_game(
-                    game["id"], alternative_names=alt_names_list
-                )
+                success = db.update_played_game(game["id"], alternative_names=alt_names_list)
 
                 if success:
                     await ctx.send(
@@ -5824,13 +5194,9 @@ async def set_alternative_names_cmd(ctx, game_name: str, *, alternative_names: s
                         f"❌ **Update failed:** Unable to set alternative names for '{game['canonical_name']}'. System malfunction detected."
                     )
             else:
-                await ctx.send(
-                    "❌ **Operation cancelled:** No changes were made to alternative names."
-                )
+                await ctx.send("❌ **Operation cancelled:** No changes were made to alternative names.")
         except asyncio.TimeoutError:
-            await ctx.send(
-                "❌ **Operation timed out:** No changes were made to alternative names."
-            )
+            await ctx.send("❌ **Operation timed out:** No changes were made to alternative names.")
 
     except Exception as e:
         await ctx.send(f"❌ **Alternative names setting error:** {str(e)}")
@@ -5843,9 +5209,7 @@ async def test_update_game_cmd(ctx, game_id: str, field: str, *, value: str):
     try:
         # Validate game ID is numeric
         if not game_id.isdigit():
-            await ctx.send(
-                "❌ **Invalid game ID:** Please provide a numeric game ID (e.g., 1, 2, 3)"
-            )
+            await ctx.send("❌ **Invalid game ID:** Please provide a numeric game ID (e.g., 1, 2, 3)")
             return
 
         game_id_int = int(game_id)
@@ -5853,9 +5217,7 @@ async def test_update_game_cmd(ctx, game_id: str, field: str, *, value: str):
         # Find the game by ID
         game = db.get_played_game_by_id(game_id_int)
         if not game:
-            await ctx.send(
-                f"🔍 **Game not found:** No game with ID {game_id} exists in the database."
-            )
+            await ctx.send(f"🔍 **Game not found:** No game with ID {game_id} exists in the database.")
             return
 
         # Validate field name
@@ -5878,17 +5240,11 @@ async def test_update_game_cmd(ctx, game_id: str, field: str, *, value: str):
 
         # Convert value to appropriate type
         update_value = value
-        if field.lower() in [
-            "release_year",
-            "total_episodes",
-            "total_playtime_minutes",
-        ]:
+        if field.lower() in ["release_year", "total_episodes", "total_playtime_minutes"]:
             try:
                 update_value = int(value)
             except ValueError:
-                await ctx.send(
-                    f"❌ **Invalid value:** '{value}' is not a valid number for field '{field}'"
-                )
+                await ctx.send(f"❌ **Invalid value:** '{value}' is not a valid number for field '{field}'")
                 return
 
         # Show current and new values
@@ -5902,26 +5258,20 @@ async def test_update_game_cmd(ctx, game_id: str, field: str, *, value: str):
         success = db.update_played_game(game_id_int, **update_data)
 
         if success:
-            await ctx.send(
-                f"✅ **Update successful:** {field} updated from '{current_value}' to '{update_value}'"
-            )
+            await ctx.send(f"✅ **Update successful:** {field} updated from '{current_value}' to '{update_value}'")
 
             # Verify the update by reading the game again
             updated_game = db.get_played_game_by_id(game_id_int)
             if updated_game:
                 verified_value = updated_game.get(field.lower(), "None")
                 if str(verified_value) == str(update_value):
-                    await ctx.send(
-                        f"✅ **Verification successful:** Database now shows {field} = '{verified_value}'"
-                    )
+                    await ctx.send(f"✅ **Verification successful:** Database now shows {field} = '{verified_value}'")
                 else:
                     await ctx.send(
                         f"⚠️ **Verification warning:** Expected '{update_value}' but database shows '{verified_value}'"
                     )
             else:
-                await ctx.send(
-                    "⚠️ **Verification failed:** Could not re-read game from database"
-                )
+                await ctx.send("⚠️ **Verification failed:** Could not re-read game from database")
         else:
             await ctx.send(
                 f"❌ **Update failed:** Database update operation returned false. Check database permissions and connection."
@@ -5945,9 +5295,7 @@ async def debug_game_cmd(ctx, game_id: str):
         # Get the game
         game = db.get_played_game_by_id(game_id_int)
         if not game:
-            await ctx.send(
-                f"🔍 **Game not found:** No game with ID {game_id} exists in the database."
-            )
+            await ctx.send(f"🔍 **Game not found:** No game with ID {game_id} exists in the database.")
             return
 
         # Show detailed game information
@@ -5960,9 +5308,7 @@ async def debug_game_cmd(ctx, game_id: str):
         debug_info += f"• **Platform:** {game.get('platform', 'None')}\n"
         debug_info += f"• **Status:** {game.get('completion_status', 'None')}\n"
         debug_info += f"• **Episodes:** {game.get('total_episodes', 0)}\n"
-        debug_info += (
-            f"• **Playtime:** {game.get('total_playtime_minutes', 0)} minutes\n"
-        )
+        debug_info += f"• **Playtime:** {game.get('total_playtime_minutes', 0)} minutes\n"
         debug_info += f"• **Alt Names:** {game.get('alternative_names', [])}\n"
         debug_info += f"• **Created:** {game.get('created_at', 'None')}\n"
         debug_info += f"• **Updated:** {game.get('updated_at', 'None')}\n"
@@ -5975,40 +5321,26 @@ async def debug_game_cmd(ctx, game_id: str):
             try:
                 with conn.cursor() as cur:
                     # Test if we can read the specific game
-                    cur.execute(
-                        "SELECT canonical_name FROM played_games WHERE id = %s",
-                        (game_id_int,),
-                    )
+                    cur.execute("SELECT canonical_name FROM played_games WHERE id = %s", (game_id_int,))
                     result = cur.fetchone()
                     if result:
-                        await ctx.send(
-                            f"✅ **Database read test:** Successfully read game '{result[0]}'"
-                        )
+                        await ctx.send(f"✅ **Database read test:** Successfully read game '{result[0]}'")
                     else:
                         await ctx.send("❌ **Database read test:** Failed to read game")
 
                     # Test if we can perform a harmless update (set updated_at to current time)
-                    cur.execute(
-                        "UPDATE played_games SET updated_at = CURRENT_TIMESTAMP WHERE id = %s",
-                        (game_id_int,),
-                    )
+                    cur.execute("UPDATE played_games SET updated_at = CURRENT_TIMESTAMP WHERE id = %s", (game_id_int,))
                     rows_affected = cur.rowcount
-                    await ctx.send(
-                        f"✅ **Database update test:** {rows_affected} row(s) affected by timestamp update"
-                    )
+                    await ctx.send(f"✅ **Database update test:** {rows_affected} row(s) affected by timestamp update")
 
                     # Rollback the test update
                     conn.rollback()
-                    await ctx.send(
-                        "✅ **Test update rolled back:** No permanent changes made"
-                    )
+                    await ctx.send("✅ **Test update rolled back:** No permanent changes made")
 
             except Exception as db_error:
                 await ctx.send(f"❌ **Database test error:** {str(db_error)}")
         else:
-            await ctx.send(
-                "❌ **Database connection failed:** Cannot test update capabilities"
-            )
+            await ctx.send("❌ **Database connection failed:** Cannot test update capabilities")
 
     except Exception as e:
         await ctx.send(f"❌ **Debug error:** {str(e)}")
