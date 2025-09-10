@@ -73,9 +73,7 @@ Only respond with valid JSON."""
                     print(f"  • Year: {game_data.get('release_year')}")
                     print(f"  • Alt Names: {game_data.get('alternative_names')}")
                 else:
-                    print(
-                        f"⚠️ Game not found in response keys: {list(parsed_data.keys())}"
-                    )
+                    print(f"⚠️ Game not found in response keys: {list(parsed_data.keys())}")
 
             except json.JSONDecodeError as e:
                 print(f"❌ JSON Parsing Failed: {e}")

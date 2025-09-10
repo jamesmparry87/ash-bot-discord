@@ -181,10 +181,7 @@ class TestStrikesOperations:
     def test_get_all_strikes(self, db_with_mock_connection):
         """Test getting all users with strikes."""
         db, mock_cursor = db_with_mock_connection
-        mock_cursor.fetchall.return_value = [
-            {"user_id": 123, "strike_count": 1},
-            {"user_id": 456, "strike_count": 2},
-        ]
+        mock_cursor.fetchall.return_value = [{"user_id": 123, "strike_count": 1}, {"user_id": 456, "strike_count": 2}]
 
         result = db.get_all_strikes()
         expected = {123: 1, 456: 2}
@@ -236,9 +233,7 @@ class TestGameRecommendations:
 
         # Mock get_all_games
         with patch.object(
-            db,
-            "get_all_games",
-            return_value=[{"name": "Test Game", "reason": "Great", "added_by": "User"}],
+            db, "get_all_games", return_value=[{"name": "Test Game", "reason": "Great", "added_by": "User"}]
         ):
             result = db.game_exists("Test Game")
             assert result is True
@@ -251,13 +246,7 @@ class TestGameRecommendations:
         with patch.object(
             db,
             "get_all_games",
-            return_value=[
-                {
-                    "name": "The Elder Scrolls V: Skyrim",
-                    "reason": "Great",
-                    "added_by": "User",
-                }
-            ],
+            return_value=[{"name": "The Elder Scrolls V: Skyrim", "reason": "Great", "added_by": "User"}],
         ):
             result = db.game_exists("Elder Scrolls Skyrim")
             assert result is True
@@ -268,11 +257,7 @@ class TestGameRecommendations:
 
         # Mock get_all_games
         with patch.object(
-            db,
-            "get_all_games",
-            return_value=[
-                {"name": "Different Game", "reason": "Great", "added_by": "User"}
-            ],
+            db, "get_all_games", return_value=[{"name": "Different Game", "reason": "Great", "added_by": "User"}]
         ):
             result = db.game_exists("Test Game")
             assert result is False
@@ -326,11 +311,7 @@ class TestPlayedGames:
         ]
 
         with patch.object(db, "_convert_text_to_arrays") as mock_convert:
-            mock_convert.return_value = {
-                "id": 1,
-                "canonical_name": "Test Game",
-                "alternative_names": ["TG", "Test"],
-            }
+            mock_convert.return_value = {"id": 1, "canonical_name": "Test Game", "alternative_names": ["TG", "Test"]}
 
             result = db.get_played_game("Test Game")
             assert result is not None
@@ -378,10 +359,7 @@ class TestPlayedGames:
         """Test conversion with empty TEXT fields."""
         db = DatabaseManager()
 
-        game_dict = {
-            "alternative_names": "",
-            "twitch_vod_urls": None,
-        }
+        game_dict = {"alternative_names": "", "twitch_vod_urls": None}
 
         result = db._convert_text_to_arrays(game_dict)  # type: ignore
 
@@ -521,10 +499,7 @@ class TestStatisticsAndQueries:
                 {"completion_status": "completed", "count": 30},
                 {"completion_status": "ongoing", "count": 20},
             ],  # Status counts
-            [
-                {"genre": "Action", "count": 15},
-                {"genre": "RPG", "count": 10},
-            ],  # Top genres
+            [{"genre": "Action", "count": 15}, {"genre": "RPG", "count": 10}],  # Top genres
             [{"series_name": "Series A", "count": 5}],  # Top series
         ]
 
@@ -563,11 +538,7 @@ class TestStatisticsAndQueries:
         db, mock_cursor = db_with_mock_connection
 
         mock_cursor.fetchall.return_value = [
-            {
-                "canonical_name": "Horror Game",
-                "genre": "Survival-Horror",
-                "alternative_names": "HG,Horror",
-            }
+            {"canonical_name": "Horror Game", "genre": "Survival-Horror", "alternative_names": "HG,Horror"}
         ]
 
         with patch.object(db, "_convert_text_to_arrays") as mock_convert:

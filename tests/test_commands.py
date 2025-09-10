@@ -109,9 +109,7 @@ class TestStrikeCommands:
     """Test strike-related commands."""
 
     @pytest.mark.asyncio
-    async def test_get_strikes_command(
-        self, mock_discord_context, mock_db, mock_discord_user
-    ):
+    async def test_get_strikes_command(self, mock_discord_context, mock_db, mock_discord_user):
         """Test the !strikes command."""
 
         # Mock the database to return strike count
@@ -131,9 +129,7 @@ class TestStrikeCommands:
             assert "has 3 strike(s)" in call_args
 
     @pytest.mark.asyncio
-    async def test_reset_strikes_command(
-        self, mock_discord_context, mock_db, mock_discord_user
-    ):
+    async def test_reset_strikes_command(self, mock_discord_context, mock_db, mock_discord_user):
         """Test the !resetstrikes command."""
         import ash_bot_fallback  # type: ignore
 
@@ -141,9 +137,7 @@ class TestStrikeCommands:
         mock_discord_context.author.guild_permissions.manage_messages = True
 
         with patch("ash_bot_fallback.db", mock_db):
-            await ash_bot_fallback.reset_strikes(
-                mock_discord_context, mock_discord_user
-            )
+            await ash_bot_fallback.reset_strikes(mock_discord_context, mock_discord_user)
 
             # Verify database was updated
             mock_db.set_user_strikes.assert_called_once_with(mock_discord_user.id, 0)
@@ -202,12 +196,7 @@ class TestGameRecommendationCommands:
         mock_db.game_exists.return_value = False
         mock_db.add_game_recommendation.return_value = True
         mock_db.get_all_games.return_value = [
-            {
-                "id": 1,
-                "name": "Test Game",
-                "reason": "Great game",
-                "added_by": "TestUser",
-            }
+            {"id": 1, "name": "Test Game", "reason": "Great game", "added_by": "TestUser"}
         ]
 
         # Mock channel operations
@@ -216,9 +205,7 @@ class TestGameRecommendationCommands:
 
         with patch("ash_bot_fallback.db", mock_db):
             with patch("ash_bot_fallback.post_or_update_recommend_list") as mock_update:
-                await ash_bot_fallback._add_game(
-                    mock_discord_context, "Test Game - Great game"
-                )
+                await ash_bot_fallback._add_game(mock_discord_context, "Test Game - Great game")
 
                 # Verify game was checked for existence
                 mock_db.game_exists.assert_called_once_with("Test Game")
@@ -237,9 +224,7 @@ class TestGameRecommendationCommands:
         mock_db.game_exists.return_value = True
 
         with patch("ash_bot_fallback.db", mock_db):
-            await ash_bot_fallback._add_game(
-                mock_discord_context, "Duplicate Game - Great game"
-            )
+            await ash_bot_fallback._add_game(mock_discord_context, "Duplicate Game - Great game")
 
             # Verify duplicate message was sent
             mock_discord_context.send.assert_called_once()
@@ -277,10 +262,7 @@ class TestGameRecommendationCommands:
         import ash_bot_fallback  # type: ignore
 
         # Mock successful removal
-        mock_db.remove_game_by_name.return_value = {
-            "name": "Test Game",
-            "reason": "Test",
-        }
+        mock_db.remove_game_by_name.return_value = {"name": "Test Game", "reason": "Test"}
 
         # Mock channel operations for update
         mock_channel = MagicMock()
@@ -288,9 +270,7 @@ class TestGameRecommendationCommands:
 
         with patch("ash_bot_fallback.db", mock_db):
             with patch("ash_bot_fallback.post_or_update_recommend_list") as mock_update:
-                await ash_bot_fallback.remove_game(
-                    mock_discord_context, arg="Test Game"
-                )
+                await ash_bot_fallback.remove_game(mock_discord_context, arg="Test Game")
 
                 # Verify game was removed
                 mock_db.remove_game_by_name.assert_called_once_with("Test Game")
@@ -314,8 +294,7 @@ class TestPlayedGamesCommands:
 
         with patch("ash_bot_fallback.db", mock_db):
             await ash_bot_fallback.add_played_game_cmd(
-                mock_discord_context,
-                game_info="Test Game | series:Test Series | year:2023 | status:completed",
+                mock_discord_context, game_info="Test Game | series:Test Series | year:2023 | status:completed"
             )
 
             # Verify game was added with correct parameters
@@ -332,9 +311,7 @@ class TestPlayedGamesCommands:
             assert "catalogued" in call_args
 
     @pytest.mark.asyncio
-    async def test_game_info_command(
-        self, mock_discord_context, mock_db, sample_game_data
-    ):
+    async def test_game_info_command(self, mock_discord_context, mock_db, sample_game_data):
         """Test getting game information."""
         import ash_bot_fallback  # type: ignore
 
@@ -342,12 +319,8 @@ class TestPlayedGamesCommands:
         mock_db.get_played_game.return_value = sample_game_data
 
         with patch("ash_bot_fallback.db", mock_db):
-            with patch(
-                "ash_bot_fallback.get_game_by_id_or_name", return_value=sample_game_data
-            ):
-                await ash_bot_fallback.game_info_cmd(
-                    mock_discord_context, identifier="Test Game"
-                )
+            with patch("ash_bot_fallback.get_game_by_id_or_name", return_value=sample_game_data):
+                await ash_bot_fallback.game_info_cmd(mock_discord_context, identifier="Test Game")
 
                 # Verify response contains game details
                 mock_discord_context.send.assert_called_once()
@@ -356,9 +329,7 @@ class TestPlayedGamesCommands:
                 assert "embed" in call_args[1]
 
     @pytest.mark.asyncio
-    async def test_search_played_games_command(
-        self, mock_discord_context, mock_db, sample_game_data
-    ):
+    async def test_search_played_games_command(self, mock_discord_context, mock_db, sample_game_data):
         """Test searching played games."""
         import ash_bot_fallback  # type: ignore
 
@@ -366,9 +337,7 @@ class TestPlayedGamesCommands:
         mock_db.search_played_games.return_value = [sample_game_data]
 
         with patch("ash_bot_fallback.db", mock_db):
-            await ash_bot_fallback.search_played_games_cmd(
-                mock_discord_context, query="Test"
-            )
+            await ash_bot_fallback.search_played_games_cmd(mock_discord_context, query="Test")
 
             # Verify database was searched
             mock_db.search_played_games.assert_called_once_with("Test")
@@ -432,9 +401,7 @@ class TestPermissionChecking:
     """Test command permission requirements."""
 
     @pytest.mark.asyncio
-    async def test_command_requires_manage_messages(
-        self, mock_discord_context, mock_db, mock_discord_user
-    ):
+    async def test_command_requires_manage_messages(self, mock_discord_context, mock_db, mock_discord_user):
         """Test that mod commands require manage_messages permission."""
         import ash_bot_fallback  # type: ignore
 
@@ -445,16 +412,12 @@ class TestPermissionChecking:
         # Instead, test that the command works when called directly (simulates bypass in test)
         with patch("ash_bot_fallback.db", mock_db):
             # The command should execute without error in test environment
-            await ash_bot_fallback.reset_strikes(
-                mock_discord_context, mock_discord_user
-            )
+            await ash_bot_fallback.reset_strikes(mock_discord_context, mock_discord_user)
             # Verify the command executed (permission checking is handled by discord.py framework)
             mock_db.set_user_strikes.assert_called_once_with(mock_discord_user.id, 0)
 
     @pytest.mark.asyncio
-    async def test_command_with_valid_permissions(
-        self, mock_discord_context, mock_db, mock_discord_user
-    ):
+    async def test_command_with_valid_permissions(self, mock_discord_context, mock_db, mock_discord_user):
         """Test that mod commands work with proper permissions."""
         import ash_bot_fallback  # type: ignore
 
@@ -463,9 +426,7 @@ class TestPermissionChecking:
 
         with patch("ash_bot_fallback.db", mock_db):
             # Should not raise any permission errors
-            await ash_bot_fallback.reset_strikes(
-                mock_discord_context, mock_discord_user
-            )
+            await ash_bot_fallback.reset_strikes(mock_discord_context, mock_discord_user)
 
             # Verify command executed
             mock_db.set_user_strikes.assert_called_once()
@@ -475,9 +436,7 @@ class TestMessageHandling:
     """Test message event handling."""
 
     @pytest.mark.asyncio
-    async def test_strike_detection_in_violation_channel(
-        self, mock_discord_message, mock_db
-    ):
+    async def test_strike_detection_in_violation_channel(self, mock_discord_message, mock_db):
         """Test strike detection when user is mentioned in violation channel."""
         import ash_bot_fallback  # type: ignore
 
@@ -528,14 +487,7 @@ class TestMessageHandling:
         assert "pineapple" in call_args.lower()
         # The response can be one of several random responses, so just check for key content
         assert any(
-            word in call_args.lower()
-            for word in [
-                "rejected",
-                "suboptimal",
-                "contradicts",
-                "incorrect",
-                "negative",
-            ]
+            word in call_args.lower() for word in ["rejected", "suboptimal", "contradicts", "incorrect", "negative"]
         )
 
     @pytest.mark.asyncio
@@ -557,10 +509,7 @@ class TestMessageHandling:
             mock_bot.process_commands = AsyncMock()  # Fix async mocking
 
             with patch("ash_bot_fallback.ai_enabled", True):
-                with patch(
-                    "ash_bot_fallback.BOT_PERSONA",
-                    {"enabled": True, "personality": "Test persona"},
-                ):
+                with patch("ash_bot_fallback.BOT_PERSONA", {"enabled": True, "personality": "Test persona"}):
                     with patch("ash_bot_fallback.primary_ai", "gemini"):
                         with patch("ash_bot_fallback.gemini_model") as mock_gemini:
                             # Mock AI response
@@ -614,10 +563,7 @@ class TestQueryRouting:
         """Test routing of genre queries."""
         import ash_bot_fallback  # type: ignore
 
-        test_queries = [
-            "what horror games has jonesy played",
-            "what RPG games did jonesy play",
-        ]
+        test_queries = ["what horror games has jonesy played", "what RPG games did jonesy play"]
 
         for query in test_queries:
             query_type, match = ash_bot_fallback.route_query(query)
@@ -644,9 +590,9 @@ class TestTimezoneAwareFunctionality:
             # Mock UK time at 11:00 PM on Dec 31, 2023 (still same date in UK)
             uk_time = datetime(2023, 12, 31, 23, 0, tzinfo=ZoneInfo("Europe/London"))
             mock_datetime.now.return_value = uk_time
-            
+
             result = ash_bot_fallback.get_today_date_str()
-            
+
             # Should use UK timezone for date calculation
             mock_datetime.now.assert_called_once_with(ZoneInfo("Europe/London"))
             assert result == "2023-12-31"
@@ -657,21 +603,21 @@ class TestTimezoneAwareFunctionality:
 
         # Mock current UK time
         uk_now = datetime(2024, 6, 15, 14, 30, tzinfo=ZoneInfo("Europe/London"))
-        
+
         # Set up alias state with time 2 hours ago (should be expired)
         test_user_id = 123456789
         ash_bot_fallback.user_alias_state[test_user_id] = {
             "alias_type": "moderator",
             "set_time": uk_now - timedelta(hours=2),
-            "last_activity": uk_now - timedelta(hours=2)
+            "last_activity": uk_now - timedelta(hours=2),
         }
 
         with patch("ash_bot_fallback.datetime") as mock_datetime:
             mock_datetime.now.return_value = uk_now
-            
+
             # Run cleanup
             ash_bot_fallback.cleanup_expired_aliases()
-            
+
             # Should use UK timezone and remove expired alias
             mock_datetime.now.assert_called_with(ZoneInfo("Europe/London"))
             assert test_user_id not in ash_bot_fallback.user_alias_state
@@ -682,20 +628,20 @@ class TestTimezoneAwareFunctionality:
 
         test_user_id = 123456789
         uk_now = datetime(2024, 6, 15, 14, 30, tzinfo=ZoneInfo("Europe/London"))
-        
+
         # Set up initial alias state
         ash_bot_fallback.user_alias_state[test_user_id] = {
             "alias_type": "moderator",
             "set_time": uk_now - timedelta(hours=1),
-            "last_activity": uk_now - timedelta(hours=1)
+            "last_activity": uk_now - timedelta(hours=1),
         }
 
         with patch("ash_bot_fallback.datetime") as mock_datetime:
             mock_datetime.now.return_value = uk_now
-            
+
             # Update activity
             ash_bot_fallback.update_alias_activity(test_user_id)
-            
+
             # Should use UK timezone for last_activity update
             mock_datetime.now.assert_called_with(ZoneInfo("Europe/London"))
             assert ash_bot_fallback.user_alias_state[test_user_id]["last_activity"] == uk_now
@@ -707,17 +653,17 @@ class TestTimezoneAwareFunctionality:
 
         # Check that the scheduled task is configured for UK timezone
         scheduled_task = ash_bot_fallback.scheduled_games_update
-        
+
         # The task should be configured to run at 12:00 PM UK time
         # This tests the task configuration, not the execution
         assert scheduled_task is not None
-        
+
         # Mock UK Sunday at 12:00 PM
         uk_sunday = datetime(2024, 6, 16, 12, 0, tzinfo=ZoneInfo("Europe/London"))  # Sunday
-        
+
         with patch("ash_bot_fallback.datetime") as mock_datetime:
             mock_datetime.now.return_value = uk_sunday
-            
+
             # The task should recognize it's Sunday in UK time
             # This tests the weekday check logic
             assert uk_sunday.weekday() == 6  # Sunday = 6

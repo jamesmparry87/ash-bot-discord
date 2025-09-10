@@ -14,9 +14,7 @@ class DatabaseManager:
     def __init__(self):
         self.database_url = os.getenv("DATABASE_URL")
         if not self.database_url:
-            logger.warning(
-                "DATABASE_URL not found. Database features will be disabled."
-            )
+            logger.warning("DATABASE_URL not found. Database features will be disabled.")
             self.connection = None
         else:
             self.connection = None
@@ -30,9 +28,7 @@ class DatabaseManager:
         try:
             # Always create a fresh connection for each operation to avoid stale connections
             # This is more reliable than trying to reuse connections
-            self.connection = psycopg2.connect(
-                self.database_url, cursor_factory=RealDictCursor
-            )
+            self.connection = psycopg2.connect(self.database_url, cursor_factory=RealDictCursor)
             return self.connection
         except Exception as e:
             logger.error(f"Database connection failed: {e}")
@@ -223,9 +219,7 @@ class DatabaseManager:
 
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT strike_count FROM strikes WHERE user_id = %s", (user_id,)
-                )
+                cur.execute("SELECT strike_count FROM strikes WHERE user_id = %s", (user_id,))
                 result = cur.fetchone()
                 if result:
                     # Handle both RealDictCursor (dict-like) and regular cursor (tuple-like)
@@ -275,9 +269,7 @@ class DatabaseManager:
 
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT user_id, strike_count FROM strikes WHERE strike_count > 0"
-                )
+                cur.execute("SELECT user_id, strike_count FROM strikes WHERE strike_count > 0")
                 results = cur.fetchall()
                 # Handle both RealDictCursor (dict-like) and regular cursor (tuple-like)
                 result_dict = {}
@@ -397,15 +389,11 @@ class DatabaseManager:
         try:
             with conn.cursor() as cur:
                 # Get the game before deleting
-                cur.execute(
-                    "SELECT * FROM game_recommendations WHERE id = %s", (game_id,)
-                )
+                cur.execute("SELECT * FROM game_recommendations WHERE id = %s", (game_id,))
                 game = cur.fetchone()
 
                 if game:
-                    cur.execute(
-                        "DELETE FROM game_recommendations WHERE id = %s", (game_id,)
-                    )
+                    cur.execute("DELETE FROM game_recommendations WHERE id = %s", (game_id,))
                     conn.commit()
                     return dict(game)
                 return None
@@ -427,9 +415,7 @@ class DatabaseManager:
         # Check fuzzy matches
         import difflib
 
-        matches = difflib.get_close_matches(
-            name_lower, existing_names, n=1, cutoff=0.85
-        )
+        matches = difflib.get_close_matches(name_lower, existing_names, n=1, cutoff=0.85)
         return len(matches) > 0
 
     def get_config_value(self, key: str) -> Optional[str]:
@@ -484,11 +470,7 @@ class DatabaseManager:
         try:
             with conn.cursor() as cur:
                 # Prepare data for batch insert
-                data_tuples = [
-                    (user_id, count, count)
-                    for user_id, count in strikes_data.items()
-                    if count > 0
-                ]
+                data_tuples = [(user_id, count, count) for user_id, count in strikes_data.items() if count > 0]
 
                 if data_tuples:
                     cur.executemany(
@@ -518,10 +500,7 @@ class DatabaseManager:
         try:
             with conn.cursor() as cur:
                 # Prepare data for batch insert
-                data_tuples = [
-                    (game["name"], game["reason"], game["added_by"])
-                    for game in games_data
-                ]
+                data_tuples = [(game["name"], game["reason"], game["added_by"]) for game in games_data]
 
                 if data_tuples:
                     cur.executemany(
@@ -532,9 +511,7 @@ class DatabaseManager:
                         data_tuples,
                     )
                     conn.commit()
-                    logger.info(
-                        f"Bulk imported {len(data_tuples)} game recommendations"
-                    )
+                    logger.info(f"Bulk imported {len(data_tuples)} game recommendations")
                     return len(data_tuples)
                 return 0
         except Exception as e:
@@ -706,18 +683,14 @@ class DatabaseManager:
         # Convert alternative_names from TEXT to list
         if "alternative_names" in game_dict:
             if isinstance(game_dict["alternative_names"], str):
-                game_dict["alternative_names"] = self._parse_comma_separated_list(
-                    game_dict["alternative_names"]
-                )
+                game_dict["alternative_names"] = self._parse_comma_separated_list(game_dict["alternative_names"])
             elif game_dict["alternative_names"] is None:
                 game_dict["alternative_names"] = []
 
         # Convert twitch_vod_urls from TEXT to list
         if "twitch_vod_urls" in game_dict:
             if isinstance(game_dict["twitch_vod_urls"], str):
-                game_dict["twitch_vod_urls"] = self._parse_comma_separated_list(
-                    game_dict["twitch_vod_urls"]
-                )
+                game_dict["twitch_vod_urls"] = self._parse_comma_separated_list(game_dict["twitch_vod_urls"])
             elif game_dict["twitch_vod_urls"] is None:
                 game_dict["twitch_vod_urls"] = []
 
@@ -728,7 +701,7 @@ class DatabaseManager:
         try:
             # Set similarity threshold for this session
             cur.execute("SET pg_trgm.similarity_threshold = 0.75")
-            
+
             # Search canonical names with similarity scoring
             cur.execute(
                 """
@@ -741,7 +714,7 @@ class DatabaseManager:
                 (name_lower, name_lower),
             )
             result = cur.fetchone()
-            
+
             if result:
                 result_dict = dict(result)
                 # Remove similarity score from final result
@@ -749,7 +722,7 @@ class DatabaseManager:
                 result_dict = self._convert_text_to_arrays(result_dict)
                 logger.debug(f"pg_trgm found match with similarity: {result.get('sim_score', 0)}")
                 return result_dict
-                
+
             # If no canonical match, try alternative names
             cur.execute(
                 """
@@ -764,17 +737,17 @@ class DatabaseManager:
                 (name_lower, name_lower),
             )
             result = cur.fetchone()
-            
+
             if result:
                 result_dict = dict(result)
                 result_dict.pop('sim_score', None)
                 result_dict = self._convert_text_to_arrays(result_dict)
                 logger.debug(f"pg_trgm found alt name match with similarity: {result.get('sim_score', 0)}")
                 return result_dict
-                
+
         except Exception as e:
             logger.debug(f"pg_trgm search failed, falling back to Python: {e}")
-            
+
         return None
 
     def _fuzzy_search_python_optimized(self, cur, name_lower: str) -> Optional[Dict[str, Any]]:
@@ -796,7 +769,7 @@ class DatabaseManager:
             for game in all_games:
                 game_dict = dict(game)
                 games_by_id[game_dict["id"]] = game_dict
-                
+
                 canonical_name = game_dict.get("canonical_name")
                 if canonical_name:
                     canonical_lower = str(canonical_name).lower().strip()
@@ -812,9 +785,7 @@ class DatabaseManager:
 
             # Try fuzzy matching
             all_name_keys = list(game_names_map.keys())
-            matches = difflib.get_close_matches(
-                name_lower, all_name_keys, n=1, cutoff=0.75
-            )
+            matches = difflib.get_close_matches(name_lower, all_name_keys, n=1, cutoff=0.75)
 
             if matches:
                 match_name = matches[0]
@@ -825,7 +796,7 @@ class DatabaseManager:
 
         except Exception as e:
             logger.error(f"Python fuzzy search failed: {e}")
-            
+
         return None
 
     def _fuzzy_search_recommendations_with_trgm(self, cur, name_lower: str) -> Optional[int]:
@@ -833,7 +804,7 @@ class DatabaseManager:
         try:
             # Set similarity threshold for this session
             cur.execute("SET pg_trgm.similarity_threshold = 0.8")
-            
+
             # Search game recommendation names with similarity scoring
             cur.execute(
                 """
@@ -846,14 +817,14 @@ class DatabaseManager:
                 (name_lower, name_lower),
             )
             result = cur.fetchone()
-            
+
             if result:
                 logger.debug(f"pg_trgm found game recommendation match with similarity: {result.get('sim_score', 0)}")
                 return int(result["id"])  # type: ignore
-                
+
         except Exception as e:
             logger.debug(f"pg_trgm search for recommendations failed, falling back to Python: {e}")
-            
+
         return None
 
     def _fuzzy_search_recommendations_python_optimized(self, cur, name_lower: str) -> Optional[int]:
@@ -875,16 +846,14 @@ class DatabaseManager:
                 rec_dict = dict(recommendation)
                 rec_id = rec_dict["id"]
                 rec_name = rec_dict.get("name")
-                
+
                 if rec_name:
                     name_lower_clean = str(rec_name).lower().strip()
                     recommendation_names_map[name_lower_clean] = rec_id
 
             # Try fuzzy matching
             all_name_keys = list(recommendation_names_map.keys())
-            matches = difflib.get_close_matches(
-                name_lower, all_name_keys, n=1, cutoff=0.8
-            )
+            matches = difflib.get_close_matches(name_lower, all_name_keys, n=1, cutoff=0.8)
 
             if matches:
                 match_name = matches[0]
@@ -893,12 +862,10 @@ class DatabaseManager:
 
         except Exception as e:
             logger.error(f"Python fuzzy search for recommendations failed: {e}")
-            
+
         return None
 
-    def get_all_played_games(
-        self, series_name: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    def get_all_played_games(self, series_name: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all played games, optionally filtered by series"""
         conn = self.get_connection()
         if not conn:
@@ -1036,13 +1003,7 @@ class DatabaseManager:
                         CASE WHEN LOWER(canonical_name) = %s THEN 1 ELSE 2 END,
                         canonical_name ASC
                 """,
-                    (
-                        query_lower,
-                        query_lower,
-                        query_lower,
-                        query.lower(),
-                        query.lower(),
-                    ),
+                    (query_lower, query_lower, query_lower, query.lower(), query.lower()),
                 )
                 results = cur.fetchall()
                 return [dict(row) for row in results]
@@ -1067,19 +1028,13 @@ class DatabaseManager:
         try:
             with conn.cursor() as cur:
                 # Optimization: Batch fetch all existing games to avoid N+1 queries
-                canonical_names_to_check = [
-                    g.get('canonical_name') for g in games_data 
-                    if g.get('canonical_name')
-                ]
-                
+                canonical_names_to_check = [g.get('canonical_name') for g in games_data if g.get('canonical_name')]
+
                 if not canonical_names_to_check:
                     return 0
 
                 # Single query to fetch all existing games
-                cur.execute(
-                    "SELECT * FROM played_games WHERE canonical_name = ANY(%s)", 
-                    (canonical_names_to_check,)
-                )
+                cur.execute("SELECT * FROM played_games WHERE canonical_name = ANY(%s)", (canonical_names_to_check,))
                 existing_games_list = cur.fetchall()
                 existing_games_map = {}
                 for game in existing_games_list:
@@ -1097,7 +1052,7 @@ class DatabaseManager:
 
                         # Fast lookup from pre-fetched map instead of individual database query
                         existing_game = existing_games_map.get(canonical_name)
-                        
+
                         # Convert TEXT fields to arrays for compatibility if game exists
                         if existing_game:
                             existing_game = self._convert_text_to_arrays(existing_game)
@@ -1126,64 +1081,39 @@ class DatabaseManager:
 
                                 # Update if new value exists and either existing is empty/null or new has more data
                                 if new_value is not None:
-                                    if (
-                                        field == "alternative_names"
-                                        or field == "twitch_vod_urls"
-                                    ):
+                                    if field == "alternative_names" or field == "twitch_vod_urls":
                                         # For arrays, merge unique values
-                                        if isinstance(new_value, list) and isinstance(
-                                            existing_value, list
-                                        ):
-                                            merged = list(
-                                                set(existing_value + new_value)
-                                            )
+                                        if isinstance(new_value, list) and isinstance(existing_value, list):
+                                            merged = list(set(existing_value + new_value))
                                             if merged != existing_value:
                                                 update_fields[field] = merged
                                         elif isinstance(new_value, list) and new_value:
                                             update_fields[field] = new_value
-                                    elif (
-                                        field == "total_episodes"
-                                        or field == "total_playtime_minutes"
-                                    ):
+                                    elif field == "total_episodes" or field == "total_playtime_minutes":
                                         # For numeric fields, use the higher value
-                                        if isinstance(new_value, int) and isinstance(
-                                            existing_value, int
-                                        ):
+                                        if isinstance(new_value, int) and isinstance(existing_value, int):
                                             if new_value > existing_value:
                                                 update_fields[field] = new_value
-                                        elif (
-                                            isinstance(new_value, int) and new_value > 0
-                                        ):
+                                        elif isinstance(new_value, int) and new_value > 0:
                                             update_fields[field] = new_value
                                     elif field == "notes":
                                         # For notes, append if different
-                                        if (
-                                            isinstance(new_value, str)
-                                            and new_value.strip()
-                                        ):
-                                            if (
-                                                not existing_value
-                                                or new_value not in existing_value
-                                            ):
+                                        if isinstance(new_value, str) and new_value.strip():
+                                            if not existing_value or new_value not in existing_value:
                                                 if existing_value:
-                                                    update_fields[field] = (
-                                                        f"{existing_value} | {new_value}"
-                                                    )
+                                                    update_fields[field] = f"{existing_value} | {new_value}"
                                                 else:
                                                     update_fields[field] = new_value
                                     else:
                                         # For other fields, update if existing is empty or new value is different
                                         if not existing_value or (
-                                            new_value != existing_value
-                                            and str(new_value).strip()
+                                            new_value != existing_value and str(new_value).strip()
                                         ):
                                             update_fields[field] = new_value
 
                             # Apply updates if any
                             if update_fields:
-                                self.update_played_game(
-                                    existing_game["id"], **update_fields
-                                )
+                                self.update_played_game(existing_game["id"], **update_fields)
                                 logger.info(f"Updated existing game: {canonical_name}")
 
                             imported_count += 1
@@ -1218,9 +1148,7 @@ class DatabaseManager:
                             imported_count += 1
 
                     except Exception as e:
-                        logger.error(
-                            f"Error importing game {game_data.get('canonical_name', 'unknown')}: {e}"
-                        )
+                        logger.error(f"Error importing game {game_data.get('canonical_name', 'unknown')}: {e}")
                         continue
 
                 conn.commit()
@@ -1261,9 +1189,7 @@ class DatabaseManager:
                     canonical_name = duplicate[0]
                     duplicate_count = duplicate[1]
 
-                    logger.info(
-                        f"Processing {duplicate_count} duplicates of '{canonical_name}'"
-                    )
+                    logger.info(f"Processing {duplicate_count} duplicates of '{canonical_name}'")
 
                     # Get all games with this canonical name (case-insensitive)
                     cur.execute(
@@ -1286,20 +1212,15 @@ class DatabaseManager:
 
                     # Merge data from all duplicates into the master record
                     merged_data = {
-                        "alternative_names": master_game.get("alternative_names", [])
-                        or [],
+                        "alternative_names": master_game.get("alternative_names", []) or [],
                         "series_name": master_game.get("series_name"),
                         "genre": master_game.get("genre"),
                         "release_year": master_game.get("release_year"),
                         "platform": master_game.get("platform"),
                         "first_played_date": master_game.get("first_played_date"),
-                        "completion_status": master_game.get(
-                            "completion_status", "unknown"
-                        ),
+                        "completion_status": master_game.get("completion_status", "unknown"),
                         "total_episodes": master_game.get("total_episodes", 0),
-                        "total_playtime_minutes": master_game.get(
-                            "total_playtime_minutes", 0
-                        ),
+                        "total_playtime_minutes": master_game.get("total_playtime_minutes", 0),
                         "youtube_playlist_url": master_game.get("youtube_playlist_url"),
                         "twitch_vod_urls": master_game.get("twitch_vod_urls", []) or [],
                         "notes": master_game.get("notes", ""),
@@ -1311,39 +1232,26 @@ class DatabaseManager:
                         if duplicate_game.get("alternative_names"):
                             if isinstance(duplicate_game["alternative_names"], str):
                                 # Handle TEXT format
-                                alt_names = self._parse_comma_separated_list(
-                                    duplicate_game["alternative_names"]
-                                )
+                                alt_names = self._parse_comma_separated_list(duplicate_game["alternative_names"])
                             else:
                                 # Handle list format
                                 alt_names = duplicate_game["alternative_names"]
 
-                            merged_data["alternative_names"] = list(
-                                set(merged_data["alternative_names"] + alt_names)
-                            )
+                            merged_data["alternative_names"] = list(set(merged_data["alternative_names"] + alt_names))
 
                         # Merge Twitch VOD URLs
                         if duplicate_game.get("twitch_vod_urls"):
                             if isinstance(duplicate_game["twitch_vod_urls"], str):
                                 # Handle TEXT format
-                                vod_urls = self._parse_comma_separated_list(
-                                    duplicate_game["twitch_vod_urls"]
-                                )
+                                vod_urls = self._parse_comma_separated_list(duplicate_game["twitch_vod_urls"])
                             else:
                                 # Handle list format
                                 vod_urls = duplicate_game["twitch_vod_urls"]
 
-                            merged_data["twitch_vod_urls"] = list(
-                                set(merged_data["twitch_vod_urls"] + vod_urls)
-                            )
+                            merged_data["twitch_vod_urls"] = list(set(merged_data["twitch_vod_urls"] + vod_urls))
 
                         # Use non-empty values from duplicates
-                        for field in [
-                            "series_name",
-                            "genre",
-                            "platform",
-                            "youtube_playlist_url",
-                        ]:
+                        for field in ["series_name", "genre", "platform", "youtube_playlist_url"]:
                             if not merged_data.get(field) and duplicate_game.get(field):
                                 merged_data[field] = duplicate_game[field]
 
@@ -1351,69 +1259,38 @@ class DatabaseManager:
                         if duplicate_game.get("first_played_date"):
                             if (
                                 not merged_data["first_played_date"]
-                                or duplicate_game["first_played_date"]
-                                < merged_data["first_played_date"]
+                                or duplicate_game["first_played_date"] < merged_data["first_played_date"]
                             ):
-                                merged_data["first_played_date"] = duplicate_game[
-                                    "first_played_date"
-                                ]
+                                merged_data["first_played_date"] = duplicate_game["first_played_date"]
 
                         # Use latest release_year if master doesn't have one
-                        if not merged_data.get("release_year") and duplicate_game.get(
-                            "release_year"
-                        ):
+                        if not merged_data.get("release_year") and duplicate_game.get("release_year"):
                             merged_data["release_year"] = duplicate_game["release_year"]
 
                         # Sum episodes and playtime
-                        merged_data["total_episodes"] += duplicate_game.get(
-                            "total_episodes", 0
-                        )
-                        merged_data["total_playtime_minutes"] += duplicate_game.get(
-                            "total_playtime_minutes", 0
-                        )
+                        merged_data["total_episodes"] += duplicate_game.get("total_episodes", 0)
+                        merged_data["total_playtime_minutes"] += duplicate_game.get("total_playtime_minutes", 0)
 
                         # Merge notes
-                        if (
-                            duplicate_game.get("notes")
-                            and duplicate_game["notes"].strip()
-                        ):
+                        if duplicate_game.get("notes") and duplicate_game["notes"].strip():
                             if merged_data["notes"]:
                                 if duplicate_game["notes"] not in merged_data["notes"]:
-                                    merged_data[
-                                        "notes"
-                                    ] += f" | {duplicate_game['notes']}"
+                                    merged_data["notes"] += f" | {duplicate_game['notes']}"
                             else:
                                 merged_data["notes"] = duplicate_game["notes"]
 
                         # Use most advanced completion status
-                        status_priority = {
-                            "unknown": 0,
-                            "ongoing": 1,
-                            "dropped": 2,
-                            "completed": 3,
-                        }
-                        current_priority = status_priority.get(
-                            merged_data["completion_status"], 0
-                        )
-                        duplicate_priority = status_priority.get(
-                            duplicate_game.get("completion_status", "unknown"), 0
-                        )
+                        status_priority = {"unknown": 0, "ongoing": 1, "dropped": 2, "completed": 3}
+                        current_priority = status_priority.get(merged_data["completion_status"], 0)
+                        duplicate_priority = status_priority.get(duplicate_game.get("completion_status", "unknown"), 0)
                         if duplicate_priority > current_priority:
-                            merged_data["completion_status"] = duplicate_game[
-                                "completion_status"
-                            ]
+                            merged_data["completion_status"] = duplicate_game["completion_status"]
 
                     # Convert lists to TEXT format for database storage
                     alt_names_str = (
-                        ",".join(merged_data["alternative_names"])
-                        if merged_data["alternative_names"]
-                        else ""
+                        ",".join(merged_data["alternative_names"]) if merged_data["alternative_names"] else ""
                     )
-                    vod_urls_str = (
-                        ",".join(merged_data["twitch_vod_urls"])
-                        if merged_data["twitch_vod_urls"]
-                        else ""
-                    )
+                    vod_urls_str = ",".join(merged_data["twitch_vod_urls"]) if merged_data["twitch_vod_urls"] else ""
 
                     # Update the master record with merged data
                     cur.execute(
@@ -1468,9 +1345,7 @@ class DatabaseManager:
                     )
 
                 conn.commit()
-                logger.info(
-                    f"Deduplication complete: merged {merged_count} duplicate records"
-                )
+                logger.info(f"Deduplication complete: merged {merged_count} duplicate records")
                 return merged_count
 
         except Exception as e:
@@ -1638,9 +1513,7 @@ class DatabaseManager:
                 total_games = int(result["count"]) if result else 0  # type: ignore
 
                 # Completed vs ongoing
-                cur.execute(
-                    "SELECT completion_status, COUNT(*) as count FROM played_games GROUP BY completion_status"
-                )
+                cur.execute("SELECT completion_status, COUNT(*) as count FROM played_games GROUP BY completion_status")
                 status_results = cur.fetchall()
                 status_counts = {str(row["completion_status"]): int(row["count"]) for row in status_results} if status_results else {}  # type: ignore
 
@@ -1671,9 +1544,7 @@ class DatabaseManager:
                     "status_counts": status_counts,
                     "total_episodes": total_episodes,
                     "total_playtime_minutes": total_playtime,
-                    "total_playtime_hours": (
-                        round(total_playtime / 60, 1) if total_playtime > 0 else 0
-                    ),
+                    "total_playtime_hours": (round(total_playtime / 60, 1) if total_playtime > 0 else 0),
                     "top_genres": top_genres,
                     "top_series": top_series,
                 }
@@ -1725,9 +1596,7 @@ class DatabaseManager:
                 }
 
                 # Get all games for comparison
-                cur.execute(
-                    "SELECT id, canonical_name, alternative_names FROM played_games"
-                )
+                cur.execute("SELECT id, canonical_name, alternative_names FROM played_games")
                 all_games = cur.fetchall()
 
                 for game in all_games:
@@ -1750,11 +1619,7 @@ class DatabaseManager:
                     # Check alternative name matches
                     if game_alt_names:
                         for alt_name in game_alt_names:
-                            if (
-                                alt_name
-                                and alt_name.lower().strip()
-                                == canonical_name.lower().strip()
-                            ):
+                            if alt_name and alt_name.lower().strip() == canonical_name.lower().strip():
                                 debug_info["exact_matches"].append(game_dict.get("id"))
 
                 # Test fuzzy matching
@@ -1765,9 +1630,7 @@ class DatabaseManager:
                     for game in all_games
                     if dict(game).get("canonical_name")
                 ]
-                matches = difflib.get_close_matches(
-                    canonical_name.lower().strip(), canonical_names, n=3, cutoff=0.75
-                )
+                matches = difflib.get_close_matches(canonical_name.lower().strip(), canonical_names, n=3, cutoff=0.75)
                 debug_info["fuzzy_matches"] = matches
 
                 # Test the actual get_played_game function
@@ -1939,9 +1802,7 @@ class DatabaseManager:
             logger.error(f"Error getting genre statistics: {e}")
             return []
 
-    def get_temporal_gaming_data(
-        self, year: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+    def get_temporal_gaming_data(self, year: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get gaming data by year or all years"""
         conn = self.get_connection()
         if not conn:
@@ -2018,14 +1879,12 @@ class DatabaseManager:
                 "genre": game2.get("genre"),
             },
             "comparison": {
-                "episode_difference": game1.get("total_episodes", 0)
-                - game2.get("total_episodes", 0),
+                "episode_difference": game1.get("total_episodes", 0) - game2.get("total_episodes", 0),
                 "playtime_difference_minutes": game1.get("total_playtime_minutes", 0)
                 - game2.get("total_playtime_minutes", 0),
                 "longer_game": (
                     game1["canonical_name"]
-                    if game1.get("total_playtime_minutes", 0)
-                    > game2.get("total_playtime_minutes", 0)
+                    if game1.get("total_playtime_minutes", 0) > game2.get("total_playtime_minutes", 0)
                     else game2["canonical_name"]
                 ),
                 "more_episodes": (
@@ -2036,9 +1895,7 @@ class DatabaseManager:
             },
         }
 
-    def get_ranking_context(
-        self, game_name: str, metric: str = "playtime"
-    ) -> Dict[str, Any]:
+    def get_ranking_context(self, game_name: str, metric: str = "playtime") -> Dict[str, Any]:
         """Get where a specific game ranks in various metrics"""
         game = self.get_played_game(game_name)
         if not game:
@@ -2065,9 +1922,7 @@ class DatabaseManager:
                     result = cur.fetchone()
                     playtime_rank = int(result["rank"]) if result else 0  # type: ignore
 
-                    cur.execute(
-                        "SELECT COUNT(*) as total FROM played_games WHERE total_playtime_minutes > 0"
-                    )
+                    cur.execute("SELECT COUNT(*) as total FROM played_games WHERE total_playtime_minutes > 0")
                     total_result = cur.fetchone()
                     total_with_playtime = int(total_result["total"]) if total_result else 0  # type: ignore
 
@@ -2075,11 +1930,7 @@ class DatabaseManager:
                         "rank": playtime_rank,
                         "total": total_with_playtime,
                         "percentile": (
-                            round(
-                                (1 - (playtime_rank - 1) / max(total_with_playtime, 1))
-                                * 100,
-                                1,
-                            )
+                            round((1 - (playtime_rank - 1) / max(total_with_playtime, 1)) * 100, 1)
                             if total_with_playtime > 0
                             else 0
                         ),
@@ -2098,9 +1949,7 @@ class DatabaseManager:
                     result = cur.fetchone()
                     episode_rank = int(result["rank"]) if result else 0  # type: ignore
 
-                    cur.execute(
-                        "SELECT COUNT(*) as total FROM played_games WHERE total_episodes > 0"
-                    )
+                    cur.execute("SELECT COUNT(*) as total FROM played_games WHERE total_episodes > 0")
                     total_result = cur.fetchone()
                     total_with_episodes = int(total_result["total"]) if total_result else 0  # type: ignore
 
@@ -2108,11 +1957,7 @@ class DatabaseManager:
                         "rank": episode_rank,
                         "total": total_with_episodes,
                         "percentile": (
-                            round(
-                                (1 - (episode_rank - 1) / max(total_with_episodes, 1))
-                                * 100,
-                                1,
-                            )
+                            round((1 - (episode_rank - 1) / max(total_with_episodes, 1)) * 100, 1)
                             if total_with_episodes > 0
                             else 0
                         ),
