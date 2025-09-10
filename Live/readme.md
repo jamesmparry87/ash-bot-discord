@@ -10,6 +10,58 @@ A Discord moderation and AI assistant bot featuring strike tracking, game recomm
 - `!recommend <name> - <reason>` - Add game recommendation (alias)
 - `!listgames` - List all game recommendations
 
+### User Interaction Tiers
+
+The bot recognizes different user tiers with varying levels of interaction and respect:
+
+#### **Captain Jonesy** (Server Owner)
+
+- **Highest Authority**: Addressed as "Captain" with military courtesy
+- **Unlimited Access**: No conversation limits, priority responses
+- **Special Protections**: Cannot receive strikes, commands work everywhere
+
+#### **Sir Decent Jam** (Bot Creator)  
+
+- **Creator Recognition**: Acknowledged as bot's creator with special respect
+- **Full Access**: Complete command access, no restrictions
+- **Development Privileges**: Access to all testing and debugging features
+
+#### **Moderators** (Manage Messages Permission)
+
+- **Authority Recognition**: Professional courtesy and respect for their status
+- **Enhanced Access**: Full moderator command suite, unlimited conversations
+- **Priority Support**: Detailed explanations available via `@Ashbot explain [feature]`
+
+#### **Members** (YouTube Members with Special Roles)
+
+- **Privileged Users**: YouTube Members (Space Cat, Space Ocelot, etc.)
+- **Enhanced Conversations**: More engaging and detailed responses than standard users
+- **Conversation System**:
+  - **Unlimited** in Senior Officers' Area (#888820289776013444)
+  - **5 daily responses** in other channels, then encouraged to move to members area
+  - **Daily Reset**: Conversation limits reset at midnight
+
+#### **Standard Users**
+
+- **Basic Access**: Standard bot interactions and public commands
+- **Public Commands**: Can add game recommendations and view lists
+- **Natural Language**: Can ask Ash about games and get informative responses
+
+### Member Conversation System
+
+**Daily Limits for Members:**
+
+- Members get **5 conversation responses per day** outside the Senior Officers' Area
+- **Unlimited conversations** within the Senior Officers' Area (#888820289776013444)
+- Conversation count resets daily at midnight
+- When limit reached, Ash politely directs members to the Senior Officers' Area
+
+**Example Behavior:**
+
+- Member asks question in #general (count: 3/5) → Normal detailed response
+- Member asks question in #general (count: 5/5) → "This member has used 5/5 daily responses outside the Senior Officers' Area. Politely encourage them to continue this conversation in the Senior Officers' Area where they can have unlimited discussions."
+- Same member asks in Senior Officers' Area → Unlimited detailed responses
+
 #### Natural Language Queries (Ask Ash)
 
 **Game Lookup Queries:**

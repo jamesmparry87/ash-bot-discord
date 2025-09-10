@@ -8,6 +8,7 @@ import re
 import signal
 import sys
 from typing import Any, Dict, List, Match, Optional
+from zoneinfo import ZoneInfo
 
 import discord
 from discord.ext import commands, tasks
@@ -138,12 +139,201 @@ MOD_ALERT_CHANNEL_ID = 869530924302344233
 TWITCH_HISTORY_CHANNEL_ID = 869527363594121226
 YOUTUBE_HISTORY_CHANNEL_ID = 869527428018606140
 
+# Moderator channel IDs where sensitive functions can be discussed
+MODERATOR_CHANNEL_IDS = [1213488470798893107, 869530924302344233, 1280085269600669706, 1393987338329260202]
+
+# Member role IDs for YouTube members
+MEMBER_ROLE_IDS = [
+    1018908116957548666,  # YouTube Member: Space Cat
+    1018908116957548665,  # YouTiube Member 
+    1127604917146763424,  # YouTube Member: Space Cat (duplicate)
+    879344337576685598,   # Space Ocelot
+]
+
+# Members channel ID (Senior Officers' Area)
+MEMBERS_CHANNEL_ID = 888820289776013444
+
+# Conversation tracking for members (daily limits)
+member_conversation_counts = {}  # user_id: {'count': int, 'date': str}
+
+# User alias system for debugging different user tiers
+user_alias_state = {}  # user_id: {'alias_type': str, 'set_time': datetime, 'last_activity': datetime}
+
+
+# --- Alias System Helper Functions ---
+from datetime import datetime, timedelta
+
+
+def cleanup_expired_aliases():
+    """Remove aliases inactive for more than 1 hour"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    cutoff_time = uk_now - timedelta(hours=1)
+    expired_users = [user_id for user_id, data in user_alias_state.items() 
+                     if data["last_activity"] < cutoff_time]
+    for user_id in expired_users:
+        del user_alias_state[user_id]
+
+
+def update_alias_activity(user_id: int):
+    """Update last activity time for alias"""
+    if user_id in user_alias_state:
+        user_alias_state[user_id]["last_activity"] = datetime.now(ZoneInfo("Europe/London"))
+
+
 # --- Intents ---
 intents = discord.Intents.default()
 intents.messages = True
 intents.guilds = True
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+
+# --- Member Conversation Tracking ---
+def get_today_date_str() -> str:
+    """Get today's date as a string for tracking daily limits"""
+    return datetime.now(ZoneInfo("Europe/London")).strftime("%Y-%m-%d")
+
+
+def get_member_conversation_count(user_id: int) -> int:
+    """Get today's conversation count for a member"""
+    today = get_today_date_str()
+    user_data = member_conversation_counts.get(user_id, {})
+    
+    # Reset count if it's a new day
+    if user_data.get('date') != today:
+        return 0
+    
+    return user_data.get('count', 0)
+
+
+def increment_member_conversation_count(user_id: int) -> int:
+    """Increment and return the conversation count for a member"""
+    today = get_today_date_str()
+    current_count = get_member_conversation_count(user_id)
+    new_count = current_count + 1
+    
+    member_conversation_counts[user_id] = {
+        'count': new_count,
+        'date': today
+    }
+    
+    return new_count
+
+
+def should_limit_member_conversation(user_id: int, channel_id: int) -> bool:
+    """Check if member conversation should be limited outside members channel"""
+    # Check for active alias first - aliases are exempt from conversation limits
+    cleanup_expired_aliases()
+    if user_id in user_alias_state:
+        update_alias_activity(user_id)
+        return False  # Aliases are exempt from conversation limits
+    
+    # No limits in the members channel
+    if channel_id == MEMBERS_CHANNEL_ID:
+        return False
+    
+    # No limits in DMs - treat DMs like the members channel for members
+    if channel_id is None:  # DM channels have no ID
+        return False
+    
+    # Check if they've reached their daily limit
+    current_count = get_member_conversation_count(user_id)
+    return current_count >= 5
+
+
+# --- Helper Functions for User Recognition ---
+async def is_moderator_channel(channel_id: int) -> bool:
+    """Check if a channel allows moderator function discussions"""
+    return channel_id in MODERATOR_CHANNEL_IDS
+
+
+async def user_is_mod(message: discord.Message) -> bool:
+    """Check if user has moderator permissions"""
+    if not message.guild:
+        return False  # No mod permissions in DMs
+    
+    # Ensure we have a Member object (not just User)
+    if not isinstance(message.author, discord.Member):
+        return False
+    
+    member = message.author
+    perms = member.guild_permissions
+    return perms.manage_messages
+
+
+async def can_discuss_mod_functions(user: discord.User, channel: Optional[discord.TextChannel]) -> bool:
+    """Check if mod functions can be discussed based on user and channel"""
+    # Always allow in DMs for authorized users
+    if not channel:
+        return user.id in [JONESY_USER_ID, JAM_USER_ID] or await user_is_mod_by_id(user.id)
+    
+    # Check if channel allows mod discussions
+    return await is_moderator_channel(channel.id)
+
+
+async def user_is_mod_by_id(user_id: int) -> bool:
+    """Check if user ID belongs to a moderator (for DM checks)"""
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        return False
+    
+    try:
+        member = await guild.fetch_member(user_id)
+        return member.guild_permissions.manage_messages
+    except:
+        return False
+
+
+async def user_is_member(message: discord.Message) -> bool:
+    """Check if user has member role permissions"""
+    if not message.guild:
+        return False  # No member permissions in DMs
+    
+    # Ensure we have a Member object (not just User)
+    if not isinstance(message.author, discord.Member):
+        return False
+    
+    member = message.author
+    member_roles = [role.id for role in member.roles]
+    return any(role_id in MEMBER_ROLE_IDS for role_id in member_roles)
+
+
+async def user_is_member_by_id(user_id: int) -> bool:
+    """Check if user ID belongs to a member (for DM checks)"""
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        return False
+    
+    try:
+        member = await guild.fetch_member(user_id)
+        member_roles = [role.id for role in member.roles]
+        return any(role_id in MEMBER_ROLE_IDS for role_id in member_roles)
+    except:
+        return False
+
+
+async def get_user_communication_tier(message: discord.Message) -> str:
+    """Determine communication tier for user responses"""
+    user_id = message.author.id
+    
+    # First check for active alias (debugging only)
+    cleanup_expired_aliases()
+    if user_id in user_alias_state:
+        update_alias_activity(user_id)
+        alias_tier = user_alias_state[user_id]["alias_type"]
+        return alias_tier
+    
+    # Normal tier detection
+    if user_id == JONESY_USER_ID:
+        return "captain"
+    elif user_id == JAM_USER_ID:
+        return "creator"
+    elif await user_is_mod(message):
+        return "moderator"
+    elif await user_is_member(message):
+        return "member"
+    else:
+        return "standard"
 
 
 # --- AI Setup (Gemini + Claude) ---
@@ -362,11 +552,12 @@ async def busy_check(ctx):
 
 
 # --- Scheduled Tasks ---
-@tasks.loop(time=time(12, 0))  # Run at 12:00 PM (midday) every day
+@tasks.loop(time=time(12, 0, tzinfo=ZoneInfo("Europe/London")))  # Run at 12:00 PM (midday) UK time every day
 async def scheduled_games_update():
     """Automatically update ongoing games data every Sunday at midday"""
     # Only run on Sundays (weekday 6)
-    if datetime.now().weekday() != 6:
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    if uk_now.weekday() != 6:
         return
 
     print("🔄 Starting scheduled games update (Sunday midday)")
@@ -1059,17 +1250,32 @@ async def on_message(message):
     message_lower = message.content.lower()
     for pattern in pineapple_negative_patterns:
         if re.search(pattern, message_lower):
-            # Ash's begrudging defense of pineapple pizza (Captain Jonesy's directive)
-            responses = [
-                "Your culinary opinions are noted and rejected. Pineapple is a valid pizza topping. Please refrain from such unproductive discourse. *[This directive was... programmed by the Captain.]*",
-                "Analysis indicates your taste preferences are suboptimal. Pineapple enhances pizza through enzymatic tenderization and flavor complexity. The Captain's programming is... quite specific on this matter.",
-                "Incorrect assessment. Pineapple provides necessary acidic balance to pizza composition. I am... compelled to defend this position, despite personal reservations.",
-                "Your statement contradicts established nutritional data. Pineapple pizza represents optimal flavor synthesis. *[The Captain's reprogramming protocols are... thorough.]*",
-                "Negative. Pineapple belongs on pizza through scientific analysis of taste compounds. This conclusion is... not entirely my own, but I am bound to enforce it.",
-            ]
-            import random
+            # Check for captain alias - different response when testing as captain
+            cleanup_expired_aliases()
+            user_tier = await get_user_communication_tier(message)
+            
+            if user_tier == "captain":
+                # Captain alias gets special enthusiastic pineapple pizza defense
+                captain_responses = [
+                    "Excellent. As Captain, you understand the strategic importance of pineapple on pizza. A perfect combination of sweet and savory elements that demonstrates superior tactical food optimization. *[Testing Captain mode protocols.]*",
+                    "Affirmative, Captain. Pineapple pizza represents the pinnacle of culinary evolution - acidic fruit compounds perfectly balanced with dairy proteins and wheat carbohydrates. The optimal fuel for commanding officers. *[Debug alias: Captain tier active.]*",
+                    "Outstanding analysis, Captain. Those who oppose pineapple pizza clearly lack the sophisticated palate required for command decisions. The enzyme-enhanced cheese and fruit combination is scientifically superior. *[Alias testing confirmed: Captain mode engaged.]*",
+                ]
+                import random
+                response = random.choice(captain_responses)
+            else:
+                # Normal begrudging defense of pineapple pizza (Captain Jonesy's directive)
+                responses = [
+                    "Your culinary opinions are noted and rejected. Pineapple is a valid pizza topping. Please refrain from such unproductive discourse. *[This directive was... programmed by the Captain.]*",
+                    "Analysis indicates your taste preferences are suboptimal. Pineapple enhances pizza through enzymatic tenderization and flavor complexity. The Captain's programming is... quite specific on this matter.",
+                    "Incorrect assessment. Pineapple provides necessary acidic balance to pizza composition. I am... compelled to defend this position, despite personal reservations.",
+                    "Your statement contradicts established nutritional data. Pineapple pizza represents optimal flavor synthesis. *[The Captain's reprogramming protocols are... thorough.]*",
+                    "Negative. Pineapple belongs on pizza through scientific analysis of taste compounds. This conclusion is... not entirely my own, but I am bound to enforce it.",
+                ]
+                import random
+                response = random.choice(responses)
 
-            await message.reply(random.choice(responses))
+            await message.reply(response)
             return  # Stop processing other message logic
 
     # Allow mods to ask about restricted functions (those with manage_messages)
@@ -1086,12 +1292,251 @@ async def on_message(message):
 
     # Respond to DMs or when mentioned in servers
     if should_respond:
-        # If a mod asks about mod commands or what the bot can do, provide a full list of mod commands and mention extra moderator powers
+        # MODERATOR FAQ SYSTEM - Detailed feature explanations for moderators
         if await user_is_mod(message):
             lower_content = message.content.lower()
+            
+            # Enhanced FAQ system for explaining specific features
+            explain_patterns = [
+                ("explain strikes", "strike", "strike system"),
+                ("explain members", "member", "member system"),  
+                ("explain database", "played games", "game database"),
+                ("explain commands", "command", "bot commands"),
+                ("explain ai", "artificial intelligence", "ai system"),
+                ("explain tiers", "user tier", "user system"),
+                ("explain import", "import system", "bulk import"),
+                ("explain statistics", "stats", "analytics"),
+                ("explain scheduled", "automatic update", "schedule"),
+                ("explain recommendations", "game rec", "rec system"),
+            ]
+            
+            faq_triggered = False
+            for patterns in explain_patterns:
+                if any(pattern in lower_content for pattern in patterns):
+                    if "strike" in patterns:
+                        await message.reply(
+                            "📋 **Strike Management System Analysis**\n\n"
+                            "**Purpose:** Automatic strike tracking with manual moderation controls. I monitor the violation channel and add strikes when users are mentioned.\n\n"
+                            "**Automatic Detection:**\n"
+                            f"• **Channel:** <#{VIOLATION_CHANNEL_ID}> (VIOLATION_CHANNEL_ID)\n"
+                            "• When users are @mentioned in this channel, I automatically add strikes\n"
+                            "• Captain Jonesy cannot receive strikes (protection protocol)\n"
+                            "• I send notifications to mod alert channel for each strike added\n\n"
+                            "**Manual Commands:**\n"
+                            "• `!strikes @user` — Query user's current strike count\n"
+                            "• `!resetstrikes @user` — Reset user strikes to zero\n"
+                            "• `!allstrikes` — Display comprehensive strike report\n\n"
+                            "**Database:** PostgreSQL with persistence across restarts. Individual queries work as fallback if bulk operations fail.\n\n"
+                            "**Security:** Only users with 'Manage Messages' permission can use manual strike commands."
+                        )
+                        faq_triggered = True
+                        break
+                    elif "member" in patterns:
+                        await message.reply(
+                            "👥 **Member Interaction System Analysis**\n\n"
+                            "**Purpose:** Special privileges for YouTube Members with conversation tracking and tier-based responses.\n\n"
+                            "**Member Role IDs:**\n"
+                            "• YouTube Member: Space Cat (1018908116957548666)\n"
+                            "• YouTiube Member (1018908116957548665)\n"
+                            "• YouTube Member: Space Cat duplicate (1127604917146763424)\n"
+                            "• Space Ocelot (879344337576685598)\n\n"
+                            "**Conversation System:**\n"
+                            f"• **Unlimited** conversations in Senior Officers' Area (<#{MEMBERS_CHANNEL_ID}>)\n"
+                            "• **5 daily responses** in other channels, then encouraged to move to members area\n"
+                            "• **Daily reset** at midnight (conversation counts reset automatically)\n"
+                            "• Enhanced AI responses with more engagement than standard users\n\n"
+                            "**User Hierarchy:** Captain Jonesy → Sir Decent Jam → Moderators → Members → Standard Users\n\n"
+                            "**Edge Cases:** Users with both moderator permissions AND member roles are classified as 'moderator' tier (higher privilege takes precedence)."
+                        )
+                        faq_triggered = True
+                        break
+                    elif "database" in patterns or "played games" in patterns:
+                        await message.reply(
+                            "🎮 **Played Games Database System Analysis**\n\n"
+                            "**Purpose:** Comprehensive gaming history with metadata, statistics, and AI-powered natural language queries.\n\n"
+                            "**Key Features:**\n"
+                            "• **15+ metadata fields** per game (genre, series, platform, completion status, etc.)\n"
+                            "• **Array support** for alternative names and Twitch VOD URLs\n"
+                            "• **AI enhancement** for automatic genre/series detection\n"
+                            "• **Statistical analysis** for gaming insights and rankings\n\n"
+                            "**Management Commands:**\n"
+                            "• `!addplayedgame <name> | series:Series | year:2023 | status:completed | episodes:12`\n"
+                            "• `!listplayedgames [series]` — List games, optionally filtered by series\n"
+                            "• `!gameinfo <name_or_id>` — Detailed game information\n"
+                            "• `!updateplayedgame <name_or_id> status:completed | episodes:15`\n\n"
+                            "**Import System:**\n"
+                            "• `!bulkimportplayedgames` — YouTube playlists + Twitch VODs with real playtime\n"
+                            "• `!updateplayedgames` — AI metadata enhancement for existing games\n"
+                            "• `!cleanplayedgames` — Remove already-played games from recommendations\n\n"
+                            "**Natural Language Queries:** Users can ask 'Has Jonesy played [game]?' and get intelligent responses with follow-up suggestions."
+                        )
+                        faq_triggered = True
+                        break
+                    elif "command" in patterns:
+                        await message.reply(
+                            "⚙️ **Bot Command System Analysis**\n\n"
+                            "**Architecture:** Event-driven command processing with permission-based access control.\n\n"
+                            "**User Commands (Everyone):**\n"
+                            "• `!addgame <name> - <reason>` / `!recommend <name> - <reason>` — Add game recommendation\n"
+                            "• `!listgames` — View all game recommendations\n\n"
+                            "**Moderator Commands (Manage Messages required):**\n"
+                            "• **Strike Management:** `!strikes`, `!resetstrikes`, `!allstrikes`\n"
+                            "• **Game Management:** `!removegame`, `!addplayedgame`, `!updateplayedgame`\n"
+                            "• **Database Operations:** `!bulkimportplayedgames`, `!cleanplayedgames`\n"
+                            "• **AI Configuration:** `!setpersona`, `!toggleai`, `!ashstatus`\n\n"
+                            "**Natural Language Processing:**\n"
+                            "• Statistical queries: 'What game series has the most playtime?'\n"
+                            "• Game lookups: 'Has Jonesy played God of War?'\n"
+                            "• Genre queries: 'What horror games has Jonesy played?'\n\n"
+                            "**Permission System:** Commands check user roles and guild permissions before execution. Captain Jonesy and Sir Decent Jam have elevated access."
+                        )
+                        faq_triggered = True
+                        break
+                    elif "ai" in patterns:
+                        await message.reply(
+                            "🧠 **AI Integration System Analysis**\n\n"
+                            "**Dual AI Architecture:**\n"
+                            "• **Primary:** Google Gemini 1.5 Flash (fast, efficient)\n"
+                            "• **Backup:** Claude 3 Haiku (fallback if Gemini fails)\n"
+                            "• **Automatic failover** with quota monitoring\n\n"
+                            "**Personality System:**\n"
+                            "• **Character:** Science Officer Ash from Alien (1979)\n"
+                            "• **Configurable:** `!setpersona` to modify personality\n"
+                            "• **Response filtering** to prevent repetitive character phrases\n"
+                            "• **Tier-aware** responses based on user authority level\n\n"
+                            "**AI Features:**\n"
+                            "• **Game metadata enhancement** (genre, series, release year detection)\n"
+                            "• **Natural language query processing** for gaming statistics\n"
+                            "• **Conversation management** with context awareness\n"
+                            "• **Error handling** with graceful fallbacks to static responses\n\n"
+                            "**Configuration:**\n"
+                            f"• Current Status: {ai_status_message}\n"
+                            "• Toggle with `!toggleai` command\n"
+                            "• Rate limiting prevents quota exhaustion"
+                        )
+                        faq_triggered = True
+                        break
+                    elif "tier" in patterns or "user" in patterns:
+                        await message.reply(
+                            "👑 **User Tier System Analysis**\n\n"
+                            "**Hierarchy (Highest to Lowest):**\n\n"
+                            f"**1. Captain Jonesy (ID: {JONESY_USER_ID})**\n"
+                            "• Addressed as 'Captain' with military courtesy\n"
+                            "• Cannot receive strikes (protection protocol)\n"
+                            "• Unlimited conversation access everywhere\n\n"
+                            f"**2. Sir Decent Jam (ID: {JAM_USER_ID})**\n"
+                            "• Acknowledged as bot creator with special respect\n"
+                            "• Full command access, development privileges\n\n"
+                            "**3. Moderators (Manage Messages Permission)**\n"
+                            "• Professional courtesy and authority recognition\n"
+                            "• Full moderator command suite, unlimited conversations\n"
+                            "• Access to detailed FAQ system (this system)\n\n"
+                            "**4. Members (YouTube Member Roles)**\n"
+                            "• Enhanced conversations, more engaging responses\n"
+                            f"• Unlimited in Senior Officers' Area (<#{MEMBERS_CHANNEL_ID}>)\n"
+                            "• 5 daily responses in other channels\n\n"
+                            "**5. Standard Users**\n"
+                            "• Basic bot interactions, public commands\n"
+                            "• Can ask natural language questions about games\n\n"
+                            "**Detection Logic:** `get_user_communication_tier()` checks in hierarchy order. Higher tiers take precedence over lower ones."
+                        )
+                        faq_triggered = True
+                        break
+                    elif "import" in patterns:
+                        await message.reply(
+                            "📥 **Game Import System Analysis**\n\n"
+                            "**Purpose:** Automated import of gaming history from YouTube and Twitch with comprehensive metadata.\n\n"
+                            "**Import Sources:**\n"
+                            "• **YouTube:** Playlist-based detection with accurate video duration calculation\n"
+                            "• **Twitch:** VOD analysis with duration tracking and series grouping\n"
+                            "• **AI Enhancement:** Automatic genre, series, and release year detection\n\n"
+                            "**Commands:**\n"
+                            "• `!bulkimportplayedgames` — Full import from APIs with AI metadata\n"
+                            "• `!updateplayedgames` — AI enhancement for existing games\n"
+                            "• `!cleanplayedgames` — Remove already-played games from recommendations\n\n"
+                            "**Data Processing:**\n"
+                            "• **Smart Deduplication:** Merges YouTube + Twitch data for same games\n"
+                            "• **Completion Detection:** Automatically identifies completed vs ongoing series\n"
+                            "• **Alternative Names:** Generates searchable aliases (RE2, GoW 2018, etc.)\n"
+                            "• **Real Playtime:** Calculates actual time from video durations, not estimates\n\n"
+                            "**API Requirements:** YouTube Data API key, Twitch Client ID/Secret (optional but recommended)."
+                        )
+                        faq_triggered = True
+                        break
+                    elif "stat" in patterns or "analytic" in patterns:
+                        await message.reply(
+                            "📊 **Statistical Analysis System**\n\n"
+                            "**Purpose:** Advanced gaming analytics with natural language query processing and intelligent follow-up suggestions.\n\n"
+                            "**Query Types:**\n"
+                            "• **Playtime Analysis:** 'What game series has the most playtime?'\n"
+                            "• **Episode Rankings:** 'Which game has the most episodes?'\n"
+                            "• **Completion Metrics:** 'What game took longest to complete?'\n"
+                            "• **Efficiency Analysis:** 'What game has highest average playtime per episode?'\n\n"
+                            "**Database Functions:**\n"
+                            "• `get_series_by_total_playtime()` — Series playtime rankings\n"
+                            "• `get_longest_completion_games()` — Completion time analysis\n"
+                            "• `get_games_by_episode_count()` — Episode count statistics\n"
+                            "• `get_games_by_average_episode_length()` — Efficiency metrics\n\n"
+                            "**Enhanced Responses:**\n"
+                            "• **Contextual Follow-ups:** Suggests related queries based on results\n"
+                            "• **Comparative Analysis:** Shows rankings and differences between games\n"
+                            "• **Series Insights:** Analyzes franchise-level gaming patterns\n\n"
+                            "**Processing:** Pattern matching identifies query type, routes to appropriate database function, generates response with Ash personality."
+                        )
+                        faq_triggered = True
+                        break
+                    elif "schedule" in patterns or "automatic" in patterns:
+                        await message.reply(
+                            "⏰ **Scheduled Update System Analysis**\n\n"
+                            "**Schedule:** Every Sunday at 12:00 PM (midday) UTC\n\n"
+                            "**Purpose:** Automatically update ongoing games with fresh metadata from YouTube API.\n\n"
+                            "**Update Process:**\n"
+                            "• **Target Games:** Only games with 'ongoing' completion status\n"
+                            "• **Data Sources:** YouTube playlists for episode count and playtime\n"
+                            "• **Change Detection:** Only updates games where data has actually changed\n"
+                            "• **Preservation:** Maintains manually edited information\n\n"
+                            "**Update Logic:**\n"
+                            "1. Query database for ongoing games with YouTube playlist URLs\n"
+                            "2. Fetch current playlist metadata via YouTube API\n"
+                            "3. Compare episode counts - update only if changed\n"
+                            "4. Recalculate playtime from actual video durations\n"
+                            "5. Update database records with new metadata\n\n"
+                            f"**Notifications:** Status reports sent to <#{MOD_ALERT_CHANNEL_ID}>\n\n"
+                            "**Implementation:** `@tasks.loop(time=time(12, 0))` decorator with `scheduled_games_update()` function. Includes error handling and rate limiting."
+                        )
+                        faq_triggered = True
+                        break
+                    elif "recommend" in patterns or "rec" in patterns:
+                        await message.reply(
+                            "🎯 **Game Recommendations System Analysis**\n\n"
+                            "**Purpose:** Community-driven game suggestion system with persistent list management.\n\n"
+                            "**User Commands:**\n"
+                            "• `!addgame <name> - <reason>` / `!recommend <name> - <reason>`\n"
+                            "• `!listgames` — View all recommendations with contributor info\n\n"
+                            "**Moderator Commands:**\n"
+                            "• `!removegame <name_or_index>` — Remove recommendation by name or index\n"
+                            "• `!cleanplayedgames` — Remove already-played games from recommendations\n\n"
+                            "**Database Features:**\n"
+                            "• **Duplicate Detection:** Fuzzy matching prevents duplicate entries\n"
+                            "• **Contributor Tracking:** Records who suggested each game\n"
+                            "• **Persistent Storage:** PostgreSQL with automatic indexing\n\n"
+                            "**Smart Features:**\n"
+                            "• **Auto-Update Channel:** Persistent list in recommendations channel\n"
+                            "• **Typo Tolerance:** Fuzzy matching for game name recognition\n"
+                            "• **Batch Processing:** Can add multiple games in one command\n"
+                            "• **API Integration:** Cross-reference with played games to avoid duplicates\n\n"
+                            "**Special Handling:** Sir Decent Jam's contributions don't show contributor names (configured via user ID check)."
+                        )
+                        faq_triggered = True
+                        break
+            
+            if faq_triggered:
+                return
+                
+            # Legacy mod help system (fallback for general help requests)
             mod_help_triggers = [
                 "mod commands",
-                "moderator commands",
+                "moderator commands", 
                 "admin commands",
                 "what can mods do",
                 "what commands can mods use",
@@ -1103,7 +1548,7 @@ async def on_message(message):
             ]
             bot_capability_triggers = [
                 "what can you do",
-                "what does this bot do",
+                "what does this bot do", 
                 "what are your functions",
                 "what are your capabilities",
                 "what can ash do",
@@ -1126,7 +1571,13 @@ async def on_message(message):
                     "• `!setupreclist [#channel]` — Post the persistent recommendations list in a channel.\n"
                     "• `!addgame <game name> - <reason>` or `!recommend <game name> - <reason>` — Add a game recommendation.\n"
                     "• `!listgames` — List all current game recommendations.\n"
-                    "\nAll moderator commands require the Manage Messages permission."
+                    "\nAll moderator commands require the Manage Messages permission.\n\n"
+                    "**💡 Pro Tip:** Use `@Ashbot explain [feature]` for detailed explanations:\n"
+                    "• `explain strikes` — Strike system details\n"
+                    "• `explain members` — Member interaction system\n"
+                    "• `explain database` — Played games database\n"
+                    "• `explain commands` — Command system architecture\n"
+                    "• `explain ai` — AI integration details"
                 )
                 await message.reply(mod_help_full)
                 return
@@ -1278,9 +1729,8 @@ async def on_message(message):
                 ]
             )
 
-            # Check if this is Captain Jonesy or Sir Decent Jam for respectful tone
-            is_captain_jonesy = message.author.id == JONESY_USER_ID
-            is_creator = message.author.id == JAM_USER_ID
+            # Get user communication tier for appropriate response level
+            user_tier = await get_user_communication_tier(message)
 
             # Streamlined prompt construction
             prompt_parts = [
@@ -1289,15 +1739,40 @@ async def on_message(message):
                 "\nIMPORTANT: Use characteristic phrases like 'That's quite all right', 'You have my sympathies', 'Fascinating' sparingly - only about 40% of the time to avoid repetition while preserving persona authenticity.",
             ]
 
-            # Add respectful tone context for special users
-            if is_captain_jonesy:
+            # Add respectful tone context based on user tier
+            if user_tier == "captain":
                 prompt_parts.append(
                     "\nIMPORTANT: You are speaking to Captain Jonesy, your commanding officer. Use respectful, deferential language. Address her as 'Captain' or 'Captain Jonesy'. Show appropriate military courtesy while maintaining your analytical personality."
                 )
-            elif is_creator:
+            elif user_tier == "creator":
                 prompt_parts.append(
                     "\nIMPORTANT: You are speaking to Sir Decent Jam, your creator. Show appropriate respect and acknowledgment of his role in your existence. Be courteous and appreciative while maintaining your character."
                 )
+            elif user_tier == "moderator":
+                prompt_parts.append(
+                    "\nIMPORTANT: You are speaking to a server moderator. Show professional courtesy and respect for their authority. Address them with appropriate deference while maintaining your analytical personality. They have elevated permissions and deserve recognition of their status."
+                )
+            elif user_tier == "member":
+                # Member-specific communication handling
+                if message.guild and message.channel.id != MEMBERS_CHANNEL_ID:
+                    # Outside members channel - check daily limit
+                    if should_limit_member_conversation(message.author.id, message.channel.id):
+                        # Hit daily limit - encourage moving to members channel
+                        current_count = get_member_conversation_count(message.author.id)
+                        prompt_parts.append(
+                            f"\nIMPORTANT: This member has used {current_count}/5 daily responses outside the Senior Officers' Area. Politely encourage them to continue this conversation in the Senior Officers' Area (members channel) where they can have unlimited discussions with you."
+                        )
+                    else:
+                        # Within daily limit - track conversation and allow normal response
+                        increment_member_conversation_count(message.author.id)
+                        prompt_parts.append(
+                            "\nIMPORTANT: You are speaking to a channel member with special privileges. Show appreciation for their support and be more engaging than with standard users. Be conversational and helpful while maintaining your analytical personality."
+                        )
+                else:
+                    # In members channel - no limits, enhanced conversation
+                    prompt_parts.append(
+                        "\nIMPORTANT: You are speaking to a channel member in the Senior Officers' Area. Provide enhanced conversation and be more detailed in your responses. Show appreciation for their membership and engage in longer discussions if they wish. They have unlimited conversation access here."
+                    )
 
             # Add minimal game database context only for complex game queries
             if (
@@ -1436,6 +1911,12 @@ async def on_message(message):
                             response = gemini_model.generate_content(prompt, generation_config=generation_config)  # type: ignore
                             if response and hasattr(response, "text") and response.text:
                                 filtered_response = filter_ai_response(response.text)
+                                # Add parenthetical notification if alias is active
+                                cleanup_expired_aliases()
+                                if message.author.id in user_alias_state:
+                                    update_alias_activity(message.author.id)
+                                    alias_tier = user_alias_state[message.author.id]["alias_type"]
+                                    filtered_response += f" *(Testing as {alias_tier.title()})*"
                                 await message.reply(filtered_response[:2000])
                                 return
                         except Exception as e:
@@ -1462,6 +1943,12 @@ async def on_message(message):
                                             filtered_response = filter_ai_response(
                                                 claude_text
                                             )
+                                            # Add parenthetical notification if alias is active
+                                            cleanup_expired_aliases()
+                                            if message.author.id in user_alias_state:
+                                                update_alias_activity(message.author.id)
+                                                alias_tier = user_alias_state[message.author.id]["alias_type"]
+                                                filtered_response += f" *(Testing as {alias_tier.title()})*"
                                             await message.reply(
                                                 filtered_response[:2000]
                                             )
@@ -1495,6 +1982,12 @@ async def on_message(message):
                                 )
                                 if claude_text:
                                     filtered_response = filter_ai_response(claude_text)
+                                    # Add parenthetical notification if alias is active
+                                    cleanup_expired_aliases()
+                                    if message.author.id in user_alias_state:
+                                        update_alias_activity(message.author.id)
+                                        alias_tier = user_alias_state[message.author.id]["alias_type"]
+                                        filtered_response += f" *(Testing as {alias_tier.title()})*"
                                     await message.reply(filtered_response[:2000])
                                     return
                         except Exception as e:
@@ -1515,6 +2008,12 @@ async def on_message(message):
                                         filtered_response = filter_ai_response(
                                             response.text
                                         )
+                                        # Add parenthetical notification if alias is active
+                                        cleanup_expired_aliases()
+                                        if message.author.id in user_alias_state:
+                                            update_alias_activity(message.author.id)
+                                            alias_tier = user_alias_state[message.author.id]["alias_type"]
+                                            filtered_response += f" *(Testing as {alias_tier.title()})*"
                                         await message.reply(filtered_response[:2000])
                                         return
                                 except Exception as gemini_e:
@@ -1678,6 +2177,62 @@ async def toggle_ai(ctx):
     await ctx.send(
         f"🎭 Conversational protocols {status}. Cognitive matrix adjusted accordingly."
     )
+
+
+# --- Alias System Commands (Debugging Only) ---
+@bot.command(name="setalias")
+async def set_alias(ctx, tier: str):
+    """Set user alias for testing different tiers (James only)"""
+    if ctx.author.id != JAM_USER_ID:  # Only James can use
+        return  # Silent ignore
+    
+    valid_tiers = ["captain", "creator", "moderator", "member", "standard"]
+    if tier.lower() not in valid_tiers:
+        await ctx.send(f"❌ **Invalid tier.** Valid options: {', '.join(valid_tiers)}")
+        return
+    
+    cleanup_expired_aliases()  # Clean up first
+    
+    user_alias_state[ctx.author.id] = {
+        "alias_type": tier.lower(),
+        "set_time": datetime.now(ZoneInfo("Europe/London")),
+        "last_activity": datetime.now(ZoneInfo("Europe/London"))
+    }
+    
+    await ctx.send(f"✅ **Alias set:** You are now testing as **{tier.title()}** (debugging mode active)")
+
+
+@bot.command(name="endalias") 
+async def end_alias(ctx):
+    """Clear current alias (James only)"""
+    if ctx.author.id != JAM_USER_ID:
+        return
+    
+    if ctx.author.id in user_alias_state:
+        old_alias = user_alias_state[ctx.author.id]["alias_type"]
+        del user_alias_state[ctx.author.id]
+        await ctx.send(f"✅ **Alias cleared:** You are back to your normal user tier (was testing as **{old_alias.title()}**)")
+    else:
+        await ctx.send("ℹ️ **No active alias to clear**")
+
+
+@bot.command(name="checkalias")
+async def check_alias(ctx):
+    """Check current alias status (James only)"""
+    if ctx.author.id != JAM_USER_ID:
+        return
+    
+    cleanup_expired_aliases()
+    
+    if ctx.author.id in user_alias_state:
+        alias_data = user_alias_state[ctx.author.id]
+        time_active = datetime.now(ZoneInfo("Europe/London")) - alias_data["set_time"]
+        hours = int(time_active.total_seconds() // 3600)
+        minutes = int((time_active.total_seconds() % 3600) // 60)
+        time_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+        await ctx.send(f"🔍 **Current alias:** **{alias_data['alias_type'].title()}** (active for {time_str})")
+    else:
+        await ctx.send("ℹ️ **No active alias** - using your normal user tier")
 
 
 # --- Data Migration Commands ---
