@@ -53,7 +53,7 @@ The bot recognizes different user tiers with varying levels of interaction and r
 
 - Members get **5 conversation responses per day** outside the Senior Officers' Area
 - **Unlimited conversations** within the Senior Officers' Area (#888820289776013444)
-- Conversation count resets daily at midnight
+- Conversation count resets daily at midnight UK time (BST/GMT)
 - When limit reached, Ash politely directs members to the Senior Officers' Area
 
 **Example Behavior:**
@@ -139,12 +139,13 @@ The bot recognizes different user tiers with varying levels of interaction and r
 
 ### Automatic Scheduled Updates
 
-The bot automatically updates ongoing games every **Sunday at 12:00 PM (midday)**:
+The bot automatically updates ongoing games every **Sunday at 12:00 PM UK time (midday BST/GMT)**:
 
 - Updates episode counts and playtime from YouTube playlists
 - Only updates games where data has changed
 - Sends status notifications to mod channel
 - Preserves manually edited information
+- **Timezone**: All scheduled tasks operate on UK timezone (Europe/London) which automatically handles BST/GMT transitions
 
 ### Intelligent Game Queries & Statistical Analysis
 

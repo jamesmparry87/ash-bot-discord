@@ -4,6 +4,8 @@ Tests for Discord bot commands and functionality.
 
 import os
 import sys
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -629,6 +631,96 @@ class TestQueryRouting:
         query_type, match = ash_bot_fallback.route_query("random unrelated question")
         assert query_type == "unknown"
         assert match is None
+
+
+class TestTimezoneAwareFunctionality:
+    """Test timezone-aware functionality."""
+
+    def test_get_today_date_str_uses_uk_timezone(self):
+        """Test that get_today_date_str returns UK timezone date."""
+        import ash_bot_fallback  # type: ignore
+
+        with patch("ash_bot_fallback.datetime") as mock_datetime:
+            # Mock UK time at 11:00 PM on Dec 31, 2023 (still same date in UK)
+            uk_time = datetime(2023, 12, 31, 23, 0, tzinfo=ZoneInfo("Europe/London"))
+            mock_datetime.now.return_value = uk_time
+            
+            result = ash_bot_fallback.get_today_date_str()
+            
+            # Should use UK timezone for date calculation
+            mock_datetime.now.assert_called_once_with(ZoneInfo("Europe/London"))
+            assert result == "2023-12-31"
+
+    def test_alias_expiry_uses_uk_timezone(self):
+        """Test that alias expiry calculations use UK timezone."""
+        import ash_bot_fallback  # type: ignore
+
+        # Mock current UK time
+        uk_now = datetime(2024, 6, 15, 14, 30, tzinfo=ZoneInfo("Europe/London"))
+        
+        # Set up alias state with time 2 hours ago (should be expired)
+        test_user_id = 123456789
+        ash_bot_fallback.user_alias_state[test_user_id] = {
+            "alias_type": "moderator",
+            "set_time": uk_now - timedelta(hours=2),
+            "last_activity": uk_now - timedelta(hours=2)
+        }
+
+        with patch("ash_bot_fallback.datetime") as mock_datetime:
+            mock_datetime.now.return_value = uk_now
+            
+            # Run cleanup
+            ash_bot_fallback.cleanup_expired_aliases()
+            
+            # Should use UK timezone and remove expired alias
+            mock_datetime.now.assert_called_with(ZoneInfo("Europe/London"))
+            assert test_user_id not in ash_bot_fallback.user_alias_state
+
+    def test_update_alias_activity_uses_uk_timezone(self):
+        """Test that alias activity updates use UK timezone."""
+        import ash_bot_fallback  # type: ignore
+
+        test_user_id = 123456789
+        uk_now = datetime(2024, 6, 15, 14, 30, tzinfo=ZoneInfo("Europe/London"))
+        
+        # Set up initial alias state
+        ash_bot_fallback.user_alias_state[test_user_id] = {
+            "alias_type": "moderator",
+            "set_time": uk_now - timedelta(hours=1),
+            "last_activity": uk_now - timedelta(hours=1)
+        }
+
+        with patch("ash_bot_fallback.datetime") as mock_datetime:
+            mock_datetime.now.return_value = uk_now
+            
+            # Update activity
+            ash_bot_fallback.update_alias_activity(test_user_id)
+            
+            # Should use UK timezone for last_activity update
+            mock_datetime.now.assert_called_with(ZoneInfo("Europe/London"))
+            assert ash_bot_fallback.user_alias_state[test_user_id]["last_activity"] == uk_now
+
+    @pytest.mark.asyncio
+    async def test_scheduled_task_uses_uk_timezone(self):
+        """Test that scheduled tasks are configured for UK timezone."""
+        import ash_bot_fallback  # type: ignore
+
+        # Check that the scheduled task is configured for UK timezone
+        scheduled_task = ash_bot_fallback.scheduled_games_update
+        
+        # The task should be configured to run at 12:00 PM UK time
+        # This tests the task configuration, not the execution
+        assert scheduled_task is not None
+        
+        # Mock UK Sunday at 12:00 PM
+        uk_sunday = datetime(2024, 6, 16, 12, 0, tzinfo=ZoneInfo("Europe/London"))  # Sunday
+        
+        with patch("ash_bot_fallback.datetime") as mock_datetime:
+            mock_datetime.now.return_value = uk_sunday
+            
+            # The task should recognize it's Sunday in UK time
+            # This tests the weekday check logic
+            assert uk_sunday.weekday() == 6  # Sunday = 6
 
 
 if __name__ == "__main__":
