@@ -1,1 +1,2 @@
 web: python ash_bot_fallback.py
+sync-staging: python database_sync.py --force

@@ -72,8 +72,8 @@ def mock_db() -> MagicMock:
     # Mock game recommendation methods
     db.add_game_recommendation.return_value = True
     db.get_all_games.return_value = []
-    db.remove_game_by_id.return_value = {'id': 1, 'name': 'Test Game', 'reason': 'Test'}
-    db.remove_game_by_name.return_value = {'id': 1, 'name': 'Test Game', 'reason': 'Test'}
+    db.remove_game_by_id.return_value = {"id": 1, "name": "Test Game", "reason": "Test"}
+    db.remove_game_by_name.return_value = {"id": 1, "name": "Test Game", "reason": "Test"}
     db.game_exists.return_value = False
     
     # Mock played games methods
@@ -186,7 +186,7 @@ def mock_discord_message() -> MagicMock:
     # Mock history to return async iterator
     mock_history_messages = []  # Empty history for tests
     message.channel.history = MagicMock(return_value=MockAsyncIterator(mock_history_messages))
-    
+
     # Create proper async context manager mock for typing()
     typing_context = AsyncMock()
     typing_context.__aenter__ = AsyncMock(return_value=typing_context)
@@ -260,9 +260,10 @@ def sample_strike_data() -> Dict[int, int]:
 def mock_ai_responses() -> Dict[str, Dict[str, Any]]:
     """Mock AI response data for testing."""
     return {
-        'gemini_response': {
-            'text': 'Test Gemini response from Science Officer Ash.',
-            'safety_ratings': []
+        "gemini_response": {"text": "Test Gemini response from Science Officer Ash.", "safety_ratings": []},
+        "claude_response": {
+            "content": [{"text": "Test Claude response from Science Officer Ash."}],
+            "stop_reason": "end_turn",
         },
         'claude_response': {
             'content': [{'text': 'Test Claude response from Science Officer Ash.'}],
@@ -277,14 +278,9 @@ def mock_youtube_api_response() -> Dict[str, List[Dict[str, Any]]]:
     return {
         'items': [
             {
-                'id': 'test_playlist_id',
-                'snippet': {
-                    'title': 'Test Game Playlist',
-                    'description': 'Test game playlist description'
-                },
-                'contentDetails': {
-                    'itemCount': 5
-                }
+                "id": "test_playlist_id",
+                "snippet": {"title": "Test Game Playlist", "description": "Test game playlist description"},
+                "contentDetails": {"itemCount": 5},
             }
         ]
     }

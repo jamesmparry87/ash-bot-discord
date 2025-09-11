@@ -26,10 +26,7 @@ class DatabaseManager:
         try:
             # Always create a fresh connection for each operation to avoid stale connections
             # This is more reliable than trying to reuse connections
-            self.connection = psycopg2.connect(
-                self.database_url,
-                cursor_factory=RealDictCursor
-            )
+            self.connection = psycopg2.connect(self.database_url, cursor_factory=RealDictCursor)
             return self.connection
         except Exception as e:
             logger.error(f"Database connection failed: {e}")
@@ -74,8 +71,107 @@ class DatabaseManager:
                         value TEXT,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
-                """)
-                
+                """
+                )
+
+                # Create reminders table
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS reminders (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        reminder_text TEXT NOT NULL,
+                        scheduled_time TIMESTAMP NOT NULL,
+                        delivery_channel_id BIGINT NULL,
+                        delivery_type VARCHAR(20) NOT NULL,
+                        auto_action_enabled BOOLEAN DEFAULT FALSE,
+                        auto_action_type VARCHAR(50) NULL,
+                        auto_action_data JSONB NULL,
+                        status VARCHAR(20) DEFAULT 'pending',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        delivered_at TIMESTAMP NULL,
+                        auto_executed_at TIMESTAMP NULL
+                    )
+                """
+                )
+
+                # Create trivia_questions table
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS trivia_questions (
+                        id SERIAL PRIMARY KEY,
+                        question_text TEXT NOT NULL,
+                        question_type VARCHAR(20) NOT NULL, -- 'single', 'multiple_choice'
+                        correct_answer TEXT,
+                        multiple_choice_options TEXT[], -- For multiple choice questions
+                        is_dynamic BOOLEAN DEFAULT FALSE, -- Requires real-time calculation
+                        dynamic_query_type VARCHAR(50), -- 'longest_playtime', 'most_episodes', etc.
+                        submitted_by_user_id BIGINT, -- NULL for AI-generated questions
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_used_at TIMESTAMP,
+                        usage_count INTEGER DEFAULT 0,
+                        category VARCHAR(50), -- 'completion', 'playtime', 'genre', 'series', etc.
+                        difficulty_level INTEGER DEFAULT 1, -- 1-5 scale
+                        is_active BOOLEAN DEFAULT TRUE,
+                        status VARCHAR(20) DEFAULT 'available' -- 'available', 'answered', 'retired'
+                    )
+                """
+                )
+
+                # Add status column to existing trivia_questions table if it doesn't exist
+                cur.execute(
+                    """
+                    ALTER TABLE trivia_questions 
+                    ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'available'
+                """
+                )
+
+                # Update any NULL status values to 'available'
+                cur.execute(
+                    """
+                    UPDATE trivia_questions 
+                    SET status = 'available' 
+                    WHERE status IS NULL
+                """
+                )
+
+                # Create trivia_sessions table
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS trivia_sessions (
+                        id SERIAL PRIMARY KEY,
+                        question_id INTEGER REFERENCES trivia_questions(id),
+                        session_date DATE NOT NULL,
+                        session_type VARCHAR(20) DEFAULT 'weekly', -- 'weekly', 'bonus'
+                        question_submitter_id BIGINT, -- For conflict checking
+                        calculated_answer TEXT, -- For dynamic questions
+                        status VARCHAR(20) DEFAULT 'active', -- 'active', 'completed', 'expired'
+                        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        ended_at TIMESTAMP,
+                        first_correct_user_id BIGINT,
+                        total_participants INTEGER DEFAULT 0,
+                        correct_answers_count INTEGER DEFAULT 0
+                    )
+                """
+                )
+
+                # Create trivia_answers table
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS trivia_answers (
+                        id SERIAL PRIMARY KEY,
+                        session_id INTEGER REFERENCES trivia_sessions(id),
+                        user_id BIGINT NOT NULL,
+                        answer_text TEXT NOT NULL,
+                        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        is_correct BOOLEAN,
+                        is_first_correct BOOLEAN DEFAULT FALSE,
+                        conflict_detected BOOLEAN DEFAULT FALSE, -- Mod answering own question
+                        normalized_answer TEXT -- For matching with alternative names
+                    )
+                """
+                )
+
                 # Create played_games table with proper data types for manual editing
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS played_games (
@@ -339,6 +435,7 @@ class DatabaseManager:
         
         # Check fuzzy matches
         import difflib
+
         matches = difflib.get_close_matches(name_lower, existing_names, n=1, cutoff=0.85)
         return len(matches) > 0
     
@@ -392,7 +489,7 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 # Prepare data for batch insert
                 data_tuples = [(user_id, count, count) for user_id, count in strikes_data.items() if count > 0]
-                
+
                 if data_tuples:
                     cur.executemany("""
                         INSERT INTO strikes (user_id, strike_count, updated_at)
@@ -418,8 +515,8 @@ class DatabaseManager:
         try:
             with conn.cursor() as cur:
                 # Prepare data for batch insert
-                data_tuples = [(game['name'], game['reason'], game['added_by']) for game in games_data]
-                
+                data_tuples = [(game["name"], game["reason"], game["added_by"]) for game in games_data]
+
                 if data_tuples:
                     cur.executemany("""
                         INSERT INTO game_recommendations (name, reason, added_by, created_at)
@@ -605,21 +702,190 @@ class DatabaseManager:
     def _convert_text_to_arrays(self, game_dict: Dict[str, Any]) -> Dict[str, Any]:
         """Convert TEXT fields back to arrays for backward compatibility"""
         # Convert alternative_names from TEXT to list
-        if 'alternative_names' in game_dict:
-            if isinstance(game_dict['alternative_names'], str):
-                game_dict['alternative_names'] = self._parse_comma_separated_list(game_dict['alternative_names'])
-            elif game_dict['alternative_names'] is None:
-                game_dict['alternative_names'] = []
-        
+        if "alternative_names" in game_dict:
+            if isinstance(game_dict["alternative_names"], str):
+                game_dict["alternative_names"] = self._parse_comma_separated_list(game_dict["alternative_names"])
+            elif game_dict["alternative_names"] is None:
+                game_dict["alternative_names"] = []
+
         # Convert twitch_vod_urls from TEXT to list
-        if 'twitch_vod_urls' in game_dict:
-            if isinstance(game_dict['twitch_vod_urls'], str):
-                game_dict['twitch_vod_urls'] = self._parse_comma_separated_list(game_dict['twitch_vod_urls'])
-            elif game_dict['twitch_vod_urls'] is None:
-                game_dict['twitch_vod_urls'] = []
-        
+        if "twitch_vod_urls" in game_dict:
+            if isinstance(game_dict["twitch_vod_urls"], str):
+                game_dict["twitch_vod_urls"] = self._parse_comma_separated_list(game_dict["twitch_vod_urls"])
+            elif game_dict["twitch_vod_urls"] is None:
+                game_dict["twitch_vod_urls"] = []
+
         return game_dict
-    
+
+    def _fuzzy_search_with_trgm(self, cur, name_lower: str) -> Optional[Dict[str, Any]]:
+        """Database-level fuzzy search using pg_trgm extension"""
+        try:
+            # Set similarity threshold for this session
+            cur.execute("SET pg_trgm.similarity_threshold = 0.75")
+
+            # Search canonical names with similarity scoring
+            cur.execute(
+                """
+                SELECT *, similarity(canonical_name, %s) as sim_score 
+                FROM played_games 
+                WHERE canonical_name %% %s
+                ORDER BY sim_score DESC, canonical_name
+                LIMIT 1
+            """,
+                (name_lower, name_lower),
+            )
+            result = cur.fetchone()
+
+            if result:
+                result_dict = dict(result)
+                # Remove similarity score from final result
+                result_dict.pop('sim_score', None)
+                result_dict = self._convert_text_to_arrays(result_dict)
+                logger.debug(f"pg_trgm found match with similarity: {result.get('sim_score', 0)}")
+                return result_dict
+
+            # If no canonical match, try alternative names
+            cur.execute(
+                """
+                SELECT *, similarity(alternative_names, %s) as sim_score 
+                FROM played_games 
+                WHERE alternative_names %% %s
+                AND alternative_names IS NOT NULL 
+                AND alternative_names != ''
+                ORDER BY sim_score DESC, canonical_name
+                LIMIT 1
+            """,
+                (name_lower, name_lower),
+            )
+            result = cur.fetchone()
+
+            if result:
+                result_dict = dict(result)
+                result_dict.pop('sim_score', None)
+                result_dict = self._convert_text_to_arrays(result_dict)
+                logger.debug(f"pg_trgm found alt name match with similarity: {result.get('sim_score', 0)}")
+                return result_dict
+
+        except Exception as e:
+            logger.debug(f"pg_trgm search failed, falling back to Python: {e}")
+
+        return None
+
+    def _fuzzy_search_python_optimized(self, cur, name_lower: str) -> Optional[Dict[str, Any]]:
+        """Optimized Python-based fuzzy search as fallback"""
+        try:
+            # Get all games with full data (not just id/name) to avoid second query
+            cur.execute("SELECT * FROM played_games")
+            all_games = cur.fetchall()
+
+            if not all_games:
+                return None
+
+            import difflib
+
+            # Build name mapping for fuzzy matching
+            game_names_map = {}
+            games_by_id = {}
+
+            for game in all_games:
+                game_dict = dict(game)
+                games_by_id[game_dict["id"]] = game_dict
+
+                canonical_name = game_dict.get("canonical_name")
+                if canonical_name:
+                    canonical_lower = str(canonical_name).lower().strip()
+                    game_names_map[canonical_lower] = game_dict["id"]
+
+                    # Also add alternative names to the map (handle TEXT format)
+                    alt_names_text = game_dict.get("alternative_names", "")
+                    if alt_names_text and isinstance(alt_names_text, str):
+                        alt_names = self._parse_comma_separated_list(alt_names_text)
+                        for alt_name in alt_names:
+                            alt_lower = alt_name.lower().strip()
+                            game_names_map[alt_lower] = game_dict["id"]
+
+            # Try fuzzy matching
+            all_name_keys = list(game_names_map.keys())
+            matches = difflib.get_close_matches(name_lower, all_name_keys, n=1, cutoff=0.75)
+
+            if matches:
+                match_name = matches[0]
+                matched_game_id = game_names_map[match_name]
+                game_dict = games_by_id[matched_game_id]
+                result_dict = self._convert_text_to_arrays(game_dict)
+                return result_dict
+
+        except Exception as e:
+            logger.error(f"Python fuzzy search failed: {e}")
+
+        return None
+
+    def _fuzzy_search_recommendations_with_trgm(self, cur, name_lower: str) -> Optional[int]:
+        """Database-level fuzzy search for game recommendations using pg_trgm extension"""
+        try:
+            # Set similarity threshold for this session
+            cur.execute("SET pg_trgm.similarity_threshold = 0.8")
+
+            # Search game recommendation names with similarity scoring
+            cur.execute(
+                """
+                SELECT id, similarity(name, %s) as sim_score 
+                FROM game_recommendations 
+                WHERE name %% %s
+                ORDER BY sim_score DESC, name
+                LIMIT 1
+            """,
+                (name_lower, name_lower),
+            )
+            result = cur.fetchone()
+
+            if result:
+                logger.debug(f"pg_trgm found game recommendation match with similarity: {result.get('sim_score', 0)}")
+                return int(result["id"])  # type: ignore
+
+        except Exception as e:
+            logger.debug(f"pg_trgm search for recommendations failed, falling back to Python: {e}")
+
+        return None
+
+    def _fuzzy_search_recommendations_python_optimized(self, cur, name_lower: str) -> Optional[int]:
+        """Optimized Python-based fuzzy search for game recommendations as fallback"""
+        try:
+            # Get only id and name to minimize data transfer
+            cur.execute("SELECT id, name FROM game_recommendations")
+            all_recommendations = cur.fetchall()
+
+            if not all_recommendations:
+                return None
+
+            import difflib
+
+            # Build name mapping for fuzzy matching
+            recommendation_names_map = {}
+
+            for recommendation in all_recommendations:
+                rec_dict = dict(recommendation)
+                rec_id = rec_dict["id"]
+                rec_name = rec_dict.get("name")
+
+                if rec_name:
+                    name_lower_clean = str(rec_name).lower().strip()
+                    recommendation_names_map[name_lower_clean] = rec_id
+
+            # Try fuzzy matching
+            all_name_keys = list(recommendation_names_map.keys())
+            matches = difflib.get_close_matches(name_lower, all_name_keys, n=1, cutoff=0.8)
+
+            if matches:
+                match_name = matches[0]
+                matched_rec_id = recommendation_names_map[match_name]
+                return int(matched_rec_id)
+
+        except Exception as e:
+            logger.error(f"Python fuzzy search for recommendations failed: {e}")
+
+        return None
+
     def get_all_played_games(self, series_name: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all played games, optionally filtered by series"""
         conn = self.get_connection()
@@ -742,7 +1008,9 @@ class DatabaseManager:
                     ORDER BY 
                         CASE WHEN LOWER(canonical_name) = %s THEN 1 ELSE 2 END,
                         canonical_name ASC
-                """, (query_lower, query_lower, query_lower, query.lower(), query.lower()))
+                """,
+                    (query_lower, query_lower, query_lower, query.lower(), query.lower()),
+                )
                 results = cur.fetchall()
                 return [dict(row) for row in results]
         except Exception as e:
@@ -765,16 +1033,36 @@ class DatabaseManager:
         
         try:
             with conn.cursor() as cur:
+                # Optimization: Batch fetch all existing games to avoid N+1 queries
+                canonical_names_to_check = [g.get('canonical_name') for g in games_data if g.get('canonical_name')]
+
+                if not canonical_names_to_check:
+                    return 0
+
+                # Single query to fetch all existing games
+                cur.execute("SELECT * FROM played_games WHERE canonical_name = ANY(%s)", (canonical_names_to_check,))
+                existing_games_list = cur.fetchall()
+                existing_games_map = {}
+                for game in existing_games_list:
+                    game_dict = dict(game)
+                    canonical_name = game_dict.get('canonical_name')
+                    if canonical_name:
+                        existing_games_map[canonical_name] = game_dict
+
                 imported_count = 0
                 for game_data in games_data:
                     try:
                         canonical_name = game_data.get('canonical_name')
                         if not canonical_name:
                             continue
-                        
-                        # Check if game already exists
-                        existing_game = self.get_played_game(canonical_name)
-                        
+
+                        # Fast lookup from pre-fetched map instead of individual database query
+                        existing_game = existing_games_map.get(canonical_name)
+
+                        # Convert TEXT fields to arrays for compatibility if game exists
+                        if existing_game:
+                            existing_game = self._convert_text_to_arrays(existing_game)
+
                         if existing_game:
                             # Update existing game, preserving existing data where new data is empty
                             update_fields = {}
@@ -789,7 +1077,7 @@ class DatabaseManager:
                                 
                                 # Update if new value exists and either existing is empty/null or new has more data
                                 if new_value is not None:
-                                    if field == 'alternative_names' or field == 'twitch_vod_urls':
+                                    if field == "alternative_names" or field == "twitch_vod_urls":
                                         # For arrays, merge unique values
                                         if isinstance(new_value, list) and isinstance(existing_value, list):
                                             merged = list(set(existing_value + new_value))
@@ -797,7 +1085,7 @@ class DatabaseManager:
                                                 update_fields[field] = merged
                                         elif isinstance(new_value, list) and new_value:
                                             update_fields[field] = new_value
-                                    elif field == 'total_episodes' or field == 'total_playtime_minutes':
+                                    elif field == "total_episodes" or field == "total_playtime_minutes":
                                         # For numeric fields, use the higher value
                                         if isinstance(new_value, int) and isinstance(existing_value, int):
                                             if new_value > existing_value:
@@ -814,12 +1102,14 @@ class DatabaseManager:
                                                     update_fields[field] = new_value
                                     else:
                                         # For other fields, update if existing is empty or new value is different
-                                        if not existing_value or (new_value != existing_value and str(new_value).strip()):
+                                        if not existing_value or (
+                                            new_value != existing_value and str(new_value).strip()
+                                        ):
                                             update_fields[field] = new_value
                             
                             # Apply updates if any
                             if update_fields:
-                                self.update_played_game(existing_game['id'], **update_fields)
+                                self.update_played_game(existing_game["id"], **update_fields)
                                 logger.info(f"Updated existing game: {canonical_name}")
                             
                             imported_count += 1
@@ -889,9 +1179,9 @@ class DatabaseManager:
                 for duplicate in duplicates:
                     canonical_name = duplicate[0]
                     duplicate_count = duplicate[1]
-                    
+
                     logger.info(f"Processing {duplicate_count} duplicates of '{canonical_name}'")
-                    
+
                     # Get all games with this canonical name (case-insensitive)
                     cur.execute("""
                         SELECT * FROM played_games 
@@ -910,18 +1200,18 @@ class DatabaseManager:
                     
                     # Merge data from all duplicates into the master record
                     merged_data = {
-                        'alternative_names': master_game.get('alternative_names', []) or [],
-                        'series_name': master_game.get('series_name'),
-                        'genre': master_game.get('genre'),
-                        'release_year': master_game.get('release_year'),
-                        'platform': master_game.get('platform'),
-                        'first_played_date': master_game.get('first_played_date'),
-                        'completion_status': master_game.get('completion_status', 'unknown'),
-                        'total_episodes': master_game.get('total_episodes', 0),
-                        'total_playtime_minutes': master_game.get('total_playtime_minutes', 0),
-                        'youtube_playlist_url': master_game.get('youtube_playlist_url'),
-                        'twitch_vod_urls': master_game.get('twitch_vod_urls', []) or [],
-                        'notes': master_game.get('notes', '')
+                        "alternative_names": master_game.get("alternative_names", []) or [],
+                        "series_name": master_game.get("series_name"),
+                        "genre": master_game.get("genre"),
+                        "release_year": master_game.get("release_year"),
+                        "platform": master_game.get("platform"),
+                        "first_played_date": master_game.get("first_played_date"),
+                        "completion_status": master_game.get("completion_status", "unknown"),
+                        "total_episodes": master_game.get("total_episodes", 0),
+                        "total_playtime_minutes": master_game.get("total_playtime_minutes", 0),
+                        "youtube_playlist_url": master_game.get("youtube_playlist_url"),
+                        "twitch_vod_urls": master_game.get("twitch_vod_urls", []) or [],
+                        "notes": master_game.get("notes", ""),
                     }
                     
                     # Merge data from duplicates
@@ -930,61 +1220,66 @@ class DatabaseManager:
                         if duplicate_game.get('alternative_names'):
                             if isinstance(duplicate_game['alternative_names'], str):
                                 # Handle TEXT format
-                                alt_names = self._parse_comma_separated_list(duplicate_game['alternative_names'])
+                                alt_names = self._parse_comma_separated_list(duplicate_game["alternative_names"])
                             else:
                                 # Handle list format
-                                alt_names = duplicate_game['alternative_names']
-                            
-                            merged_data['alternative_names'] = list(set(merged_data['alternative_names'] + alt_names))
-                        
+                                alt_names = duplicate_game["alternative_names"]
+
+                            merged_data["alternative_names"] = list(set(merged_data["alternative_names"] + alt_names))
+
                         # Merge Twitch VOD URLs
                         if duplicate_game.get('twitch_vod_urls'):
                             if isinstance(duplicate_game['twitch_vod_urls'], str):
                                 # Handle TEXT format
-                                vod_urls = self._parse_comma_separated_list(duplicate_game['twitch_vod_urls'])
+                                vod_urls = self._parse_comma_separated_list(duplicate_game["twitch_vod_urls"])
                             else:
                                 # Handle list format
-                                vod_urls = duplicate_game['twitch_vod_urls']
-                            
-                            merged_data['twitch_vod_urls'] = list(set(merged_data['twitch_vod_urls'] + vod_urls))
-                        
+                                vod_urls = duplicate_game["twitch_vod_urls"]
+
+                            merged_data["twitch_vod_urls"] = list(set(merged_data["twitch_vod_urls"] + vod_urls))
+
                         # Use non-empty values from duplicates
-                        for field in ['series_name', 'genre', 'platform', 'youtube_playlist_url']:
+                        for field in ["series_name", "genre", "platform", "youtube_playlist_url"]:
                             if not merged_data.get(field) and duplicate_game.get(field):
                                 merged_data[field] = duplicate_game[field]
                         
                         # Use earliest first_played_date
-                        if duplicate_game.get('first_played_date'):
-                            if not merged_data['first_played_date'] or duplicate_game['first_played_date'] < merged_data['first_played_date']:
-                                merged_data['first_played_date'] = duplicate_game['first_played_date']
-                        
+                        if duplicate_game.get("first_played_date"):
+                            if (
+                                not merged_data["first_played_date"]
+                                or duplicate_game["first_played_date"] < merged_data["first_played_date"]
+                            ):
+                                merged_data["first_played_date"] = duplicate_game["first_played_date"]
+
                         # Use latest release_year if master doesn't have one
-                        if not merged_data.get('release_year') and duplicate_game.get('release_year'):
-                            merged_data['release_year'] = duplicate_game['release_year']
-                        
+                        if not merged_data.get("release_year") and duplicate_game.get("release_year"):
+                            merged_data["release_year"] = duplicate_game["release_year"]
+
                         # Sum episodes and playtime
-                        merged_data['total_episodes'] += duplicate_game.get('total_episodes', 0)
-                        merged_data['total_playtime_minutes'] += duplicate_game.get('total_playtime_minutes', 0)
-                        
+                        merged_data["total_episodes"] += duplicate_game.get("total_episodes", 0)
+                        merged_data["total_playtime_minutes"] += duplicate_game.get("total_playtime_minutes", 0)
+
                         # Merge notes
-                        if duplicate_game.get('notes') and duplicate_game['notes'].strip():
-                            if merged_data['notes']:
-                                if duplicate_game['notes'] not in merged_data['notes']:
-                                    merged_data['notes'] += f" | {duplicate_game['notes']}"
+                        if duplicate_game.get("notes") and duplicate_game["notes"].strip():
+                            if merged_data["notes"]:
+                                if duplicate_game["notes"] not in merged_data["notes"]:
+                                    merged_data["notes"] += f" | {duplicate_game['notes']}"
                             else:
                                 merged_data['notes'] = duplicate_game['notes']
                         
                         # Use most advanced completion status
-                        status_priority = {'unknown': 0, 'ongoing': 1, 'dropped': 2, 'completed': 3}
-                        current_priority = status_priority.get(merged_data['completion_status'], 0)
-                        duplicate_priority = status_priority.get(duplicate_game.get('completion_status', 'unknown'), 0)
+                        status_priority = {"unknown": 0, "ongoing": 1, "dropped": 2, "completed": 3}
+                        current_priority = status_priority.get(merged_data["completion_status"], 0)
+                        duplicate_priority = status_priority.get(duplicate_game.get("completion_status", "unknown"), 0)
                         if duplicate_priority > current_priority:
-                            merged_data['completion_status'] = duplicate_game['completion_status']
-                    
+                            merged_data["completion_status"] = duplicate_game["completion_status"]
+
                     # Convert lists to TEXT format for database storage
-                    alt_names_str = ','.join(merged_data['alternative_names']) if merged_data['alternative_names'] else ''
-                    vod_urls_str = ','.join(merged_data['twitch_vod_urls']) if merged_data['twitch_vod_urls'] else ''
-                    
+                    alt_names_str = (
+                        ",".join(merged_data["alternative_names"]) if merged_data["alternative_names"] else ""
+                    )
+                    vod_urls_str = ",".join(merged_data["twitch_vod_urls"]) if merged_data["twitch_vod_urls"] else ""
+
                     # Update the master record with merged data
                     cur.execute("""
                         UPDATE played_games SET
@@ -1202,13 +1497,13 @@ class DatabaseManager:
                 top_series = {str(row['series_name']): int(row['count']) for row in series_results} if series_results else {}  # type: ignore
                 
                 return {
-                    'total_games': total_games,
-                    'status_counts': status_counts,
-                    'total_episodes': total_episodes,
-                    'total_playtime_minutes': total_playtime,
-                    'total_playtime_hours': round(total_playtime / 60, 1) if total_playtime > 0 else 0,
-                    'top_genres': top_genres,
-                    'top_series': top_series
+                    "total_games": total_games,
+                    "status_counts": status_counts,
+                    "total_episodes": total_episodes,
+                    "total_playtime_minutes": total_playtime,
+                    "total_playtime_hours": (round(total_playtime / 60, 1) if total_playtime > 0 else 0),
+                    "top_genres": top_genres,
+                    "top_series": top_series,
                 }
         except Exception as e:
             logger.error(f"Error getting played games stats: {e}")
@@ -1280,11 +1575,16 @@ class DatabaseManager:
                     if game_alt_names:
                         for alt_name in game_alt_names:
                             if alt_name and alt_name.lower().strip() == canonical_name.lower().strip():
-                                debug_info["exact_matches"].append(game_dict.get('id'))
-                
+                                debug_info["exact_matches"].append(game_dict.get("id"))
+
                 # Test fuzzy matching
                 import difflib
-                canonical_names = [str(dict(game)['canonical_name']).lower().strip() for game in all_games if dict(game).get('canonical_name')]
+
+                canonical_names = [
+                    str(dict(game)["canonical_name"]).lower().strip()
+                    for game in all_games
+                    if dict(game).get("canonical_name")
+                ]
                 matches = difflib.get_close_matches(canonical_name.lower().strip(), canonical_names, n=3, cutoff=0.75)
                 debug_info["fuzzy_matches"] = matches
                 
@@ -1446,7 +1746,7 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting genre statistics: {e}")
             return []
-    
+
     def get_temporal_gaming_data(self, year: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get gaming data by year or all years"""
         conn = self.get_connection()
@@ -1509,14 +1809,29 @@ class DatabaseManager:
                 'status': game1.get('completion_status'),
                 'genre': game1.get('genre')
             },
-            'game2': {
-                'name': game2['canonical_name'],
-                'series': game2.get('series_name'),
-                'episodes': game2.get('total_episodes', 0),
-                'playtime_minutes': game2.get('total_playtime_minutes', 0),
-                'playtime_hours': round(game2.get('total_playtime_minutes', 0) / 60, 1),
-                'status': game2.get('completion_status'),
-                'genre': game2.get('genre')
+            "game2": {
+                "name": game2["canonical_name"],
+                "series": game2.get("series_name"),
+                "episodes": game2.get("total_episodes", 0),
+                "playtime_minutes": game2.get("total_playtime_minutes", 0),
+                "playtime_hours": round(game2.get("total_playtime_minutes", 0) / 60, 1),
+                "status": game2.get("completion_status"),
+                "genre": game2.get("genre"),
+            },
+            "comparison": {
+                "episode_difference": game1.get("total_episodes", 0) - game2.get("total_episodes", 0),
+                "playtime_difference_minutes": game1.get("total_playtime_minutes", 0)
+                - game2.get("total_playtime_minutes", 0),
+                "longer_game": (
+                    game1["canonical_name"]
+                    if game1.get("total_playtime_minutes", 0) > game2.get("total_playtime_minutes", 0)
+                    else game2["canonical_name"]
+                ),
+                "more_episodes": (
+                    game1["canonical_name"]
+                    if game1.get("total_episodes", 0) > game2.get("total_episodes", 0)
+                    else game2["canonical_name"]
+                ),
             },
             'comparison': {
                 'episode_difference': game1.get('total_episodes', 0) - game2.get('total_episodes', 0),
@@ -1525,8 +1840,8 @@ class DatabaseManager:
                 'more_episodes': game1['canonical_name'] if game1.get('total_episodes', 0) > game2.get('total_episodes', 0) else game2['canonical_name']
             }
         }
-    
-    def get_ranking_context(self, game_name: str, metric: str = 'playtime') -> Dict[str, Any]:
+
+    def get_ranking_context(self, game_name: str, metric: str = "playtime") -> Dict[str, Any]:
         """Get where a specific game ranks in various metrics"""
         game = self.get_played_game(game_name)
         if not game:
@@ -1551,16 +1866,20 @@ class DatabaseManager:
                         WHERE total_playtime_minutes > %s
                     """, (game.get('total_playtime_minutes', 0),))
                     result = cur.fetchone()
-                    playtime_rank = int(result['rank']) if result else 0  # type: ignore
-                    
+                    playtime_rank = int(result["rank"]) if result else 0  # type: ignore
+
                     cur.execute("SELECT COUNT(*) as total FROM played_games WHERE total_playtime_minutes > 0")
                     total_result = cur.fetchone()
-                    total_with_playtime = int(total_result['total']) if total_result else 0  # type: ignore
-                    
-                    context['rankings']['playtime'] = {
-                        'rank': playtime_rank,
-                        'total': total_with_playtime,
-                        'percentile': round((1 - (playtime_rank - 1) / max(total_with_playtime, 1)) * 100, 1) if total_with_playtime > 0 else 0
+                    total_with_playtime = int(total_result["total"]) if total_result else 0  # type: ignore
+
+                    context["rankings"]["playtime"] = {
+                        "rank": playtime_rank,
+                        "total": total_with_playtime,
+                        "percentile": (
+                            round((1 - (playtime_rank - 1) / max(total_with_playtime, 1)) * 100, 1)
+                            if total_with_playtime > 0
+                            else 0
+                        ),
                     }
                 
                 # Episode count ranking
@@ -1571,16 +1890,20 @@ class DatabaseManager:
                         WHERE total_episodes > %s
                     """, (game.get('total_episodes', 0),))
                     result = cur.fetchone()
-                    episode_rank = int(result['rank']) if result else 0  # type: ignore
-                    
+                    episode_rank = int(result["rank"]) if result else 0  # type: ignore
+
                     cur.execute("SELECT COUNT(*) as total FROM played_games WHERE total_episodes > 0")
                     total_result = cur.fetchone()
-                    total_with_episodes = int(total_result['total']) if total_result else 0  # type: ignore
-                    
-                    context['rankings']['episodes'] = {
-                        'rank': episode_rank,
-                        'total': total_with_episodes,
-                        'percentile': round((1 - (episode_rank - 1) / max(total_with_episodes, 1)) * 100, 1) if total_with_episodes > 0 else 0
+                    total_with_episodes = int(total_result["total"]) if total_result else 0  # type: ignore
+
+                    context["rankings"]["episodes"] = {
+                        "rank": episode_rank,
+                        "total": total_with_episodes,
+                        "percentile": (
+                            round((1 - (episode_rank - 1) / max(total_with_episodes, 1)) * 100, 1)
+                            if total_with_episodes > 0
+                            else 0
+                        ),
                     }
                 
                 return context
@@ -1588,10 +1911,811 @@ class DatabaseManager:
             logger.error(f"Error getting ranking context: {e}")
             return {'error': str(e)}
 
+    def add_reminder(
+        self,
+        user_id: int,
+        reminder_text: str,
+        scheduled_time: Any,  # Can be datetime or str
+        delivery_channel_id: Optional[int] = None,
+        delivery_type: str = "dm",
+        auto_action_enabled: bool = False,
+        auto_action_type: Optional[str] = None,
+        auto_action_data: Optional[Dict[str, Any]] = None,
+    ) -> Optional[int]:
+        """Add a reminder to the database"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO reminders (
+                        user_id, reminder_text, scheduled_time, delivery_channel_id,
+                        delivery_type, auto_action_enabled, auto_action_type, auto_action_data,
+                        status, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending', CURRENT_TIMESTAMP)
+                    RETURNING id
+                """,
+                    (
+                        user_id,
+                        reminder_text,
+                        scheduled_time,
+                        delivery_channel_id,
+                        delivery_type,
+                        auto_action_enabled,
+                        auto_action_type,
+                        auto_action_data,
+                    ),
+                )
+                result = cur.fetchone()
+                conn.commit()
+
+                if result:
+                    reminder_id = int(result["id"])  # type: ignore
+                    logger.info(f"Added reminder ID {reminder_id} for user {user_id}")
+                    return reminder_id
+                return None
+        except Exception as e:
+            logger.error(f"Error adding reminder: {e}")
+            conn.rollback()
+            return None
+
+    def get_user_reminders(self, user_id: int, status: str = "pending") -> List[Dict[str, Any]]:
+        """Get all reminders for a user"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM reminders 
+                    WHERE user_id = %s AND status = %s
+                    ORDER BY scheduled_time ASC
+                """,
+                    (user_id, status),
+                )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting user reminders: {e}")
+            return []
+
+    def get_due_reminders(self, current_time) -> List[Dict[str, Any]]:
+        """Get all reminders that are due for delivery"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM reminders 
+                    WHERE status = 'pending' 
+                    AND scheduled_time <= %s
+                    ORDER BY scheduled_time ASC
+                """,
+                    (current_time,),
+                )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting due reminders: {e}")
+            return []
+
+    def update_reminder_status(
+        self,
+        reminder_id: int,
+        status: str,
+        delivered_at: Optional[Any] = None,  # Can be datetime or str
+        auto_executed_at: Optional[Any] = None,  # Can be datetime or str
+    ) -> bool:
+        """Update reminder status"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                # Build query dynamically to avoid repetition
+                set_clauses = ["status = %s"]
+                params: List[Any] = [status]
+
+                if status == "delivered" and delivered_at:
+                    set_clauses.append("delivered_at = %s")
+                    params.append(delivered_at)
+                elif status == "auto_completed" and auto_executed_at:
+                    set_clauses.append("auto_executed_at = %s")
+                    params.append(auto_executed_at)
+
+                params.append(reminder_id)
+
+                query = f"UPDATE reminders SET {', '.join(set_clauses)} WHERE id = %s"
+                cur.execute(query, tuple(params))
+
+                conn.commit()
+                return cur.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error updating reminder status: {e}")
+            conn.rollback()
+            return False
+
+    def cancel_reminder(self, reminder_id: int, user_id: int) -> Optional[Dict[str, Any]]:
+        """Cancel a reminder (only if it belongs to the user)"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                # Atomically update the reminder and return it if found
+                cur.execute(
+                    """
+                    UPDATE reminders
+                    SET status = 'cancelled'
+                    WHERE id = %s AND user_id = %s AND status = 'pending'
+                    RETURNING *
+                    """,
+                    (reminder_id, user_id),
+                )
+                reminder = cur.fetchone()
+
+                if reminder:
+                    conn.commit()
+                    logger.info(f"Cancelled reminder ID {reminder_id} for user {user_id}")
+                    return dict(reminder)
+
+                return None
+        except Exception as e:
+            logger.error(f"Error cancelling reminder: {e}")
+            conn.rollback()
+            return None
+
+    def get_reminders_awaiting_auto_action(self, current_time) -> List[Dict[str, Any]]:
+        """Get reminders that are past delivery time and waiting for auto-action"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                # Calculate 5 minutes ago from current time
+                import datetime
+
+                five_minutes_ago = current_time - datetime.timedelta(minutes=5)
+                cur.execute(
+                    """
+                    SELECT * FROM reminders 
+                    WHERE status = 'delivered' 
+                    AND auto_action_enabled = TRUE
+                    AND auto_executed_at IS NULL
+                    AND delivered_at <= %s
+                    ORDER BY delivered_at ASC
+                """,
+                    (five_minutes_ago,),
+                )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting reminders awaiting auto-action: {e}")
+            return []
+
     def close(self):
         """Close database connection"""
         if self.connection and not self.connection.closed:
             self.connection.close()
+
+    # --- Trivia System Methods ---
+
+    def add_trivia_question(
+        self,
+        question_text: str,
+        question_type: str,
+        correct_answer: Optional[str] = None,
+        multiple_choice_options: Optional[List[str]] = None,
+        is_dynamic: bool = False,
+        dynamic_query_type: Optional[str] = None,
+        submitted_by_user_id: Optional[int] = None,
+        category: Optional[str] = None,
+        difficulty_level: int = 1,
+    ) -> Optional[int]:
+        """Add a new trivia question to the database"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO trivia_questions (
+                        question_text, question_type, correct_answer, multiple_choice_options,
+                        is_dynamic, dynamic_query_type, submitted_by_user_id, category, difficulty_level,
+                        created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    RETURNING id
+                """,
+                    (
+                        question_text,
+                        question_type,
+                        correct_answer,
+                        multiple_choice_options,
+                        is_dynamic,
+                        dynamic_query_type,
+                        submitted_by_user_id,
+                        category,
+                        difficulty_level,
+                    ),
+                )
+                result = cur.fetchone()
+                conn.commit()
+
+                if result:
+                    question_id = int(result["id"])  # type: ignore
+                    logger.info(f"Added trivia question ID {question_id}")
+                    return question_id
+                return None
+        except Exception as e:
+            logger.error(f"Error adding trivia question: {e}")
+            conn.rollback()
+            return None
+
+    def get_next_trivia_question(self, exclude_user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
+        """Get the next trivia question based on priority system (excluding answered questions)"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                # Build exclusion condition if exclude_user_id is provided
+                exclusion_condition = ""
+                query_params = []
+
+                if exclude_user_id is not None:
+                    exclusion_condition = "AND (submitted_by_user_id != %s OR submitted_by_user_id IS NULL)"
+                    query_params = [exclude_user_id]
+
+                # Priority 1: Recent mod-submitted questions (available status, unused within 4 weeks)
+                query1 = f"""
+                    SELECT * FROM trivia_questions 
+                    WHERE is_active = TRUE
+                    AND status = 'available'
+                    AND submitted_by_user_id IS NOT NULL
+                    AND (last_used_at IS NULL OR last_used_at < CURRENT_TIMESTAMP - INTERVAL '4 weeks')
+                    {exclusion_condition}
+                    ORDER BY created_at DESC, usage_count ASC
+                    LIMIT 1
+                """
+                cur.execute(query1, query_params)
+                result = cur.fetchone()
+
+                if result:
+                    return dict(result)
+
+                # Priority 2: AI-generated questions focusing on statistical anomalies (available status)
+                query2 = f"""
+                    SELECT * FROM trivia_questions 
+                    WHERE is_active = TRUE
+                    AND status = 'available'
+                    AND submitted_by_user_id IS NULL
+                    AND (category IN ('statistical_anomaly', 'completion_rate', 'playtime_insight') 
+                         OR is_dynamic = TRUE)
+                    AND (last_used_at IS NULL OR last_used_at < CURRENT_TIMESTAMP - INTERVAL '2 weeks')
+                    {exclusion_condition}
+                    ORDER BY usage_count ASC, created_at ASC
+                    LIMIT 1
+                """
+                cur.execute(query2, query_params)
+                result = cur.fetchone()
+
+                if result:
+                    return dict(result)
+
+                # Priority 3: Any unused questions with available status
+                query3 = f"""
+                    SELECT * FROM trivia_questions 
+                    WHERE is_active = TRUE
+                    AND status = 'available'
+                    AND (last_used_at IS NULL OR last_used_at < CURRENT_TIMESTAMP - INTERVAL '1 week')
+                    {exclusion_condition}
+                    ORDER BY usage_count ASC, created_at ASC
+                    LIMIT 1
+                """
+                cur.execute(query3, query_params)
+                result = cur.fetchone()
+
+                return dict(result) if result else None
+        except Exception as e:
+            logger.error(f"Error getting next trivia question: {e}")
+            return None
+
+    def create_trivia_session(
+        self, question_id: int, session_type: str = "weekly", calculated_answer: Optional[str] = None
+    ) -> Optional[int]:
+        """Create a new trivia session"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                # Get question submitter for conflict checking
+                cur.execute("SELECT submitted_by_user_id FROM trivia_questions WHERE id = %s", (question_id,))
+                question_result = cur.fetchone()
+                question_submitter_id = question_result["submitted_by_user_id"] if question_result else None  # type: ignore
+
+                from datetime import datetime, timezone
+
+                session_date = datetime.now(timezone.utc).date()
+
+                cur.execute(
+                    """
+                    INSERT INTO trivia_sessions (
+                        question_id, session_date, session_type, question_submitter_id,
+                        calculated_answer, started_at
+                    ) VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    RETURNING id
+                """,
+                    (question_id, session_date, session_type, question_submitter_id, calculated_answer),
+                )
+                result = cur.fetchone()
+
+                # Update question usage
+                cur.execute(
+                    """
+                    UPDATE trivia_questions 
+                    SET last_used_at = CURRENT_TIMESTAMP, usage_count = usage_count + 1
+                    WHERE id = %s
+                """,
+                    (question_id,),
+                )
+
+                conn.commit()
+
+                if result:
+                    session_id = int(result["id"])  # type: ignore
+                    logger.info(f"Created trivia session ID {session_id} for question {question_id}")
+                    return session_id
+                return None
+        except Exception as e:
+            logger.error(f"Error creating trivia session: {e}")
+            conn.rollback()
+            return None
+
+    def get_active_trivia_session(self) -> Optional[Dict[str, Any]]:
+        """Get the current active trivia session"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT ts.*, tq.question_text, tq.question_type, tq.correct_answer,
+                           tq.multiple_choice_options, tq.is_dynamic, tq.dynamic_query_type,
+                           tq.submitted_by_user_id, tq.category
+                    FROM trivia_sessions ts
+                    JOIN trivia_questions tq ON ts.question_id = tq.id
+                    WHERE ts.status = 'active'
+                    ORDER BY ts.started_at DESC
+                    LIMIT 1
+                """
+                )
+                result = cur.fetchone()
+                return dict(result) if result else None
+        except Exception as e:
+            logger.error(f"Error getting active trivia session: {e}")
+            return None
+
+    def submit_trivia_answer(
+        self, session_id: int, user_id: int, answer_text: str, normalized_answer: Optional[str] = None
+    ) -> Optional[int]:
+        """Submit an answer to a trivia session"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                # Check for conflict (mod answering their own question)
+                cur.execute(
+                    """
+                    SELECT question_submitter_id FROM trivia_sessions WHERE id = %s
+                """,
+                    (session_id,),
+                )
+                session_result = cur.fetchone()
+
+                conflict_detected = False
+                if session_result and session_result["question_submitter_id"] == user_id:  # type: ignore
+                    conflict_detected = True
+
+                cur.execute(
+                    """
+                    INSERT INTO trivia_answers (
+                        session_id, user_id, answer_text, normalized_answer,
+                        conflict_detected, submitted_at
+                    ) VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    RETURNING id
+                """,
+                    (session_id, user_id, answer_text, normalized_answer, conflict_detected),
+                )
+                result = cur.fetchone()
+                conn.commit()
+
+                if result:
+                    answer_id = int(result["id"])  # type: ignore
+                    logger.info(f"Submitted trivia answer ID {answer_id} for session {session_id}")
+                    return answer_id
+                return None
+        except Exception as e:
+            logger.error(f"Error submitting trivia answer: {e}")
+            conn.rollback()
+            return None
+
+    def complete_trivia_session(
+        self,
+        session_id: int,
+        first_correct_user_id: Optional[int] = None,
+        total_participants: Optional[int] = None,
+        correct_count: Optional[int] = None,
+    ) -> bool:
+        """Complete a trivia session and mark correct answers"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                # Get session details
+                cur.execute(
+                    """
+                    SELECT * FROM trivia_sessions ts
+                    JOIN trivia_questions tq ON ts.question_id = tq.id
+                    WHERE ts.id = %s
+                """,
+                    (session_id,),
+                )
+                session = cur.fetchone()
+                if not session:
+                    return False
+
+                session_dict = dict(session)
+                correct_answer = session_dict.get("calculated_answer") or session_dict.get("correct_answer")
+
+                if correct_answer:
+                    # Mark correct answers (excluding conflicts)
+                    cur.execute(
+                        """
+                        UPDATE trivia_answers 
+                        SET is_correct = TRUE
+                        WHERE session_id = %s
+                        AND conflict_detected = FALSE
+                        AND (
+                            LOWER(TRIM(answer_text)) = LOWER(TRIM(%s))
+                            OR LOWER(TRIM(normalized_answer)) = LOWER(TRIM(%s))
+                        )
+                    """,
+                        (session_id, correct_answer, correct_answer),
+                    )
+
+                    # Only calculate counts if not provided as parameters
+                    if total_participants is None or correct_count is None:
+                        cur.execute(
+                            """
+                            SELECT COUNT(*) as total_participants,
+                                   COUNT(CASE WHEN is_correct = TRUE THEN 1 END) as correct_count
+                            FROM trivia_answers
+                            WHERE session_id = %s AND conflict_detected = FALSE
+                        """,
+                            (session_id,),
+                        )
+                        counts = cur.fetchone()
+
+                        if counts:
+                            if total_participants is None:
+                                total_participants = int(counts["total_participants"])  # type: ignore
+                            if correct_count is None:
+                                correct_count = int(counts["correct_count"])  # type: ignore
+
+                    # Use defaults if still None after database query
+                    if total_participants is None:
+                        total_participants = 0
+                    if correct_count is None:
+                        correct_count = 0
+
+                    # Mark first correct answer
+                    if first_correct_user_id:
+                        cur.execute(
+                            """
+                            UPDATE trivia_answers 
+                            SET is_first_correct = TRUE
+                            WHERE session_id = %s 
+                            AND user_id = %s 
+                            AND is_correct = TRUE
+                        """,
+                            (session_id, first_correct_user_id),
+                        )
+
+                # Update session
+                cur.execute(
+                    """
+                    UPDATE trivia_sessions 
+                    SET status = 'completed',
+                        ended_at = CURRENT_TIMESTAMP,
+                        first_correct_user_id = %s,
+                        total_participants = %s,
+                        correct_answers_count = %s
+                    WHERE id = %s
+                """,
+                    (first_correct_user_id, total_participants, correct_count, session_id),
+                )
+
+                # Mark the question as 'answered' so it won't be chosen again
+                question_id = session_dict.get("question_id")
+                if question_id:
+                    cur.execute(
+                        """
+                        UPDATE trivia_questions 
+                        SET status = 'answered'
+                        WHERE id = %s
+                    """,
+                        (question_id,),
+                    )
+                    logger.info(f"Marked trivia question {question_id} as 'answered'")
+
+                conn.commit()
+                logger.info(f"Completed trivia session {session_id}")
+                return True
+        except Exception as e:
+            logger.error(f"Error completing trivia session: {e}")
+            conn.rollback()
+            return False
+
+    def get_trivia_session_answers(self, session_id: int) -> List[Dict[str, Any]]:
+        """Get all answers for a trivia session"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM trivia_answers 
+                    WHERE session_id = %s
+                    ORDER BY submitted_at ASC
+                """,
+                    (session_id,),
+                )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting trivia session answers: {e}")
+            return []
+
+    def calculate_dynamic_answer(self, dynamic_query_type: str) -> Optional[str]:
+        """Calculate the current answer for a dynamic question"""
+        try:
+            if dynamic_query_type == "longest_playtime":
+                games = self.get_longest_completion_games()
+                if games:
+                    return games[0]["canonical_name"]
+
+            elif dynamic_query_type == "most_episodes":
+                games = self.get_games_by_episode_count("DESC")
+                if games:
+                    return games[0]["canonical_name"]
+
+            elif dynamic_query_type == "series_most_playtime":
+                series = self.get_series_by_total_playtime()
+                if series:
+                    return series[0]["series_name"]
+
+            elif dynamic_query_type == "highest_avg_episode":
+                games = self.get_games_by_average_episode_length()
+                if games:
+                    return games[0]["canonical_name"]
+
+            elif dynamic_query_type == "genre_most_games":
+                stats = self.get_genre_statistics()
+                if stats:
+                    return stats[0]["genre"]
+
+            # Add more dynamic query types as needed
+            return None
+        except Exception as e:
+            logger.error(f"Error calculating dynamic answer for {dynamic_query_type}: {e}")
+            return None
+
+    def get_trivia_question_by_id(self, question_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific trivia question by ID"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM trivia_questions WHERE id = %s", (question_id,))
+                result = cur.fetchone()
+                return dict(result) if result else None
+        except Exception as e:
+            logger.error(f"Error getting trivia question by ID {question_id}: {e}")
+            return None
+
+    def get_pending_trivia_questions(self, submitted_by_user_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get pending trivia questions for mod review"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                if submitted_by_user_id:
+                    cur.execute(
+                        """
+                        SELECT * FROM trivia_questions 
+                        WHERE submitted_by_user_id = %s
+                        ORDER BY created_at DESC
+                    """,
+                        (submitted_by_user_id,),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT * FROM trivia_questions 
+                        WHERE submitted_by_user_id IS NOT NULL
+                        AND is_active = TRUE
+                        ORDER BY created_at DESC
+                    """
+                    )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting pending trivia questions: {e}")
+            return []
+
+    def get_answered_trivia_questions(self) -> List[Dict[str, Any]]:
+        """Get all trivia questions that have been answered"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM trivia_questions 
+                    WHERE status = 'answered'
+                    AND is_active = TRUE
+                    ORDER BY last_used_at DESC
+                """
+                )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting answered trivia questions: {e}")
+            return []
+
+    def reset_trivia_question_status(self, question_id: int, new_status: str = 'available') -> bool:
+        """Reset a trivia question's status (e.g., from 'answered' back to 'available')"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE trivia_questions 
+                    SET status = %s
+                    WHERE id = %s
+                """,
+                    (new_status, question_id),
+                )
+                conn.commit()
+
+                if cur.rowcount > 0:
+                    logger.info(f"Reset trivia question {question_id} status to '{new_status}'")
+                    return True
+                return False
+        except Exception as e:
+            logger.error(f"Error resetting trivia question status: {e}")
+            conn.rollback()
+            return False
+
+    def reset_all_trivia_questions_status(self, from_status: str = 'answered', to_status: str = 'available') -> int:
+        """Reset all trivia questions from one status to another (bulk operation)"""
+        conn = self.get_connection()
+        if not conn:
+            return 0
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE trivia_questions 
+                    SET status = %s
+                    WHERE status = %s
+                    AND is_active = TRUE
+                """,
+                    (to_status, from_status),
+                )
+                conn.commit()
+
+                reset_count = cur.rowcount
+                if reset_count > 0:
+                    logger.info(f"Reset {reset_count} trivia questions from '{from_status}' to '{to_status}'")
+                return reset_count
+        except Exception as e:
+            logger.error(f"Error resetting trivia questions status: {e}")
+            conn.rollback()
+            return 0
+
+    def get_trivia_question_statistics(self) -> Dict[str, Any]:
+        """Get statistics about trivia questions by status"""
+        conn = self.get_connection()
+        if not conn:
+            return {}
+
+        try:
+            with conn.cursor() as cur:
+                # Combined query using UNION ALL for efficiency
+                cur.execute(
+                    """
+                    SELECT 'status' as dimension, status as value, COUNT(*) as count 
+                    FROM trivia_questions 
+                    WHERE is_active = TRUE
+                    GROUP BY status
+                    UNION ALL
+                    SELECT 'type' as dimension, question_type as value, COUNT(*) as count
+                    FROM trivia_questions
+                    WHERE is_active = TRUE
+                    GROUP BY question_type
+                    UNION ALL
+                    SELECT 'source' as dimension, CASE WHEN submitted_by_user_id IS NOT NULL THEN 'mod_submitted' ELSE 'ai_generated' END as value, COUNT(*) as count
+                    FROM trivia_questions
+                    WHERE is_active = TRUE
+                    GROUP BY (submitted_by_user_id IS NOT NULL)
+                    """
+                )
+                results = cur.fetchall()
+                status_counts: Dict[str, int] = {}
+                type_counts: Dict[str, int] = {}
+                source_counts: Dict[str, int] = {}
+
+                if results:
+                    for row in results:
+                        row_dict = dict(row)
+                        dimension = row_dict['dimension']
+                        value = str(row_dict['value'])
+                        count = int(row_dict['count'])
+                        if dimension == 'status':
+                            status_counts[value] = count
+                        elif dimension == 'type':
+                            type_counts[value] = count
+                        elif dimension == 'source':
+                            source_counts[value] = count
+
+                return {
+                    "status_counts": status_counts,
+                    "type_counts": type_counts,
+                    "source_counts": source_counts,
+                    "total_questions": sum(status_counts.values()) if status_counts else 0,
+                    "available_questions": status_counts.get('available', 0),
+                    "answered_questions": status_counts.get('answered', 0),
+                    "retired_questions": status_counts.get('retired', 0),
+                }
+        except Exception as e:
+            logger.error(f"Error getting trivia question statistics: {e}")
+            return {}
+
 
 # Global database manager instance
 db = DatabaseManager()

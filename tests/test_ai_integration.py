@@ -93,17 +93,17 @@ class TestAIIntegration:
         
         with patch('ash_bot_fallback.bot') as mock_bot:
             mock_bot.user = mock_bot_user
-            
-            with patch('ash_bot_fallback.ai_enabled', True):
-                with patch('ash_bot_fallback.BOT_PERSONA', {'enabled': True, 'personality': 'Test persona'}):
-                    with patch('ash_bot_fallback.primary_ai', 'gemini'):
-                        with patch('ash_bot_fallback.backup_ai', 'claude'):
-                            with patch('ash_bot_fallback.gemini_model') as mock_gemini:
+
+            with patch("ash_bot_fallback.ai_enabled", True):
+                with patch("ash_bot_fallback.BOT_PERSONA", {"enabled": True, "personality": "Test persona"}):
+                    with patch("ash_bot_fallback.primary_ai", "gemini"):
+                        with patch("ash_bot_fallback.backup_ai", "claude"):
+                            with patch("ash_bot_fallback.gemini_model") as mock_gemini:
                                 mock_gemini.generate_content.return_value = mock_response
-                                
-                                with patch('ash_bot_fallback.bot.process_commands', new=AsyncMock()):
+
+                                with patch("ash_bot_fallback.bot.process_commands", new=AsyncMock()):
                                     await ash_bot_fallback.on_message(mock_discord_message)
-                                    
+
                                     # Verify response was sent (AI may not be called for simple queries)
                                     mock_discord_message.reply.assert_called_once()
 

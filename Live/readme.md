@@ -70,6 +70,32 @@ A Discord moderation and AI assistant bot featuring strike tracking, game recomm
 - `!updateplayedgames` - Update existing played games with AI-enhanced metadata (genre, alternative names, series info, release years)
 - `!cleanplayedgames` - Remove already-played games from recommendations using API analysis
 
+#### Reminder System (Moderators Only)
+
+- `!remind <user> <time> <message>` - Schedule a reminder for a user (e.g., `!remind @user 30m Don't forget the stream`)
+- `!remind <user> <time> <message> | auto:<action>` - Schedule reminder with automatic action (mute, kick, ban)
+- `!listreminders [@user]` - List pending reminders, optionally for specific user
+- `!cancelreminder <reminder_id>` - Cancel a pending reminder
+- **Time formats**: `5m`, `1h`, `2h30m`, `1d`, `2024-12-25 15:30`
+- **Auto-actions**: `auto:mute`, `auto:kick`, `auto:ban` (execute 5 minutes after reminder delivery if no mod response)
+
+#### Trivia Tuesday Management
+
+- `!addtrivia <question> | answer:<correct_answer> | type:single` - Add a trivia question
+- `!addtrivia <question> | answer:<correct_answer> | choices:A,B,C,D | type:multiple` - Add multiple choice question
+- `!starttrivia [question_id]` - Start weekly trivia (uses next available question if no ID specified)
+- `!endtrivia` - End current trivia session and reveal results
+- `!trivialeaderboard` - Show trivia participation statistics
+- `!listpendingquestions` - View submitted trivia questions awaiting use
+- `!resettrivia` - Reset all answered questions to available (bulk operation)
+
+#### Announcements (Captain Jonesy & Sir Decent Jam Only)
+
+- `!announce <message>` - Send announcement to main channels with special formatting
+- `!scheduleannouncement <time> <message>` - Schedule an announcement for later
+- `!emergency <message>` - Send emergency announcement with @everyone ping
+- **Features**: Automatic cross-posting, special embed formatting, timestamp logging
+
 #### Bot Status & Analytics
 
 - `!ashstatus` - View bot status and statistics
