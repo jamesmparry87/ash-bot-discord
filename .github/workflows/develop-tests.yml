@@ -143,9 +143,16 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Allow pushing auto-fix commits back to the repository
+      pull-requests: write  # Allow updating PRs
+      repository-projects: read  # Allow reading repository metadata
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0  # Fetch all history for proper branch operations
     
     - name: Set up Python 3.11
       uses: actions/setup-python@v4
