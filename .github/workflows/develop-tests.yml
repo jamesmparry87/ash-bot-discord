@@ -210,8 +210,23 @@ jobs:
     
     - name: Auto-fix PEP 8 violations with autopep8
       run: |
-        # Ensure we're on the correct branch (handle detached HEAD)
-        git checkout ${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+        # Determine branch name and ensure we're on it
+        if [ -n "$GITHUB_HEAD_REF" ]; then
+          BRANCH_NAME="$GITHUB_HEAD_REF"
+        else
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+        fi
+        
+        echo "Target branch for autopep8: $BRANCH_NAME"
+        
+        # Create and checkout the branch if it doesn't exist locally
+        if ! git show-ref --verify --quiet refs/heads/$BRANCH_NAME; then
+          echo "Branch $BRANCH_NAME doesn't exist locally, creating it..."
+          git checkout -b $BRANCH_NAME
+        else
+          echo "Checking out existing branch $BRANCH_NAME..."
+          git checkout $BRANCH_NAME
+        fi
         
         # Run autopep8 to fix common PEP 8 violations automatically
         echo "🔧 Running autopep8 to auto-fix PEP 8 violations..."
@@ -226,7 +241,7 @@ jobs:
           git commit -m "chore: auto-fix PEP 8 violations with autopep8 [skip ci]"
           
           # Push the changes back to the branch
-          git push origin ${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+          git push origin $BRANCH_NAME
           echo "✅ PEP 8 auto-fixes committed and pushed"
         fi
         
