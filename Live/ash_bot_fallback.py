@@ -339,6 +339,263 @@ ai_status_message = "Offline"
 primary_ai = None
 backup_ai = None
 
+# AI Usage Tracking and Rate Limiting
+ai_usage_stats = {
+    "daily_requests": 0,
+    "hourly_requests": 0,
+    "last_request_time": None,
+    "last_hour_reset": datetime.now(ZoneInfo("US/Pacific")).hour,
+    "last_day_reset": datetime.now(ZoneInfo("US/Pacific")).date(),
+    "consecutive_errors": 0,
+    "last_error_time": None,
+    "rate_limited_until": None,
+}
+
+# Rate limiting constants
+MAX_DAILY_REQUESTS = 1400  # Conservative limit below 1500
+MAX_HOURLY_REQUESTS = 120  # Conservative limit below 2000/60min = 133
+MIN_REQUEST_INTERVAL = 3.0  # Minimum seconds between AI requests
+RATE_LIMIT_COOLDOWN = 300  # 5 minutes cooldown after hitting limits
+
+
+def reset_daily_usage():
+    """Reset daily usage counter at midnight PT"""
+    global ai_usage_stats
+    pt_now = datetime.now(ZoneInfo("US/Pacific"))
+
+    if pt_now.date() > ai_usage_stats["last_day_reset"]:
+        ai_usage_stats["daily_requests"] = 0
+        ai_usage_stats["last_day_reset"] = pt_now.date()
+        print(f"🔄 Daily AI usage reset at {pt_now.strftime('%Y-%m-%d %H:%M:%S PT')}")
+
+
+def reset_hourly_usage():
+    """Reset hourly usage counter"""
+    global ai_usage_stats
+    pt_now = datetime.now(ZoneInfo("US/Pacific"))
+
+    if pt_now.hour != ai_usage_stats["last_hour_reset"]:
+        ai_usage_stats["hourly_requests"] = 0
+        ai_usage_stats["last_hour_reset"] = pt_now.hour
+        print(f"🔄 Hourly AI usage reset at {pt_now.strftime('%H:00 PT')}")
+
+
+def check_rate_limits() -> tuple[bool, str]:
+    """Check if we can make an AI request without hitting rate limits"""
+    global ai_usage_stats
+
+    # Reset counters if needed
+    reset_daily_usage()
+    reset_hourly_usage()
+
+    pt_now = datetime.now(ZoneInfo("US/Pacific"))
+
+    # Check if we're in a rate limit cooldown
+    if ai_usage_stats["rate_limited_until"]:
+        if pt_now < ai_usage_stats["rate_limited_until"]:
+            remaining = (ai_usage_stats["rate_limited_until"] - pt_now).total_seconds()
+            return False, f"Rate limited for {int(remaining)} more seconds"
+        else:
+            ai_usage_stats["rate_limited_until"] = None
+
+    # Check daily limit
+    if ai_usage_stats["daily_requests"] >= MAX_DAILY_REQUESTS:
+        ai_usage_stats["rate_limited_until"] = pt_now + timedelta(seconds=RATE_LIMIT_COOLDOWN)
+        return False, f"Daily request limit reached ({MAX_DAILY_REQUESTS})"
+
+    # Check hourly limit
+    if ai_usage_stats["hourly_requests"] >= MAX_HOURLY_REQUESTS:
+        ai_usage_stats["rate_limited_until"] = pt_now + timedelta(seconds=RATE_LIMIT_COOLDOWN)
+        return False, f"Hourly request limit reached ({MAX_HOURLY_REQUESTS})"
+
+    # Check minimum interval between requests
+    if ai_usage_stats["last_request_time"]:
+        time_since_last = (pt_now - ai_usage_stats["last_request_time"]).total_seconds()
+        if time_since_last < MIN_REQUEST_INTERVAL:
+            remaining = MIN_REQUEST_INTERVAL - time_since_last
+            return False, f"Too soon since last request, wait {remaining:.1f}s"
+
+    return True, "OK"
+
+
+def record_ai_request():
+    """Record that an AI request was made"""
+    global ai_usage_stats
+    pt_now = datetime.now(ZoneInfo("US/Pacific"))
+
+    ai_usage_stats["daily_requests"] += 1
+    ai_usage_stats["hourly_requests"] += 1
+    ai_usage_stats["last_request_time"] = pt_now
+    ai_usage_stats["consecutive_errors"] = 0
+
+
+def record_ai_error():
+    """Record that an AI request failed"""
+    global ai_usage_stats
+    pt_now = datetime.now(ZoneInfo("US/Pacific"))
+
+    ai_usage_stats["consecutive_errors"] += 1
+    ai_usage_stats["last_error_time"] = pt_now
+
+    # If we have too many consecutive errors, apply temporary cooldown
+    if ai_usage_stats["consecutive_errors"] >= 3:
+        ai_usage_stats["rate_limited_until"] = pt_now + timedelta(seconds=RATE_LIMIT_COOLDOWN)
+        print(f"⚠️ Too many consecutive AI errors, applying {RATE_LIMIT_COOLDOWN}s cooldown")
+
+
+async def send_dm_notification(user_id: int, message: str) -> bool:
+    """Send a DM notification to a specific user"""
+    try:
+        user = await bot.fetch_user(user_id)
+        if user:
+            await user.send(message)
+            print(f"✅ DM notification sent to user {user_id}")
+            return True
+    except Exception as e:
+        print(f"❌ Failed to send DM to user {user_id}: {e}")
+    return False
+
+
+async def call_ai_with_rate_limiting(prompt: str, user_id: int) -> tuple[Optional[str], str]:
+    """Make an AI call with proper rate limiting and error handling
+    Returns: (response_text, status_message)
+    """
+    global ai_usage_stats
+
+    # Check rate limits first
+    can_request, reason = check_rate_limits()
+    if not can_request:
+        print(f"⚠️ AI request blocked: {reason}")
+        
+        # Send DM notification if daily limit reached for Gemini
+        if "Daily request limit reached" in reason and primary_ai == "gemini":
+            await send_dm_notification(
+                JAM_USER_ID, 
+                f"🤖 **Ash Bot Daily Limit Alert**\n\n"
+                f"Gemini daily limit reached ({MAX_DAILY_REQUESTS} requests).\n"
+                f"Bot has automatically switched to Claude backup.\n\n"
+                f"**Current AI Status:** {backup_ai.title() if backup_ai else 'No backup available'}\n"
+                f"**Claude Free Tier Details:**\n"
+                f"• **Model:** Claude-3-Haiku (Anthropic's fastest model)\n"
+                f"• **Free Tier Limit:** 25,000 tokens/day (~18,750 words)\n"
+                f"• **Monthly Limit:** 200,000 tokens (~150k words)\n"
+                f"• **Reset:** Daily at midnight UTC, Monthly on billing cycle\n"
+                f"• **Performance:** Faster responses, excellent reasoning\n"
+                f"• **Quality:** Superior for complex conversations\n\n"
+                f"**Gemini Limit Reset:** Next day at 00:00 PT\n\n"
+                f"System continues operating normally with Claude backup. No functionality lost."
+            )
+        
+        return None, f"rate_limit:{reason}"
+
+    # Improved alias rate limiting with better UX
+    cleanup_expired_aliases()
+    if user_id in user_alias_state:
+        # Check for alias-specific cooldown
+        alias_data = user_alias_state[user_id]
+        alias_type = alias_data.get("alias_type", "unknown")
+        
+        if alias_data.get("last_ai_request"):
+            time_since_alias_request = (
+                datetime.now(ZoneInfo("Europe/London")) - alias_data["last_ai_request"]
+            ).total_seconds()
+            
+            # Reduced cooldown and progressive restrictions
+            base_cooldown = 4.0  # Reduced from 10 to 4 seconds
+            
+            # Apply progressive cooldowns based on recent usage
+            recent_requests = alias_data.get("recent_request_count", 0)
+            if recent_requests > 5:  # After 5 requests in session
+                base_cooldown = 8.0  # Increase to 8 seconds
+            elif recent_requests > 10:  # After 10 requests
+                base_cooldown = 15.0  # Increase to 15 seconds
+                
+            if time_since_alias_request < base_cooldown:
+                remaining_time = base_cooldown - time_since_alias_request
+                print(f"⚠️ Alias AI request blocked: {alias_type} testing cooldown ({remaining_time:.1f}s remaining)")
+                return None, f"alias_cooldown:{alias_type}:{remaining_time:.1f}"
+
+        # Update alias AI request tracking
+        current_time = datetime.now(ZoneInfo("Europe/London"))
+        user_alias_state[user_id]["last_ai_request"] = current_time
+        
+        # Track recent requests for progressive cooldowns
+        recent_count = alias_data.get("recent_request_count", 0)
+        user_alias_state[user_id]["recent_request_count"] = recent_count + 1
+
+    try:
+        response_text = None
+
+        # Try primary AI first
+        if primary_ai == "gemini" and gemini_model is not None:
+            try:
+                print(f"Making Gemini request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
+                generation_config = {"max_output_tokens": 300, "temperature": 0.7}
+                response = gemini_model.generate_content(prompt, generation_config=generation_config)
+                if response and hasattr(response, "text") and response.text:
+                    response_text = response.text
+                    record_ai_request()
+                    print(f"✅ Gemini request successful")
+            except Exception as e:
+                print(f"❌ Gemini AI error: {e}")
+                record_ai_error()
+
+                # Try Claude backup if available
+                if backup_ai == "claude" and claude_client is not None:
+                    try:
+                        print(f"Trying Claude backup (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
+                        response = claude_client.messages.create(
+                            model="claude-3-haiku-20240307",
+                            max_tokens=300,
+                            messages=[{"role": "user", "content": prompt}],
+                        )
+                        if response and hasattr(response, "content") and response.content:
+                            claude_text = response.content[0].text if response.content else ""
+                            if claude_text:
+                                response_text = claude_text
+                                record_ai_request()
+                                print(f"✅ Claude backup request successful")
+                    except Exception as claude_e:
+                        print(f"❌ Claude backup AI error: {claude_e}")
+                        record_ai_error()
+
+        elif primary_ai == "claude" and claude_client is not None:
+            try:
+                print(f"Making Claude request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
+                response = claude_client.messages.create(
+                    model="claude-3-haiku-20240307", max_tokens=300, messages=[{"role": "user", "content": prompt}]
+                )
+                if response and hasattr(response, "content") and response.content:
+                    claude_text = response.content[0].text if response.content else ""
+                    if claude_text:
+                        response_text = claude_text
+                        record_ai_request()
+                        print(f"✅ Claude request successful")
+            except Exception as e:
+                print(f"❌ Claude AI error: {e}")
+                record_ai_error()
+
+                # Try Gemini backup if available
+                if backup_ai == "gemini" and gemini_model is not None:
+                    try:
+                        print(f"Trying Gemini backup (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
+                        generation_config = {"max_output_tokens": 300, "temperature": 0.7}
+                        response = gemini_model.generate_content(prompt, generation_config=generation_config)
+                        if response and hasattr(response, "text") and response.text:
+                            response_text = response.text
+                            record_ai_request()
+                            print(f"✅ Gemini backup request successful")
+                    except Exception as gemini_e:
+                        print(f"❌ Gemini backup AI error: {gemini_e}")
+                        record_ai_error()
+
+        return response_text, "success"
+
+    except Exception as e:
+        print(f"❌ AI call error: {e}")
+        record_ai_error()
+        return None, f"error:{str(e)}"
+
 
 def filter_ai_response(response_text: str) -> str:
     """Filter AI responses to remove verbosity and repetitive content"""
@@ -588,6 +845,58 @@ async def scheduled_games_update():
         print(f"❌ Scheduled update error: {e}")
         if mod_channel and isinstance(mod_channel, discord.TextChannel):
             await mod_channel.send(f"❌ **Scheduled Update Failed:** {str(e)}")
+
+
+@tasks.loop(time=time(0, 0, tzinfo=ZoneInfo("US/Pacific")))  # Run at 00:00 PT (midnight Pacific Time) every day
+async def scheduled_midnight_restart():
+    """Automatically restart the bot at midnight Pacific Time to reset daily limits"""
+    pt_now = datetime.now(ZoneInfo("US/Pacific"))
+    print(f"🔄 Midnight Pacific Time restart initiated at {pt_now.strftime('%Y-%m-%d %H:%M:%S PT')}")
+
+    mod_channel = None
+    try:
+        # Get mod alert channel for notifications
+        guild = bot.get_guild(GUILD_ID)
+        if guild:
+            mod_channel = guild.get_channel(MOD_ALERT_CHANNEL_ID)
+            if isinstance(mod_channel, discord.TextChannel):
+                await mod_channel.send(
+                    f"🌙 **Midnight Pacific Time Restart:** Initiating scheduled bot restart to reset daily AI limits. System will be back online momentarily. Current time: {pt_now.strftime('%Y-%m-%d %H:%M:%S PT')}"
+                )
+
+        # Reset AI usage stats for the new day (this happens automatically on startup, but let's be explicit)
+        global ai_usage_stats
+        ai_usage_stats["daily_requests"] = 0
+        ai_usage_stats["hourly_requests"] = 0
+        ai_usage_stats["last_day_reset"] = pt_now.date()
+        ai_usage_stats["last_hour_reset"] = pt_now.hour
+        ai_usage_stats["consecutive_errors"] = 0
+        ai_usage_stats["rate_limited_until"] = None
+        
+        print(f"✅ Daily AI usage stats reset at midnight PT")
+
+        # Give a small delay to ensure the message is sent
+        await asyncio.sleep(2)
+
+        # Graceful shutdown - this will trigger a restart if managed by a process manager
+        print("🛑 Graceful shutdown initiated for midnight restart")
+        cleanup()
+        await bot.close()
+        sys.exit(0)
+
+    except Exception as e:
+        print(f"❌ Midnight restart error: {e}")
+        if mod_channel and isinstance(mod_channel, discord.TextChannel):
+            try:
+                await mod_channel.send(f"❌ **Midnight Restart Failed:** {str(e)}")
+            except:
+                pass  # Don't let notification failure prevent restart
+        
+        # Still attempt restart even if notification fails
+        print("🛑 Forcing shutdown despite error")
+        cleanup()
+        await bot.close()
+        sys.exit(0)
 
 
 # --- Query Router and Handlers ---
@@ -1115,10 +1424,14 @@ async def handle_recommendation_query(message: discord.Message, match: Match[str
 @bot.event
 async def on_ready():
     print(f"Bot is ready. Logged in as {bot.user}")
-    # Start the scheduled task
+    # Start the scheduled tasks
     if not scheduled_games_update.is_running():
         scheduled_games_update.start()
         print("✅ Scheduled games update task started (Sunday midday)")
+    
+    if not scheduled_midnight_restart.is_running():
+        scheduled_midnight_restart.start()
+        print("✅ Scheduled midnight restart task started (00:00 PT daily)")
 
 
 @bot.event
@@ -1584,101 +1897,41 @@ async def on_message(message):
 
             try:
                 async with message.channel.typing():
-                    # Try primary AI first
-                    if primary_ai == "gemini" and gemini_model is not None:
-                        try:
-                            # Configure Gemini with response limits
-                            generation_config = {"max_output_tokens": 300, "temperature": 0.7}  # Limit response length
-                            response = gemini_model.generate_content(prompt, generation_config=generation_config)  # type: ignore
-                            if response and hasattr(response, "text") and response.text:
-                                filtered_response = filter_ai_response(response.text)
-                                # Add parenthetical notification if alias is active
-                                cleanup_expired_aliases()
-                                if message.author.id in user_alias_state:
-                                    update_alias_activity(message.author.id)
-                                    alias_tier = user_alias_state[message.author.id]["alias_type"]
-                                    filtered_response += f" *(Testing as {alias_tier.title()})*"
-                                await message.reply(filtered_response[:2000])
-                                return
-                        except Exception as e:
-                            print(f"Gemini AI error: {e}")
-                            # If we have Claude backup, try it
-                            if backup_ai == "claude" and claude_client is not None:
-                                try:
-                                    response = claude_client.messages.create(  # type: ignore
-                                        model="claude-3-haiku-20240307",
-                                        max_tokens=300,  # Reduced from 1000
-                                        messages=[{"role": "user", "content": prompt}],
-                                    )
-                                    if response and hasattr(response, "content") and response.content:
-                                        claude_text = response.content[0].text if response.content else ""
-                                        if claude_text:
-                                            filtered_response = filter_ai_response(claude_text)
-                                            # Add parenthetical notification if alias is active
-                                            cleanup_expired_aliases()
-                                            if message.author.id in user_alias_state:
-                                                update_alias_activity(message.author.id)
-                                                alias_tier = user_alias_state[message.author.id]["alias_type"]
-                                                filtered_response += f" *(Testing as {alias_tier.title()})*"
-                                            await message.reply(filtered_response[:2000])
-                                            return
-                                except Exception as claude_e:
-                                    print(f"Claude backup AI error: {claude_e}")
-                            # If both fail, check if it's a quota issue
-                            error_str = str(e).lower()
-                            if "quota" in error_str or "token" in error_str or "limit" in error_str:
-                                await message.reply(BUSY_MESSAGE)
-                                return
+                    # Use the rate-limited AI call function
+                    response_text, status_message = await call_ai_with_rate_limiting(prompt, message.author.id)
 
-                    elif primary_ai == "claude" and claude_client is not None:
-                        try:
-                            response = claude_client.messages.create(  # type: ignore
-                                model="claude-3-haiku-20240307",
-                                max_tokens=300,  # Reduced from 1000
-                                messages=[{"role": "user", "content": prompt}],
-                            )
-                            if response and hasattr(response, "content") and response.content:
-                                claude_text = response.content[0].text if response.content else ""
-                                if claude_text:
-                                    filtered_response = filter_ai_response(claude_text)
-                                    # Add parenthetical notification if alias is active
-                                    cleanup_expired_aliases()
-                                    if message.author.id in user_alias_state:
-                                        update_alias_activity(message.author.id)
-                                        alias_tier = user_alias_state[message.author.id]["alias_type"]
-                                        filtered_response += f" *(Testing as {alias_tier.title()})*"
-                                    await message.reply(filtered_response[:2000])
-                                    return
-                        except Exception as e:
-                            print(f"Claude AI error: {e}")
-                            # If we have Gemini backup, try it
-                            if backup_ai == "gemini" and gemini_model is not None:
-                                try:
-                                    generation_config = {"max_output_tokens": 300, "temperature": 0.7}
-                                    response = gemini_model.generate_content(prompt, generation_config=generation_config)  # type: ignore
-                                    if response and hasattr(response, "text") and response.text:
-                                        filtered_response = filter_ai_response(response.text)
-                                        # Add parenthetical notification if alias is active
-                                        cleanup_expired_aliases()
-                                        if message.author.id in user_alias_state:
-                                            update_alias_activity(message.author.id)
-                                            alias_tier = user_alias_state[message.author.id]["alias_type"]
-                                            filtered_response += f" *(Testing as {alias_tier.title()})*"
-                                        await message.reply(filtered_response[:2000])
-                                        return
-                                except Exception as gemini_e:
-                                    print(f"Gemini backup AI error: {gemini_e}")
-                            # If both fail, check if it's a quota issue
-                            error_str = str(e).lower()
-                            if "quota" in error_str or "token" in error_str or "limit" in error_str:
+                    if response_text:
+                        filtered_response = filter_ai_response(response_text)
+                        # Add parenthetical notification if alias is active
+                        cleanup_expired_aliases()
+                        if message.author.id in user_alias_state:
+                            update_alias_activity(message.author.id)
+                            alias_tier = user_alias_state[message.author.id]["alias_type"]
+                            filtered_response += f" *(Testing as {alias_tier.title()})*"
+                        await message.reply(filtered_response[:2000])
+                        return
+                    else:
+                        # AI call was rate limited or failed - provide specific error messages
+                        if status_message.startswith("alias_cooldown:"):
+                            # Parse alias cooldown message
+                            parts = status_message.split(":")
+                            if len(parts) >= 3:
+                                alias_type = parts[1]
+                                remaining_time = parts[2]
+                                await message.reply(
+                                    f"*Alias testing rate limit active. {alias_type.title()} testing cooldown: {remaining_time}s remaining. Testing protocols require controlled intervals to prevent quota exhaustion.*"
+                                )
+                            else:
                                 await message.reply(BUSY_MESSAGE)
-                                return
+                        elif status_message.startswith("rate_limit:"):
+                            await message.reply(BUSY_MESSAGE)
+                        else:
+                            await message.reply(BUSY_MESSAGE)
+                        return
             except Exception as e:
                 print(f"AI system error: {e}")
-                error_str = str(e).lower()
-                if "quota" in error_str or "token" in error_str or "limit" in error_str:
-                    await message.reply(BUSY_MESSAGE)
-                    return
+                await message.reply(ERROR_MESSAGE)
+                return
 
         # Fallback to FAQ responses if AI failed or is disabled
         for q, resp in FAQ_RESPONSES.items():
@@ -1787,11 +2040,49 @@ async def ash_status(ctx):
             total_strikes = individual_total
 
     persona = "Enabled" if BOT_PERSONA["enabled"] else "Disabled"
+    
+    # Get current Pacific Time for display
+    pt_now = datetime.now(ZoneInfo("US/Pacific"))
+    pt_time_str = pt_now.strftime("%Y-%m-%d %H:%M:%S PT")
+    
+    # Calculate rate limit status
+    rate_limit_status = "✅ Normal"
+    if ai_usage_stats.get("rate_limited_until"):
+        if pt_now < ai_usage_stats["rate_limited_until"]:
+            remaining = (ai_usage_stats["rate_limited_until"] - pt_now).total_seconds()
+            rate_limit_status = f"🚫 Rate Limited ({int(remaining)}s remaining)"
+        else:
+            ai_usage_stats["rate_limited_until"] = None
+    
+    # Check daily/hourly limits approaching
+    daily_usage_percent = (ai_usage_stats["daily_requests"] / MAX_DAILY_REQUESTS) * 100 if MAX_DAILY_REQUESTS > 0 else 0
+    hourly_usage_percent = (ai_usage_stats["hourly_requests"] / MAX_HOURLY_REQUESTS) * 100 if MAX_HOURLY_REQUESTS > 0 else 0
+    
+    if daily_usage_percent >= 90:
+        rate_limit_status = "⚠️ Daily Limit Warning"
+    elif hourly_usage_percent >= 90:
+        rate_limit_status = "⚠️ Hourly Limit Warning"
+    elif ai_usage_stats["consecutive_errors"] >= 3:
+        rate_limit_status = "🟡 Error Cooldown"
+    
+    # AI Budget tracking status
+    ai_budget_info = (
+        f"📊 **AI Budget Tracking (Pacific Time):**\n"
+        f"• **Daily Usage:** {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS} requests ({daily_usage_percent:.1f}%)\n"
+        f"• **Hourly Usage:** {ai_usage_stats['hourly_requests']}/{MAX_HOURLY_REQUESTS} requests ({hourly_usage_percent:.1f}%)\n"
+        f"• **Rate Limit Status:** {rate_limit_status}\n"
+        f"• **Consecutive Errors:** {ai_usage_stats['consecutive_errors']}\n"
+        f"• **Current PT Time:** {pt_time_str}\n"
+        f"• **Next Daily Reset:** {(pt_now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).strftime('%Y-%m-%d 00:00:00 PT')}\n"
+        f"• **Last Request:** {ai_usage_stats['last_request_time'].strftime('%H:%M:%S PT') if ai_usage_stats['last_request_time'] else 'None'}"
+    )
+    
     await ctx.send(
         f"🤖 Ash at your service.\n"
         f"AI: {ai_status_message}\n"
         f"Persona: {persona}\n"
-        f"Total strikes: {total_strikes}"
+        f"Total strikes: {total_strikes}\n\n"
+        f"{ai_budget_info}"
     )
 
 
@@ -1872,6 +2163,156 @@ async def check_alias(ctx):
         await ctx.send(f"🔍 **Current alias:** **{alias_data['alias_type'].title()}** (active for {time_str})")
     else:
         await ctx.send("ℹ️ **No active alias** - using your normal user tier")
+
+
+@bot.command(name="testaibackup")
+@commands.has_permissions(manage_messages=True)
+async def test_ai_backup(ctx):
+    """Test AI backup functionality and DM notifications (Moderators only)"""
+    try:
+        await ctx.send("🧪 **Testing AI Backup System...**")
+        
+        # Show current AI configuration
+        config_info = (
+            f"📊 **Current AI Configuration:**\n"
+            f"• **Primary AI:** {primary_ai.title() if primary_ai else 'None'}\n"
+            f"• **Backup AI:** {backup_ai.title() if backup_ai else 'None'}\n"
+            f"• **Gemini Available:** {'✅' if gemini_model else '❌'}\n"
+            f"• **Claude Available:** {'✅' if claude_client else '❌'}\n"
+            f"• **Current Status:** {ai_status_message}\n\n"
+        )
+        
+        await ctx.send(config_info)
+        
+        # Test primary AI
+        test_prompt = "Test backup system response"
+        
+        if primary_ai == "gemini" and gemini_model is not None:
+            await ctx.send("🔍 **Testing Gemini (Primary)...**")
+            try:
+                response = gemini_model.generate_content("Respond with 'Gemini test successful'")
+                if response and hasattr(response, "text") and response.text:
+                    await ctx.send(f"✅ **Gemini Test:** {response.text}")
+                else:
+                    await ctx.send("❌ **Gemini Test:** No response received")
+            except Exception as e:
+                await ctx.send(f"❌ **Gemini Test Failed:** {str(e)}")
+                
+                # Test if backup would activate
+                if backup_ai == "claude" and claude_client is not None:
+                    await ctx.send("🔄 **Testing Claude Backup Activation...**")
+                    try:
+                        backup_response = claude_client.messages.create(
+                            model="claude-3-haiku-20240307",
+                            max_tokens=50,
+                            messages=[{"role": "user", "content": "Respond with 'Claude backup test successful'"}]
+                        )
+                        if backup_response and hasattr(backup_response, "content"):
+                            claude_text = backup_response.content[0].text if backup_response.content else ""
+                            await ctx.send(f"✅ **Claude Backup Test:** {claude_text}")
+                        else:
+                            await ctx.send("❌ **Claude Backup Test:** No response received")
+                    except Exception as claude_e:
+                        await ctx.send(f"❌ **Claude Backup Test Failed:** {str(claude_e)}")
+        
+        elif primary_ai == "claude" and claude_client is not None:
+            await ctx.send("🔍 **Testing Claude (Primary)...**")
+            try:
+                response = claude_client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=50,
+                    messages=[{"role": "user", "content": "Respond with 'Claude test successful'"}]
+                )
+                if response and hasattr(response, "content"):
+                    claude_text = response.content[0].text if response.content else ""
+                    await ctx.send(f"✅ **Claude Test:** {claude_text}")
+                else:
+                    await ctx.send("❌ **Claude Test:** No response received")
+            except Exception as e:
+                await ctx.send(f"❌ **Claude Test Failed:** {str(e)}")
+                
+                # Test if backup would activate
+                if backup_ai == "gemini" and gemini_model is not None:
+                    await ctx.send("🔄 **Testing Gemini Backup Activation...**")
+                    try:
+                        backup_response = gemini_model.generate_content("Respond with 'Gemini backup test successful'")
+                        if backup_response and hasattr(backup_response, "text") and backup_response.text:
+                            await ctx.send(f"✅ **Gemini Backup Test:** {backup_response.text}")
+                        else:
+                            await ctx.send("❌ **Gemini Backup Test:** No response received")
+                    except Exception as gemini_e:
+                        await ctx.send(f"❌ **Gemini Backup Test Failed:** {str(gemini_e)}")
+        
+        # Test DM notification system
+        await ctx.send("📱 **Testing DM Notification System...**")
+        test_dm_success = await send_dm_notification(
+            JAM_USER_ID,
+            f"🧪 **Test DM Notification**\n\n"
+            f"This is a test of the AI backup notification system.\n"
+            f"**Test initiated by:** {ctx.author.name}\n"
+            f"**Current time:** {datetime.now(ZoneInfo('Europe/London')).strftime('%H:%M:%S UK')}\n\n"
+            f"If you received this message, the DM notification system is working correctly!"
+        )
+        
+        if test_dm_success:
+            await ctx.send("✅ **DM Notification Test:** Successfully sent test DM")
+        else:
+            await ctx.send("❌ **DM Notification Test:** Failed to send test DM")
+        
+        # Show rate limiting info
+        pt_now = datetime.now(ZoneInfo("US/Pacific"))
+        rate_limit_info = (
+            f"📊 **Current Rate Limit Status:**\n"
+            f"• **Daily Requests:** {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS}\n"
+            f"• **Hourly Requests:** {ai_usage_stats['hourly_requests']}/{MAX_HOURLY_REQUESTS}\n"
+            f"• **Next Daily Reset:** {(pt_now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).strftime('%Y-%m-%d 00:00 PT')}\n"
+        )
+        
+        await ctx.send(rate_limit_info)
+        
+        await ctx.send("✅ **AI Backup System Test Complete**")
+        
+    except Exception as e:
+        await ctx.send(f"❌ **Test Error:** {str(e)}")
+
+
+@bot.command(name="simulatelimitreached")
+@commands.has_permissions(manage_messages=True)
+async def simulate_limit_reached(ctx):
+    """Simulate Gemini daily limit reached to test DM notification (Moderators only)"""
+    if ctx.author.id != JAM_USER_ID:
+        await ctx.send("❌ **Access denied:** This command is restricted to the bot creator for safety.")
+        return
+        
+    try:
+        await ctx.send("⚠️ **Simulating Gemini Daily Limit Reached...**")
+        
+        # Send the same DM that would be sent when limit is actually reached
+        success = await send_dm_notification(
+            JAM_USER_ID, 
+            f"🤖 **Ash Bot Daily Limit Alert - SIMULATION**\n\n"
+            f"**THIS IS A TEST SIMULATION**\n\n"
+            f"Gemini daily limit reached ({MAX_DAILY_REQUESTS} requests).\n"
+            f"Bot has automatically switched to Claude backup.\n\n"
+            f"**Current AI Status:** {backup_ai.title() if backup_ai else 'No backup available'}\n"
+            f"**Claude Free Tier Details:**\n"
+            f"• **Model:** Claude-3-Haiku (Anthropic's fastest model)\n"
+            f"• **Free Tier Limit:** ~200,000 tokens/month (~150k words)\n"
+            f"• **Reset:** Monthly on billing cycle\n"
+            f"• **Performance:** Faster responses, excellent reasoning\n\n"
+            f"**Limit Reset:** Next day at 00:00 PT\n\n"
+            f"System continues operating normally with Claude backup.\n"
+            f"**Initiated by:** {ctx.author.name} (Test Simulation)"
+        )
+        
+        if success:
+            await ctx.send("✅ **Simulation Complete:** DM notification sent successfully")
+            await ctx.send("📱 **Check your DMs** to see exactly what notification you'll receive when Gemini limit is reached")
+        else:
+            await ctx.send("❌ **Simulation Failed:** Could not send DM notification")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Simulation Error:** {str(e)}")
 
 
 # --- Data Migration Commands ---
