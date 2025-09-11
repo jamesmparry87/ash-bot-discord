@@ -324,7 +324,7 @@ async def user_is_member_by_id(user_id: int) -> bool:
 async def get_user_communication_tier(message_or_ctx) -> str:
     """Determine communication tier for user responses
     Accepts either discord.Message or commands.Context"""
-    
+
     # Handle both Message and Context objects
     if hasattr(message_or_ctx, 'author'):
         user_id = message_or_ctx.author.id
@@ -359,18 +359,27 @@ async def get_user_communication_tier(message_or_ctx) -> str:
     elif guild:
         # For Context objects where we need to check permissions
         try:
-            if hasattr(message_or_ctx, 'author') and hasattr(message_or_ctx.author, 'guild_permissions'):
+            if hasattr(
+                    message_or_ctx,
+                    'author') and hasattr(
+                    message_or_ctx.author,
+                    'guild_permissions'):
                 if message_or_ctx.author.guild_permissions.manage_messages:
                     return "moderator"
-            
+
             # Check member roles for Context objects
-            if hasattr(message_or_ctx, 'author') and hasattr(message_or_ctx.author, 'roles'):
-                member_roles = [role.id for role in message_or_ctx.author.roles]
+            if hasattr(
+                    message_or_ctx,
+                    'author') and hasattr(
+                    message_or_ctx.author,
+                    'roles'):
+                member_roles = [
+                    role.id for role in message_or_ctx.author.roles]
                 if any(role_id in MEMBER_ROLE_IDS for role_id in member_roles):
                     return "member"
         except AttributeError:
             pass
-    
+
     return "standard"
 
 
