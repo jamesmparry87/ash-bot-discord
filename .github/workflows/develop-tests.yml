@@ -168,6 +168,9 @@ jobs:
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
         
+        # Ensure we're on the correct branch (handle detached HEAD)
+        git checkout ${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+        
         # Run isort to fix import order (without --check-only)
         echo "🔧 Running isort to auto-fix import ordering..."
         isort Live/ tests/
@@ -181,12 +184,15 @@ jobs:
           git commit -m "chore: auto-fix import sorting with isort [skip ci]"
           
           # Push the changes back to the branch
-          git push
+          git push origin ${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
           echo "✅ Import sorting fixes committed and pushed"
         fi
     
     - name: Auto-fix PEP 8 violations with autopep8
       run: |
+        # Ensure we're on the correct branch (handle detached HEAD)
+        git checkout ${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+        
         # Run autopep8 to fix common PEP 8 violations automatically
         echo "🔧 Running autopep8 to auto-fix PEP 8 violations..."
         autopep8 --in-place --aggressive --aggressive --recursive Live/ tests/
@@ -200,7 +206,7 @@ jobs:
           git commit -m "chore: auto-fix PEP 8 violations with autopep8 [skip ci]"
           
           # Push the changes back to the branch
-          git push
+          git push origin ${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
           echo "✅ PEP 8 auto-fixes committed and pushed"
         fi
         
