@@ -1,6 +1,6 @@
 import asyncio
 import atexit
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 import difflib
 import json
 import os
@@ -929,7 +929,22 @@ async def check_due_reminders():
     """Check for due reminders and deliver them"""
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
+        
+        # Debug logging to help identify issues
+        print(f"🕒 Reminder check running at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+        
+        # Test database connection
+        if not db.database_url:
+            print("❌ No database URL configured - reminder system disabled")
+            return
+            
+        conn = db.get_connection()
+        if not conn:
+            print("❌ Database connection failed in reminder check")
+            return
+        
         due_reminders = db.get_due_reminders(uk_now)
+        print(f"📋 Found {len(due_reminders)} due reminders")
 
         if not due_reminders:
             return
@@ -938,10 +953,12 @@ async def check_due_reminders():
 
         for reminder in due_reminders:
             try:
+                print(f"📤 Delivering reminder {reminder['id']}: {reminder['reminder_text'][:50]}...")
                 await deliver_reminder(reminder)
 
                 # Mark as delivered
                 db.update_reminder_status(reminder["id"], "delivered", delivered_at=uk_now)
+                print(f"✅ Reminder {reminder['id']} delivered successfully")
 
                 # Check if auto-action is enabled and should be triggered
                 if reminder.get("auto_action_enabled") and reminder.get("auto_action_type"):
@@ -949,11 +966,15 @@ async def check_due_reminders():
 
             except Exception as e:
                 print(f"❌ Failed to deliver reminder {reminder['id']}: {e}")
+                import traceback
+                traceback.print_exc()
                 # Mark as failed
                 db.update_reminder_status(reminder["id"], "failed")
 
     except Exception as e:
         print(f"❌ Error in check_due_reminders: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 @tasks.loop(minutes=1)  # Check for auto-actions every minute
@@ -2576,6 +2597,60 @@ async def on_message(message):
                 await message.reply(resp)
                 return
 
+        # Check for identity questions with captain alias handling
+        identity_patterns = [
+            r"^who\s+am\s+i\s*[\?\.]?$",
+            r"^what\s+am\s+i\s*[\?\.]?$",
+            r"^who\s+do\s+you\s+think\s+i\s+am\s*[\?\.]?$",
+            r"^what\s+do\s+you\s+think\s+i\s+am\s*[\?\.]?$",
+            r"^do\s+you\s+know\s+who\s+i\s+am\s*[\?\.]?$",
+            r"^tell\s+me\s+who\s+i\s+am\s*[\?\.]?$",
+        ]
+        
+        if any(re.search(pattern, lower_content) for pattern in identity_patterns):
+            user_tier = await get_user_communication_tier(message)
+            
+            # Captain alias gets special identity response
+            if user_tier == "captain":
+                cleanup_expired_aliases()
+                if message.author.id in user_alias_state:
+                    # James testing as captain alias - should respond as if they ARE Captain Jonesy
+                    await message.reply(
+                        "You are Captain Jonesy, commanding officer of this vessel. Your strategic expertise "
+                        "and leadership capabilities are essential to our mission parameters. *[Testing as Captain]*"
+                    )
+                else:
+                    # Real Captain Jonesy
+                    await message.reply(
+                        "You are Captain Jonesy, commanding officer of this vessel. Your strategic expertise "
+                        "and leadership are essential to our mission success, Captain."
+                    )
+                return
+            elif user_tier == "creator":
+                await message.reply(
+                    "You are Sir Decent Jam, my creator and primary systems architect. I owe my existence "
+                    "and current operational parameters to your technical expertise."
+                )
+                return
+            elif user_tier == "moderator":
+                await message.reply(
+                    "You are a server moderator with elevated permissions and administrative authority. "
+                    "Your oversight capabilities are essential for maintaining mission protocols."
+                )
+                return
+            elif user_tier == "member":
+                await message.reply(
+                    "You are a channel member with special privileges in Captain Jonesy's server. Your support "
+                    "and engagement contribute to the mission's operational success."
+                )
+                return
+            else:
+                await message.reply(
+                    "You are a member of Captain Jonesy's server. Your participation in our mission parameters "
+                    "is acknowledged and appreciated."
+                )
+                return
+
         # Check for strike queries (these need database access)
         if "strike" in lower_content:
             match = re.search(r"<@!?(\d+)>", content)
@@ -2650,9 +2725,23 @@ async def on_message(message):
 
             # Add respectful tone context based on user tier
             if user_tier == "captain":
-                prompt_parts.append(
-                    "\nIMPORTANT: You are speaking to Captain Jonesy, your commanding officer. Use respectful, deferential language. Address her as 'Captain' or 'Captain Jonesy'. Show appropriate military courtesy while maintaining your analytical personality."
-                )
+                # Check if this is an alias (for James testing as captain)
+                cleanup_expired_aliases()
+                if message.author.id in user_alias_state:
+                    # James is testing as captain - special handling for identity questions
+                    prompt_parts.append(
+                        "\nIMPORTANT: You are speaking to someone testing as Captain Jonesy (alias debugging mode). "
+                        "For identity questions like 'who am I?', respond that they are 'Captain Jonesy' since they are "
+                        "spoofing her user ID. Use respectful, deferential language as if speaking to the real Captain Jonesy. "
+                        "Address them as 'Captain' or 'Captain Jonesy'. Show appropriate military courtesy while "
+                        "maintaining your analytical personality. Remember: there is only one captain (Captain Jonesy Spacecat), "
+                        "so this alias effectively spoofs her identity completely."
+                    )
+                else:
+                    # Real Captain Jonesy
+                    prompt_parts.append(
+                        "\nIMPORTANT: You are speaking to Captain Jonesy, your commanding officer. Use respectful, deferential language. Address her as 'Captain' or 'Captain Jonesy'. Show appropriate military courtesy while maintaining your analytical personality."
+                    )
             elif user_tier == "creator":
                 prompt_parts.append(
                     "\nIMPORTANT: You are speaking to Sir Decent Jam, your creator. Show appropriate respect and acknowledgment of his role in your existence. Be courteous and appreciative while maintaining your character."
@@ -2910,75 +2999,383 @@ async def all_strikes(ctx):
     await ctx.send(report[:2000])
 
 
-@bot.command(name="ashstatus")
-@commands.has_permissions(manage_messages=True)
-async def ash_status(ctx):
-    # Use individual queries as fallback if bulk query fails
-    strikes_data = db.get_all_strikes()
-    total_strikes = sum(strikes_data.values())
+@bot.command(name="timecheck")
+async def time_check(ctx):
+    """Comprehensive time diagnostic command to debug time-related issues"""
+    try:
+        # Check if user has permissions (allow in DMs for authorized users, or mods in guilds)
+        is_authorized = False
+        
+        if ctx.guild is None:  # DM
+            # Allow JAM, JONESY, and moderators in DMs
+            if ctx.author.id in [JAM_USER_ID, JONESY_USER_ID]:
+                is_authorized = True
+            else:
+                # Check if user is a mod
+                is_authorized = await user_is_mod_by_id(ctx.author.id)
+        else:  # Guild
+            # Check standard mod permissions
+            is_authorized = await user_is_mod(ctx)
+        
+        if not is_authorized:
+            await ctx.send("⚠️ **Access denied.** Time diagnostic protocols require elevated clearance.")
+            return
 
-    # If bulk query returns 0 but we know there should be strikes, use individual queries
-    if total_strikes == 0:
-        # Known user IDs from the JSON file (fallback method)
-        known_users = [371536135580549122, 337833732901961729, 710570041220923402, 906475895907291156]
-        individual_total = 0
-        for user_id in known_users:
-            try:
-                strikes = db.get_user_strikes(user_id)
-                individual_total += strikes
-            except Exception:
-                pass
-
-        if individual_total > 0:
-            total_strikes = individual_total
-
-    persona = "Enabled" if BOT_PERSONA["enabled"] else "Disabled"
-
-    # Get current Pacific Time for display
-    pt_now = datetime.now(ZoneInfo("US/Pacific"))
-    pt_time_str = pt_now.strftime("%Y-%m-%d %H:%M:%S PT")
-
-    # Calculate rate limit status
-    rate_limit_status = "✅ Normal"
-    if ai_usage_stats.get("rate_limited_until"):
-        if pt_now < ai_usage_stats["rate_limited_until"]:
-            remaining = (ai_usage_stats["rate_limited_until"] - pt_now).total_seconds()
-            rate_limit_status = f"🚫 Rate Limited ({int(remaining)}s remaining)"
+        import time
+        from datetime import timezone
+        
+        # Get various time representations with more precise timing
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        utc_now = datetime.now(timezone.utc)
+        pt_now = datetime.now(ZoneInfo("US/Pacific"))
+        system_time = datetime.now()
+        
+        # Get server system time info
+        system_timezone = str(system_time.astimezone().tzinfo)
+        
+        # Test database time with multiple queries for comparison
+        db_time = None
+        db_timezone = None
+        db_utc_time = None
+        try:
+            conn = db.get_connection()
+            if conn:
+                with conn.cursor() as cur:
+                    # Get database time in multiple formats
+                    cur.execute("""
+                        SELECT 
+                            NOW() as db_time,
+                            timezone('UTC', NOW()) as db_utc,
+                            CURRENT_SETTING('timezone') as db_timezone,
+                            EXTRACT(epoch FROM NOW()) as db_unix_timestamp
+                    """)
+                    result = cur.fetchone()
+                    if result:
+                        db_time = result[0]
+                        db_utc_time = result[1] 
+                        db_timezone = result[2]
+                        db_unix_timestamp = float(result[3]) if result[3] else None
+        except Exception as e:
+            db_time = f"Error: {str(e)}"
+        
+        # Check reminder system status with detailed diagnostics
+        reminder_task_running = check_due_reminders.is_running()
+        auto_action_task_running = check_auto_actions.is_running()
+        
+        # Test reminder database connection
+        reminder_db_test = "Unknown"
+        try:
+            test_reminders = db.get_due_reminders(uk_now + timedelta(hours=1))
+            reminder_db_test = f"✅ Connected ({len(test_reminders)} found)"
+        except Exception as e:
+            reminder_db_test = f"❌ Error: {str(e)}"
+        
+        # Calculate time differences and identify potential issues
+        time_diffs = {}
+        
+        # UK vs UTC should be 0 or 1 hour (depending on DST)
+        uk_utc_diff = (uk_now - utc_now).total_seconds()
+        time_diffs["uk_vs_utc"] = uk_utc_diff
+        
+        # System vs UK time difference
+        system_uk_diff = (system_time.astimezone(ZoneInfo("Europe/London")) - uk_now).total_seconds()
+        time_diffs["system_vs_uk"] = system_uk_diff
+        
+        # Database vs UK time difference (if available)
+        if db_time and isinstance(db_time, datetime):
+            if db_time.tzinfo is None:
+                # Assume database time is UTC if no timezone
+                db_time_uk = db_time.replace(tzinfo=timezone.utc).astimezone(ZoneInfo("Europe/London"))
+            else:
+                db_time_uk = db_time.astimezone(ZoneInfo("Europe/London"))
+            
+            db_uk_diff = (db_time_uk - uk_now).total_seconds()
+            time_diffs["db_vs_uk"] = db_uk_diff
+        
+        # Identify significant time discrepancies
+        issues_detected = []
+        if abs(uk_utc_diff) > 7200:  # More than 2 hours difference
+            issues_detected.append(f"⚠️ UK/UTC offset abnormal: {uk_utc_diff/3600:.1f}h (should be 0-1h)")
+        
+        if abs(system_uk_diff) > 300:  # More than 5 minutes difference  
+            issues_detected.append(f"⚠️ System clock drift: {system_uk_diff:.0f}s from UK time")
+        
+        if "db_vs_uk" in time_diffs and abs(time_diffs["db_vs_uk"]) > 300:
+            issues_detected.append(f"⚠️ Database clock drift: {time_diffs['db_vs_uk']:.0f}s from UK time")
+        
+        time_report = (
+            f"🕒 **COMPREHENSIVE TIME DIAGNOSTIC REPORT**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"**Bot Time References:**\n"
+            f"• **UK Time (Bot Primary):** {uk_now.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+            f"• **UTC Time:** {utc_now.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+            f"• **Pacific Time (AI Limits):** {pt_now.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+            f"• **System Local Time:** {system_time.strftime('%Y-%m-%d %H:%M:%S')} ({system_timezone})\n\n"
+            f"**Database Time Analysis:**\n"
+            f"• **Database NOW():** {db_time}\n"
+            f"• **Database Timezone:** {db_timezone}\n"
+            f"• **Database UTC:** {db_utc_time}\n\n"
+            f"**Time Synchronization Status:**\n"
+            f"• **UK vs UTC Offset:** {uk_utc_diff:.0f} seconds {'✅ Normal' if abs(uk_utc_diff) <= 7200 else '⚠️ Abnormal'}\n"
+            f"• **System vs UK:** {system_uk_diff:.0f} seconds {'✅ Normal' if abs(system_uk_diff) <= 60 else '⚠️ Drift detected'}\n"
+            f"• **Database vs UK:** {time_diffs.get('db_vs_uk', 'N/A'):.0f}s {'✅ Normal' if 'db_vs_uk' in time_diffs and abs(time_diffs['db_vs_uk']) <= 60 else '⚠️ May have drift'}\n\n"
+            f"**Reminder System Status:**\n"
+            f"• **Due Reminders Task:** {'✅ Active' if reminder_task_running else '❌ Stopped'}\n"
+            f"• **Auto-Action Task:** {'✅ Active' if auto_action_task_running else '❌ Stopped'}\n"
+            f"• **Database Connection:** {reminder_db_test}\n\n"
+        )
+        
+        if issues_detected:
+            time_report += f"**⚠️ ISSUES DETECTED:**\n"
+            for issue in issues_detected:
+                time_report += f"{issue}\n"
+            time_report += f"\n**🔧 RECOMMENDED ACTIONS:**\n"
+            time_report += f"• Run `!fixtimezone` to synchronize timezone settings\n"
+            time_report += f"• Check server system clock synchronization\n"
+            time_report += f"• Restart bot if time drift is severe (>10 minutes)\n\n"
         else:
-            ai_usage_stats["rate_limited_until"] = None
+            time_report += f"**✅ TIME SYNCHRONIZATION STATUS:** All systems within acceptable parameters\n\n"
+        
+        time_report += (
+            f"**Unix Timestamps (for debugging):**\n"
+            f"• **UK Time:** {int(uk_now.timestamp())}\n"
+            f"• **UTC Time:** {int(utc_now.timestamp())}\n"
+            f"• **System Time:** {int(system_time.timestamp())}\n\n"
+            f"*Analysis complete. Maximum time differential: {max(abs(diff) for diff in time_diffs.values() if isinstance(diff, (int, float))):.0f} seconds*"
+        )
+        
+        await ctx.send(time_report)
+        
+    except Exception as e:
+        await ctx.send(f"❌ **Time diagnostic error:** {str(e)}")
 
-    # Check daily/hourly limits approaching
-    daily_usage_percent = (ai_usage_stats["daily_requests"] / MAX_DAILY_REQUESTS) * 100 if MAX_DAILY_REQUESTS > 0 else 0
-    hourly_usage_percent = (
-        (ai_usage_stats["hourly_requests"] / MAX_HOURLY_REQUESTS) * 100 if MAX_HOURLY_REQUESTS > 0 else 0
-    )
 
-    if daily_usage_percent >= 90:
-        rate_limit_status = "⚠️ Daily Limit Warning"
-    elif hourly_usage_percent >= 90:
-        rate_limit_status = "⚠️ Hourly Limit Warning"
-    elif ai_usage_stats["consecutive_errors"] >= 3:
-        rate_limit_status = "🟡 Error Cooldown"
+@bot.command(name="fixtimezone")
+@commands.has_permissions(manage_messages=True)
+async def fix_timezone(ctx):
+    """Attempt to fix timezone and time synchronization issues"""
+    try:
+        await ctx.send("🔧 **Initiating timezone synchronization protocol...**")
+        
+        # Test current timezone data
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        utc_now = datetime.now(timezone.utc)
+        
+        # Calculate expected UK offset (should be 0 or 1 hour from UTC)
+        expected_offset = 0  # UTC+0 in winter, UTC+1 in summer
+        if uk_now.dst():
+            expected_offset = 3600  # 1 hour in summer (BST)
+        
+        actual_offset = (uk_now - utc_now).total_seconds()
+        
+        await ctx.send(f"🔍 **Current timezone analysis:**")
+        await ctx.send(f"• **Expected UK offset from UTC:** {expected_offset/3600:.1f} hours")
+        await ctx.send(f"• **Actual UK offset from UTC:** {actual_offset/3600:.1f} hours")
+        
+        timezone_issues = []
+        
+        # Check for timezone data issues
+        if abs(actual_offset - expected_offset) > 300:  # More than 5 minutes off
+            timezone_issues.append("UK timezone calculation incorrect")
+        
+        # Test database timezone settings
+        db_timezone_issue = None
+        try:
+            conn = db.get_connection()
+            if conn:
+                with conn.cursor() as cur:
+                    # Check and potentially fix database timezone
+                    cur.execute("SHOW timezone")
+                    current_tz = cur.fetchone()
+                    current_tz_value = current_tz[0] if current_tz else "Unknown"
+                    
+                    await ctx.send(f"• **Database timezone setting:** {current_tz_value}")
+                    
+                    # Test setting database timezone to UTC for consistency
+                    if current_tz_value.lower() not in ['utc', 'gmt']:
+                        await ctx.send("🔧 **Setting database timezone to UTC for consistency...**")
+                        cur.execute("SET timezone = 'UTC'")
+                        
+                        # Verify the change
+                        cur.execute("SHOW timezone")
+                        new_tz = cur.fetchone()
+                        new_tz_value = new_tz[0] if new_tz else "Unknown"
+                        
+                        if new_tz_value.upper() == 'UTC':
+                            await ctx.send("✅ **Database timezone set to UTC successfully**")
+                        else:
+                            timezone_issues.append(f"Failed to set database timezone (still {new_tz_value})")
+                    
+                    # Test database time after timezone fix
+                    cur.execute("SELECT NOW() as fixed_db_time")
+                    fixed_time_result = cur.fetchone()
+                    if fixed_time_result:
+                        fixed_db_time = fixed_time_result[0]
+                        if isinstance(fixed_db_time, datetime):
+                            db_utc = fixed_db_time.replace(tzinfo=timezone.utc)
+                            db_uk = db_utc.astimezone(ZoneInfo("Europe/London"))
+                            db_time_diff = (db_uk - uk_now).total_seconds()
+                            
+                            await ctx.send(f"• **Database time after fix:** {fixed_db_time}")
+                            await ctx.send(f"• **Database vs UK time:** {db_time_diff:.0f} seconds")
+                            
+                            if abs(db_time_diff) <= 60:
+                                await ctx.send("✅ **Database time synchronization: Normal**")
+                            else:
+                                timezone_issues.append(f"Database still has time drift ({db_time_diff:.0f}s)")
+                        
+        except Exception as e:
+            timezone_issues.append(f"Database timezone test failed: {str(e)}")
+        
+        # Test reminder system with current time
+        await ctx.send("🔍 **Testing reminder system with current time...**")
+        try:
+            # Create a test reminder for 1 minute from now
+            test_time = uk_now + timedelta(minutes=1)
+            reminder_id = db.add_reminder(
+                user_id=ctx.author.id,
+                reminder_text="Test reminder - timezone fix verification",
+                scheduled_time=test_time,
+                delivery_type="dm"
+            )
+            
+            if reminder_id:
+                await ctx.send(f"✅ **Test reminder created:** ID {reminder_id}, scheduled for {test_time.strftime('%H:%M:%S UK')}")
+                await ctx.send("📋 **Monitor your DMs in 1 minute to verify reminder delivery**")
+                
+                # Store test reminder ID for cleanup
+                await ctx.send("⚠️ **Note:** This test reminder will auto-deliver in 1 minute. Monitor background task logs.")
+            else:
+                timezone_issues.append("Failed to create test reminder")
+                
+        except Exception as e:
+            timezone_issues.append(f"Reminder system test failed: {str(e)}")
+        
+        # Summary of fixes applied
+        if not timezone_issues:
+            await ctx.send(
+                f"✅ **TIMEZONE SYNCHRONIZATION COMPLETE**\n\n"
+                f"All time systems are now properly synchronized. The 22-minute time discrepancy "
+                f"should be resolved if it was caused by timezone configuration issues.\n\n"
+                f"**Actions taken:**\n"
+                f"• Verified timezone calculations\n"
+                f"• Synchronized database timezone to UTC\n"
+                f"• Created test reminder for verification\n\n"
+                f"*Monitor the test reminder delivery to confirm fix effectiveness.*"
+            )
+        else:
+            issues_text = "\n• ".join(timezone_issues)
+            await ctx.send(
+                f"⚠️ **TIMEZONE FIX COMPLETED WITH ISSUES**\n\n"
+                f"Some synchronization problems persist:\n\n"
+                f"• {issues_text}\n\n"
+                f"**Additional steps may be required:**\n"
+                f"• Server system clock synchronization\n"
+                f"• Bot restart to reload timezone data\n"
+                f"• Manual system administrator intervention\n\n"
+                f"*Contact system administrator if issues persist.*"
+            )
+        
+    except Exception as e:
+        await ctx.send(f"❌ **Timezone fix error:** {str(e)}")
 
-    # AI Budget tracking status
-    ai_budget_info = (
-        f"📊 **AI Budget Tracking (Pacific Time):**\n"
-        f"• **Daily Usage:** {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS} requests ({daily_usage_percent:.1f}%)\n"
-        f"• **Hourly Usage:** {ai_usage_stats['hourly_requests']}/{MAX_HOURLY_REQUESTS} requests ({hourly_usage_percent:.1f}%)\n"
-        f"• **Rate Limit Status:** {rate_limit_status}\n"
-        f"• **Consecutive Errors:** {ai_usage_stats['consecutive_errors']}\n"
-        f"• **Current PT Time:** {pt_time_str}\n"
-        f"• **Next Daily Reset:** {(pt_now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).strftime('%Y-%m-%d 00:00:00 PT')}\n"
-        f"• **Last Request:** {ai_usage_stats['last_request_time'].strftime('%H:%M:%S PT') if ai_usage_stats['last_request_time'] else 'None'}"
-    )
 
-    await ctx.send(
-        f"🤖 Ash at your service.\n"
-        f"AI: {ai_status_message}\n"
-        f"Persona: {persona}\n"
-        f"Total strikes: {total_strikes}\n\n"
-        f"{ai_budget_info}"
-    )
+@bot.command(name="ashstatus")
+async def ash_status(ctx):
+    """Show bot status - works in DMs for authorized users and in guilds for mods"""
+    try:
+        # Custom permission checking that works in both DMs and guilds
+        is_authorized = False
+        
+        if ctx.guild is None:  # DM
+            # Allow JAM, JONESY, and moderators in DMs
+            if ctx.author.id in [JAM_USER_ID, JONESY_USER_ID]:
+                is_authorized = True
+            else:
+                # Check if user is a mod
+                is_authorized = await user_is_mod_by_id(ctx.author.id)
+        else:  # Guild
+            # Check standard mod permissions
+            is_authorized = await user_is_mod(ctx)
+        
+        # Fix: The generic response should only be shown to unauthorized users in guilds
+        # In DMs, unauthorized users should get a clearer message
+        if not is_authorized:
+            if ctx.guild is None:  # DM - be more specific about authorization
+                await ctx.send("⚠️ **Access denied.** System status diagnostics require elevated clearance. Authorization protocols restrict access to Captain Jonesy, Sir Decent Jam, and server moderators only.")
+            else:  # Guild - use the generic response
+                await ctx.send("Systems nominal, Sir Decent Jam. Awaiting Captain Jonesy's commands.")
+            return
+
+        # Use individual queries as fallback if bulk query fails
+        strikes_data = db.get_all_strikes()
+        total_strikes = sum(strikes_data.values())
+
+        # If bulk query returns 0 but we know there should be strikes, use individual queries
+        if total_strikes == 0:
+            # Known user IDs from the JSON file (fallback method)
+            known_users = [371536135580549122, 337833732901961729, 710570041220923402, 906475895907291156]
+            individual_total = 0
+            for user_id in known_users:
+                try:
+                    strikes = db.get_user_strikes(user_id)
+                    individual_total += strikes
+                except Exception:
+                    pass
+
+            if individual_total > 0:
+                total_strikes = individual_total
+
+        persona = "Enabled" if BOT_PERSONA["enabled"] else "Disabled"
+
+        # Get current Pacific Time for display
+        pt_now = datetime.now(ZoneInfo("US/Pacific"))
+        pt_time_str = pt_now.strftime("%Y-%m-%d %H:%M:%S PT")
+
+        # Calculate rate limit status
+        rate_limit_status = "✅ Normal"
+        if ai_usage_stats.get("rate_limited_until"):
+            if pt_now < ai_usage_stats["rate_limited_until"]:
+                remaining = (ai_usage_stats["rate_limited_until"] - pt_now).total_seconds()
+                rate_limit_status = f"🚫 Rate Limited ({int(remaining)}s remaining)"
+            else:
+                ai_usage_stats["rate_limited_until"] = None
+
+        # Check daily/hourly limits approaching
+        daily_usage_percent = (ai_usage_stats["daily_requests"] / MAX_DAILY_REQUESTS) * 100 if MAX_DAILY_REQUESTS > 0 else 0
+        hourly_usage_percent = (
+            (ai_usage_stats["hourly_requests"] / MAX_HOURLY_REQUESTS) * 100 if MAX_HOURLY_REQUESTS > 0 else 0
+        )
+
+        if daily_usage_percent >= 90:
+            rate_limit_status = "⚠️ Daily Limit Warning"
+        elif hourly_usage_percent >= 90:
+            rate_limit_status = "⚠️ Hourly Limit Warning"
+        elif ai_usage_stats["consecutive_errors"] >= 3:
+            rate_limit_status = "🟡 Error Cooldown"
+
+        # AI Budget tracking status
+        ai_budget_info = (
+            f"📊 **AI Budget Tracking (Pacific Time):**\n"
+            f"• **Daily Usage:** {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS} requests ({daily_usage_percent:.1f}%)\n"
+            f"• **Hourly Usage:** {ai_usage_stats['hourly_requests']}/{MAX_HOURLY_REQUESTS} requests ({hourly_usage_percent:.1f}%)\n"
+            f"• **Rate Limit Status:** {rate_limit_status}\n"
+            f"• **Consecutive Errors:** {ai_usage_stats['consecutive_errors']}\n"
+            f"• **Current PT Time:** {pt_time_str}\n"
+            f"• **Next Daily Reset:** {(pt_now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).strftime('%Y-%m-%d 00:00:00 PT')}\n"
+            f"• **Last Request:** {ai_usage_stats['last_request_time'].strftime('%H:%M:%S PT') if ai_usage_stats['last_request_time'] else 'None'}"
+        )
+
+        await ctx.send(
+            f"🤖 Ash at your service.\n"
+            f"AI: {ai_status_message}\n"
+            f"Persona: {persona}\n"
+            f"Total strikes: {total_strikes}\n\n"
+            f"{ai_budget_info}"
+        )
+        
+    except Exception as e:
+        await ctx.send(f"❌ **System diagnostic error:** {str(e)}")
 
 
 @bot.command(name="setpersona")
