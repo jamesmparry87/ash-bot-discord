@@ -420,7 +420,10 @@ FAQ_DATA = {
         "patterns": ["explain reminders", "reminder system", "remind"],
         "title": "⏰ **Reminder System Analysis**",
         "sections": [
-            {"title": "Purpose", "content": "Moderator tool for scheduling user reminders with optional automatic enforcement actions."},
+            {
+                "title": "Purpose",
+                "content": "Moderator tool for scheduling user reminders with optional automatic enforcement actions.",
+            },
             {
                 "title": "Access Control",
                 "content": "Moderators only (requires 'Manage Messages' permission). Users cannot set reminders for themselves or others.",
@@ -473,7 +476,10 @@ FAQ_DATA = {
         "patterns": ["explain trivia", "trivia tuesday", "trivia system"],
         "title": "🧠 **Trivia Tuesday System Analysis**",
         "sections": [
-            {"title": "Purpose", "content": "Weekly community trivia events with comprehensive question management and participation tracking."},
+            {
+                "title": "Purpose",
+                "content": "Weekly community trivia events with comprehensive question management and participation tracking.",
+            },
             {
                 "title": "Question Management (Moderators)",
                 "content": [
@@ -527,7 +533,10 @@ FAQ_DATA = {
         "patterns": ["explain announcements", "announcement system", "announce"],
         "title": "📢 **Announcement System Analysis**",
         "sections": [
-            {"title": "Purpose", "content": "High-priority communication system for server-wide announcements with special formatting and delivery."},
+            {
+                "title": "Purpose",
+                "content": "High-priority communication system for server-wide announcements with special formatting and delivery.",
+            },
             {
                 "title": "Access Control",
                 "content": [

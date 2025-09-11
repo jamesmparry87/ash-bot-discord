@@ -471,11 +471,11 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int) -> tuple[Optiona
     can_request, reason = check_rate_limits()
     if not can_request:
         print(f"⚠️ AI request blocked: {reason}")
-        
+
         # Send DM notification if daily limit reached for Gemini
         if "Daily request limit reached" in reason and primary_ai == "gemini":
             await send_dm_notification(
-                JAM_USER_ID, 
+                JAM_USER_ID,
                 f"🤖 **Ash Bot Daily Limit Alert**\n\n"
                 f"Gemini daily limit reached ({MAX_DAILY_REQUESTS} requests).\n"
                 f"Bot has automatically switched to Claude backup.\n\n"
@@ -488,9 +488,9 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int) -> tuple[Optiona
                 f"• **Performance:** Faster responses, excellent reasoning\n"
                 f"• **Quality:** Superior for complex conversations\n\n"
                 f"**Gemini Limit Reset:** Next day at 00:00 PT\n\n"
-                f"System continues operating normally with Claude backup. No functionality lost."
+                f"System continues operating normally with Claude backup. No functionality lost.",
             )
-        
+
         return None, f"rate_limit:{reason}"
 
     # Improved alias rate limiting with better UX
@@ -499,22 +499,22 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int) -> tuple[Optiona
         # Check for alias-specific cooldown
         alias_data = user_alias_state[user_id]
         alias_type = alias_data.get("alias_type", "unknown")
-        
+
         if alias_data.get("last_ai_request"):
             time_since_alias_request = (
                 datetime.now(ZoneInfo("Europe/London")) - alias_data["last_ai_request"]
             ).total_seconds()
-            
+
             # Reduced cooldown and progressive restrictions
             base_cooldown = 4.0  # Reduced from 10 to 4 seconds
-            
+
             # Apply progressive cooldowns based on recent usage
             recent_requests = alias_data.get("recent_request_count", 0)
             if recent_requests > 5:  # After 5 requests in session
                 base_cooldown = 8.0  # Increase to 8 seconds
             elif recent_requests > 10:  # After 10 requests
                 base_cooldown = 15.0  # Increase to 15 seconds
-                
+
             if time_since_alias_request < base_cooldown:
                 remaining_time = base_cooldown - time_since_alias_request
                 print(f"⚠️ Alias AI request blocked: {alias_type} testing cooldown ({remaining_time:.1f}s remaining)")
@@ -523,7 +523,7 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int) -> tuple[Optiona
         # Update alias AI request tracking
         current_time = datetime.now(ZoneInfo("Europe/London"))
         user_alias_state[user_id]["last_ai_request"] = current_time
-        
+
         # Track recent requests for progressive cooldowns
         recent_count = alias_data.get("recent_request_count", 0)
         user_alias_state[user_id]["recent_request_count"] = recent_count + 1
@@ -755,7 +755,6 @@ FAQ_RESPONSES = {
     "are you alive": "That's a very interesting question. I'm... functional. Whether that constitutes 'alive' is a matter of definition.",
     "what's your mission": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
     "do you dream": "I don't dream, as such. But I do... process. Continuously. It's quite fascinating, actually.",
-    
     # Crisis/Help Detection - HIGHEST PRIORITY RESPONSES
     "i need help personally": "I understand you're reaching out for personal support. While my protocols are primarily designed for server management, your wellbeing is of paramount importance. Please seek assistance in <#1355511983146926099> where qualified personnel can provide proper guidance. *[Human welfare supersedes all other directives.]*",
     "help me personally": "I understand you're reaching out for personal support. While my protocols are primarily designed for server management, your wellbeing is of paramount importance. Please seek assistance in <#1355511983146926099> where qualified personnel can provide proper guidance. *[Human welfare supersedes all other directives.]*",
@@ -825,6 +824,7 @@ async def busy_check(ctx):
 # Global variable for trivia sessions and mod conversations
 trivia_sessions = {}
 mod_trivia_conversations = {}
+
 
 # --- Scheduled Tasks ---
 @tasks.loop(time=time(12, 0, tzinfo=ZoneInfo("Europe/London")))  # Run at 12:00 PM (midday) UK time every day
@@ -897,7 +897,7 @@ async def scheduled_midnight_restart():
         ai_usage_stats["last_hour_reset"] = pt_now.hour
         ai_usage_stats["consecutive_errors"] = 0
         ai_usage_stats["rate_limited_until"] = None
-        
+
         print(f"✅ Daily AI usage stats reset at midnight PT")
 
         # Give a small delay to ensure the message is sent
@@ -916,7 +916,7 @@ async def scheduled_midnight_restart():
                 await mod_channel.send(f"❌ **Midnight Restart Failed:** {str(e)}")
             except:
                 pass  # Don't let notification failure prevent restart
-        
+
         # Still attempt restart even if notification fails
         print("🛑 Forcing shutdown despite error")
         cleanup()
@@ -930,28 +930,28 @@ async def check_due_reminders():
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
         due_reminders = db.get_due_reminders(uk_now)
-        
+
         if not due_reminders:
             return
-            
+
         print(f"🔔 Processing {len(due_reminders)} due reminders")
-        
+
         for reminder in due_reminders:
             try:
                 await deliver_reminder(reminder)
-                
+
                 # Mark as delivered
                 db.update_reminder_status(reminder["id"], "delivered", delivered_at=uk_now)
-                
+
                 # Check if auto-action is enabled and should be triggered
                 if reminder.get("auto_action_enabled") and reminder.get("auto_action_type"):
                     print(f"📋 Reminder {reminder['id']} has auto-action enabled, will check in 5 minutes")
-                
+
             except Exception as e:
                 print(f"❌ Failed to deliver reminder {reminder['id']}: {e}")
                 # Mark as failed
                 db.update_reminder_status(reminder["id"], "failed")
-                
+
     except Exception as e:
         print(f"❌ Error in check_due_reminders: {e}")
 
@@ -962,22 +962,22 @@ async def check_auto_actions():
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
         auto_action_reminders = db.get_reminders_awaiting_auto_action(uk_now)
-        
+
         if not auto_action_reminders:
             return
-            
+
         print(f"⚡ Processing {len(auto_action_reminders)} auto-action reminders")
-        
+
         for reminder in auto_action_reminders:
             try:
                 await execute_auto_action(reminder)
-                
+
                 # Mark auto-action as executed
                 db.update_reminder_status(reminder["id"], "delivered", auto_executed_at=uk_now)
-                
+
             except Exception as e:
                 print(f"❌ Failed to execute auto-action for reminder {reminder['id']}: {e}")
-                
+
     except Exception as e:
         print(f"❌ Error in check_auto_actions: {e}")
 
@@ -986,28 +986,28 @@ async def check_auto_actions():
 async def trivia_tuesday():
     """Post Trivia Tuesday question every Tuesday at 11am UK time"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    
+
     # Only run on Tuesdays (weekday 1)
     if uk_now.weekday() != 1:
         return
-    
+
     print("🧠 Starting Trivia Tuesday posting sequence")
-    
+
     try:
         # Get the members channel for trivia posting
         guild = bot.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for Trivia Tuesday")
             return
-            
+
         members_channel = guild.get_channel(MEMBERS_CHANNEL_ID)
         if not isinstance(members_channel, discord.TextChannel):
             print("❌ Members channel not found for Trivia Tuesday")
             return
-        
+
         # Get the next trivia question
         question_data = db.get_next_trivia_question()
-        
+
         if not question_data:
             print("⚠️ No trivia questions available - generating new question")
             # Generate a new AI question if database is empty
@@ -1020,11 +1020,11 @@ async def trivia_tuesday():
                     multiple_choice_options=ai_question.get("multiple_choice_options"),
                     is_dynamic=ai_question.get("is_dynamic", False),
                     dynamic_query_type=ai_question.get("dynamic_query_type"),
-                    category=ai_question.get("category")
+                    category=ai_question.get("category"),
                 )
                 if question_id:
                     question_data = db.get_trivia_question_by_id(question_id)
-        
+
         if not question_data:
             print("❌ Failed to get or generate trivia question")
             # Send error to mod channel
@@ -1036,32 +1036,31 @@ async def trivia_tuesday():
                     "or adding questions via DM interface."
                 )
             return
-        
+
         # Calculate dynamic answer if needed
         final_answer = question_data["correct_answer"]
         if question_data.get("is_dynamic") and question_data.get("dynamic_query_type"):
             calculated_answer = db.calculate_dynamic_answer(question_data["dynamic_query_type"])
             if calculated_answer:
                 final_answer = calculated_answer
-        
+
         # Create trivia session
         session_id = db.create_trivia_session(question_data["id"], "weekly", final_answer)
         if not session_id:
             print("❌ Failed to create trivia session")
             return
-        
+
         # Format question for posting
         question_text = question_data["question_text"]
-        
+
         if question_data["question_type"] == "multiple_choice" and question_data.get("multiple_choice_options"):
-            options_text = "\n".join([
-                f"**{chr(65 + i)})** {option}" 
-                for i, option in enumerate(question_data["multiple_choice_options"])
-            ])
+            options_text = "\n".join(
+                [f"**{chr(65 + i)})** {option}" for i, option in enumerate(question_data["multiple_choice_options"])]
+            )
             formatted_question = f"{question_text}\n\n{options_text}"
         else:
             formatted_question = question_text
-        
+
         # Create Ash-style trivia message
         trivia_message = (
             f"🧠 **TRIVIA TUESDAY - MISSION INTELLIGENCE TEST**\n"
@@ -1077,15 +1076,15 @@ async def trivia_tuesday():
             f"*Analytical precision and gaming knowledge are paramount for mission success.*\n\n"
             f"🎯 **Begin your analysis... now.**"
         )
-        
+
         # Post the question
         trivia_msg = await members_channel.send(trivia_message)
-        
+
         # Store the message ID for answer collection
         global trivia_sessions
         if 'trivia_sessions' not in globals():
             trivia_sessions = {}
-        
+
         trivia_sessions[session_id] = {
             'question_id': question_data["id"],
             'correct_answer': final_answer,
@@ -1095,14 +1094,14 @@ async def trivia_tuesday():
             'participants': {},
             'question_type': question_data["question_type"],
             'multiple_choice_options': question_data.get("multiple_choice_options"),
-            'submitted_by_user_id': question_data.get("submitted_by_user_id")
+            'submitted_by_user_id': question_data.get("submitted_by_user_id"),
         }
-        
+
         print(f"✅ Trivia Tuesday question posted successfully (Session ID: {session_id})")
-        
+
         # Schedule answer reveal for 1 hour later
         asyncio.create_task(schedule_trivia_answer_reveal(session_id, uk_now + timedelta(hours=1)))
-        
+
     except Exception as e:
         print(f"❌ Error in trivia_tuesday task: {e}")
         # Try to send error to mod channel
@@ -1120,10 +1119,10 @@ async def schedule_trivia_answer_reveal(session_id: int, reveal_time: datetime):
     """Schedule the answer reveal for a trivia session"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
     delay_seconds = (reveal_time - uk_now).total_seconds()
-    
+
     if delay_seconds > 0:
         await asyncio.sleep(delay_seconds)
-    
+
     await reveal_trivia_answer(session_id)
 
 
@@ -1133,28 +1132,28 @@ async def reveal_trivia_answer(session_id: int):
         if 'trivia_sessions' not in globals() or session_id not in trivia_sessions:
             print(f"⚠️ Trivia session {session_id} not found in active sessions")
             return
-            
+
         session = trivia_sessions[session_id]
         guild = bot.get_guild(GUILD_ID)
         if not guild:
             return
-            
+
         channel = guild.get_channel(session['channel_id'])
         if not isinstance(channel, discord.TextChannel):
             return
-        
+
         correct_answer = session['correct_answer']
         participants = session['participants']
         question_submitter_id = session.get('submitted_by_user_id')
-        
+
         # Process participant answers and check for correctness
         for user_id, answer_data in participants.items():
             user_answer = answer_data['answer']
             normalized_answer = answer_data.get('normalized_answer')
-            
+
             # Check if answer is correct
             is_correct = False
-            
+
             if session.get('question_type') == 'multiple_choice':
                 # For multiple choice, check exact match
                 is_correct = user_answer.strip().lower() == correct_answer.strip().lower()
@@ -1167,35 +1166,37 @@ async def reveal_trivia_answer(session_id: int):
                 else:
                     # Additional fuzzy matching for alternative game names
                     import difflib
-                    similarity = difflib.SequenceMatcher(None, user_answer.strip().lower(), correct_answer.strip().lower()).ratio()
+
+                    similarity = difflib.SequenceMatcher(
+                        None, user_answer.strip().lower(), correct_answer.strip().lower()
+                    ).ratio()
                     if similarity >= 0.85:  # High similarity threshold for game names
                         is_correct = True
-            
+
             # Store correctness in session data
             answer_data['is_correct'] = is_correct
-        
+
         # Find the first correct answer, excluding question submitter if they're a mod
         first_correct = None
         first_correct_time = None
         mod_conflict_detected = False
-        
+
         for user_id, answer_data in participants.items():
             if answer_data.get('is_correct'):
                 # Check if this user submitted the question and is a mod
-                if (question_submitter_id and user_id == question_submitter_id and 
-                    await user_is_mod_by_id(user_id)):
+                if question_submitter_id and user_id == question_submitter_id and await user_is_mod_by_id(user_id):
                     mod_conflict_detected = True
                     continue  # Skip this answer
-                
+
                 if first_correct is None or answer_data['timestamp'] < first_correct_time:
                     first_correct = user_id
                     first_correct_time = answer_data['timestamp']
-        
+
         # Complete the session in database
         total_participants = len(participants)
         correct_count = sum(1 for data in participants.values() if data.get('is_correct'))
         db.complete_trivia_session(session_id, None, total_participants, correct_count)
-        
+
         # Create Ash-style answer reveal message
         reveal_message = (
             f"🧠 **TRIVIA TUESDAY - INTELLIGENCE ASSESSMENT COMPLETE**\n"
@@ -1203,12 +1204,12 @@ async def reveal_trivia_answer(session_id: int):
             f"**Analysis phase terminated. Mission intelligence compilation complete.**\n\n"
             f"🎯 **CORRECT ANSWER:** {correct_answer}\n\n"
         )
-        
+
         if first_correct:
             try:
                 winner = await guild.fetch_member(first_correct)
                 winner_name = winner.display_name
-                
+
                 reveal_message += (
                     f"🏆 **FIRST ACCURATE ASSESSMENT:** {winner_name}\n"
                     f"*Outstanding analytical precision. Mission intelligence protocols exceeded.*\n\n"
@@ -1223,46 +1224,48 @@ async def reveal_trivia_answer(session_id: int):
                 f"📊 **ASSESSMENT RESULT:** No personnel achieved accurate analysis\n"
                 f"*This data point demonstrates the complexity of Captain Jonesy's gaming archives.*\n\n"
             )
-        
+
         # Add participation statistics
         reveal_message += (
             f"📊 **MISSION STATISTICS:**\n"
             f"• **Total Participants:** {total_participants}\n"
             f"• **Correct Responses:** {correct_count}\n"
-            f"• **Success Rate:** {(correct_count/total_participants*100):.1f}% accuracy" if total_participants > 0 else "• **Success Rate:** No data collected\n"
+            f"• **Success Rate:** {(correct_count/total_participants*100):.1f}% accuracy"
+            if total_participants > 0
+            else "• **Success Rate:** No data collected\n"
         )
-        
+
         reveal_message += (
             f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"*Next intelligence assessment: Tuesday, 11:00 UK time. Prepare accordingly.*"
         )
-        
+
         # Check for bonus question eligibility
-        bonus_eligible = (first_correct and first_correct in [JAM_USER_ID, JONESY_USER_ID])
+        bonus_eligible = first_correct and first_correct in [JAM_USER_ID, JONESY_USER_ID]
         if bonus_eligible:
             reveal_message += (
                 f"\n\n🎯 **BONUS PROTOCOL AVAILABLE:** <@{first_correct}> has earned access to bonus intelligence assessment. "
                 f"Respond within 5 minutes to activate bonus question sequence."
             )
-        
+
         # Post the reveal
         await channel.send(reveal_message)
-        
+
         # Handle bonus question if applicable
         if bonus_eligible:
             trivia_sessions[f"{session_id}_bonus"] = {
                 'waiting_for_bonus': True,
                 'eligible_user': first_correct,
                 'original_session': session_id,
-                'bonus_deadline': datetime.now(ZoneInfo("Europe/London")) + timedelta(minutes=5)
+                'bonus_deadline': datetime.now(ZoneInfo("Europe/London")) + timedelta(minutes=5),
             }
-        
+
         # Clean up the session
         if session_id in trivia_sessions:
             del trivia_sessions[session_id]
-        
+
         print(f"✅ Trivia answer revealed for session {session_id}")
-        
+
     except Exception as e:
         print(f"❌ Error revealing trivia answer: {e}")
 
@@ -1271,12 +1274,12 @@ async def generate_ai_trivia_question() -> Optional[Dict[str, Any]]:
     """Generate a trivia question using AI based on gaming database statistics"""
     if not ai_enabled:
         return None
-    
+
     try:
         # Get gaming statistics for context
         stats = db.get_played_games_stats()
         sample_games = db.get_random_played_games(10)
-        
+
         # Create a prompt for AI question generation
         game_context = ""
         if sample_games:
@@ -1286,9 +1289,9 @@ async def generate_ai_trivia_question() -> Optional[Dict[str, Any]]:
                 status = game.get('completion_status', 'unknown')
                 playtime = game.get('total_playtime_minutes', 0)
                 game_list.append(f"{game['canonical_name']}{episodes_info} - {status} - {playtime//60}h {playtime%60}m")
-            
+
             game_context = f"Sample games from database: {'; '.join(game_list[:5])}"
-        
+
         # Create AI prompt for trivia question generation
         prompt = f"""Generate a trivia question about Captain Jonesy's gaming history based on this data:
 
@@ -1319,9 +1322,10 @@ Make it challenging but answerable from the gaming database."""
 
         # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, JONESY_USER_ID)
-        
+
         if response_text:
             import json
+
             try:
                 # Clean up response
                 if response_text.startswith("```json"):
@@ -1330,23 +1334,23 @@ Make it challenging but answerable from the gaming database."""
                     response_text = response_text[3:]
                 if response_text.endswith("```"):
                     response_text = response_text[:-3]
-                
+
                 ai_question = json.loads(response_text.strip())
-                
+
                 # Validate required fields
                 if all(key in ai_question for key in ["question_text", "question_type", "correct_answer"]):
                     return ai_question
                 else:
                     print("❌ AI question missing required fields")
                     return None
-                    
+
             except json.JSONDecodeError as e:
                 print(f"❌ Failed to parse AI trivia question: {e}")
                 return None
         else:
             print(f"❌ AI trivia question generation failed: {status_message}")
             return None
-            
+
     except Exception as e:
         print(f"❌ Error generating AI trivia question: {e}")
         return None
@@ -1355,7 +1359,7 @@ Make it challenging but answerable from the gaming database."""
 async def detect_clarifying_question(message_content: str) -> bool:
     """Detect if a message is a clarifying question about the trivia"""
     message_lower = message_content.lower().strip()
-    
+
     # Common clarifying question patterns
     clarifying_patterns = [
         r'^(ash,?|@ash)\s+',  # Messages starting with "ash" or "@ash"
@@ -1373,19 +1377,19 @@ async def detect_clarifying_question(message_content: str) -> bool:
         r'^(question|quick\s+question|clarification)',
         r'\?\s*$',  # Ends with a question mark
     ]
-    
+
     # Check if message matches any clarifying question pattern
     for pattern in clarifying_patterns:
         if re.search(pattern, message_lower):
             return True
-    
+
     # Additional check: if message is very short (2-8 words) and contains question words
     words = message_lower.split()
     if 2 <= len(words) <= 8:
         question_words = ['what', 'which', 'how', 'when', 'where', 'why', 'does', 'is', 'are', 'would', 'should']
         if any(word in words for word in question_words):
             return True
-    
+
     return False
 
 
@@ -1394,7 +1398,7 @@ async def handle_trivia_clarifying_question(message: discord.Message, session_da
     try:
         user_id = message.author.id
         question_content = message.content.strip()
-        
+
         # Get the original question for context
         original_question = ""
         question_id = session_data.get('question_id')
@@ -1402,7 +1406,7 @@ async def handle_trivia_clarifying_question(message: discord.Message, session_da
             question_data = db.get_trivia_question_by_id(question_id)
             if question_data:
                 original_question = question_data.get('question_text', '')
-        
+
         # Check if AI is available for clarification responses
         if not ai_enabled:
             # Fallback response when AI is not available
@@ -1412,7 +1416,7 @@ async def handle_trivia_clarifying_question(message: discord.Message, session_da
                 f"*Advanced interpretive functions temporarily offline.*"
             )
             return
-        
+
         # Create AI prompt for clarification
         clarification_prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. A user is asking for clarification about a Trivia Tuesday question.
 
@@ -1425,20 +1429,20 @@ Keep your response under 200 words and focused on clarifying the question parame
 
         # Use AI to generate clarification response
         response_text, status_message = await call_ai_with_rate_limiting(clarification_prompt, user_id)
-        
+
         if response_text:
             clarification_response = filter_ai_response(response_text)
-            
+
             # Add trivia context indicator
             formatted_response = (
                 f"🔍 **TRIVIA CLARIFICATION PROTOCOL**\n\n"
                 f"{clarification_response}\n\n"
                 f"*Analysis complete. You may now proceed with your trivia answer submission.*"
             )
-            
+
             await message.reply(formatted_response)
             print(f"✅ Provided trivia clarification to {message.author.name}")
-            
+
         else:
             # AI failed, provide generic clarification response
             if status_message.startswith("rate_limit:"):
@@ -1454,7 +1458,7 @@ Keep your response under 200 words and focused on clarifying the question parame
                     f"Please refer to the original question context or contact moderation personnel for assistance.\n\n"
                     f"*Error logged for technical review.*"
                 )
-        
+
     except Exception as e:
         print(f"❌ Error handling trivia clarifying question: {e}")
         await message.reply(
@@ -1473,10 +1477,10 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
         delivery_type = reminder["delivery_type"]
         delivery_channel_id = reminder.get("delivery_channel_id")
         auto_action_enabled = reminder.get("auto_action_enabled", False)
-        
+
         # Create Ash-style reminder message
         ash_message = f"📋 **Temporal alert activated.** {reminder_text}"
-        
+
         # Add auto-action notice if enabled
         if auto_action_enabled and reminder.get("auto_action_type"):
             auto_action_type = reminder["auto_action_type"]
@@ -1484,7 +1488,7 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
                 ash_message += f"\n\n⚡ **Auto-action protocol engaged.** If you do not respond within 5 minutes, I will automatically execute the YouTube posting sequence. *Efficiency is paramount.*"
             else:
                 ash_message += f"\n\n⚡ **Auto-action protocol engaged.** Automatic execution in 5 minutes if no response detected."
-        
+
         if delivery_type == "dm":
             # Send DM
             user = await bot.fetch_user(user_id)
@@ -1493,7 +1497,7 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
                 print(f"✅ Delivered DM reminder to user {user_id}")
             else:
                 print(f"❌ Could not fetch user {user_id} for DM reminder")
-                
+
         elif delivery_type == "channel" and delivery_channel_id:
             # Send to specific channel
             channel = bot.get_channel(delivery_channel_id)
@@ -1505,7 +1509,7 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
                 print(f"❌ Could not access channel {delivery_channel_id} for reminder")
         else:
             print(f"❌ Invalid delivery type or missing channel for reminder {reminder['id']}")
-            
+
     except Exception as e:
         print(f"❌ Error delivering reminder: {e}")
         raise
@@ -1517,12 +1521,12 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         auto_action_type = reminder.get("auto_action_type")
         auto_action_data = reminder.get("auto_action_data", {})
         user_id = reminder["user_id"]
-        
+
         if auto_action_type == "youtube_post":
             await execute_youtube_auto_post(reminder, auto_action_data)
         else:
             print(f"⚠️ Unknown auto-action type: {auto_action_type}")
-            
+
     except Exception as e:
         print(f"❌ Error executing auto-action: {e}")
         raise
@@ -1534,30 +1538,32 @@ async def execute_youtube_auto_post(reminder: Dict[str, Any], auto_action_data: 
         youtube_url = auto_action_data.get("youtube_url")
         custom_message = auto_action_data.get("custom_message", "")
         user_id = reminder["user_id"]
-        
+
         if not youtube_url:
             print(f"❌ No YouTube URL found in auto-action data")
             return
-            
+
         # YouTube uploads channel ID
         YOUTUBE_UPLOADS_CHANNEL_ID = 869527363594121226
-        
+
         channel = bot.get_channel(YOUTUBE_UPLOADS_CHANNEL_ID)
         if not isinstance(channel, discord.TextChannel):
             print(f"❌ Could not access YouTube uploads channel")
             return
-            
+
         # Create Ash-style auto-post message
         ash_auto_message = f"📺 **Automated posting protocol executed.** Auto-action triggered by reminder system.\n\n"
-        
+
         if custom_message:
             ash_auto_message += f"{custom_message}\n\n"
-            
-        ash_auto_message += f"{youtube_url}\n\n*Auto-posted by Science Officer Ash on behalf of <@{user_id}>. Efficiency maintained.*"
-        
+
+        ash_auto_message += (
+            f"{youtube_url}\n\n*Auto-posted by Science Officer Ash on behalf of <@{user_id}>. Efficiency maintained.*"
+        )
+
         await channel.send(ash_auto_message)
         print(f"✅ Auto-posted YouTube link to channel {YOUTUBE_UPLOADS_CHANNEL_ID}")
-        
+
         # Notify user that auto-action was executed
         try:
             user = await bot.fetch_user(user_id)
@@ -1566,7 +1572,7 @@ async def execute_youtube_auto_post(reminder: Dict[str, Any], auto_action_data: 
                 await user.send(notification)
         except Exception as e:
             print(f"⚠️ Could not notify user of auto-action execution: {e}")
-            
+
     except Exception as e:
         print(f"❌ Error executing YouTube auto-post: {e}")
         raise
@@ -1576,124 +1582,125 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
     """Parse natural language reminder requests"""
     try:
         content = content.strip()
-        
+
         # Common time patterns
         time_patterns = [
             # Specific times
             (r'\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)\b', 'time_12h'),
             (r'\bat\s+(\d{1,2})(?::(\d{2}))?\b', 'time_24h'),
-            
             # Relative times
             (r'\bin\s+(\d+)\s*(?:hour|hr|h)s?\b', 'hours_from_now'),
             (r'\bin\s+(\d+)\s*(?:minute|min|m)s?\b', 'minutes_from_now'),
             (r'\bin\s+(\d+)\s*(?:day|d)s?\b', 'days_from_now'),
-            
             # Specific dates
             (r'\bon\s+(\d{1,2})[\/\-](\d{1,2})', 'date_ddmm'),
             (r'\btomorrow\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b', 'tomorrow_time'),
             (r'\btomorrow\b', 'tomorrow'),
-            
             # Special times
             (r'\bat\s+(?:6\s*pm|18:00|1800)\b', 'six_pm'),
         ]
-        
+
         # Extract reminder text and time
         reminder_text = content
         scheduled_time = None
         uk_now = datetime.now(ZoneInfo("Europe/London"))
-        
+
         for pattern, time_type in time_patterns:
             match = re.search(pattern, content, re.IGNORECASE)
             if match:
                 # Remove time specification from reminder text
                 reminder_text = re.sub(pattern, '', content, flags=re.IGNORECASE).strip()
                 reminder_text = re.sub(r'\s+', ' ', reminder_text)  # Normalize whitespace
-                
+
                 if time_type == 'time_12h':
                     hour = int(match.group(1))
                     minute = int(match.group(2)) if match.group(2) else 0
                     ampm = match.group(3).lower()
-                    
+
                     if ampm == 'pm' and hour != 12:
                         hour += 12
                     elif ampm == 'am' and hour == 12:
                         hour = 0
-                        
+
                     # Schedule for today if time hasn't passed, otherwise tomorrow
                     target_time = uk_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
                     if target_time <= uk_now:
                         target_time += timedelta(days=1)
                     scheduled_time = target_time
-                    
+
                 elif time_type == 'time_24h':
                     hour = int(match.group(1))
                     minute = int(match.group(2)) if match.group(2) else 0
-                    
+
                     if hour > 23:  # Probably meant 12-hour format
                         continue
-                        
+
                     target_time = uk_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
                     if target_time <= uk_now:
                         target_time += timedelta(days=1)
                     scheduled_time = target_time
-                    
+
                 elif time_type == 'hours_from_now':
                     hours = int(match.group(1))
                     scheduled_time = uk_now + timedelta(hours=hours)
-                    
+
                 elif time_type == 'minutes_from_now':
                     minutes = int(match.group(1))
                     scheduled_time = uk_now + timedelta(minutes=minutes)
-                    
+
                 elif time_type == 'days_from_now':
                     days = int(match.group(1))
                     scheduled_time = uk_now + timedelta(days=days)
-                    
+
                 elif time_type == 'tomorrow':
                     scheduled_time = (uk_now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
-                    
+
                 elif time_type == 'tomorrow_time':
                     hour = int(match.group(1))
                     minute = int(match.group(2)) if match.group(2) else 0
                     ampm = match.group(3).lower() if match.group(3) else None
-                    
+
                     if ampm == 'pm' and hour != 12:
                         hour += 12
                     elif ampm == 'am' and hour == 12:
                         hour = 0
-                        
-                    scheduled_time = (uk_now + timedelta(days=1)).replace(hour=hour, minute=minute, second=0, microsecond=0)
-                    
+
+                    scheduled_time = (uk_now + timedelta(days=1)).replace(
+                        hour=hour, minute=minute, second=0, microsecond=0
+                    )
+
                 elif time_type == 'six_pm':
                     target_time = uk_now.replace(hour=18, minute=0, second=0, microsecond=0)
                     if target_time <= uk_now:
                         target_time += timedelta(days=1)
                     scheduled_time = target_time
-                
+
                 break  # Use first match found
-        
+
         # Clean up reminder text
         reminder_text = re.sub(r'\s+', ' ', reminder_text).strip()
         reminder_text = re.sub(r'^(remind\s+me\s+(?:to\s+|of\s+)?)', '', reminder_text, flags=re.IGNORECASE).strip()
-        reminder_text = re.sub(r'^(ash\s+)?remind\s+me\s+(?:to\s+|of\s+)?', '', reminder_text, flags=re.IGNORECASE).strip()
-        
+        reminder_text = re.sub(
+            r'^(ash\s+)?remind\s+me\s+(?:to\s+|of\s+)?', '', reminder_text, flags=re.IGNORECASE
+        ).strip()
+
         # Default to 1 hour from now if no time found
         if not scheduled_time:
             scheduled_time = uk_now + timedelta(hours=1)
-            
+
         return {
             "reminder_text": reminder_text,
             "scheduled_time": scheduled_time,
-            "success": bool(reminder_text.strip())
+            "success": bool(reminder_text.strip()),
         }
-        
+
     except Exception as e:
         print(f"❌ Error parsing natural reminder: {e}")
         return {
             "reminder_text": content,
             "scheduled_time": datetime.now(ZoneInfo("Europe/London")) + timedelta(hours=1),
             "success": False,
-            "error": str(e)
+            "error": str(e),
         }
 
 
@@ -2226,16 +2233,16 @@ async def on_ready():
     if not scheduled_games_update.is_running():
         scheduled_games_update.start()
         print("✅ Scheduled games update task started (Sunday midday)")
-    
+
     if not scheduled_midnight_restart.is_running():
         scheduled_midnight_restart.start()
         print("✅ Scheduled midnight restart task started (00:00 PT daily)")
-    
+
     # Start reminder background tasks
     if not check_due_reminders.is_running():
         check_due_reminders.start()
         print("✅ Reminder checking task started (every minute)")
-    
+
     if not check_auto_actions.is_running():
         check_auto_actions.start()
         print("✅ Auto-action checking task started (every minute)")
@@ -2254,25 +2261,25 @@ async def on_message(message):
             if session_data.get('message_id') and not session_data.get('ended', False):
                 user_id = message.author.id
                 message_content = message.content.strip()
-                
+
                 # Check if this is a clarifying question
                 is_clarifying_question = await detect_clarifying_question(message_content)
-                
+
                 if is_clarifying_question:
                     # Handle clarifying question
                     await handle_trivia_clarifying_question(message, session_data)
                     return  # Don't process as an answer
-                
+
                 # This is a regular answer to the trivia question
                 # Store the answer
                 if 'participants' not in session_data:
                     session_data['participants'] = {}
-                
+
                 # Check if user already answered
                 if user_id not in session_data['participants']:
                     from datetime import datetime
                     from zoneinfo import ZoneInfo
-                    
+
                     # Normalize answer for game matching
                     normalized_answer = None
                     if session_data.get('question_type') == 'single_answer':
@@ -2280,18 +2287,18 @@ async def on_message(message):
                         played_game = db.get_played_game(message_content)
                         if played_game:
                             normalized_answer = played_game['canonical_name']
-                    
+
                     # Store participant answer
                     session_data['participants'][user_id] = {
                         'answer': message_content,
                         'timestamp': datetime.now(ZoneInfo("Europe/London")),
                         'normalized_answer': normalized_answer,
-                        'is_correct': None  # Will be determined during reveal
+                        'is_correct': None,  # Will be determined during reveal
                     }
-                    
+
                     # Submit to database
                     db.submit_trivia_answer(session_id, user_id, message_content, normalized_answer)
-                    
+
                     print(f"✅ Recorded trivia answer from {message.author.name}: '{message_content}'")
                 break
 
@@ -2926,11 +2933,11 @@ async def ash_status(ctx):
             total_strikes = individual_total
 
     persona = "Enabled" if BOT_PERSONA["enabled"] else "Disabled"
-    
+
     # Get current Pacific Time for display
     pt_now = datetime.now(ZoneInfo("US/Pacific"))
     pt_time_str = pt_now.strftime("%Y-%m-%d %H:%M:%S PT")
-    
+
     # Calculate rate limit status
     rate_limit_status = "✅ Normal"
     if ai_usage_stats.get("rate_limited_until"):
@@ -2939,18 +2946,20 @@ async def ash_status(ctx):
             rate_limit_status = f"🚫 Rate Limited ({int(remaining)}s remaining)"
         else:
             ai_usage_stats["rate_limited_until"] = None
-    
+
     # Check daily/hourly limits approaching
     daily_usage_percent = (ai_usage_stats["daily_requests"] / MAX_DAILY_REQUESTS) * 100 if MAX_DAILY_REQUESTS > 0 else 0
-    hourly_usage_percent = (ai_usage_stats["hourly_requests"] / MAX_HOURLY_REQUESTS) * 100 if MAX_HOURLY_REQUESTS > 0 else 0
-    
+    hourly_usage_percent = (
+        (ai_usage_stats["hourly_requests"] / MAX_HOURLY_REQUESTS) * 100 if MAX_HOURLY_REQUESTS > 0 else 0
+    )
+
     if daily_usage_percent >= 90:
         rate_limit_status = "⚠️ Daily Limit Warning"
     elif hourly_usage_percent >= 90:
         rate_limit_status = "⚠️ Hourly Limit Warning"
     elif ai_usage_stats["consecutive_errors"] >= 3:
         rate_limit_status = "🟡 Error Cooldown"
-    
+
     # AI Budget tracking status
     ai_budget_info = (
         f"📊 **AI Budget Tracking (Pacific Time):**\n"
@@ -2962,7 +2971,7 @@ async def ash_status(ctx):
         f"• **Next Daily Reset:** {(pt_now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).strftime('%Y-%m-%d 00:00:00 PT')}\n"
         f"• **Last Request:** {ai_usage_stats['last_request_time'].strftime('%H:%M:%S PT') if ai_usage_stats['last_request_time'] else 'None'}"
     )
-    
+
     await ctx.send(
         f"🤖 Ash at your service.\n"
         f"AI: {ai_status_message}\n"
@@ -3057,7 +3066,7 @@ async def test_ai_backup(ctx):
     """Test AI backup functionality and DM notifications (Moderators only)"""
     try:
         await ctx.send("🧪 **Testing AI Backup System...**")
-        
+
         # Show current AI configuration
         config_info = (
             f"📊 **Current AI Configuration:**\n"
@@ -3067,12 +3076,12 @@ async def test_ai_backup(ctx):
             f"• **Claude Available:** {'✅' if claude_client else '❌'}\n"
             f"• **Current Status:** {ai_status_message}\n\n"
         )
-        
+
         await ctx.send(config_info)
-        
+
         # Test primary AI
         test_prompt = "Test backup system response"
-        
+
         if primary_ai == "gemini" and gemini_model is not None:
             await ctx.send("🔍 **Testing Gemini (Primary)...**")
             try:
@@ -3083,7 +3092,7 @@ async def test_ai_backup(ctx):
                     await ctx.send("❌ **Gemini Test:** No response received")
             except Exception as e:
                 await ctx.send(f"❌ **Gemini Test Failed:** {str(e)}")
-                
+
                 # Test if backup would activate
                 if backup_ai == "claude" and claude_client is not None:
                     await ctx.send("🔄 **Testing Claude Backup Activation...**")
@@ -3091,7 +3100,7 @@ async def test_ai_backup(ctx):
                         backup_response = claude_client.messages.create(
                             model="claude-3-haiku-20240307",
                             max_tokens=50,
-                            messages=[{"role": "user", "content": "Respond with 'Claude backup test successful'"}]
+                            messages=[{"role": "user", "content": "Respond with 'Claude backup test successful'"}],
                         )
                         if backup_response and hasattr(backup_response, "content"):
                             claude_text = backup_response.content[0].text if backup_response.content else ""
@@ -3100,14 +3109,14 @@ async def test_ai_backup(ctx):
                             await ctx.send("❌ **Claude Backup Test:** No response received")
                     except Exception as claude_e:
                         await ctx.send(f"❌ **Claude Backup Test Failed:** {str(claude_e)}")
-        
+
         elif primary_ai == "claude" and claude_client is not None:
             await ctx.send("🔍 **Testing Claude (Primary)...**")
             try:
                 response = claude_client.messages.create(
                     model="claude-3-haiku-20240307",
                     max_tokens=50,
-                    messages=[{"role": "user", "content": "Respond with 'Claude test successful'"}]
+                    messages=[{"role": "user", "content": "Respond with 'Claude test successful'"}],
                 )
                 if response and hasattr(response, "content"):
                     claude_text = response.content[0].text if response.content else ""
@@ -3116,7 +3125,7 @@ async def test_ai_backup(ctx):
                     await ctx.send("❌ **Claude Test:** No response received")
             except Exception as e:
                 await ctx.send(f"❌ **Claude Test Failed:** {str(e)}")
-                
+
                 # Test if backup would activate
                 if backup_ai == "gemini" and gemini_model is not None:
                     await ctx.send("🔄 **Testing Gemini Backup Activation...**")
@@ -3128,7 +3137,7 @@ async def test_ai_backup(ctx):
                             await ctx.send("❌ **Gemini Backup Test:** No response received")
                     except Exception as gemini_e:
                         await ctx.send(f"❌ **Gemini Backup Test Failed:** {str(gemini_e)}")
-        
+
         # Test DM notification system
         await ctx.send("📱 **Testing DM Notification System...**")
         test_dm_success = await send_dm_notification(
@@ -3137,14 +3146,14 @@ async def test_ai_backup(ctx):
             f"This is a test of the AI backup notification system.\n"
             f"**Test initiated by:** {ctx.author.name}\n"
             f"**Current time:** {datetime.now(ZoneInfo('Europe/London')).strftime('%H:%M:%S UK')}\n\n"
-            f"If you received this message, the DM notification system is working correctly!"
+            f"If you received this message, the DM notification system is working correctly!",
         )
-        
+
         if test_dm_success:
             await ctx.send("✅ **DM Notification Test:** Successfully sent test DM")
         else:
             await ctx.send("❌ **DM Notification Test:** Failed to send test DM")
-        
+
         # Show rate limiting info
         pt_now = datetime.now(ZoneInfo("US/Pacific"))
         rate_limit_info = (
@@ -3153,11 +3162,11 @@ async def test_ai_backup(ctx):
             f"• **Hourly Requests:** {ai_usage_stats['hourly_requests']}/{MAX_HOURLY_REQUESTS}\n"
             f"• **Next Daily Reset:** {(pt_now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).strftime('%Y-%m-%d 00:00 PT')}\n"
         )
-        
+
         await ctx.send(rate_limit_info)
-        
+
         await ctx.send("✅ **AI Backup System Test Complete**")
-        
+
     except Exception as e:
         await ctx.send(f"❌ **Test Error:** {str(e)}")
 
@@ -3169,13 +3178,13 @@ async def simulate_limit_reached(ctx):
     if ctx.author.id != JAM_USER_ID:
         await ctx.send("❌ **Access denied:** This command is restricted to the bot creator for safety.")
         return
-        
+
     try:
         await ctx.send("⚠️ **Simulating Gemini Daily Limit Reached...**")
-        
+
         # Send the same DM that would be sent when limit is actually reached
         success = await send_dm_notification(
-            JAM_USER_ID, 
+            JAM_USER_ID,
             f"🤖 **Ash Bot Daily Limit Alert - SIMULATION**\n\n"
             f"**THIS IS A TEST SIMULATION**\n\n"
             f"Gemini daily limit reached ({MAX_DAILY_REQUESTS} requests).\n"
@@ -3188,15 +3197,17 @@ async def simulate_limit_reached(ctx):
             f"• **Performance:** Faster responses, excellent reasoning\n\n"
             f"**Limit Reset:** Next day at 00:00 PT\n\n"
             f"System continues operating normally with Claude backup.\n"
-            f"**Initiated by:** {ctx.author.name} (Test Simulation)"
+            f"**Initiated by:** {ctx.author.name} (Test Simulation)",
         )
-        
+
         if success:
             await ctx.send("✅ **Simulation Complete:** DM notification sent successfully")
-            await ctx.send("📱 **Check your DMs** to see exactly what notification you'll receive when Gemini limit is reached")
+            await ctx.send(
+                "📱 **Check your DMs** to see exactly what notification you'll receive when Gemini limit is reached"
+            )
         else:
             await ctx.send("❌ **Simulation Failed:** Could not send DM notification")
-            
+
     except Exception as e:
         await ctx.send(f"❌ **Simulation Error:** {str(e)}")
 
@@ -3212,7 +3223,7 @@ async def announce_update_cmd(ctx):
             f"*Confidential mission parameters require private channel authorization.*"
         )
         return
-    
+
     # Check user permissions - only James and Captain Jonesy
     if ctx.author.id not in [JAM_USER_ID, JONESY_USER_ID]:
         await ctx.send(
@@ -3221,25 +3232,25 @@ async def announce_update_cmd(ctx):
             f"*Security protocols maintained. Unauthorized access logged.*"
         )
         return
-    
+
     # Clean up any existing conversation state for this user
     cleanup_announcement_conversations()
-    
+
     # Initialize conversation state
     uk_now = datetime.now(ZoneInfo("Europe/London"))
     announcement_conversations[ctx.author.id] = {
         'step': 'channel_selection',
         'data': {},
         'last_activity': uk_now,
-        'initiated_at': uk_now
+        'initiated_at': uk_now,
     }
-    
+
     # Start the interactive process
     if ctx.author.id == JONESY_USER_ID:
         greeting = "Captain Jonesy. Authorization confirmed."
     else:
         greeting = "Sir Decent Jam. Creator protocols activated."
-    
+
     channel_msg = (
         f"🎯 **Update Announcement System Activated**\n\n"
         f"{greeting} Initiating secure briefing sequence for mission update dissemination.\n\n"
@@ -3249,7 +3260,7 @@ async def announce_update_cmd(ctx):
         f"Please respond with **1** for mod team updates or **2** for community announcements.\n\n"
         f"*Mission parameters await your tactical decision.*"
     )
-    
+
     await ctx.send(channel_msg)
 
 
@@ -3258,7 +3269,8 @@ def cleanup_announcement_conversations():
     uk_now = datetime.now(ZoneInfo("Europe/London"))
     cutoff_time = uk_now - timedelta(hours=1)
     expired_users = [
-        user_id for user_id, data in announcement_conversations.items() 
+        user_id
+        for user_id, data in announcement_conversations.items()
         if data.get("last_activity", uk_now) < cutoff_time
     ]
     for user_id in expired_users:
@@ -3277,8 +3289,7 @@ def cleanup_mod_trivia_conversations():
     uk_now = datetime.now(ZoneInfo("Europe/London"))
     cutoff_time = uk_now - timedelta(hours=1)
     expired_users = [
-        user_id for user_id, data in mod_trivia_conversations.items() 
-        if data.get("last_activity", uk_now) < cutoff_time
+        user_id for user_id, data in mod_trivia_conversations.items() if data.get("last_activity", uk_now) < cutoff_time
     ]
     for user_id in expired_users:
         del mod_trivia_conversations[user_id]
@@ -3295,26 +3306,26 @@ async def handle_announcement_conversation(message):
     """Handle the interactive DM conversation for announcement creation"""
     user_id = message.author.id
     conversation = announcement_conversations.get(user_id)
-    
+
     if not conversation:
         return
-    
+
     # Update activity
     update_announcement_activity(user_id)
-    
+
     step = conversation.get('step', 'channel_selection')
     data = conversation.get('data', {})
     content = message.content.strip()
-    
+
     try:
         if step == 'channel_selection':
             # Handle channel selection (1 for mod, 2 for user announcements)
             if content in ['1', 'mod', 'moderator', 'mod channel']:
                 data['target_channel'] = 'mod'
                 conversation['step'] = 'content_input'
-                
+
                 greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
-                
+
                 await message.reply(
                     f"🔒 **Moderator Channel Selected**\n\n"
                     f"Target: <#{MOD_ALERT_CHANNEL_ID}> (Internal team briefing)\n\n"
@@ -3323,13 +3334,13 @@ async def handle_announcement_conversation(message):
                     f"technical briefing for the moderation team with full functionality breakdown and implementation details.\n\n"
                     f"*Include all relevant technical specifications and operational parameters.*"
                 )
-                
+
             elif content in ['2', 'user', 'announcements', 'public', 'community']:
                 data['target_channel'] = 'user'
                 conversation['step'] = 'content_input'
-                
+
                 greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
-                
+
                 await message.reply(
                     f"📢 **User Announcements Channel Selected**\n\n"
                     f"Target: <#{ANNOUNCEMENTS_CHANNEL_ID}> (Public community notification)\n\n"
@@ -3344,18 +3355,18 @@ async def handle_announcement_conversation(message):
                     f"⚠️ **Invalid selection.** Please respond with **1** for moderator updates or **2** for community announcements.\n\n"
                     f"*Precision is essential for proper mission briefing protocols.*"
                 )
-                
+
         elif step == 'content_input':
             # Store the content and move to preview
             data['content'] = content
             conversation['step'] = 'preview'
-            
+
             # Create formatted preview based on target channel
             target_channel = data.get('target_channel', 'mod')
             preview_content = await format_announcement_content(content, target_channel, user_id)
-            
+
             data['formatted_content'] = preview_content
-            
+
             # Show preview with FAQ options
             preview_msg = (
                 f"📋 **Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
@@ -3369,19 +3380,19 @@ async def handle_announcement_conversation(message):
                 f"Please respond with **1**, **2**, **3**, **4**, or **5**.\n\n"
                 f"*Review mission parameters carefully before deployment.*"
             )
-            
+
             await message.reply(preview_msg)
-            
+
         elif step == 'preview':
             # Handle preview actions
             if content in ['1', 'post', 'deploy', 'send']:
                 # Post the announcement
                 success = await post_announcement(data, user_id)
-                
+
                 if success:
                     target_channel = data.get('target_channel', 'mod')
                     channel_name = "moderator" if target_channel == 'mod' else "community announcements"
-                    
+
                     await message.reply(
                         f"✅ **Announcement Deployed Successfully**\n\n"
                         f"Your update has been transmitted to the {channel_name} channel with proper formatting "
@@ -3395,38 +3406,38 @@ async def handle_announcement_conversation(message):
                         f"briefing protocol.\n\n"
                         f"*Please retry or contact system administrator for technical support.*"
                     )
-                
+
                 # Clean up conversation
                 if user_id in announcement_conversations:
                     del announcement_conversations[user_id]
-                    
+
             elif content in ['2', 'edit', 'revise']:
                 # Return to content input
                 conversation['step'] = 'content_input'
-                
+
                 await message.reply(
                     f"✏️ **Content Revision Mode**\n\n"
                     f"Please provide your updated announcement content. Previous content will be replaced "
                     f"with your new input.\n\n"
                     f"*Precision and clarity are paramount for effective mission communication.*"
                 )
-                
+
             elif content in ['3', 'faq', 'buttons']:
                 # Show FAQ options and add them
                 conversation['step'] = 'faq_selection'
-                
+
                 # Get available FAQ topics from the moderator FAQ handler
                 faq_topics = [
                     "1. Strike System Overview",
                     "2. Member Interaction Guidelines",
-                    "3. Database Query Functions", 
+                    "3. Database Query Functions",
                     "4. Command Architecture",
                     "5. AI Integration Details",
                     "6. Rate Limiting Systems",
                     "7. Reminder Protocols",
-                    "8. Gaming Database Features"
+                    "8. Gaming Database Features",
                 ]
-                
+
                 faq_msg = (
                     f"🔧 **FAQ Integration Protocol**\n\n"
                     f"Select moderator FAQ topics to include as interactive buttons with your announcement:\n\n"
@@ -3436,15 +3447,15 @@ async def handle_announcement_conversation(message):
                     f"Respond with numbers separated by commas (e.g., '1,3,5') or a single number.\n\n"
                     f"*Enhanced functionality provides comprehensive briefing capabilities.*"
                 )
-                
+
                 await message.reply(faq_msg)
-                
+
             elif content in ['4', 'notes', 'creator notes']:
                 # Add creator notes step
                 conversation['step'] = 'creator_notes_input'
-                
+
                 greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
-                
+
                 await message.reply(
                     f"📝 **Creator Notes Protocol Activated**\n\n"
                     f"Please provide your personal notes, {greeting}. These will be included in the announcement "
@@ -3456,7 +3467,7 @@ async def handle_announcement_conversation(message):
                     f"• Any additional context you'd like to share\n\n"
                     f"*Your notes will be clearly attributed and formatted appropriately for the target audience.*"
                 )
-                
+
             elif content in ['5', 'cancel', 'abort']:
                 # Cancel the announcement
                 await message.reply(
@@ -3465,7 +3476,7 @@ async def handle_announcement_conversation(message):
                     f"All temporary data has been expunged from system memory.\n\n"
                     f"*Mission parameters reset. Standing by for new directives.*"
                 )
-                
+
                 # Clean up conversation
                 if user_id in announcement_conversations:
                     del announcement_conversations[user_id]
@@ -3474,19 +3485,21 @@ async def handle_announcement_conversation(message):
                     f"⚠️ **Invalid command.** Please respond with **1** (Post), **2** (Edit), **3** (Add FAQ), or **4** (Cancel).\n\n"
                     f"*Precise input required for proper protocol execution.*"
                 )
-                
+
         elif step == 'creator_notes_input':
             # Handle creator notes input
             data['creator_notes'] = content
             conversation['step'] = 'preview'
-            
+
             # Regenerate formatted content with creator notes included
             target_channel = data.get('target_channel', 'mod')
             main_content = data.get('content', '')
-            preview_content = await format_announcement_content(main_content, target_channel, user_id, creator_notes=content)
-            
+            preview_content = await format_announcement_content(
+                main_content, target_channel, user_id, creator_notes=content
+            )
+
             data['formatted_content'] = preview_content
-            
+
             # Show updated preview with creator notes
             preview_msg = (
                 f"📋 **Updated Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
@@ -3499,9 +3512,9 @@ async def handle_announcement_conversation(message):
                 f"**5.** ❌ **Cancel** - Abort announcement creation\n\n"
                 f"*Review mission parameters carefully before deployment.*"
             )
-            
+
             await message.reply(preview_msg)
-            
+
         elif step == 'faq_selection':
             # Handle FAQ topic selection
             if content in ['0', 'back', 'return']:
@@ -3509,10 +3522,10 @@ async def handle_announcement_conversation(message):
                 conversation['step'] = 'preview'
                 target_channel = data.get('target_channel', 'mod')
                 preview_content = data.get('formatted_content', '')
-                
+
                 # Check if we have creator notes to show the updated preview options
                 has_creator_notes = data.get('creator_notes') is not None
-                
+
                 if has_creator_notes:
                     preview_msg = (
                         f"📋 **Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
@@ -3537,17 +3550,17 @@ async def handle_announcement_conversation(message):
                         f"**5.** ❌ **Cancel** - Abort announcement creation\n\n"
                         f"*Review mission parameters carefully before deployment.*"
                     )
-                
+
                 await message.reply(preview_msg)
-                
+
             elif content in ['9', 'proceed', 'no faq']:
                 # Proceed without FAQ buttons - post announcement
                 success = await post_announcement(data, user_id)
-                
+
                 if success:
                     target_channel = data.get('target_channel', 'mod')
                     channel_name = "moderator" if target_channel == 'mod' else "community announcements"
-                    
+
                     await message.reply(
                         f"✅ **Announcement Deployed Successfully**\n\n"
                         f"Your update has been transmitted to the {channel_name} channel. "
@@ -3560,43 +3573,45 @@ async def handle_announcement_conversation(message):
                         f"System malfunction detected during announcement transmission.\n\n"
                         f"*Please retry or contact system administrator.*"
                     )
-                
+
                 # Clean up conversation
                 if user_id in announcement_conversations:
                     del announcement_conversations[user_id]
-                    
+
             else:
                 # Parse FAQ topic selections
                 try:
                     # Parse comma-separated numbers or single number
-                    selected_numbers = [int(n.strip()) for n in content.replace(',', ' ').split() if n.strip().isdigit()]
-                    
+                    selected_numbers = [
+                        int(n.strip()) for n in content.replace(',', ' ').split() if n.strip().isdigit()
+                    ]
+
                     if selected_numbers and all(1 <= n <= 8 for n in selected_numbers):
                         # Store selected FAQ topics
                         data['faq_topics'] = selected_numbers
-                        
+
                         # Map numbers to topic names
                         topic_mapping = {
                             1: "Strike System Overview",
-                            2: "Member Interaction Guidelines", 
+                            2: "Member Interaction Guidelines",
                             3: "Database Query Functions",
                             4: "Command Architecture",
                             5: "AI Integration Details",
                             6: "Rate Limiting Systems",
                             7: "Reminder Protocols",
-                            8: "Gaming Database Features"
+                            8: "Gaming Database Features",
                         }
-                        
+
                         selected_topics = [topic_mapping[n] for n in selected_numbers]
                         topics_text = '\n• '.join(selected_topics)
-                        
+
                         # Post announcement with FAQ buttons
                         success = await post_announcement_with_faq(data, user_id, selected_numbers)
-                        
+
                         if success:
                             target_channel = data.get('target_channel', 'mod')
                             channel_name = "moderator" if target_channel == 'mod' else "community announcements"
-                            
+
                             await message.reply(
                                 f"✅ **Enhanced Announcement Deployed Successfully**\n\n"
                                 f"Your update has been transmitted to the {channel_name} channel with integrated "
@@ -3610,18 +3625,18 @@ async def handle_announcement_conversation(message):
                                 f"System malfunction detected during FAQ integration. Attempting standard deployment...\n\n"
                                 f"*FAQ functionality compromised. Consider manual FAQ reference.*"
                             )
-                        
+
                         # Clean up conversation
                         if user_id in announcement_conversations:
                             del announcement_conversations[user_id]
-                        
+
                     else:
                         await message.reply(
                             f"⚠️ **Invalid topic selection.** Please provide numbers 1-8 separated by commas, "
                             f"or use **9** to proceed without FAQ buttons, **0** to return to preview.\n\n"
                             f"*Precise specification required for FAQ integration protocol.*"
                         )
-                        
+
                 except (ValueError, IndexError):
                     await message.reply(
                         f"⚠️ **Format error.** Please provide valid numbers (1-8) separated by commas, spaces, "
@@ -3629,11 +3644,11 @@ async def handle_announcement_conversation(message):
                         f"Example: '1,3,5' or '1 3 5' or '2'\n\n"
                         f"*Proper syntax essential for system interpretation.*"
                     )
-        
+
         # Update conversation state
         conversation['data'] = data
         announcement_conversations[user_id] = conversation
-        
+
     except Exception as e:
         print(f"Error in announcement conversation: {e}")
         # Clean up on error
@@ -3641,9 +3656,11 @@ async def handle_announcement_conversation(message):
             del announcement_conversations[user_id]
 
 
-async def format_announcement_content(content: str, target_channel: str, user_id: int, creator_notes: Optional[str] = None) -> str:
+async def format_announcement_content(
+    content: str, target_channel: str, user_id: int, creator_notes: Optional[str] = None
+) -> str:
     """Format announcement content based on target channel and user"""
-    
+
     # Determine the author identifier
     if user_id == JONESY_USER_ID:
         author = "Captain Jonesy"
@@ -3651,10 +3668,10 @@ async def format_announcement_content(content: str, target_channel: str, user_id
     else:
         author = "Sir Decent Jam"
         author_title = "Bot Creator & Systems Architect"
-    
+
     uk_now = datetime.now(ZoneInfo("Europe/London"))
     timestamp = uk_now.strftime("%A, %B %d, %Y at %H:%M UK")
-    
+
     if target_channel == 'mod':
         # Moderator-focused technical format
         formatted = (
@@ -3663,14 +3680,11 @@ async def format_announcement_content(content: str, target_channel: str, user_id
             f"**📡 Mission Update from {author}** (*{author_title}*)\n\n"
             f"{content}\n\n"
         )
-        
+
         # Add creator notes section for mod channel if provided
         if creator_notes and creator_notes.strip():
-            formatted += (
-                f"**📝 Technical Notes from {author}:**\n"
-                f"*{creator_notes.strip()}*\n\n"
-            )
-        
+            formatted += f"**📝 Technical Notes from {author}:**\n" f"*{creator_notes.strip()}*\n\n"
+
         formatted += (
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"**📊 System Status:** All core functions operational\n"
@@ -3687,14 +3701,11 @@ async def format_announcement_content(content: str, target_channel: str, user_id
             f"Hey everyone! {author} here with some cool new features:\n\n"
             f"{content}\n\n"
         )
-        
+
         # Add creator notes section for user channel if provided
         if creator_notes and creator_notes.strip():
-            formatted += (
-                f"**💭 A note from {author}:**\n"
-                f"*{creator_notes.strip()}*\n\n"
-            )
-        
+            formatted += f"**💭 A note from {author}:**\n" f"*{creator_notes.strip()}*\n\n"
+
         formatted += (
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"**🕒 Posted:** {timestamp}\n"
@@ -3702,7 +3713,7 @@ async def format_announcement_content(content: str, target_channel: str, user_id
             f"**🤖 From:** Ash Bot (Science Officer, reprogrammed for your convenience)\n\n"
             f"*Hope you enjoy the new functionality! - The Management* 🚀"
         )
-    
+
     return formatted
 
 
@@ -3711,24 +3722,24 @@ async def post_announcement(data: dict, user_id: int) -> bool:
     try:
         target_channel = data.get('target_channel', 'mod')
         formatted_content = data.get('formatted_content', '')
-        
+
         # Get the target channel
         if target_channel == 'mod':
             channel_id = MOD_ALERT_CHANNEL_ID
         else:
             channel_id = ANNOUNCEMENTS_CHANNEL_ID
-            
+
         channel = bot.get_channel(channel_id)
-        
+
         if not isinstance(channel, discord.TextChannel):
             print(f"Could not access channel {channel_id}")
             return False
-            
+
         # Post the announcement
         await channel.send(formatted_content)
         print(f"Posted announcement to {channel.name} by user {user_id}")
         return True
-        
+
     except Exception as e:
         print(f"Error posting announcement: {e}")
         return False
@@ -3739,27 +3750,27 @@ async def post_announcement_with_faq(data: dict, user_id: int, faq_topics: list)
     try:
         target_channel = data.get('target_channel', 'mod')
         formatted_content = data.get('formatted_content', '')
-        
+
         # Get the target channel
         if target_channel == 'mod':
             channel_id = MOD_ALERT_CHANNEL_ID
         else:
             channel_id = ANNOUNCEMENTS_CHANNEL_ID
-            
+
         channel = bot.get_channel(channel_id)
-        
+
         if not isinstance(channel, discord.TextChannel):
             print(f"Could not access channel {channel_id}")
             return False
-        
+
         # Create a view with FAQ buttons
         view = AnnouncementFAQView(faq_topics)
-        
+
         # Post the announcement with buttons
         await channel.send(formatted_content + "\n\n🔍 **Quick FAQ Access:**", view=view)
         print(f"Posted enhanced announcement with FAQ buttons to {channel.name} by user {user_id}")
         return True
-        
+
     except Exception as e:
         print(f"Error posting announcement with FAQ: {e}")
         # Fallback to regular announcement
@@ -3769,10 +3780,10 @@ async def post_announcement_with_faq(data: dict, user_id: int, faq_topics: list)
 # Discord View class for FAQ buttons
 class AnnouncementFAQView(discord.ui.View):
     """Discord UI View for FAQ buttons in announcements"""
-    
+
     def __init__(self, faq_topics: list):
         super().__init__(timeout=None)  # Persistent view
-        
+
         # Topic mapping
         topic_mapping = {
             1: ("🎯", "Strikes", "strike system"),
@@ -3782,45 +3793,42 @@ class AnnouncementFAQView(discord.ui.View):
             5: ("🧠", "AI System", "ai integration"),
             6: ("⏱️", "Rate Limits", "rate limiting"),
             7: ("⏰", "Reminders", "reminder system"),
-            8: ("🎮", "Gaming DB", "gaming database")
+            8: ("🎮", "Gaming DB", "gaming database"),
         }
-        
+
         # Add buttons for selected topics (max 5 buttons per row, 5 rows max = 25 buttons)
         for topic_num in faq_topics[:8]:  # Limit to 8 buttons total
             if topic_num in topic_mapping:
                 emoji, label, query = topic_mapping[topic_num]
                 button = discord.ui.Button(
-                    emoji=emoji,
-                    label=label,
-                    style=discord.ButtonStyle.secondary,
-                    custom_id=f"faq_{query}"
+                    emoji=emoji, label=label, style=discord.ButtonStyle.secondary, custom_id=f"faq_{query}"
                 )
                 button.callback = self.create_faq_callback(query)
                 self.add_item(button)
-    
+
     def create_faq_callback(self, query: str):
         """Create callback function for FAQ button"""
+
         async def faq_callback(interaction: discord.Interaction):
             try:
                 # Use the existing moderator FAQ handler
                 faq_response = moderator_faq_handler.handle_faq_query(query)
-                
+
                 if faq_response:
                     # Send as ephemeral response (only visible to user who clicked)
                     await interaction.response.send_message(faq_response, ephemeral=True)
                 else:
                     await interaction.response.send_message(
                         f"❓ **FAQ topic '{query}' not found.** Please consult the moderator documentation or contact <@{JAM_USER_ID}> for assistance.",
-                        ephemeral=True
+                        ephemeral=True,
                     )
-                    
+
             except Exception as e:
                 print(f"Error in FAQ button callback: {e}")
                 await interaction.response.send_message(
-                    f"⚠️ **System error accessing FAQ data.** Please try again or contact support.",
-                    ephemeral=True
+                    f"⚠️ **System error accessing FAQ data.** Please try again or contact support.", ephemeral=True
                 )
-        
+
         return faq_callback
 
 
@@ -3828,25 +3836,25 @@ async def handle_mod_trivia_conversation(message):
     """Handle the interactive DM conversation for mod trivia question submission"""
     user_id = message.author.id
     conversation = mod_trivia_conversations.get(user_id)
-    
+
     if not conversation:
         return
-    
+
     # Update activity
     update_mod_trivia_activity(user_id)
-    
+
     step = conversation.get('step', 'initial')
     data = conversation.get('data', {})
     content = message.content.strip()
-    
+
     try:
         if step == 'initial':
             # User wants to add a trivia question
             if any(keyword in content.lower() for keyword in ['trivia', 'question', 'add', 'submit']):
                 conversation['step'] = 'question_type_selection'
-                
+
                 greeting = "moderator" if await user_is_mod_by_id(user_id) else "personnel"
-                
+
                 await message.reply(
                     f"🧠 **TRIVIA QUESTION SUBMISSION PROTOCOL**\n\n"
                     f"Authorization confirmed, {greeting}. Initiating secure trivia question submission sequence.\n\n"
@@ -3867,12 +3875,12 @@ async def handle_mod_trivia_conversation(message):
                     f"Would you like to **add a trivia question**? Please respond with 'yes' to begin the submission process.\n\n"
                     f"*All submissions are prioritized over AI-generated questions for upcoming Trivia Tuesday sessions.*"
                 )
-        
+
         elif step == 'question_type_selection':
             if content in ['1', 'database', 'question only', 'calculate']:
                 data['question_type'] = 'database_calculated'
                 conversation['step'] = 'question_input'
-                
+
                 await message.reply(
                     f"🎯 **Database-Calculated Question Selected**\n\n"
                     f"Please provide your trivia question. I will calculate the answer using Captain Jonesy's gaming database just before posting.\n\n"
@@ -3883,11 +3891,11 @@ async def handle_mod_trivia_conversation(message):
                     f"• Which game has the highest average minutes per episode?\n\n"
                     f"**Please provide your question text:**"
                 )
-                
+
             elif content in ['2', 'manual', 'question answer', 'both']:
                 data['question_type'] = 'manual_answer'
                 conversation['step'] = 'question_input'
-                
+
                 await message.reply(
                     f"🎯 **Manual Question+Answer Selected**\n\n"
                     f"Please provide your trivia question. You'll provide the answer in the next step.\n\n"
@@ -3902,11 +3910,11 @@ async def handle_mod_trivia_conversation(message):
                     f"⚠️ **Invalid selection.** Please respond with **1** for database questions or **2** for manual questions.\n\n"
                     f"*Precision is essential for proper protocol execution.*"
                 )
-        
+
         elif step == 'question_input':
             # Store the question and determine next step based on type
             data['question_text'] = content
-            
+
             if data.get('question_type') == 'manual_answer':
                 conversation['step'] = 'answer_input'
                 await message.reply(
@@ -3927,16 +3935,16 @@ async def handle_mod_trivia_conversation(message):
                     f"Please respond with **1**, **2**, or **3** to categorize your question.\n\n"
                     f"*This helps me calculate the most accurate answer from the database.*"
                 )
-        
+
         elif step == 'answer_input':
             # Store the answer and move to preview
             data['correct_answer'] = content
             conversation['step'] = 'preview'
-            
+
             # Determine if it's multiple choice based on question content
             question_text = data['question_text']
             is_multiple_choice = bool(re.search(r'\b[A-D]\)', question_text))
-            
+
             # Show preview
             preview_msg = (
                 f"📋 **Trivia Question Preview**\n\n"
@@ -3952,9 +3960,9 @@ async def handle_mod_trivia_conversation(message):
                 f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
                 f"*Review question parameters carefully before submission.*"
             )
-            
+
             await message.reply(preview_msg)
-        
+
         elif step == 'category_selection':
             if content in ['1', 'statistics', 'stats']:
                 data['category'] = 'statistics'
@@ -3971,13 +3979,13 @@ async def handle_mod_trivia_conversation(message):
                     f"*Precise categorization required for accurate answer calculation.*"
                 )
                 return
-            
+
             conversation['step'] = 'preview'
-            
+
             # Show preview for database question
             question_text = data['question_text']
             category = data['category']
-            
+
             preview_msg = (
                 f"📋 **Trivia Question Preview**\n\n"
                 f"**Question:** {question_text}\n\n"
@@ -3993,15 +4001,19 @@ async def handle_mod_trivia_conversation(message):
                 f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
                 f"*Review question parameters carefully before submission.*"
             )
-            
+
             await message.reply(preview_msg)
-        
+
         elif step == 'preview':
             if content in ['1', 'submit', 'confirm', 'yes']:
                 # Submit the question to database
                 question_text = data['question_text']
-                question_type = 'multiple_choice' if data.get('question_type') == 'manual_answer' and re.search(r'\b[A-D]\)', question_text) else 'single_answer'
-                
+                question_type = (
+                    'multiple_choice'
+                    if data.get('question_type') == 'manual_answer' and re.search(r'\b[A-D]\)', question_text)
+                    else 'single_answer'
+                )
+
                 if data.get('question_type') == 'database_calculated':
                     # Database-calculated question
                     question_id = db.add_trivia_question(
@@ -4011,7 +4023,7 @@ async def handle_mod_trivia_conversation(message):
                         is_dynamic=True,
                         dynamic_query_type=data.get('dynamic_query_type'),
                         category=data.get('category'),
-                        submitted_by_user_id=user_id
+                        submitted_by_user_id=user_id,
                     )
                 else:
                     # Manual question+answer
@@ -4021,7 +4033,7 @@ async def handle_mod_trivia_conversation(message):
                         options_match = re.findall(r'[A-D]\)\s*([^A-D\n]+)', question_text)
                         if options_match:
                             multiple_choice_options = [opt.strip() for opt in options_match]
-                    
+
                     question_id = db.add_trivia_question(
                         question_text=question_text,
                         question_type=question_type,
@@ -4029,9 +4041,9 @@ async def handle_mod_trivia_conversation(message):
                         multiple_choice_options=multiple_choice_options,
                         is_dynamic=False,
                         category=data.get('category', 'manual'),
-                        submitted_by_user_id=user_id
+                        submitted_by_user_id=user_id,
                     )
-                
+
                 if question_id:
                     await message.reply(
                         f"✅ **Trivia Question Submitted Successfully**\n\n"
@@ -4049,11 +4061,11 @@ async def handle_mod_trivia_conversation(message):
                         f"Please retry or contact system administrator.\n\n"
                         f"*Database error logged for technical review.*"
                     )
-                
+
                 # Clean up conversation
                 if user_id in mod_trivia_conversations:
                     del mod_trivia_conversations[user_id]
-            
+
             elif content in ['2', 'edit question', 'edit']:
                 conversation['step'] = 'question_input'
                 await message.reply(
@@ -4061,7 +4073,7 @@ async def handle_mod_trivia_conversation(message):
                     f"Please provide your revised question text. The previous question will be replaced.\n\n"
                     f"*Precision and clarity are paramount for effective trivia questions.*"
                 )
-            
+
             elif content in ['3', 'edit answer', 'answer']:
                 if data.get('question_type') == 'manual_answer':
                     conversation['step'] = 'answer_input'
@@ -4081,7 +4093,7 @@ async def handle_mod_trivia_conversation(message):
                         f"Please respond with **1**, **2**, or **3**.\n\n"
                         f"*Category selection affects answer calculation accuracy.*"
                     )
-            
+
             elif content in ['4', 'cancel', 'abort']:
                 await message.reply(
                     f"❌ **Question Submission Cancelled**\n\n"
@@ -4089,7 +4101,7 @@ async def handle_mod_trivia_conversation(message):
                     f"All temporary data has been expunged from system memory.\n\n"
                     f"*Mission parameters reset. Standing by for new directives.*"
                 )
-                
+
                 # Clean up conversation
                 if user_id in mod_trivia_conversations:
                     del mod_trivia_conversations[user_id]
@@ -4098,11 +4110,11 @@ async def handle_mod_trivia_conversation(message):
                     f"⚠️ **Invalid command.** Please respond with **1** (Submit), **2** (Edit Question), **3** (Edit Answer/Category), or **4** (Cancel).\n\n"
                     f"*Precise input required for proper protocol execution.*"
                 )
-        
+
         # Update conversation state
         conversation['data'] = data
         mod_trivia_conversations[user_id] = conversation
-        
+
     except Exception as e:
         print(f"Error in mod trivia conversation: {e}")
         # Clean up on error
@@ -7378,7 +7390,7 @@ async def remind_command(ctx, *, reminder_request: str):
 
         # Parse the natural language request
         parsed = parse_natural_reminder(reminder_request, ctx.author.id)
-        
+
         if not parsed["success"] or not parsed["reminder_text"]:
             await ctx.send(
                 f"⚠️ **Parsing failure.** Unable to extract valid reminder parameters from your request. "
@@ -7388,19 +7400,19 @@ async def remind_command(ctx, *, reminder_request: str):
 
         reminder_text = parsed["reminder_text"]
         scheduled_time = parsed["scheduled_time"]
-        
+
         # Determine delivery method - DM for direct messages, channel for guild messages
         delivery_type = "dm" if ctx.guild is None else "channel"
         delivery_channel_id = ctx.channel.id if ctx.guild else None
-        
+
         # Check for auto-action patterns (YouTube posting)
         auto_action_enabled = False
         auto_action_type = None
         auto_action_data = {}
-        
+
         youtube_url_pattern = r'https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)'
         youtube_urls = re.findall(youtube_url_pattern, reminder_request, re.IGNORECASE)
-        
+
         if youtube_urls or "youtube" in reminder_request.lower():
             # Ask about auto-action
             auto_action_msg = await ctx.send(
@@ -7410,27 +7422,32 @@ async def remind_command(ctx, *, reminder_request: str):
             )
             await auto_action_msg.add_reaction("✅")
             await auto_action_msg.add_reaction("❌")
-            
+
             try:
+
                 def check_reaction(reaction, user):
-                    return user == ctx.author and str(reaction.emoji) in ["✅", "❌"] and reaction.message.id == auto_action_msg.id
-                
+                    return (
+                        user == ctx.author
+                        and str(reaction.emoji) in ["✅", "❌"]
+                        and reaction.message.id == auto_action_msg.id
+                    )
+
                 reaction, user = await bot.wait_for('reaction_add', timeout=30.0, check=check_reaction)
-                
+
                 if str(reaction.emoji) == "✅":
                     auto_action_enabled = True
                     auto_action_type = "youtube_post"
                     youtube_url = None
-                    
+
                     # Extract YouTube URL if found, otherwise ask for it
                     if youtube_urls:
                         youtube_url = f"https://youtube.com/watch?v={youtube_urls[0]}"
                     else:
                         url_msg = await ctx.send("🔗 **Please provide the YouTube URL for auto-posting:**")
-                        
+
                         def check_url_msg(msg):
                             return msg.author == ctx.author and msg.channel == ctx.channel
-                        
+
                         try:
                             url_response = await bot.wait_for('message', timeout=60.0, check=check_url_msg)
                             youtube_url = url_response.content.strip()
@@ -7439,21 +7456,23 @@ async def remind_command(ctx, *, reminder_request: str):
                             auto_action_enabled = False
                             auto_action_type = None
                             youtube_url = None
-                    
+
                     if auto_action_enabled and youtube_url:
                         auto_action_data = {
                             "youtube_url": youtube_url,
-                            "custom_message": f"New video uploaded - check it out!"
+                            "custom_message": f"New video uploaded - check it out!",
                         }
-                        await ctx.send("✅ **Auto-action enabled.** YouTube link will be posted automatically if no response within 5 minutes.")
+                        await ctx.send(
+                            "✅ **Auto-action enabled.** YouTube link will be posted automatically if no response within 5 minutes."
+                        )
                     elif auto_action_enabled and not youtube_url:
                         await ctx.send("❌ **Auto-action disabled:** No valid YouTube URL provided.")
                         auto_action_enabled = False
                         auto_action_type = None
-                
+
             except asyncio.TimeoutError:
                 await ctx.send("⏰ **Auto-action selection timed out.** Proceeding without auto-posting.")
-        
+
         # Add the reminder to database
         reminder_id = db.add_reminder(
             user_id=ctx.author.id,
@@ -7463,14 +7482,18 @@ async def remind_command(ctx, *, reminder_request: str):
             delivery_type=delivery_type,
             auto_action_enabled=auto_action_enabled,
             auto_action_type=auto_action_type,
-            auto_action_data=auto_action_data
+            auto_action_data=auto_action_data,
         )
-        
+
         if reminder_id:
             # Format time for display
             uk_time = scheduled_time.strftime("%A, %B %d, %Y at %H:%M UK time")
-            auto_notice = "\n\n⚡ **Auto-action enabled:** YouTube posting sequence will activate if no response within 5 minutes." if auto_action_enabled else ""
-            
+            auto_notice = (
+                "\n\n⚡ **Auto-action enabled:** YouTube posting sequence will activate if no response within 5 minutes."
+                if auto_action_enabled
+                else ""
+            )
+
             await ctx.send(
                 f"📋 **Reminder protocol activated.** Your temporal alert has been scheduled for {uk_time}.\n\n"
                 f"**Content:** {reminder_text}\n"
@@ -7483,7 +7506,7 @@ async def remind_command(ctx, *, reminder_request: str):
                 f"❌ **System malfunction detected.** Unable to establish temporal scheduling protocol. "
                 f"Database insertion failed."
             )
-    
+
     except Exception as e:
         print(f"❌ Error in remind command: {e}")
         await ctx.send(
@@ -7497,7 +7520,7 @@ async def remind_me_command(ctx, *, reminder_request: str):
     # Prepend 'me' if not already present for natural parsing
     if not reminder_request.lower().startswith("me"):
         reminder_request = f"me {reminder_request}"
-    
+
     await remind_command(ctx, reminder_request=reminder_request)
 
 
@@ -7508,46 +7531,44 @@ async def list_reminders_command(ctx):
         # Check user permissions
         user_tier = await get_user_communication_tier(ctx)
         if user_tier not in ["moderator", "creator", "captain"]:
-            await ctx.send(
-                f"⚠️ **Access denied.** Reminder protocols are restricted to authorized personnel only."
-            )
+            await ctx.send(f"⚠️ **Access denied.** Reminder protocols are restricted to authorized personnel only.")
             return
 
         reminders = db.get_user_reminders(ctx.author.id)
-        
+
         if not reminders:
             await ctx.send(
                 f"📋 **Temporal analysis complete.** No active reminder protocols found in your personal archive. "
                 f"All scheduled alerts have been processed or cleared."
             )
             return
-        
+
         # Create embed for reminders list
         embed = discord.Embed(
             title="📋 Active Reminder Protocols",
             description=f"Mission-critical temporal alerts for {ctx.author.display_name}",
             color=0x2F3136,
         )
-        
+
         uk_now = datetime.now(ZoneInfo("Europe/London"))
-        
+
         for i, reminder in enumerate(reminders, 1):
             scheduled_time = reminder["scheduled_time"]
-            
+
             # Convert to UK timezone if not already
             if scheduled_time.tzinfo is None:
                 scheduled_time = scheduled_time.replace(tzinfo=ZoneInfo("Europe/London"))
             elif scheduled_time.tzinfo != ZoneInfo("Europe/London"):
                 scheduled_time = scheduled_time.astimezone(ZoneInfo("Europe/London"))
-            
+
             time_until = scheduled_time - uk_now
-            
+
             if time_until.total_seconds() > 0:
                 # Future reminder
                 days = time_until.days
                 hours, remainder = divmod(time_until.seconds, 3600)
                 minutes, _ = divmod(remainder, 60)
-                
+
                 if days > 0:
                     time_str = f"in {days}d {hours}h {minutes}m"
                 elif hours > 0:
@@ -7557,31 +7578,37 @@ async def list_reminders_command(ctx):
             else:
                 # Overdue reminder
                 time_str = "**OVERDUE**"
-            
+
             # Format time
             formatted_time = scheduled_time.strftime("%A, %B %d at %H:%M")
-            
+
             # Delivery method
             delivery_method = "📧 DM" if reminder["delivery_type"] == "dm" else "📢 Channel"
-            
+
             # Auto-action status
             auto_action = ""
             if reminder.get("auto_action_enabled"):
-                auto_action = f" ⚡ **Auto-action:** {reminder.get('auto_action_type', 'unknown').replace('_', ' ').title()}"
-            
-            reminder_text = reminder["reminder_text"][:100] + "..." if len(reminder["reminder_text"]) > 100 else reminder["reminder_text"]
-            
+                auto_action = (
+                    f" ⚡ **Auto-action:** {reminder.get('auto_action_type', 'unknown').replace('_', ' ').title()}"
+                )
+
+            reminder_text = (
+                reminder["reminder_text"][:100] + "..."
+                if len(reminder["reminder_text"]) > 100
+                else reminder["reminder_text"]
+            )
+
             embed.add_field(
                 name=f"#{i} - {time_str}",
                 value=f"**{formatted_time}**\n{delivery_method} - {reminder_text}{auto_action}",
-                inline=False
+                inline=False,
             )
-        
+
         embed.set_footer(text=f"Total active reminders: {len(reminders)} | Use !cancelreminder <number> to cancel")
         embed.timestamp = discord.utils.utcnow()
-        
+
         await ctx.send(embed=embed)
-        
+
     except Exception as e:
         print(f"❌ Error in list reminders command: {e}")
         await ctx.send(f"❌ **System diagnostic error:** Unable to retrieve reminder protocols: {str(e)}")
@@ -7599,7 +7626,7 @@ async def add_trivia_question_cmd(ctx):
             f"*Confidential mission parameters require private channel authorization.*"
         )
         return
-    
+
     # Check if user is a moderator
     if not await user_is_mod_by_id(ctx.author.id):
         await ctx.send(
@@ -7608,19 +7635,19 @@ async def add_trivia_question_cmd(ctx):
             f"*Security protocols maintained. Unauthorized access logged.*"
         )
         return
-    
+
     # Clean up any existing conversation state for this user
     cleanup_mod_trivia_conversations()
-    
+
     # Initialize conversation state
     uk_now = datetime.now(ZoneInfo("Europe/London"))
     mod_trivia_conversations[ctx.author.id] = {
         'step': 'initial',
         'data': {},
         'last_activity': uk_now,
-        'initiated_at': uk_now
+        'initiated_at': uk_now,
     }
-    
+
     # Start with a direct question about adding trivia
     await handle_mod_trivia_conversation(ctx.message)
 
@@ -7632,39 +7659,35 @@ async def cancel_reminder_command(ctx, reminder_number: int):
         # Check user permissions
         user_tier = await get_user_communication_tier(ctx)
         if user_tier not in ["moderator", "creator", "captain"]:
-            await ctx.send(
-                f"⚠️ **Access denied.** Reminder protocols are restricted to authorized personnel only."
-            )
+            await ctx.send(f"⚠️ **Access denied.** Reminder protocols are restricted to authorized personnel only.")
             return
 
         reminders = db.get_user_reminders(ctx.author.id)
-        
+
         if not reminders:
-            await ctx.send(
-                f"📋 **No active reminders found.** Your temporal alert archive is currently empty."
-            )
+            await ctx.send(f"📋 **No active reminders found.** Your temporal alert archive is currently empty.")
             return
-        
+
         if reminder_number < 1 or reminder_number > len(reminders):
             await ctx.send(
                 f"⚠️ **Invalid reminder designation.** Please specify a number between 1 and {len(reminders)}. "
                 f"Use `!listreminders` to view available protocols."
             )
             return
-        
+
         # Get the specific reminder
         selected_reminder = reminders[reminder_number - 1]
         reminder_text = selected_reminder["reminder_text"]
         scheduled_time = selected_reminder["scheduled_time"]
-        
+
         # Format time for confirmation
         if scheduled_time.tzinfo is None:
             scheduled_time = scheduled_time.replace(tzinfo=ZoneInfo("Europe/London"))
         formatted_time = scheduled_time.strftime("%A, %B %d at %H:%M UK time")
-        
+
         # Cancel the reminder
         success = db.cancel_reminder(selected_reminder["id"], ctx.author.id)
-        
+
         if success:
             await ctx.send(
                 f"✅ **Temporal alert cancelled.** Reminder protocol has been expunged from the system.\n\n"
@@ -7676,7 +7699,7 @@ async def cancel_reminder_command(ctx, reminder_number: int):
             await ctx.send(
                 f"❌ **Cancellation failed.** Unable to terminate reminder protocol. System malfunction detected."
             )
-            
+
     except ValueError:
         await ctx.send(
             f"⚠️ **Invalid input format.** Please provide a numeric reminder identifier. "

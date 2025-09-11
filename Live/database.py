@@ -2075,7 +2075,7 @@ class DatabaseManager:
         delivery_type: str = "dm",
         auto_action_enabled: bool = False,
         auto_action_type: Optional[str] = None,
-        auto_action_data: Optional[Dict[str, Any]] = None
+        auto_action_data: Optional[Dict[str, Any]] = None,
     ) -> Optional[int]:
         """Add a reminder to the database"""
         conn = self.get_connection()
@@ -2101,12 +2101,12 @@ class DatabaseManager:
                         delivery_type,
                         auto_action_enabled,
                         auto_action_type,
-                        auto_action_data
+                        auto_action_data,
                     ),
                 )
                 result = cur.fetchone()
                 conn.commit()
-                
+
                 if result:
                     reminder_id = int(result["id"])  # type: ignore
                     logger.info(f"Added reminder ID {reminder_id} for user {user_id}")
@@ -2154,7 +2154,7 @@ class DatabaseManager:
                     AND scheduled_time <= %s
                     ORDER BY scheduled_time ASC
                 """,
-                    (current_time,)
+                    (current_time,),
                 )
                 results = cur.fetchall()
                 return [dict(row) for row in results]
@@ -2163,11 +2163,11 @@ class DatabaseManager:
             return []
 
     def update_reminder_status(
-        self, 
-        reminder_id: int, 
-        status: str, 
+        self,
+        reminder_id: int,
+        status: str,
         delivered_at: Optional[Any] = None,  # Can be datetime or str
-        auto_executed_at: Optional[Any] = None  # Can be datetime or str
+        auto_executed_at: Optional[Any] = None,  # Can be datetime or str
     ) -> bool:
         """Update reminder status"""
         conn = self.get_connection()
@@ -2203,7 +2203,7 @@ class DatabaseManager:
                     """,
                         (status, reminder_id),
                     )
-                
+
                 conn.commit()
                 return cur.rowcount > 0
         except Exception as e:
@@ -2258,6 +2258,7 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 # Calculate 5 minutes ago from current time
                 import datetime
+
                 five_minutes_ago = current_time - datetime.timedelta(minutes=5)
                 cur.execute(
                     """
@@ -2268,7 +2269,7 @@ class DatabaseManager:
                     AND delivered_at <= %s
                     ORDER BY delivered_at ASC
                 """,
-                    (five_minutes_ago,)
+                    (five_minutes_ago,),
                 )
                 results = cur.fetchall()
                 return [dict(row) for row in results]
@@ -2282,7 +2283,7 @@ class DatabaseManager:
             self.connection.close()
 
     # --- Trivia System Methods ---
-    
+
     def add_trivia_question(
         self,
         question_text: str,
@@ -2325,7 +2326,7 @@ class DatabaseManager:
                 )
                 result = cur.fetchone()
                 conn.commit()
-                
+
                 if result:
                     question_id = int(result["id"])  # type: ignore
                     logger.info(f"Added trivia question ID {question_id}")
@@ -2357,7 +2358,7 @@ class DatabaseManager:
                 """
                 )
                 result = cur.fetchone()
-                
+
                 if result:
                     return dict(result)
 
@@ -2376,7 +2377,7 @@ class DatabaseManager:
                 """
                 )
                 result = cur.fetchone()
-                
+
                 if result:
                     return dict(result)
 
@@ -2392,17 +2393,14 @@ class DatabaseManager:
                 """
                 )
                 result = cur.fetchone()
-                
+
                 return dict(result) if result else None
         except Exception as e:
             logger.error(f"Error getting next trivia question: {e}")
             return None
 
     def create_trivia_session(
-        self, 
-        question_id: int, 
-        session_type: str = "weekly",
-        calculated_answer: Optional[str] = None
+        self, question_id: int, session_type: str = "weekly", calculated_answer: Optional[str] = None
     ) -> Optional[int]:
         """Create a new trivia session"""
         conn = self.get_connection()
@@ -2417,8 +2415,9 @@ class DatabaseManager:
                 question_submitter_id = question_result["submitted_by_user_id"] if question_result else None  # type: ignore
 
                 from datetime import datetime, timezone
+
                 session_date = datetime.now(timezone.utc).date()
-                
+
                 cur.execute(
                     """
                     INSERT INTO trivia_sessions (
@@ -2430,7 +2429,7 @@ class DatabaseManager:
                     (question_id, session_date, session_type, question_submitter_id, calculated_answer),
                 )
                 result = cur.fetchone()
-                
+
                 # Update question usage
                 cur.execute(
                     """
@@ -2438,11 +2437,11 @@ class DatabaseManager:
                     SET last_used_at = CURRENT_TIMESTAMP, usage_count = usage_count + 1
                     WHERE id = %s
                 """,
-                    (question_id,)
+                    (question_id,),
                 )
-                
+
                 conn.commit()
-                
+
                 if result:
                     session_id = int(result["id"])  # type: ignore
                     logger.info(f"Created trivia session ID {session_id} for question {question_id}")
@@ -2480,11 +2479,7 @@ class DatabaseManager:
             return None
 
     def submit_trivia_answer(
-        self, 
-        session_id: int, 
-        user_id: int, 
-        answer_text: str,
-        normalized_answer: Optional[str] = None
+        self, session_id: int, user_id: int, answer_text: str, normalized_answer: Optional[str] = None
     ) -> Optional[int]:
         """Submit an answer to a trivia session"""
         conn = self.get_connection()
@@ -2498,14 +2493,14 @@ class DatabaseManager:
                     """
                     SELECT question_submitter_id FROM trivia_sessions WHERE id = %s
                 """,
-                    (session_id,)
+                    (session_id,),
                 )
                 session_result = cur.fetchone()
-                
+
                 conflict_detected = False
                 if session_result and session_result["question_submitter_id"] == user_id:  # type: ignore
                     conflict_detected = True
-                
+
                 cur.execute(
                     """
                     INSERT INTO trivia_answers (
@@ -2518,7 +2513,7 @@ class DatabaseManager:
                 )
                 result = cur.fetchone()
                 conn.commit()
-                
+
                 if result:
                     answer_id = int(result["id"])  # type: ignore
                     logger.info(f"Submitted trivia answer ID {answer_id} for session {session_id}")
@@ -2530,11 +2525,11 @@ class DatabaseManager:
             return None
 
     def complete_trivia_session(
-        self, 
-        session_id: int, 
+        self,
+        session_id: int,
         first_correct_user_id: Optional[int] = None,
         total_participants: Optional[int] = None,
-        correct_count: Optional[int] = None
+        correct_count: Optional[int] = None,
     ) -> bool:
         """Complete a trivia session and mark correct answers"""
         conn = self.get_connection()
@@ -2550,15 +2545,15 @@ class DatabaseManager:
                     JOIN trivia_questions tq ON ts.question_id = tq.id
                     WHERE ts.id = %s
                 """,
-                    (session_id,)
+                    (session_id,),
                 )
                 session = cur.fetchone()
                 if not session:
                     return False
-                
+
                 session_dict = dict(session)
                 correct_answer = session_dict.get("calculated_answer") or session_dict.get("correct_answer")
-                
+
                 if correct_answer:
                     # Mark correct answers (excluding conflicts)
                     cur.execute(
@@ -2572,9 +2567,9 @@ class DatabaseManager:
                             OR LOWER(TRIM(normalized_answer)) = LOWER(TRIM(%s))
                         )
                     """,
-                        (session_id, correct_answer, correct_answer)
+                        (session_id, correct_answer, correct_answer),
                     )
-                    
+
                     # Only calculate counts if not provided as parameters
                     if total_participants is None or correct_count is None:
                         cur.execute(
@@ -2584,22 +2579,22 @@ class DatabaseManager:
                             FROM trivia_answers
                             WHERE session_id = %s AND conflict_detected = FALSE
                         """,
-                            (session_id,)
+                            (session_id,),
                         )
                         counts = cur.fetchone()
-                        
+
                         if counts:
                             if total_participants is None:
                                 total_participants = int(counts["total_participants"])  # type: ignore
                             if correct_count is None:
                                 correct_count = int(counts["correct_count"])  # type: ignore
-                    
+
                     # Use defaults if still None after database query
                     if total_participants is None:
                         total_participants = 0
                     if correct_count is None:
                         correct_count = 0
-                    
+
                     # Mark first correct answer
                     if first_correct_user_id:
                         cur.execute(
@@ -2610,9 +2605,9 @@ class DatabaseManager:
                             AND user_id = %s 
                             AND is_correct = TRUE
                         """,
-                            (session_id, first_correct_user_id)
+                            (session_id, first_correct_user_id),
                         )
-                
+
                 # Update session
                 cur.execute(
                     """
@@ -2624,9 +2619,9 @@ class DatabaseManager:
                         correct_answers_count = %s
                     WHERE id = %s
                 """,
-                    (first_correct_user_id, total_participants, correct_count, session_id)
+                    (first_correct_user_id, total_participants, correct_count, session_id),
                 )
-                
+
                 # Mark the question as 'answered' so it won't be chosen again
                 question_id = session_dict.get("question_id")
                 if question_id:
@@ -2636,10 +2631,10 @@ class DatabaseManager:
                         SET status = 'answered'
                         WHERE id = %s
                     """,
-                        (question_id,)
+                        (question_id,),
                     )
                     logger.info(f"Marked trivia question {question_id} as 'answered'")
-                
+
                 conn.commit()
                 logger.info(f"Completed trivia session {session_id}")
                 return True
@@ -2662,7 +2657,7 @@ class DatabaseManager:
                     WHERE session_id = %s
                     ORDER BY submitted_at ASC
                 """,
-                    (session_id,)
+                    (session_id,),
                 )
                 results = cur.fetchall()
                 return [dict(row) for row in results]
@@ -2677,27 +2672,27 @@ class DatabaseManager:
                 games = self.get_longest_completion_games()
                 if games:
                     return games[0]["canonical_name"]
-                    
+
             elif dynamic_query_type == "most_episodes":
                 games = self.get_games_by_episode_count("DESC")
                 if games:
                     return games[0]["canonical_name"]
-                    
+
             elif dynamic_query_type == "series_most_playtime":
                 series = self.get_series_by_total_playtime()
                 if series:
                     return series[0]["series_name"]
-                    
+
             elif dynamic_query_type == "highest_avg_episode":
                 games = self.get_games_by_average_episode_length()
                 if games:
                     return games[0]["canonical_name"]
-                    
+
             elif dynamic_query_type == "genre_most_games":
                 stats = self.get_genre_statistics()
                 if stats:
                     return stats[0]["genre"]
-                    
+
             # Add more dynamic query types as needed
             return None
         except Exception as e:
@@ -2734,7 +2729,7 @@ class DatabaseManager:
                         WHERE submitted_by_user_id = %s
                         ORDER BY created_at DESC
                     """,
-                        (submitted_by_user_id,)
+                        (submitted_by_user_id,),
                     )
                 else:
                     cur.execute(
@@ -2743,7 +2738,7 @@ class DatabaseManager:
                         WHERE submitted_by_user_id IS NOT NULL
                         AND is_active = TRUE
                         ORDER BY created_at DESC
-                    """,
+                    """
                     )
                 results = cur.fetchall()
                 return [dict(row) for row in results]
@@ -2787,10 +2782,10 @@ class DatabaseManager:
                     SET status = %s
                     WHERE id = %s
                 """,
-                    (new_status, question_id)
+                    (new_status, question_id),
                 )
                 conn.commit()
-                
+
                 if cur.rowcount > 0:
                     logger.info(f"Reset trivia question {question_id} status to '{new_status}'")
                     return True
@@ -2815,10 +2810,10 @@ class DatabaseManager:
                     WHERE status = %s
                     AND is_active = TRUE
                 """,
-                    (to_status, from_status)
+                    (to_status, from_status),
                 )
                 conn.commit()
-                
+
                 reset_count = cur.rowcount
                 if reset_count > 0:
                     logger.info(f"Reset {reset_count} trivia questions from '{from_status}' to '{to_status}'")
@@ -2893,7 +2888,7 @@ class DatabaseManager:
                     "total_questions": sum(status_counts.values()) if status_counts else 0,
                     "available_questions": status_counts.get('available', 0),
                     "answered_questions": status_counts.get('answered', 0),
-                    "retired_questions": status_counts.get('retired', 0)
+                    "retired_questions": status_counts.get('retired', 0),
                 }
         except Exception as e:
             logger.error(f"Error getting trivia question statistics: {e}")
