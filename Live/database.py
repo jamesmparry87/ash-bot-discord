@@ -81,6 +81,104 @@ class DatabaseManager:
                 """
                 )
 
+                # Create reminders table
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS reminders (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        reminder_text TEXT NOT NULL,
+                        scheduled_time TIMESTAMP NOT NULL,
+                        delivery_channel_id BIGINT NULL,
+                        delivery_type VARCHAR(20) NOT NULL,
+                        auto_action_enabled BOOLEAN DEFAULT FALSE,
+                        auto_action_type VARCHAR(50) NULL,
+                        auto_action_data JSONB NULL,
+                        status VARCHAR(20) DEFAULT 'pending',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        delivered_at TIMESTAMP NULL,
+                        auto_executed_at TIMESTAMP NULL
+                    )
+                """
+                )
+
+                # Create trivia_questions table
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS trivia_questions (
+                        id SERIAL PRIMARY KEY,
+                        question_text TEXT NOT NULL,
+                        question_type VARCHAR(20) NOT NULL, -- 'single', 'multiple_choice'
+                        correct_answer TEXT,
+                        multiple_choice_options TEXT[], -- For multiple choice questions
+                        is_dynamic BOOLEAN DEFAULT FALSE, -- Requires real-time calculation
+                        dynamic_query_type VARCHAR(50), -- 'longest_playtime', 'most_episodes', etc.
+                        submitted_by_user_id BIGINT, -- NULL for AI-generated questions
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_used_at TIMESTAMP,
+                        usage_count INTEGER DEFAULT 0,
+                        category VARCHAR(50), -- 'completion', 'playtime', 'genre', 'series', etc.
+                        difficulty_level INTEGER DEFAULT 1, -- 1-5 scale
+                        is_active BOOLEAN DEFAULT TRUE,
+                        status VARCHAR(20) DEFAULT 'available' -- 'available', 'answered', 'retired'
+                    )
+                """
+                )
+
+                # Add status column to existing trivia_questions table if it doesn't exist
+                cur.execute(
+                    """
+                    ALTER TABLE trivia_questions 
+                    ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'available'
+                """
+                )
+
+                # Update any NULL status values to 'available'
+                cur.execute(
+                    """
+                    UPDATE trivia_questions 
+                    SET status = 'available' 
+                    WHERE status IS NULL
+                """
+                )
+
+                # Create trivia_sessions table
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS trivia_sessions (
+                        id SERIAL PRIMARY KEY,
+                        question_id INTEGER REFERENCES trivia_questions(id),
+                        session_date DATE NOT NULL,
+                        session_type VARCHAR(20) DEFAULT 'weekly', -- 'weekly', 'bonus'
+                        question_submitter_id BIGINT, -- For conflict checking
+                        calculated_answer TEXT, -- For dynamic questions
+                        status VARCHAR(20) DEFAULT 'active', -- 'active', 'completed', 'expired'
+                        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        ended_at TIMESTAMP,
+                        first_correct_user_id BIGINT,
+                        total_participants INTEGER DEFAULT 0,
+                        correct_answers_count INTEGER DEFAULT 0
+                    )
+                """
+                )
+
+                # Create trivia_answers table
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS trivia_answers (
+                        id SERIAL PRIMARY KEY,
+                        session_id INTEGER REFERENCES trivia_sessions(id),
+                        user_id BIGINT NOT NULL,
+                        answer_text TEXT NOT NULL,
+                        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        is_correct BOOLEAN,
+                        is_first_correct BOOLEAN DEFAULT FALSE,
+                        conflict_detected BOOLEAN DEFAULT FALSE, -- Mod answering own question
+                        normalized_answer TEXT -- For matching with alternative names
+                    )
+                """
+                )
+
                 # Create played_games table with proper data types for manual editing
                 cur.execute(
                     """
@@ -1968,10 +2066,810 @@ class DatabaseManager:
             logger.error(f"Error getting ranking context: {e}")
             return {"error": str(e)}
 
+    def add_reminder(
+        self,
+        user_id: int,
+        reminder_text: str,
+        scheduled_time: Any,  # Can be datetime or str
+        delivery_channel_id: Optional[int] = None,
+        delivery_type: str = "dm",
+        auto_action_enabled: bool = False,
+        auto_action_type: Optional[str] = None,
+        auto_action_data: Optional[Dict[str, Any]] = None,
+    ) -> Optional[int]:
+        """Add a reminder to the database"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO reminders (
+                        user_id, reminder_text, scheduled_time, delivery_channel_id,
+                        delivery_type, auto_action_enabled, auto_action_type, auto_action_data,
+                        status, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending', CURRENT_TIMESTAMP)
+                    RETURNING id
+                """,
+                    (
+                        user_id,
+                        reminder_text,
+                        scheduled_time,
+                        delivery_channel_id,
+                        delivery_type,
+                        auto_action_enabled,
+                        auto_action_type,
+                        auto_action_data,
+                    ),
+                )
+                result = cur.fetchone()
+                conn.commit()
+
+                if result:
+                    reminder_id = int(result["id"])  # type: ignore
+                    logger.info(f"Added reminder ID {reminder_id} for user {user_id}")
+                    return reminder_id
+                return None
+        except Exception as e:
+            logger.error(f"Error adding reminder: {e}")
+            conn.rollback()
+            return None
+
+    def get_user_reminders(self, user_id: int, status: str = "pending") -> List[Dict[str, Any]]:
+        """Get all reminders for a user"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM reminders 
+                    WHERE user_id = %s AND status = %s
+                    ORDER BY scheduled_time ASC
+                """,
+                    (user_id, status),
+                )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting user reminders: {e}")
+            return []
+
+    def get_due_reminders(self, current_time) -> List[Dict[str, Any]]:
+        """Get all reminders that are due for delivery"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM reminders 
+                    WHERE status = 'pending' 
+                    AND scheduled_time <= %s
+                    ORDER BY scheduled_time ASC
+                """,
+                    (current_time,),
+                )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting due reminders: {e}")
+            return []
+
+    def update_reminder_status(
+        self,
+        reminder_id: int,
+        status: str,
+        delivered_at: Optional[Any] = None,  # Can be datetime or str
+        auto_executed_at: Optional[Any] = None,  # Can be datetime or str
+    ) -> bool:
+        """Update reminder status"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                # Build query dynamically to avoid repetition
+                set_clauses = ["status = %s"]
+                params: List[Any] = [status]
+
+                if status == "delivered" and delivered_at:
+                    set_clauses.append("delivered_at = %s")
+                    params.append(delivered_at)
+                elif status == "auto_completed" and auto_executed_at:
+                    set_clauses.append("auto_executed_at = %s")
+                    params.append(auto_executed_at)
+
+                params.append(reminder_id)
+
+                query = f"UPDATE reminders SET {', '.join(set_clauses)} WHERE id = %s"
+                cur.execute(query, tuple(params))
+
+                conn.commit()
+                return cur.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error updating reminder status: {e}")
+            conn.rollback()
+            return False
+
+    def cancel_reminder(self, reminder_id: int, user_id: int) -> Optional[Dict[str, Any]]:
+        """Cancel a reminder (only if it belongs to the user)"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                # Atomically update the reminder and return it if found
+                cur.execute(
+                    """
+                    UPDATE reminders
+                    SET status = 'cancelled'
+                    WHERE id = %s AND user_id = %s AND status = 'pending'
+                    RETURNING *
+                    """,
+                    (reminder_id, user_id),
+                )
+                reminder = cur.fetchone()
+
+                if reminder:
+                    conn.commit()
+                    logger.info(f"Cancelled reminder ID {reminder_id} for user {user_id}")
+                    return dict(reminder)
+                
+                return None
+        except Exception as e:
+            logger.error(f"Error cancelling reminder: {e}")
+            conn.rollback()
+            return None
+
+    def get_reminders_awaiting_auto_action(self, current_time) -> List[Dict[str, Any]]:
+        """Get reminders that are past delivery time and waiting for auto-action"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                # Calculate 5 minutes ago from current time
+                import datetime
+
+                five_minutes_ago = current_time - datetime.timedelta(minutes=5)
+                cur.execute(
+                    """
+                    SELECT * FROM reminders 
+                    WHERE status = 'delivered' 
+                    AND auto_action_enabled = TRUE
+                    AND auto_executed_at IS NULL
+                    AND delivered_at <= %s
+                    ORDER BY delivered_at ASC
+                """,
+                    (five_minutes_ago,),
+                )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting reminders awaiting auto-action: {e}")
+            return []
+
     def close(self):
         """Close database connection"""
         if self.connection and not self.connection.closed:
             self.connection.close()
+
+    # --- Trivia System Methods ---
+
+    def add_trivia_question(
+        self,
+        question_text: str,
+        question_type: str,
+        correct_answer: Optional[str] = None,
+        multiple_choice_options: Optional[List[str]] = None,
+        is_dynamic: bool = False,
+        dynamic_query_type: Optional[str] = None,
+        submitted_by_user_id: Optional[int] = None,
+        category: Optional[str] = None,
+        difficulty_level: int = 1,
+    ) -> Optional[int]:
+        """Add a new trivia question to the database"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO trivia_questions (
+                        question_text, question_type, correct_answer, multiple_choice_options,
+                        is_dynamic, dynamic_query_type, submitted_by_user_id, category, difficulty_level,
+                        created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    RETURNING id
+                """,
+                    (
+                        question_text,
+                        question_type,
+                        correct_answer,
+                        multiple_choice_options,
+                        is_dynamic,
+                        dynamic_query_type,
+                        submitted_by_user_id,
+                        category,
+                        difficulty_level,
+                    ),
+                )
+                result = cur.fetchone()
+                conn.commit()
+
+                if result:
+                    question_id = int(result["id"])  # type: ignore
+                    logger.info(f"Added trivia question ID {question_id}")
+                    return question_id
+                return None
+        except Exception as e:
+            logger.error(f"Error adding trivia question: {e}")
+            conn.rollback()
+            return None
+
+    def get_next_trivia_question(self, exclude_user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
+        """Get the next trivia question based on priority system (excluding answered questions)"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                # Build exclusion condition if exclude_user_id is provided
+                exclusion_condition = ""
+                query_params = []
+                
+                if exclude_user_id is not None:
+                    exclusion_condition = "AND (submitted_by_user_id != %s OR submitted_by_user_id IS NULL)"
+                    query_params = [exclude_user_id]
+
+                # Priority 1: Recent mod-submitted questions (available status, unused within 4 weeks)
+                query1 = f"""
+                    SELECT * FROM trivia_questions 
+                    WHERE is_active = TRUE
+                    AND status = 'available'
+                    AND submitted_by_user_id IS NOT NULL
+                    AND (last_used_at IS NULL OR last_used_at < CURRENT_TIMESTAMP - INTERVAL '4 weeks')
+                    {exclusion_condition}
+                    ORDER BY created_at DESC, usage_count ASC
+                    LIMIT 1
+                """
+                cur.execute(query1, query_params)
+                result = cur.fetchone()
+
+                if result:
+                    return dict(result)
+
+                # Priority 2: AI-generated questions focusing on statistical anomalies (available status)
+                query2 = f"""
+                    SELECT * FROM trivia_questions 
+                    WHERE is_active = TRUE
+                    AND status = 'available'
+                    AND submitted_by_user_id IS NULL
+                    AND (category IN ('statistical_anomaly', 'completion_rate', 'playtime_insight') 
+                         OR is_dynamic = TRUE)
+                    AND (last_used_at IS NULL OR last_used_at < CURRENT_TIMESTAMP - INTERVAL '2 weeks')
+                    {exclusion_condition}
+                    ORDER BY usage_count ASC, created_at ASC
+                    LIMIT 1
+                """
+                cur.execute(query2, query_params)
+                result = cur.fetchone()
+
+                if result:
+                    return dict(result)
+
+                # Priority 3: Any unused questions with available status
+                query3 = f"""
+                    SELECT * FROM trivia_questions 
+                    WHERE is_active = TRUE
+                    AND status = 'available'
+                    AND (last_used_at IS NULL OR last_used_at < CURRENT_TIMESTAMP - INTERVAL '1 week')
+                    {exclusion_condition}
+                    ORDER BY usage_count ASC, created_at ASC
+                    LIMIT 1
+                """
+                cur.execute(query3, query_params)
+                result = cur.fetchone()
+
+                return dict(result) if result else None
+        except Exception as e:
+            logger.error(f"Error getting next trivia question: {e}")
+            return None
+
+    def create_trivia_session(
+        self, question_id: int, session_type: str = "weekly", calculated_answer: Optional[str] = None
+    ) -> Optional[int]:
+        """Create a new trivia session"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                # Get question submitter for conflict checking
+                cur.execute("SELECT submitted_by_user_id FROM trivia_questions WHERE id = %s", (question_id,))
+                question_result = cur.fetchone()
+                question_submitter_id = question_result["submitted_by_user_id"] if question_result else None  # type: ignore
+
+                from datetime import datetime, timezone
+
+                session_date = datetime.now(timezone.utc).date()
+
+                cur.execute(
+                    """
+                    INSERT INTO trivia_sessions (
+                        question_id, session_date, session_type, question_submitter_id,
+                        calculated_answer, started_at
+                    ) VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    RETURNING id
+                """,
+                    (question_id, session_date, session_type, question_submitter_id, calculated_answer),
+                )
+                result = cur.fetchone()
+
+                # Update question usage
+                cur.execute(
+                    """
+                    UPDATE trivia_questions 
+                    SET last_used_at = CURRENT_TIMESTAMP, usage_count = usage_count + 1
+                    WHERE id = %s
+                """,
+                    (question_id,),
+                )
+
+                conn.commit()
+
+                if result:
+                    session_id = int(result["id"])  # type: ignore
+                    logger.info(f"Created trivia session ID {session_id} for question {question_id}")
+                    return session_id
+                return None
+        except Exception as e:
+            logger.error(f"Error creating trivia session: {e}")
+            conn.rollback()
+            return None
+
+    def get_active_trivia_session(self) -> Optional[Dict[str, Any]]:
+        """Get the current active trivia session"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT ts.*, tq.question_text, tq.question_type, tq.correct_answer,
+                           tq.multiple_choice_options, tq.is_dynamic, tq.dynamic_query_type,
+                           tq.submitted_by_user_id, tq.category
+                    FROM trivia_sessions ts
+                    JOIN trivia_questions tq ON ts.question_id = tq.id
+                    WHERE ts.status = 'active'
+                    ORDER BY ts.started_at DESC
+                    LIMIT 1
+                """
+                )
+                result = cur.fetchone()
+                return dict(result) if result else None
+        except Exception as e:
+            logger.error(f"Error getting active trivia session: {e}")
+            return None
+
+    def submit_trivia_answer(
+        self, session_id: int, user_id: int, answer_text: str, normalized_answer: Optional[str] = None
+    ) -> Optional[int]:
+        """Submit an answer to a trivia session"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                # Check for conflict (mod answering their own question)
+                cur.execute(
+                    """
+                    SELECT question_submitter_id FROM trivia_sessions WHERE id = %s
+                """,
+                    (session_id,),
+                )
+                session_result = cur.fetchone()
+
+                conflict_detected = False
+                if session_result and session_result["question_submitter_id"] == user_id:  # type: ignore
+                    conflict_detected = True
+
+                cur.execute(
+                    """
+                    INSERT INTO trivia_answers (
+                        session_id, user_id, answer_text, normalized_answer,
+                        conflict_detected, submitted_at
+                    ) VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    RETURNING id
+                """,
+                    (session_id, user_id, answer_text, normalized_answer, conflict_detected),
+                )
+                result = cur.fetchone()
+                conn.commit()
+
+                if result:
+                    answer_id = int(result["id"])  # type: ignore
+                    logger.info(f"Submitted trivia answer ID {answer_id} for session {session_id}")
+                    return answer_id
+                return None
+        except Exception as e:
+            logger.error(f"Error submitting trivia answer: {e}")
+            conn.rollback()
+            return None
+
+    def complete_trivia_session(
+        self,
+        session_id: int,
+        first_correct_user_id: Optional[int] = None,
+        total_participants: Optional[int] = None,
+        correct_count: Optional[int] = None,
+    ) -> bool:
+        """Complete a trivia session and mark correct answers"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                # Get session details
+                cur.execute(
+                    """
+                    SELECT * FROM trivia_sessions ts
+                    JOIN trivia_questions tq ON ts.question_id = tq.id
+                    WHERE ts.id = %s
+                """,
+                    (session_id,),
+                )
+                session = cur.fetchone()
+                if not session:
+                    return False
+
+                session_dict = dict(session)
+                correct_answer = session_dict.get("calculated_answer") or session_dict.get("correct_answer")
+
+                if correct_answer:
+                    # Mark correct answers (excluding conflicts)
+                    cur.execute(
+                        """
+                        UPDATE trivia_answers 
+                        SET is_correct = TRUE
+                        WHERE session_id = %s
+                        AND conflict_detected = FALSE
+                        AND (
+                            LOWER(TRIM(answer_text)) = LOWER(TRIM(%s))
+                            OR LOWER(TRIM(normalized_answer)) = LOWER(TRIM(%s))
+                        )
+                    """,
+                        (session_id, correct_answer, correct_answer),
+                    )
+
+                    # Only calculate counts if not provided as parameters
+                    if total_participants is None or correct_count is None:
+                        cur.execute(
+                            """
+                            SELECT COUNT(*) as total_participants,
+                                   COUNT(CASE WHEN is_correct = TRUE THEN 1 END) as correct_count
+                            FROM trivia_answers
+                            WHERE session_id = %s AND conflict_detected = FALSE
+                        """,
+                            (session_id,),
+                        )
+                        counts = cur.fetchone()
+
+                        if counts:
+                            if total_participants is None:
+                                total_participants = int(counts["total_participants"])  # type: ignore
+                            if correct_count is None:
+                                correct_count = int(counts["correct_count"])  # type: ignore
+
+                    # Use defaults if still None after database query
+                    if total_participants is None:
+                        total_participants = 0
+                    if correct_count is None:
+                        correct_count = 0
+
+                    # Mark first correct answer
+                    if first_correct_user_id:
+                        cur.execute(
+                            """
+                            UPDATE trivia_answers 
+                            SET is_first_correct = TRUE
+                            WHERE session_id = %s 
+                            AND user_id = %s 
+                            AND is_correct = TRUE
+                        """,
+                            (session_id, first_correct_user_id),
+                        )
+
+                # Update session
+                cur.execute(
+                    """
+                    UPDATE trivia_sessions 
+                    SET status = 'completed',
+                        ended_at = CURRENT_TIMESTAMP,
+                        first_correct_user_id = %s,
+                        total_participants = %s,
+                        correct_answers_count = %s
+                    WHERE id = %s
+                """,
+                    (first_correct_user_id, total_participants, correct_count, session_id),
+                )
+
+                # Mark the question as 'answered' so it won't be chosen again
+                question_id = session_dict.get("question_id")
+                if question_id:
+                    cur.execute(
+                        """
+                        UPDATE trivia_questions 
+                        SET status = 'answered'
+                        WHERE id = %s
+                    """,
+                        (question_id,),
+                    )
+                    logger.info(f"Marked trivia question {question_id} as 'answered'")
+
+                conn.commit()
+                logger.info(f"Completed trivia session {session_id}")
+                return True
+        except Exception as e:
+            logger.error(f"Error completing trivia session: {e}")
+            conn.rollback()
+            return False
+
+    def get_trivia_session_answers(self, session_id: int) -> List[Dict[str, Any]]:
+        """Get all answers for a trivia session"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM trivia_answers 
+                    WHERE session_id = %s
+                    ORDER BY submitted_at ASC
+                """,
+                    (session_id,),
+                )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting trivia session answers: {e}")
+            return []
+
+    def calculate_dynamic_answer(self, dynamic_query_type: str) -> Optional[str]:
+        """Calculate the current answer for a dynamic question"""
+        try:
+            if dynamic_query_type == "longest_playtime":
+                games = self.get_longest_completion_games()
+                if games:
+                    return games[0]["canonical_name"]
+
+            elif dynamic_query_type == "most_episodes":
+                games = self.get_games_by_episode_count("DESC")
+                if games:
+                    return games[0]["canonical_name"]
+
+            elif dynamic_query_type == "series_most_playtime":
+                series = self.get_series_by_total_playtime()
+                if series:
+                    return series[0]["series_name"]
+
+            elif dynamic_query_type == "highest_avg_episode":
+                games = self.get_games_by_average_episode_length()
+                if games:
+                    return games[0]["canonical_name"]
+
+            elif dynamic_query_type == "genre_most_games":
+                stats = self.get_genre_statistics()
+                if stats:
+                    return stats[0]["genre"]
+
+            # Add more dynamic query types as needed
+            return None
+        except Exception as e:
+            logger.error(f"Error calculating dynamic answer for {dynamic_query_type}: {e}")
+            return None
+
+    def get_trivia_question_by_id(self, question_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific trivia question by ID"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM trivia_questions WHERE id = %s", (question_id,))
+                result = cur.fetchone()
+                return dict(result) if result else None
+        except Exception as e:
+            logger.error(f"Error getting trivia question by ID {question_id}: {e}")
+            return None
+
+    def get_pending_trivia_questions(self, submitted_by_user_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get pending trivia questions for mod review"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                if submitted_by_user_id:
+                    cur.execute(
+                        """
+                        SELECT * FROM trivia_questions 
+                        WHERE submitted_by_user_id = %s
+                        ORDER BY created_at DESC
+                    """,
+                        (submitted_by_user_id,),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT * FROM trivia_questions 
+                        WHERE submitted_by_user_id IS NOT NULL
+                        AND is_active = TRUE
+                        ORDER BY created_at DESC
+                    """
+                    )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting pending trivia questions: {e}")
+            return []
+
+    def get_answered_trivia_questions(self) -> List[Dict[str, Any]]:
+        """Get all trivia questions that have been answered"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM trivia_questions 
+                    WHERE status = 'answered'
+                    AND is_active = TRUE
+                    ORDER BY last_used_at DESC
+                """
+                )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting answered trivia questions: {e}")
+            return []
+
+    def reset_trivia_question_status(self, question_id: int, new_status: str = 'available') -> bool:
+        """Reset a trivia question's status (e.g., from 'answered' back to 'available')"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE trivia_questions 
+                    SET status = %s
+                    WHERE id = %s
+                """,
+                    (new_status, question_id),
+                )
+                conn.commit()
+
+                if cur.rowcount > 0:
+                    logger.info(f"Reset trivia question {question_id} status to '{new_status}'")
+                    return True
+                return False
+        except Exception as e:
+            logger.error(f"Error resetting trivia question status: {e}")
+            conn.rollback()
+            return False
+
+    def reset_all_trivia_questions_status(self, from_status: str = 'answered', to_status: str = 'available') -> int:
+        """Reset all trivia questions from one status to another (bulk operation)"""
+        conn = self.get_connection()
+        if not conn:
+            return 0
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE trivia_questions 
+                    SET status = %s
+                    WHERE status = %s
+                    AND is_active = TRUE
+                """,
+                    (to_status, from_status),
+                )
+                conn.commit()
+
+                reset_count = cur.rowcount
+                if reset_count > 0:
+                    logger.info(f"Reset {reset_count} trivia questions from '{from_status}' to '{to_status}'")
+                return reset_count
+        except Exception as e:
+            logger.error(f"Error resetting trivia questions status: {e}")
+            conn.rollback()
+            return 0
+
+    def get_trivia_question_statistics(self) -> Dict[str, Any]:
+        """Get statistics about trivia questions by status"""
+        conn = self.get_connection()
+        if not conn:
+            return {}
+
+        try:
+            with conn.cursor() as cur:
+                # Combined query using UNION ALL for efficiency
+                cur.execute(
+                    """
+                    SELECT 'status' as dimension, status as value, COUNT(*) as count 
+                    FROM trivia_questions 
+                    WHERE is_active = TRUE
+                    GROUP BY status
+                    UNION ALL
+                    SELECT 'type' as dimension, question_type as value, COUNT(*) as count
+                    FROM trivia_questions
+                    WHERE is_active = TRUE
+                    GROUP BY question_type
+                    UNION ALL
+                    SELECT 'source' as dimension, CASE WHEN submitted_by_user_id IS NOT NULL THEN 'mod_submitted' ELSE 'ai_generated' END as value, COUNT(*) as count
+                    FROM trivia_questions
+                    WHERE is_active = TRUE
+                    GROUP BY (submitted_by_user_id IS NOT NULL)
+                    """
+                )
+                results = cur.fetchall()
+                status_counts: Dict[str, int] = {}
+                type_counts: Dict[str, int] = {}
+                source_counts: Dict[str, int] = {}
+
+                if results:
+                    for row in results:
+                        row_dict = dict(row)
+                        dimension = row_dict['dimension']
+                        value = str(row_dict['value'])
+                        count = int(row_dict['count'])
+                        if dimension == 'status':
+                            status_counts[value] = count
+                        elif dimension == 'type':
+                            type_counts[value] = count
+                        elif dimension == 'source':
+                            source_counts[value] = count
+
+                return {
+                    "status_counts": status_counts,
+                    "type_counts": type_counts,
+                    "source_counts": source_counts,
+                    "total_questions": sum(status_counts.values()) if status_counts else 0,
+                    "available_questions": status_counts.get('available', 0),
+                    "answered_questions": status_counts.get('answered', 0),
+                    "retired_questions": status_counts.get('retired', 0),
+                }
+        except Exception as e:
+            logger.error(f"Error getting trivia question statistics: {e}")
+            return {}
 
 
 # Global database manager instance
