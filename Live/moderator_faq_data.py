@@ -119,7 +119,7 @@ FAQ_DATA = {
         ],
     },
     "commands": {
-        "patterns": ["explain commands", "command", "bot commands"],
+        "patterns": ["explain commands", "command", "bot commands", "what can you do", "capabilities"],
         "title": "⚙️ **Bot Command System Analysis**",
         "sections": [
             {
@@ -131,6 +131,7 @@ FAQ_DATA = {
                 "content": [
                     "• `!addgame <name> - <reason>` / `!recommend <name> - <reason>` — Add game recommendation",
                     "• `!listgames` — View all game recommendations",
+                    "• **Trivia Tuesday Participation:** Answer questions during weekly trivia sessions (no commands needed - just respond when trivia is active)",
                 ],
             },
             {
@@ -139,7 +140,16 @@ FAQ_DATA = {
                     "• **Strike Management:** `!strikes`, `!resetstrikes`, `!allstrikes`",
                     "• **Game Management:** `!removegame`, `!addplayedgame`, `!updateplayedgame`",
                     "• **Database Operations:** `!bulkimportplayedgames`, `!cleanplayedgames`",
+                    "• **Reminder System:** `!remind`, `!listreminders`, `!cancelreminder`",
+                    "• **Trivia Management:** `!addtrivia`, `!starttrivia`, `!endtrivia`, `!trivialeaderboard`",
                     "• **AI Configuration:** `!setpersona`, `!toggleai`, `!ashstatus`",
+                ],
+            },
+            {
+                "title": "Elite Access (Captain Jonesy & Sir Decent Jam)",
+                "content": [
+                    "• **Announcement System:** `!announce`, `!scheduleannouncement`, `!emergency`",
+                    "• **Special Authority:** Full access to all bot systems and overrides",
                 ],
             },
             {
@@ -151,8 +161,16 @@ FAQ_DATA = {
                 ],
             },
             {
+                "title": "Weekly Events",
+                "content": [
+                    "• **Trivia Tuesday:** Weekly community trivia with gaming questions",
+                    "• **Sunday Updates:** Automatic game database updates at 12:00 PM UK time",
+                    "• **Member Conversations:** Enhanced AI responses for YouTube Members",
+                ],
+            },
+            {
                 "title": "Permission System",
-                "content": "Commands check user roles and guild permissions before execution. Captain Jonesy and Sir Decent Jam have elevated access.",
+                "content": "Commands check user roles and guild permissions before execution. Captain Jonesy and Sir Decent Jam have elevated access for announcements.",
             },
         ],
     },
@@ -198,7 +216,7 @@ FAQ_DATA = {
     },
     "tiers": {
         "patterns": ["explain tiers", "user tier", "user system"],
-        "title": "👑 **User Tier System Analysis**",
+        "title": "� **User Tier System Analysis**",
         "sections": [
             {"title": "Hierarchy (Highest to Lowest)", "content": ""},
             {
@@ -395,6 +413,175 @@ FAQ_DATA = {
             {
                 "title": "Special Handling",
                 "content": "Sir Decent Jam's contributions don't show contributor names (configured via user ID check).",
+            },
+        ],
+    },
+    "reminders": {
+        "patterns": ["explain reminders", "reminder system", "remind"],
+        "title": "⏰ **Reminder System Analysis**",
+        "sections": [
+            {
+                "title": "Purpose",
+                "content": "Moderator tool for scheduling user reminders with optional automatic enforcement actions.",
+            },
+            {
+                "title": "Access Control",
+                "content": "Moderators only (requires 'Manage Messages' permission). Users cannot set reminders for themselves or others.",
+            },
+            {
+                "title": "Basic Commands",
+                "content": [
+                    "• `!remind <user> <time> <message>` — Schedule basic reminder",
+                    "• `!listreminders [@user]` — List pending reminders (optionally for specific user)",
+                    "• `!cancelreminder <reminder_id>` — Cancel pending reminder",
+                ],
+            },
+            {
+                "title": "Time Format Support",
+                "content": [
+                    "• **Relative:** `5m`, `1h`, `2h30m`, `1d` (minutes, hours, days)",
+                    "• **Absolute:** `2024-12-25 15:30` (YYYY-MM-DD HH:MM format)",
+                    "• **Mixed:** `1d 2h 30m` (combines multiple units)",
+                ],
+            },
+            {
+                "title": "Auto-Action System",
+                "content": [
+                    "• `!remind <user> <time> <message> | auto:mute` — Mute if no mod response",
+                    "• `!remind <user> <time> <message> | auto:kick` — Kick if no mod response",
+                    "• `!remind <user> <time> <message> | auto:ban` — Ban if no mod response",
+                    "• **Execution Delay:** 5 minutes after reminder delivery",
+                    "• **Prevention:** Any moderator message cancels auto-action",
+                ],
+            },
+            {
+                "title": "Database Schema",
+                "content": [
+                    "• **Delivery Tracking:** Separate timestamps for creation, delivery, and auto-execution",
+                    "• **Status Management:** pending → delivered → (auto_completed or manual cancellation)",
+                    "• **Channel Support:** Reminders can be delivered via DM or specific channel",
+                ],
+            },
+            {
+                "title": "Use Cases",
+                "content": [
+                    "• **Warning System:** 'Final warning about spam behavior'",
+                    "• **Temporary Measures:** 'Reminder to keep chat family-friendly'",
+                    "• **Escalation:** Auto-mute for repeated violations after warning period",
+                ],
+            },
+        ],
+    },
+    "trivia": {
+        "patterns": ["explain trivia", "trivia tuesday", "trivia system"],
+        "title": "🧠 **Trivia Tuesday System Analysis**",
+        "sections": [
+            {
+                "title": "Purpose",
+                "content": "Weekly community trivia events with comprehensive question management and participation tracking.",
+            },
+            {
+                "title": "Question Management (Moderators)",
+                "content": [
+                    "• `!addtrivia <question> | answer:<correct_answer> | type:single` — Add single answer question",
+                    "• `!addtrivia <question> | answer:<correct_answer> | choices:A,B,C,D | type:multiple` — Add multiple choice",
+                    "• `!listpendingquestions` — View submitted questions awaiting use",
+                    "• `!resettrivia` — Reset answered questions to available (bulk operation)",
+                ],
+            },
+            {
+                "title": "Session Management (Moderators)",
+                "content": [
+                    "• `!starttrivia [question_id]` — Start weekly trivia (auto-selects next question if no ID)",
+                    "• `!endtrivia` — End current session and reveal results",
+                    "• `!trivialeaderboard` — Show participation and success statistics",
+                ],
+            },
+            {
+                "title": "Question Prioritization System",
+                "content": [
+                    "• **Priority 1:** Recent mod-submitted questions (unused within 4 weeks)",
+                    "• **Priority 2:** AI-generated questions focusing on statistical anomalies",
+                    "• **Priority 3:** Any unused questions with 'available' status",
+                ],
+            },
+            {
+                "title": "User Participation",
+                "content": [
+                    "• Users submit answers during active trivia sessions",
+                    "• **Conflict Detection:** Prevents mods from answering their own questions",
+                    "• **First Correct Tracking:** Special recognition for fastest correct answer",
+                    "• **Statistics:** Individual and community participation metrics",
+                ],
+            },
+            {
+                "title": "Database Schema",
+                "content": [
+                    "• **trivia_questions:** Question bank with metadata and usage tracking",
+                    "• **trivia_sessions:** Active sessions with participant counts and results",
+                    "• **trivia_answers:** Individual responses with correctness and timing",
+                    "• **Status Tracking:** available → answered → (can be reset to available)",
+                ],
+            },
+            {
+                "title": "Dynamic Questions",
+                "content": "Support for questions with real-time calculated answers (e.g., 'What game currently has the most episodes?') with automatic answer computation at session start.",
+            },
+        ],
+    },
+    "announcements": {
+        "patterns": ["explain announcements", "announcement system", "announce"],
+        "title": "📢 **Announcement System Analysis**",
+        "sections": [
+            {
+                "title": "Purpose",
+                "content": "High-priority communication system for server-wide announcements with special formatting and delivery.",
+            },
+            {
+                "title": "Access Control",
+                "content": [
+                    "• **Captain Jonesy Only:** Server owner has full announcement privileges",
+                    "• **Sir Decent Jam Only:** Bot creator has emergency announcement access",
+                    "• **Restriction Reason:** Prevents announcement spam and maintains authority hierarchy",
+                ],
+            },
+            {
+                "title": "Command Types",
+                "content": [
+                    "• `!announce <message>` — Standard announcement with special embed formatting",
+                    "• `!scheduleannouncement <time> <message>` — Schedule announcement for future delivery",
+                    "• `!emergency <message>` — Emergency announcement with @everyone ping",
+                ],
+            },
+            {
+                "title": "Features",
+                "content": [
+                    "• **Special Formatting:** Custom embed styling with authority indicators",
+                    "• **Cross-posting:** Automatic delivery to multiple channels",
+                    "• **Timestamp Logging:** Database tracking of announcement history",
+                    "• **Priority Delivery:** Bypasses normal message rate limiting",
+                ],
+            },
+            {
+                "title": "Delivery Channels",
+                "content": [
+                    "• **Primary:** Main announcement channel",
+                    "• **Secondary:** General discussion channels",
+                    "• **Optional:** Member-specific channels based on announcement type",
+                ],
+            },
+            {
+                "title": "Emergency System",
+                "content": [
+                    "• **@everyone ping** for critical server announcements",
+                    "• **Immediate delivery** without scheduling delays",
+                    "• **Special visual formatting** to distinguish from regular announcements",
+                    "• **Audit logging** for security and accountability",
+                ],
+            },
+            {
+                "title": "Scheduling",
+                "content": "Time format support matches reminder system: relative times (1h, 30m) and absolute timestamps (YYYY-MM-DD HH:MM).",
             },
         ],
     },

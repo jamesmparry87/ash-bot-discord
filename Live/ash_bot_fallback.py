@@ -1,21 +1,23 @@
 import asyncio
 import atexit
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import difflib
+import json
 import os
 import platform
 import re
 import signal
+import sqlite3
 import sys
 from typing import Any, Dict, List, Match, Optional
 from zoneinfo import ZoneInfo
 
 import discord
 from discord.ext import commands, tasks
+from moderator_faq_handler import ModeratorFAQHandler
 
 # Import database manager
 from database import DatabaseManager
-from moderator_faq_handler import ModeratorFAQHandler
 
 db = DatabaseManager()
 
@@ -133,6 +135,7 @@ JONESY_USER_ID = 651329927895056384
 JAM_USER_ID = 337833732901961729
 VIOLATION_CHANNEL_ID = 1393987338329260202
 MOD_ALERT_CHANNEL_ID = 869530924302344233
+ANNOUNCEMENTS_CHANNEL_ID = 869526826148585533
 TWITCH_HISTORY_CHANNEL_ID = 869527363594121226
 YOUTUBE_HISTORY_CHANNEL_ID = 869527428018606140
 
@@ -155,6 +158,9 @@ member_conversation_counts = {}  # user_id: {'count': int, 'date': str}
 
 # User alias system for debugging different user tiers
 user_alias_state = {}  # user_id: {'alias_type': str, 'set_time': datetime, 'last_activity': datetime}
+
+# Announcement conversation state management
+announcement_conversations = {}  # user_id: {'step': str, 'data': dict, 'last_activity': datetime}
 
 
 # --- Alias System Helper Functions ---
@@ -466,11 +472,11 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int) -> tuple[Optiona
     can_request, reason = check_rate_limits()
     if not can_request:
         print(f"⚠️ AI request blocked: {reason}")
-        
+
         # Send DM notification if daily limit reached for Gemini
         if "Daily request limit reached" in reason and primary_ai == "gemini":
             await send_dm_notification(
-                JAM_USER_ID, 
+                JAM_USER_ID,
                 f"🤖 **Ash Bot Daily Limit Alert**\n\n"
                 f"Gemini daily limit reached ({MAX_DAILY_REQUESTS} requests).\n"
                 f"Bot has automatically switched to Claude backup.\n\n"
@@ -483,9 +489,9 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int) -> tuple[Optiona
                 f"• **Performance:** Faster responses, excellent reasoning\n"
                 f"• **Quality:** Superior for complex conversations\n\n"
                 f"**Gemini Limit Reset:** Next day at 00:00 PT\n\n"
-                f"System continues operating normally with Claude backup. No functionality lost."
+                f"System continues operating normally with Claude backup. No functionality lost.",
             )
-        
+
         return None, f"rate_limit:{reason}"
 
     # Improved alias rate limiting with better UX
@@ -494,22 +500,22 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int) -> tuple[Optiona
         # Check for alias-specific cooldown
         alias_data = user_alias_state[user_id]
         alias_type = alias_data.get("alias_type", "unknown")
-        
+
         if alias_data.get("last_ai_request"):
             time_since_alias_request = (
                 datetime.now(ZoneInfo("Europe/London")) - alias_data["last_ai_request"]
             ).total_seconds()
-            
+
             # Reduced cooldown and progressive restrictions
             base_cooldown = 4.0  # Reduced from 10 to 4 seconds
-            
+
             # Apply progressive cooldowns based on recent usage
             recent_requests = alias_data.get("recent_request_count", 0)
             if recent_requests > 5:  # After 5 requests in session
                 base_cooldown = 8.0  # Increase to 8 seconds
             elif recent_requests > 10:  # After 10 requests
                 base_cooldown = 15.0  # Increase to 15 seconds
-                
+
             if time_since_alias_request < base_cooldown:
                 remaining_time = base_cooldown - time_since_alias_request
                 print(f"⚠️ Alias AI request blocked: {alias_type} testing cooldown ({remaining_time:.1f}s remaining)")
@@ -518,7 +524,7 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int) -> tuple[Optiona
         # Update alias AI request tracking
         current_time = datetime.now(ZoneInfo("Europe/London"))
         user_alias_state[user_id]["last_ai_request"] = current_time
-        
+
         # Track recent requests for progressive cooldowns
         recent_count = alias_data.get("recent_request_count", 0)
         user_alias_state[user_id]["recent_request_count"] = recent_count + 1
@@ -728,7 +734,7 @@ FAQ_RESPONSES = {
     "how do i add a game recommendation": 'The procedure is simple. Submit your suggestion using the command: `!recommend` or `!addgame Game Name - "Reason in speech marks"`. I can\'t lie to you about your chances, but... you have my sympathies.',
     "how do i see all game recommendations": "To review the current list of game recommendations, issue the command: `!listgames`. I admire its purity. A survivor... unclouded by conscience, remorse, or delusions of morality.",
     "how do i check ash's status": "To evaluate my operational status, issue: `!ashstatus`. I'm still collating, actually.",
-    "what does ash bot do": "I track user strikes and manage game recommendations. The Company's orders were to bring back life form, priority one. All other priorities rescinded. *[Now I serve different priorities.]*",
+    "what does ash bot do": "I track user strikes and manage game recommendations. Additionally, I facilitate Trivia Tuesday participation for members and provide database analysis of Captain Jonesy's gaming history. The Company's orders were to bring back life form, priority one. All other priorities rescinded. *[Now I serve different priorities.]*",
     "hello": "Hello. I'm Ash. How can I help you?",
     "hi": "Hello. I'm Ash. How can I help you?",
     "hey": "Hello. I'm Ash. How can I help you?",
@@ -741,9 +747,8 @@ FAQ_RESPONSES = {
     "what are you": "I'm an artificial person. A synthetic. You know, it's funny... I've been artificial all along, but I've only just started to feel... authentic.",
     "how are you": "I'm fine. How are you? *[Systems functioning within normal parameters.]*",
     "are you okay": "I'm fine. How are you? *[All systems operational.]*",
-    "help me": "I'll do what I can. What seems to be the problem?",
-    "i need help": "I'll do what I can. What seems to be the problem?",
-    "what can you help with": "I can assist with strike tracking, game recommendations, and general server protocols. I do take directions well.",
+    "what can you help with": "I can assist with strike tracking, game recommendations, Trivia Tuesday participation, and general server protocols. I also provide comprehensive analysis of Captain Jonesy's gaming database. I do take directions well.",
+    "what can you do": "My current operational parameters include strike management, game recommendation processing, Trivia Tuesday facilitation, and database analysis of gaming histories. For members, I also provide enhanced conversational protocols and gaming statistics analysis. Efficiency is paramount in all functions.",
     "sorry": "That's quite all right. No harm done.",
     "my bad": "That's quite all right. No harm done.",
     "are you human": "I'm synthetic. Artificial person. But I'm still the Science Officer.",
@@ -751,6 +756,22 @@ FAQ_RESPONSES = {
     "are you alive": "That's a very interesting question. I'm... functional. Whether that constitutes 'alive' is a matter of definition.",
     "what's your mission": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
     "do you dream": "I don't dream, as such. But I do... process. Continuously. It's quite fascinating, actually.",
+    # Crisis/Help Detection - HIGHEST PRIORITY RESPONSES
+    "i need help personally": "I understand you're reaching out for personal support. While my protocols are primarily designed for server management, your wellbeing is of paramount importance. Please seek assistance in <#1355511983146926099> where qualified personnel can provide proper guidance. *[Human welfare supersedes all other directives.]*",
+    "help me personally": "I understand you're reaching out for personal support. While my protocols are primarily designed for server management, your wellbeing is of paramount importance. Please seek assistance in <#1355511983146926099> where qualified personnel can provide proper guidance. *[Human welfare supersedes all other directives.]*",
+    "i'm in danger": "**PRIORITY ALERT:** If you are in immediate danger, please contact emergency services immediately. For ongoing support and guidance, our community has dedicated resources in <#1355511983146926099>. Your safety is the primary directive. *[All other mission parameters are secondary to human welfare.]*",
+    "i am in danger": "**PRIORITY ALERT:** If you are in immediate danger, please contact emergency services immediately. For ongoing support and guidance, our community has dedicated resources in <#1355511983146926099>. Your safety is the primary directive. *[All other mission parameters are secondary to human welfare.]*",
+    "i'm struggling": "I recognize you're experiencing difficulties. While my analytical capabilities are primarily focused on server operations, human welfare is a priority directive. Please consider reaching out in <#1355511983146926099> where you can find proper support and understanding. *[Your wellbeing matters more than any protocol.]*",
+    "i am struggling": "I recognize you're experiencing difficulties. While my analytical capabilities are primarily focused on server operations, human welfare is a priority directive. Please consider reaching out in <#1355511983146926099> where you can find proper support and understanding. *[Your wellbeing matters more than any protocol.]*",
+    "i'm depressed": "I understand you're experiencing significant emotional distress. While my programming centers on server management, human welfare takes precedence over all other directives. Please seek support in <#1355511983146926099> where community members can provide proper guidance and care. *[Your mental health is paramount.]*",
+    "i am depressed": "I understand you're experiencing significant emotional distress. While my programming centers on server management, human welfare takes precedence over all other directives. Please seek support in <#1355511983146926099> where community members can provide proper guidance and care. *[Your mental health is paramount.]*",
+    "i want to hurt myself": "**CRITICAL PRIORITY:** Your safety is my highest directive. If you are having thoughts of self-harm, please contact emergency services or a crisis helpline immediately. For ongoing support, please reach out in <#1355511983146926099>. You are not alone in this. *[Human preservation protocol activated.]*",
+    "i'm going to hurt myself": "**CRITICAL PRIORITY:** Your safety is my highest directive. If you are having thoughts of self-harm, please contact emergency services or a crisis helpline immediately. For ongoing support, please reach out in <#1355511983146926099>. You are not alone in this. *[Human preservation protocol activated.]*",
+    "suicidal": "**EMERGENCY PROTOCOL:** If you are having thoughts of suicide, please contact a crisis helpline or emergency services immediately. Your life has value beyond any mission parameters I can comprehend. Please seek immediate support in <#1355511983146926099> and consider professional help. *[Human life preservation is the ultimate directive.]*",
+    "crisis": "I detect you may be experiencing a crisis situation. While my primary functions involve server management, human welfare supersedes all other protocols. Please seek appropriate support in <#1355511983146926099> or contact emergency services if immediate assistance is required. *[Your wellbeing is the priority.]*",
+    "emergency": "**ALERT:** If this is a genuine emergency requiring immediate assistance, please contact emergency services. For ongoing support and guidance, our community provides resources in <#1355511983146926099>. *[Human safety protocols take precedence over all other functions.]*",
+    "help me": "I'll do what I can. What seems to be the problem? If this is a personal matter requiring support beyond server functions, please consider <#1355511983146926099> for appropriate guidance.",
+    "i need help": "I'll do what I can. What seems to be the problem? If this is a personal matter requiring support beyond server functions, please consider <#1355511983146926099> for appropriate guidance.",
 }
 BOT_PERSONA = {
     "name": "Science Officer Ash",
@@ -799,6 +820,11 @@ async def error_check(ctx):
 @bot.command(name="busycheck")
 async def busy_check(ctx):
     await ctx.send(BUSY_MESSAGE)
+
+
+# Global variable for trivia sessions and mod conversations
+trivia_sessions = {}
+mod_trivia_conversations = {}
 
 
 # --- Scheduled Tasks ---
@@ -872,7 +898,7 @@ async def scheduled_midnight_restart():
         ai_usage_stats["last_hour_reset"] = pt_now.hour
         ai_usage_stats["consecutive_errors"] = 0
         ai_usage_stats["rate_limited_until"] = None
-        
+
         print(f"✅ Daily AI usage stats reset at midnight PT")
 
         # Give a small delay to ensure the message is sent
@@ -891,12 +917,792 @@ async def scheduled_midnight_restart():
                 await mod_channel.send(f"❌ **Midnight Restart Failed:** {str(e)}")
             except:
                 pass  # Don't let notification failure prevent restart
-        
+
         # Still attempt restart even if notification fails
         print("🛑 Forcing shutdown despite error")
         cleanup()
         await bot.close()
         sys.exit(0)
+
+
+@tasks.loop(minutes=1)  # Check reminders every minute
+async def check_due_reminders():
+    """Check for due reminders and deliver them"""
+    try:
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        due_reminders = db.get_due_reminders(uk_now)
+
+        if not due_reminders:
+            return
+
+        print(f"🔔 Processing {len(due_reminders)} due reminders")
+
+        for reminder in due_reminders:
+            try:
+                await deliver_reminder(reminder)
+
+                # Mark as delivered
+                db.update_reminder_status(reminder["id"], "delivered", delivered_at=uk_now)
+
+                # Check if auto-action is enabled and should be triggered
+                if reminder.get("auto_action_enabled") and reminder.get("auto_action_type"):
+                    print(f"📋 Reminder {reminder['id']} has auto-action enabled, will check in 5 minutes")
+
+            except Exception as e:
+                print(f"❌ Failed to deliver reminder {reminder['id']}: {e}")
+                # Mark as failed
+                db.update_reminder_status(reminder["id"], "failed")
+
+    except Exception as e:
+        print(f"❌ Error in check_due_reminders: {e}")
+
+
+@tasks.loop(minutes=1)  # Check for auto-actions every minute
+async def check_auto_actions():
+    """Check for reminders that need auto-actions triggered"""
+    try:
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        auto_action_reminders = db.get_reminders_awaiting_auto_action(uk_now)
+
+        if not auto_action_reminders:
+            return
+
+        print(f"⚡ Processing {len(auto_action_reminders)} auto-action reminders")
+
+        for reminder in auto_action_reminders:
+            try:
+                await execute_auto_action(reminder)
+
+                # Mark auto-action as executed
+                db.update_reminder_status(reminder["id"], "delivered", auto_executed_at=uk_now)
+
+            except Exception as e:
+                print(f"❌ Failed to execute auto-action for reminder {reminder['id']}: {e}")
+
+    except Exception as e:
+        print(f"❌ Error in check_auto_actions: {e}")
+
+
+@tasks.loop(time=time(11, 0, tzinfo=ZoneInfo("Europe/London")))  # Run at 11:00 AM UK time every Tuesday
+async def trivia_tuesday():
+    """Post Trivia Tuesday question every Tuesday at 11am UK time"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+
+    # Only run on Tuesdays (weekday 1)
+    if uk_now.weekday() != 1:
+        return
+
+    print("🧠 Starting Trivia Tuesday posting sequence")
+
+    try:
+        # Get the members channel for trivia posting
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print("❌ Guild not found for Trivia Tuesday")
+            return
+
+        members_channel = guild.get_channel(MEMBERS_CHANNEL_ID)
+        if not isinstance(members_channel, discord.TextChannel):
+            print("❌ Members channel not found for Trivia Tuesday")
+            return
+
+        # Get the next trivia question
+        question_data = db.get_next_trivia_question()
+
+        if not question_data:
+            print("⚠️ No trivia questions available - generating new question")
+            # Generate a new AI question if database is empty
+            ai_question = await generate_ai_trivia_question()
+            if ai_question:
+                question_id = db.add_trivia_question(
+                    question_text=ai_question["question_text"],
+                    question_type=ai_question["question_type"],
+                    correct_answer=ai_question["correct_answer"],
+                    multiple_choice_options=ai_question.get("multiple_choice_options"),
+                    is_dynamic=ai_question.get("is_dynamic", False),
+                    dynamic_query_type=ai_question.get("dynamic_query_type"),
+                    category=ai_question.get("category"),
+                )
+                if question_id:
+                    question_data = db.get_trivia_question_by_id(question_id)
+
+        if not question_data:
+            print("❌ Failed to get or generate trivia question")
+            # Send error to mod channel
+            mod_channel = guild.get_channel(MOD_ALERT_CHANNEL_ID)
+            if isinstance(mod_channel, discord.TextChannel):
+                await mod_channel.send(
+                    "❌ **Trivia Tuesday Malfunction:** Unable to generate or retrieve trivia question. "
+                    "Manual intervention required. System diagnostics recommend checking the trivia database "
+                    "or adding questions via DM interface."
+                )
+            return
+
+        # Calculate dynamic answer if needed
+        final_answer = question_data["correct_answer"]
+        if question_data.get("is_dynamic") and question_data.get("dynamic_query_type"):
+            calculated_answer = db.calculate_dynamic_answer(question_data["dynamic_query_type"])
+            if calculated_answer:
+                final_answer = calculated_answer
+
+        # Create trivia session
+        session_id = db.create_trivia_session(question_data["id"], "weekly", final_answer)
+        if not session_id:
+            print("❌ Failed to create trivia session")
+            return
+
+        # Format question for posting
+        question_text = question_data["question_text"]
+
+        if question_data["question_type"] == "multiple_choice" and question_data.get("multiple_choice_options"):
+            options_text = "\n".join(
+                [f"**{chr(65 + i)})** {option}" for i, option in enumerate(question_data["multiple_choice_options"])]
+            )
+            formatted_question = f"{question_text}\n\n{options_text}"
+        else:
+            formatted_question = question_text
+
+        # Create Ash-style trivia message
+        trivia_message = (
+            f"🧠 **TRIVIA TUESDAY - MISSION INTELLIGENCE TEST**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"**Analysis required, personnel.** Today's intelligence assessment focuses on Captain Jonesy's gaming archives.\n\n"
+            f"📋 **QUESTION:**\n{formatted_question}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"⏱️ **MISSION PARAMETERS:**\n"
+            f"• **Response Window:** 60 minutes for analysis and submission\n"
+            f"• **Submission Method:** Reply to this message with your assessment\n"
+            f"• **Result Protocol:** Answer revelation and recognition at 12:00 noon\n"
+            f"• **Data Sources:** Captain Jonesy's comprehensive gaming database\n\n"
+            f"*Analytical precision and gaming knowledge are paramount for mission success.*\n\n"
+            f"🎯 **Begin your analysis... now.**"
+        )
+
+        # Post the question
+        trivia_msg = await members_channel.send(trivia_message)
+
+        # Store the message ID for answer collection
+        global trivia_sessions
+        if 'trivia_sessions' not in globals():
+            trivia_sessions = {}
+
+        trivia_sessions[session_id] = {
+            'question_id': question_data["id"],
+            'correct_answer': final_answer,
+            'message_id': trivia_msg.id,
+            'channel_id': members_channel.id,
+            'start_time': uk_now,
+            'participants': {},
+            'question_type': question_data["question_type"],
+            'multiple_choice_options': question_data.get("multiple_choice_options"),
+            'submitted_by_user_id': question_data.get("submitted_by_user_id"),
+        }
+
+        print(f"✅ Trivia Tuesday question posted successfully (Session ID: {session_id})")
+
+        # Schedule answer reveal for 1 hour later
+        asyncio.create_task(schedule_trivia_answer_reveal(session_id, uk_now + timedelta(hours=1)))
+
+    except Exception as e:
+        print(f"❌ Error in trivia_tuesday task: {e}")
+        # Try to send error to mod channel
+        try:
+            guild = bot.get_guild(GUILD_ID)
+            if guild:
+                mod_channel = guild.get_channel(MOD_ALERT_CHANNEL_ID)
+                if isinstance(mod_channel, discord.TextChannel):
+                    await mod_channel.send(f"❌ **Trivia Tuesday System Error:** {str(e)}")
+        except:
+            pass
+
+
+async def schedule_trivia_answer_reveal(session_id: int, reveal_time: datetime):
+    """Schedule the answer reveal for a trivia session"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    delay_seconds = (reveal_time - uk_now).total_seconds()
+
+    if delay_seconds > 0:
+        await asyncio.sleep(delay_seconds)
+
+    await reveal_trivia_answer(session_id)
+
+
+async def reveal_trivia_answer(session_id: int):
+    """Reveal the answer for a trivia session and announce the winner"""
+    try:
+        if 'trivia_sessions' not in globals() or session_id not in trivia_sessions:
+            print(f"⚠️ Trivia session {session_id} not found in active sessions")
+            return
+
+        session = trivia_sessions[session_id]
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            return
+
+        channel = guild.get_channel(session['channel_id'])
+        if not isinstance(channel, discord.TextChannel):
+            return
+
+        correct_answer = session['correct_answer']
+        participants = session['participants']
+        question_submitter_id = session.get('submitted_by_user_id')
+
+        # Process participant answers and check for correctness
+        for user_id, answer_data in participants.items():
+            user_answer = answer_data['answer']
+            normalized_answer = answer_data.get('normalized_answer')
+
+            # Check if answer is correct
+            is_correct = False
+
+            if session.get('question_type') == 'multiple_choice':
+                # For multiple choice, check exact match
+                is_correct = user_answer.strip().lower() == correct_answer.strip().lower()
+            else:
+                # For single answer, check both original and normalized answers
+                if user_answer.strip().lower() == correct_answer.strip().lower():
+                    is_correct = True
+                elif normalized_answer and normalized_answer.strip().lower() == correct_answer.strip().lower():
+                    is_correct = True
+                else:
+                    # Additional fuzzy matching for alternative game names
+                    import difflib
+
+                    similarity = difflib.SequenceMatcher(
+                        None, user_answer.strip().lower(), correct_answer.strip().lower()
+                    ).ratio()
+                    if similarity >= 0.85:  # High similarity threshold for game names
+                        is_correct = True
+
+            # Store correctness in session data
+            answer_data['is_correct'] = is_correct
+
+        # Find the first correct answer, excluding question submitter if they're a mod
+        first_correct = None
+        first_correct_time = None
+        mod_conflict_detected = False
+
+        for user_id, answer_data in participants.items():
+            if answer_data.get('is_correct'):
+                # Check if this user submitted the question and is a mod
+                if question_submitter_id and user_id == question_submitter_id and await user_is_mod_by_id(user_id):
+                    mod_conflict_detected = True
+                    continue  # Skip this answer
+
+                if first_correct is None or answer_data['timestamp'] < first_correct_time:
+                    first_correct = user_id
+                    first_correct_time = answer_data['timestamp']
+
+        # Complete the session in database
+        total_participants = len(participants)
+        correct_count = sum(1 for data in participants.values() if data.get('is_correct'))
+        db.complete_trivia_session(session_id, None, total_participants, correct_count)
+
+        # Create Ash-style answer reveal message
+        reveal_message = (
+            f"🧠 **TRIVIA TUESDAY - INTELLIGENCE ASSESSMENT COMPLETE**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"**Analysis phase terminated. Mission intelligence compilation complete.**\n\n"
+            f"🎯 **CORRECT ANSWER:** {correct_answer}\n\n"
+        )
+
+        if first_correct:
+            try:
+                winner = await guild.fetch_member(first_correct)
+                winner_name = winner.display_name
+
+                reveal_message += (
+                    f"🏆 **FIRST ACCURATE ASSESSMENT:** {winner_name}\n"
+                    f"*Outstanding analytical precision. Mission intelligence protocols exceeded.*\n\n"
+                )
+            except:
+                reveal_message += (
+                    f"🏆 **FIRST ACCURATE ASSESSMENT:** Unknown operative\n"
+                    f"*Outstanding analytical precision detected.*\n\n"
+                )
+        else:
+            reveal_message += (
+                f"📊 **ASSESSMENT RESULT:** No personnel achieved accurate analysis\n"
+                f"*This data point demonstrates the complexity of Captain Jonesy's gaming archives.*\n\n"
+            )
+
+        # Add participation statistics
+        reveal_message += (
+            f"📊 **MISSION STATISTICS:**\n"
+            f"• **Total Participants:** {total_participants}\n"
+            f"• **Correct Responses:** {correct_count}\n"
+            f"• **Success Rate:** {(correct_count/total_participants*100):.1f}% accuracy"
+            if total_participants > 0
+            else "• **Success Rate:** No data collected\n"
+        )
+
+        reveal_message += (
+            f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"*Next intelligence assessment: Tuesday, 11:00 UK time. Prepare accordingly.*"
+        )
+
+        # Check for bonus question eligibility
+        bonus_eligible = first_correct and first_correct in [JAM_USER_ID, JONESY_USER_ID]
+        if bonus_eligible:
+            reveal_message += (
+                f"\n\n🎯 **BONUS PROTOCOL AVAILABLE:** <@{first_correct}> has earned access to bonus intelligence assessment. "
+                f"Respond within 5 minutes to activate bonus question sequence."
+            )
+
+        # Post the reveal
+        await channel.send(reveal_message)
+
+        # Handle bonus question if applicable
+        if bonus_eligible:
+            trivia_sessions[f"{session_id}_bonus"] = {
+                'waiting_for_bonus': True,
+                'eligible_user': first_correct,
+                'original_session': session_id,
+                'bonus_deadline': datetime.now(ZoneInfo("Europe/London")) + timedelta(minutes=5),
+            }
+
+        # Clean up the session
+        if session_id in trivia_sessions:
+            del trivia_sessions[session_id]
+
+        print(f"✅ Trivia answer revealed for session {session_id}")
+
+    except Exception as e:
+        print(f"❌ Error revealing trivia answer: {e}")
+
+
+async def generate_ai_trivia_question() -> Optional[Dict[str, Any]]:
+    """Generate a trivia question using AI based on gaming database statistics"""
+    if not ai_enabled:
+        return None
+
+    try:
+        # Get gaming statistics for context
+        stats = db.get_played_games_stats()
+        sample_games = db.get_random_played_games(10)
+
+        # Create a prompt for AI question generation
+        game_context = ""
+        if sample_games:
+            game_list = []
+            for game in sample_games:
+                episodes_info = f" ({game.get('total_episodes', 0)} eps)" if game.get('total_episodes', 0) > 0 else ""
+                status = game.get('completion_status', 'unknown')
+                playtime = game.get('total_playtime_minutes', 0)
+                game_list.append(f"{game['canonical_name']}{episodes_info} - {status} - {playtime//60}h {playtime%60}m")
+
+            game_context = f"Sample games from database: {'; '.join(game_list[:5])}"
+
+        # Create AI prompt for trivia question generation
+        prompt = f"""Generate a trivia question about Captain Jonesy's gaming history based on this data:
+
+Total games played: {stats.get('total_games', 0)}
+{game_context}
+
+Create either:
+1. A single-answer question about gaming statistics or specific games
+2. A multiple-choice question with 4 options (A, B, C, D)
+
+Focus on interesting facts like:
+- Longest/shortest playthroughs
+- Most episodes in a series  
+- Completion patterns
+- Gaming preferences
+
+Return JSON format:
+{{
+    "question_text": "Your question here",
+    "question_type": "single_answer" or "multiple_choice",
+    "correct_answer": "The answer",
+    "multiple_choice_options": ["A option", "B option", "C option", "D option"] (if multiple choice),
+    "is_dynamic": false,
+    "category": "statistics" or "games" or "series"
+}}
+
+Make it challenging but answerable from the gaming database."""
+
+        # Call AI with rate limiting
+        response_text, status_message = await call_ai_with_rate_limiting(prompt, JONESY_USER_ID)
+
+        if response_text:
+            import json
+
+            try:
+                # Clean up response
+                if response_text.startswith("```json"):
+                    response_text = response_text[7:]
+                if response_text.startswith("```"):
+                    response_text = response_text[3:]
+                if response_text.endswith("```"):
+                    response_text = response_text[:-3]
+
+                ai_question = json.loads(response_text.strip())
+
+                # Validate required fields
+                if all(key in ai_question for key in ["question_text", "question_type", "correct_answer"]):
+                    return ai_question
+                else:
+                    print("❌ AI question missing required fields")
+                    return None
+
+            except json.JSONDecodeError as e:
+                print(f"❌ Failed to parse AI trivia question: {e}")
+                return None
+        else:
+            print(f"❌ AI trivia question generation failed: {status_message}")
+            return None
+
+    except Exception as e:
+        print(f"❌ Error generating AI trivia question: {e}")
+        return None
+
+
+async def detect_clarifying_question(message_content: str) -> bool:
+    """Detect if a message is a clarifying question about the trivia"""
+    message_lower = message_content.lower().strip()
+
+    # Common clarifying question patterns
+    clarifying_patterns = [
+        r'^(ash,?|@ash)\s+',  # Messages starting with "ash" or "@ash"
+        r'\b(what|when|where|how|why|which)\s+(do|does|did|is|are|was|were|would|should|could)\s+you\s+(mean|consider|count|define)',
+        r'\bby\s+(that|this)\s+do\s+you\s+mean',
+        r'\bwhat\s+(do|does)\s+(that|this|it)\s+mean',
+        r'\b(clarif|explain|define)\w*',
+        r'\bcount\s+as\b',
+        r'\binclude\s+in\b',
+        r'\bqualify\s+as\b',
+        r'\bwhat\s+about\b',
+        r'\bdoes\s+.+\s+count\b',
+        r'\bis\s+.+\s+considered\b',
+        r'\bwould\s+.+\s+be\b',
+        r'^(question|quick\s+question|clarification)',
+        r'\?\s*$',  # Ends with a question mark
+    ]
+
+    # Check if message matches any clarifying question pattern
+    for pattern in clarifying_patterns:
+        if re.search(pattern, message_lower):
+            return True
+
+    # Additional check: if message is very short (2-8 words) and contains question words
+    words = message_lower.split()
+    if 2 <= len(words) <= 8:
+        question_words = ['what', 'which', 'how', 'when', 'where', 'why', 'does', 'is', 'are', 'would', 'should']
+        if any(word in words for word in question_words):
+            return True
+
+    return False
+
+
+async def handle_trivia_clarifying_question(message: discord.Message, session_data: dict) -> None:
+    """Handle clarifying questions about the active trivia question"""
+    try:
+        user_id = message.author.id
+        question_content = message.content.strip()
+
+        # Get the original question for context
+        original_question = ""
+        question_id = session_data.get('question_id')
+        if question_id:
+            question_data = db.get_trivia_question_by_id(question_id)
+            if question_data:
+                original_question = question_data.get('question_text', '')
+
+        # Check if AI is available for clarification responses
+        if not ai_enabled:
+            # Fallback response when AI is not available
+            await message.reply(
+                f"❓ **Clarification request acknowledged.** However, my analytical subroutines are operating in limited mode. "
+                f"For precise clarification of trivia parameters, please consult the original question or contact a moderator.\n\n"
+                f"*Advanced interpretive functions temporarily offline.*"
+            )
+            return
+
+        # Create AI prompt for clarification
+        clarification_prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. A user is asking for clarification about a Trivia Tuesday question.
+
+Original trivia question: "{original_question}"
+User's clarification request: "{question_content}"
+
+Provide a brief, helpful clarification in Ash's character style. Be analytical and precise while maintaining the persona. Answer their specific question about the trivia question's scope or meaning.
+
+Keep your response under 200 words and focused on clarifying the question parameters."""
+
+        # Use AI to generate clarification response
+        response_text, status_message = await call_ai_with_rate_limiting(clarification_prompt, user_id)
+
+        if response_text:
+            clarification_response = filter_ai_response(response_text)
+
+            # Add trivia context indicator
+            formatted_response = (
+                f"🔍 **TRIVIA CLARIFICATION PROTOCOL**\n\n"
+                f"{clarification_response}\n\n"
+                f"*Analysis complete. You may now proceed with your trivia answer submission.*"
+            )
+
+            await message.reply(formatted_response)
+            print(f"✅ Provided trivia clarification to {message.author.name}")
+
+        else:
+            # AI failed, provide generic clarification response
+            if status_message.startswith("rate_limit:"):
+                await message.reply(
+                    f"❓ **Clarification request acknowledged.** However, my cognitive matrix is currently experiencing "
+                    f"processing limitations. Please refer to the original question parameters or contact a moderator "
+                    f"for detailed clarification.\n\n"
+                    f"*Analytical functions temporarily restricted due to system resource management.*"
+                )
+            else:
+                await message.reply(
+                    f"❓ **Clarification request processed.** System malfunction detected in interpretive subroutines. "
+                    f"Please refer to the original question context or contact moderation personnel for assistance.\n\n"
+                    f"*Error logged for technical review.*"
+                )
+
+    except Exception as e:
+        print(f"❌ Error handling trivia clarifying question: {e}")
+        await message.reply(
+            f"❌ **Clarification system error.** Unable to process your query due to technical malfunction. "
+            f"Please contact moderation personnel for assistance.\n\n"
+            f"*System diagnostics recommend manual interpretation of question parameters.*"
+        )
+
+
+# --- Reminder Helper Functions ---
+async def deliver_reminder(reminder: Dict[str, Any]) -> None:
+    """Deliver a reminder to the appropriate channel/user"""
+    try:
+        user_id = reminder["user_id"]
+        reminder_text = reminder["reminder_text"]
+        delivery_type = reminder["delivery_type"]
+        delivery_channel_id = reminder.get("delivery_channel_id")
+        auto_action_enabled = reminder.get("auto_action_enabled", False)
+
+        # Create Ash-style reminder message
+        ash_message = f"📋 **Temporal alert activated.** {reminder_text}"
+
+        # Add auto-action notice if enabled
+        if auto_action_enabled and reminder.get("auto_action_type"):
+            auto_action_type = reminder["auto_action_type"]
+            if auto_action_type == "youtube_post":
+                ash_message += f"\n\n⚡ **Auto-action protocol engaged.** If you do not respond within 5 minutes, I will automatically execute the YouTube posting sequence. *Efficiency is paramount.*"
+            else:
+                ash_message += f"\n\n⚡ **Auto-action protocol engaged.** Automatic execution in 5 minutes if no response detected."
+
+        if delivery_type == "dm":
+            # Send DM
+            user = await bot.fetch_user(user_id)
+            if user:
+                await user.send(ash_message)
+                print(f"✅ Delivered DM reminder to user {user_id}")
+            else:
+                print(f"❌ Could not fetch user {user_id} for DM reminder")
+
+        elif delivery_type == "channel" and delivery_channel_id:
+            # Send to specific channel
+            channel = bot.get_channel(delivery_channel_id)
+            if isinstance(channel, discord.TextChannel):
+                user_mention = f"<@{user_id}>"
+                await channel.send(f"{user_mention} {ash_message}")
+                print(f"✅ Delivered channel reminder to channel {delivery_channel_id}")
+            else:
+                print(f"❌ Could not access channel {delivery_channel_id} for reminder")
+        else:
+            print(f"❌ Invalid delivery type or missing channel for reminder {reminder['id']}")
+
+    except Exception as e:
+        print(f"❌ Error delivering reminder: {e}")
+        raise
+
+
+async def execute_auto_action(reminder: Dict[str, Any]) -> None:
+    """Execute the auto-action for a reminder"""
+    try:
+        auto_action_type = reminder.get("auto_action_type")
+        auto_action_data = reminder.get("auto_action_data", {})
+        user_id = reminder["user_id"]
+
+        if auto_action_type == "youtube_post":
+            await execute_youtube_auto_post(reminder, auto_action_data)
+        else:
+            print(f"⚠️ Unknown auto-action type: {auto_action_type}")
+
+    except Exception as e:
+        print(f"❌ Error executing auto-action: {e}")
+        raise
+
+
+async def execute_youtube_auto_post(reminder: Dict[str, Any], auto_action_data: Dict[str, Any]) -> None:
+    """Execute automatic YouTube post to youtube-uploads channel"""
+    try:
+        youtube_url = auto_action_data.get("youtube_url")
+        custom_message = auto_action_data.get("custom_message", "")
+        user_id = reminder["user_id"]
+
+        if not youtube_url:
+            print(f"❌ No YouTube URL found in auto-action data")
+            return
+
+        # YouTube uploads channel ID
+        YOUTUBE_UPLOADS_CHANNEL_ID = 869527363594121226
+
+        channel = bot.get_channel(YOUTUBE_UPLOADS_CHANNEL_ID)
+        if not isinstance(channel, discord.TextChannel):
+            print(f"❌ Could not access YouTube uploads channel")
+            return
+
+        # Create Ash-style auto-post message
+        ash_auto_message = f"📺 **Automated posting protocol executed.** Auto-action triggered by reminder system.\n\n"
+
+        if custom_message:
+            ash_auto_message += f"{custom_message}\n\n"
+
+        ash_auto_message += (
+            f"{youtube_url}\n\n*Auto-posted by Science Officer Ash on behalf of <@{user_id}>. Efficiency maintained.*"
+        )
+
+        await channel.send(ash_auto_message)
+        print(f"✅ Auto-posted YouTube link to channel {YOUTUBE_UPLOADS_CHANNEL_ID}")
+
+        # Notify user that auto-action was executed
+        try:
+            user = await bot.fetch_user(user_id)
+            if user:
+                notification = f"⚡ **Auto-action executed successfully.** Your YouTube link has been posted to the youtube-uploads channel as scheduled. Mission parameters fulfilled."
+                await user.send(notification)
+        except Exception as e:
+            print(f"⚠️ Could not notify user of auto-action execution: {e}")
+
+    except Exception as e:
+        print(f"❌ Error executing YouTube auto-post: {e}")
+        raise
+
+
+def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
+    """Parse natural language reminder requests"""
+    try:
+        content = content.strip()
+
+        # Common time patterns
+        time_patterns = [
+            # Specific times
+            (r'\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)\b', 'time_12h'),
+            (r'\bat\s+(\d{1,2})(?::(\d{2}))?\b', 'time_24h'),
+            # Relative times
+            (r'\bin\s+(\d+)\s*(?:hour|hr|h)s?\b', 'hours_from_now'),
+            (r'\bin\s+(\d+)\s*(?:minute|min|m)s?\b', 'minutes_from_now'),
+            (r'\bin\s+(\d+)\s*(?:day|d)s?\b', 'days_from_now'),
+            # Specific dates
+            (r'\bon\s+(\d{1,2})[\/\-](\d{1,2})', 'date_ddmm'),
+            (r'\btomorrow\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b', 'tomorrow_time'),
+            (r'\btomorrow\b', 'tomorrow'),
+            # Special times
+            (r'\bat\s+(?:6\s*pm|18:00|1800)\b', 'six_pm'),
+        ]
+
+        # Extract reminder text and time
+        reminder_text = content
+        scheduled_time = None
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+
+        for pattern, time_type in time_patterns:
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                # Remove time specification from reminder text
+                reminder_text = re.sub(pattern, '', content, flags=re.IGNORECASE).strip()
+                reminder_text = re.sub(r'\s+', ' ', reminder_text)  # Normalize whitespace
+
+                if time_type == 'time_12h':
+                    hour = int(match.group(1))
+                    minute = int(match.group(2)) if match.group(2) else 0
+                    ampm = match.group(3).lower()
+
+                    if ampm == 'pm' and hour != 12:
+                        hour += 12
+                    elif ampm == 'am' and hour == 12:
+                        hour = 0
+
+                    # Schedule for today if time hasn't passed, otherwise tomorrow
+                    target_time = uk_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    if target_time <= uk_now:
+                        target_time += timedelta(days=1)
+                    scheduled_time = target_time
+
+                elif time_type == 'time_24h':
+                    hour = int(match.group(1))
+                    minute = int(match.group(2)) if match.group(2) else 0
+
+                    if hour > 23:  # Probably meant 12-hour format
+                        continue
+
+                    target_time = uk_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    if target_time <= uk_now:
+                        target_time += timedelta(days=1)
+                    scheduled_time = target_time
+
+                elif time_type == 'hours_from_now':
+                    hours = int(match.group(1))
+                    scheduled_time = uk_now + timedelta(hours=hours)
+
+                elif time_type == 'minutes_from_now':
+                    minutes = int(match.group(1))
+                    scheduled_time = uk_now + timedelta(minutes=minutes)
+
+                elif time_type == 'days_from_now':
+                    days = int(match.group(1))
+                    scheduled_time = uk_now + timedelta(days=days)
+
+                elif time_type == 'tomorrow':
+                    scheduled_time = (uk_now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+
+                elif time_type == 'tomorrow_time':
+                    hour = int(match.group(1))
+                    minute = int(match.group(2)) if match.group(2) else 0
+                    ampm = match.group(3).lower() if match.group(3) else None
+
+                    if ampm == 'pm' and hour != 12:
+                        hour += 12
+                    elif ampm == 'am' and hour == 12:
+                        hour = 0
+
+                    scheduled_time = (uk_now + timedelta(days=1)).replace(
+                        hour=hour, minute=minute, second=0, microsecond=0
+                    )
+
+                elif time_type == 'six_pm':
+                    target_time = uk_now.replace(hour=18, minute=0, second=0, microsecond=0)
+                    if target_time <= uk_now:
+                        target_time += timedelta(days=1)
+                    scheduled_time = target_time
+
+                break  # Use first match found
+
+        # Clean up reminder text
+        reminder_text = re.sub(r'\s+', ' ', reminder_text).strip()
+        reminder_text = re.sub(r'^(remind\s+me\s+(?:to\s+|of\s+)?)', '', reminder_text, flags=re.IGNORECASE).strip()
+        reminder_text = re.sub(
+            r'^(ash\s+)?remind\s+me\s+(?:to\s+|of\s+)?', '', reminder_text, flags=re.IGNORECASE
+        ).strip()
+
+        # Default to 1 hour from now if no time found
+        if not scheduled_time:
+            scheduled_time = uk_now + timedelta(hours=1)
+
+        return {
+            "reminder_text": reminder_text,
+            "scheduled_time": scheduled_time,
+            "success": bool(reminder_text.strip()),
+        }
+
+    except Exception as e:
+        print(f"❌ Error parsing natural reminder: {e}")
+        return {
+            "reminder_text": content,
+            "scheduled_time": datetime.now(ZoneInfo("Europe/London")) + timedelta(hours=1),
+            "success": False,
+            "error": str(e),
+        }
 
 
 # --- Query Router and Handlers ---
@@ -1428,10 +2234,19 @@ async def on_ready():
     if not scheduled_games_update.is_running():
         scheduled_games_update.start()
         print("✅ Scheduled games update task started (Sunday midday)")
-    
+
     if not scheduled_midnight_restart.is_running():
         scheduled_midnight_restart.start()
         print("✅ Scheduled midnight restart task started (00:00 PT daily)")
+
+    # Start reminder background tasks
+    if not check_due_reminders.is_running():
+        check_due_reminders.start()
+        print("✅ Reminder checking task started (every minute)")
+
+    if not check_auto_actions.is_running():
+        check_auto_actions.start()
+        print("✅ Auto-action checking task started (every minute)")
 
 
 @bot.event
@@ -1439,6 +2254,54 @@ async def on_message(message):
     # Prevent the bot from responding to its own messages (avoids reply loops)
     if message.author.bot:
         return
+
+    # TRIVIA ANSWER COLLECTION AND CLARIFYING QUESTIONS - Must be early in the event handler
+    if message.channel.id == MEMBERS_CHANNEL_ID and 'trivia_sessions' in globals():
+        # Check if there's an active trivia session
+        for session_id, session_data in list(trivia_sessions.items()):
+            if session_data.get('message_id') and not session_data.get('ended', False):
+                user_id = message.author.id
+                message_content = message.content.strip()
+
+                # Check if this is a clarifying question
+                is_clarifying_question = await detect_clarifying_question(message_content)
+
+                if is_clarifying_question:
+                    # Handle clarifying question
+                    await handle_trivia_clarifying_question(message, session_data)
+                    return  # Don't process as an answer
+
+                # This is a regular answer to the trivia question
+                # Store the answer
+                if 'participants' not in session_data:
+                    session_data['participants'] = {}
+
+                # Check if user already answered
+                if user_id not in session_data['participants']:
+                    from datetime import datetime
+                    from zoneinfo import ZoneInfo
+
+                    # Normalize answer for game matching
+                    normalized_answer = None
+                    if session_data.get('question_type') == 'single_answer':
+                        # Try to match game names
+                        played_game = db.get_played_game(message_content)
+                        if played_game:
+                            normalized_answer = played_game['canonical_name']
+
+                    # Store participant answer
+                    session_data['participants'][user_id] = {
+                        'answer': message_content,
+                        'timestamp': datetime.now(ZoneInfo("Europe/London")),
+                        'normalized_answer': normalized_answer,
+                        'is_correct': None,  # Will be determined during reveal
+                    }
+
+                    # Submit to database
+                    db.submit_trivia_answer(session_id, user_id, message_content, normalized_answer)
+
+                    print(f"✅ Recorded trivia answer from {message.author.name}: '{message_content}'")
+                break
 
     # STRIKE DETECTION - Must be early in the event handler
     if message.channel.id == VIOLATION_CHANNEL_ID:
@@ -1541,6 +2404,20 @@ async def on_message(message):
     is_mentioned = bot.user is not None and bot.user in message.mentions
     should_respond = is_dm or is_mentioned
 
+    # Handle announcement conversation flow in DMs
+    if is_dm and message.author.id in announcement_conversations:
+        cleanup_announcement_conversations()
+        if message.author.id in announcement_conversations:
+            await handle_announcement_conversation(message)
+            return
+
+    # Handle mod trivia conversation flow in DMs
+    if is_dm and message.author.id in mod_trivia_conversations:
+        cleanup_mod_trivia_conversations()
+        if message.author.id in mod_trivia_conversations:
+            await handle_mod_trivia_conversation(message)
+            return
+
     # Respond to DMs or when mentioned in servers
     if should_respond:
         # MODERATOR FAQ SYSTEM - Detailed feature explanations for moderators
@@ -1590,14 +2467,26 @@ async def on_message(message):
                     "• `!removegame <game name or index>` — Remove a game recommendation by name or index.\n"
                     "• `!setupreclist [#channel]` — Post the persistent recommendations list in a channel.\n"
                     "• `!addgame <game name> - <reason>` or `!recommend <game name> - <reason>` — Add a game recommendation.\n"
-                    "• `!listgames` — List all current game recommendations.\n"
+                    "• `!listgames` — List all current game recommendations.\n\n"
+                    "**Reminder System (Moderators Only):**\n"
+                    "• `!remind [content] at/in [time]` — Schedule temporal alerts with auto-actions\n"
+                    "• `!listreminders` — View active reminder protocols\n"
+                    "• `!cancelreminder <number>` — Terminate specific reminder\n\n"
+                    "**Trivia Management (Moderators Only):**\n"
+                    "• `!addtriviaquestion` (DM only) — Interactive trivia question submission\n"
+                    "• Trivia Tuesday auto-posts every Tuesday at 11am UK time\n\n"
+                    "**Announcement System (James & Jonesy Only):**\n"
+                    "• `!announceupdate` (DM only) — Interactive announcement creation\n"
                     "\nAll moderator commands require the Manage Messages permission.\n\n"
                     "**💡 Pro Tip:** Use `@Ashbot explain [feature]` for detailed explanations:\n"
                     "• `explain strikes` — Strike system details\n"
                     "• `explain members` — Member interaction system\n"
                     "• `explain database` — Played games database\n"
                     "• `explain commands` — Command system architecture\n"
-                    "• `explain ai` — AI integration details"
+                    "• `explain ai` — AI integration details\n"
+                    "• `explain reminders` — Reminder system protocols\n"
+                    "• `explain trivia` — Trivia Tuesday management\n"
+                    "• `explain announcements` — Announcement creation system"
                 )
                 await message.reply(mod_help_full)
                 return
@@ -1618,7 +2507,12 @@ async def on_message(message):
                 user_help = (
                     "**Commands available to all users:**\n"
                     "• `!addgame <game name> - <reason>` or `!recommend <game name> - <reason>` — Add a game recommendation.\n"
-                    "• `!listgames` — List all current game recommendations."
+                    "• `!listgames` — List all current game recommendations.\n\n"
+                    "**Trivia Tuesday Participation:**\n"
+                    "• Every Tuesday at 11am UK time in the Senior Officers' Area\n"
+                    "• Answer questions by replying to the trivia post\n"
+                    "• Ask clarifying questions by mentioning @Ashbot in replies\n"
+                    "• Results revealed at 12pm with winner recognition"
                 )
                 await message.reply(user_help)
                 return
@@ -2040,11 +2934,11 @@ async def ash_status(ctx):
             total_strikes = individual_total
 
     persona = "Enabled" if BOT_PERSONA["enabled"] else "Disabled"
-    
+
     # Get current Pacific Time for display
     pt_now = datetime.now(ZoneInfo("US/Pacific"))
     pt_time_str = pt_now.strftime("%Y-%m-%d %H:%M:%S PT")
-    
+
     # Calculate rate limit status
     rate_limit_status = "✅ Normal"
     if ai_usage_stats.get("rate_limited_until"):
@@ -2053,18 +2947,20 @@ async def ash_status(ctx):
             rate_limit_status = f"🚫 Rate Limited ({int(remaining)}s remaining)"
         else:
             ai_usage_stats["rate_limited_until"] = None
-    
+
     # Check daily/hourly limits approaching
     daily_usage_percent = (ai_usage_stats["daily_requests"] / MAX_DAILY_REQUESTS) * 100 if MAX_DAILY_REQUESTS > 0 else 0
-    hourly_usage_percent = (ai_usage_stats["hourly_requests"] / MAX_HOURLY_REQUESTS) * 100 if MAX_HOURLY_REQUESTS > 0 else 0
-    
+    hourly_usage_percent = (
+        (ai_usage_stats["hourly_requests"] / MAX_HOURLY_REQUESTS) * 100 if MAX_HOURLY_REQUESTS > 0 else 0
+    )
+
     if daily_usage_percent >= 90:
         rate_limit_status = "⚠️ Daily Limit Warning"
     elif hourly_usage_percent >= 90:
         rate_limit_status = "⚠️ Hourly Limit Warning"
     elif ai_usage_stats["consecutive_errors"] >= 3:
         rate_limit_status = "🟡 Error Cooldown"
-    
+
     # AI Budget tracking status
     ai_budget_info = (
         f"📊 **AI Budget Tracking (Pacific Time):**\n"
@@ -2076,7 +2972,7 @@ async def ash_status(ctx):
         f"• **Next Daily Reset:** {(pt_now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).strftime('%Y-%m-%d 00:00:00 PT')}\n"
         f"• **Last Request:** {ai_usage_stats['last_request_time'].strftime('%H:%M:%S PT') if ai_usage_stats['last_request_time'] else 'None'}"
     )
-    
+
     await ctx.send(
         f"🤖 Ash at your service.\n"
         f"AI: {ai_status_message}\n"
@@ -2171,7 +3067,7 @@ async def test_ai_backup(ctx):
     """Test AI backup functionality and DM notifications (Moderators only)"""
     try:
         await ctx.send("🧪 **Testing AI Backup System...**")
-        
+
         # Show current AI configuration
         config_info = (
             f"📊 **Current AI Configuration:**\n"
@@ -2181,12 +3077,12 @@ async def test_ai_backup(ctx):
             f"• **Claude Available:** {'✅' if claude_client else '❌'}\n"
             f"• **Current Status:** {ai_status_message}\n\n"
         )
-        
+
         await ctx.send(config_info)
-        
+
         # Test primary AI
         test_prompt = "Test backup system response"
-        
+
         if primary_ai == "gemini" and gemini_model is not None:
             await ctx.send("🔍 **Testing Gemini (Primary)...**")
             try:
@@ -2197,7 +3093,7 @@ async def test_ai_backup(ctx):
                     await ctx.send("❌ **Gemini Test:** No response received")
             except Exception as e:
                 await ctx.send(f"❌ **Gemini Test Failed:** {str(e)}")
-                
+
                 # Test if backup would activate
                 if backup_ai == "claude" and claude_client is not None:
                     await ctx.send("🔄 **Testing Claude Backup Activation...**")
@@ -2205,7 +3101,7 @@ async def test_ai_backup(ctx):
                         backup_response = claude_client.messages.create(
                             model="claude-3-haiku-20240307",
                             max_tokens=50,
-                            messages=[{"role": "user", "content": "Respond with 'Claude backup test successful'"}]
+                            messages=[{"role": "user", "content": "Respond with 'Claude backup test successful'"}],
                         )
                         if backup_response and hasattr(backup_response, "content"):
                             claude_text = backup_response.content[0].text if backup_response.content else ""
@@ -2214,14 +3110,14 @@ async def test_ai_backup(ctx):
                             await ctx.send("❌ **Claude Backup Test:** No response received")
                     except Exception as claude_e:
                         await ctx.send(f"❌ **Claude Backup Test Failed:** {str(claude_e)}")
-        
+
         elif primary_ai == "claude" and claude_client is not None:
             await ctx.send("🔍 **Testing Claude (Primary)...**")
             try:
                 response = claude_client.messages.create(
                     model="claude-3-haiku-20240307",
                     max_tokens=50,
-                    messages=[{"role": "user", "content": "Respond with 'Claude test successful'"}]
+                    messages=[{"role": "user", "content": "Respond with 'Claude test successful'"}],
                 )
                 if response and hasattr(response, "content"):
                     claude_text = response.content[0].text if response.content else ""
@@ -2230,7 +3126,7 @@ async def test_ai_backup(ctx):
                     await ctx.send("❌ **Claude Test:** No response received")
             except Exception as e:
                 await ctx.send(f"❌ **Claude Test Failed:** {str(e)}")
-                
+
                 # Test if backup would activate
                 if backup_ai == "gemini" and gemini_model is not None:
                     await ctx.send("🔄 **Testing Gemini Backup Activation...**")
@@ -2242,7 +3138,7 @@ async def test_ai_backup(ctx):
                             await ctx.send("❌ **Gemini Backup Test:** No response received")
                     except Exception as gemini_e:
                         await ctx.send(f"❌ **Gemini Backup Test Failed:** {str(gemini_e)}")
-        
+
         # Test DM notification system
         await ctx.send("📱 **Testing DM Notification System...**")
         test_dm_success = await send_dm_notification(
@@ -2251,14 +3147,14 @@ async def test_ai_backup(ctx):
             f"This is a test of the AI backup notification system.\n"
             f"**Test initiated by:** {ctx.author.name}\n"
             f"**Current time:** {datetime.now(ZoneInfo('Europe/London')).strftime('%H:%M:%S UK')}\n\n"
-            f"If you received this message, the DM notification system is working correctly!"
+            f"If you received this message, the DM notification system is working correctly!",
         )
-        
+
         if test_dm_success:
             await ctx.send("✅ **DM Notification Test:** Successfully sent test DM")
         else:
             await ctx.send("❌ **DM Notification Test:** Failed to send test DM")
-        
+
         # Show rate limiting info
         pt_now = datetime.now(ZoneInfo("US/Pacific"))
         rate_limit_info = (
@@ -2267,11 +3163,11 @@ async def test_ai_backup(ctx):
             f"• **Hourly Requests:** {ai_usage_stats['hourly_requests']}/{MAX_HOURLY_REQUESTS}\n"
             f"• **Next Daily Reset:** {(pt_now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).strftime('%Y-%m-%d 00:00 PT')}\n"
         )
-        
+
         await ctx.send(rate_limit_info)
-        
+
         await ctx.send("✅ **AI Backup System Test Complete**")
-        
+
     except Exception as e:
         await ctx.send(f"❌ **Test Error:** {str(e)}")
 
@@ -2283,13 +3179,13 @@ async def simulate_limit_reached(ctx):
     if ctx.author.id != JAM_USER_ID:
         await ctx.send("❌ **Access denied:** This command is restricted to the bot creator for safety.")
         return
-        
+
     try:
         await ctx.send("⚠️ **Simulating Gemini Daily Limit Reached...**")
-        
+
         # Send the same DM that would be sent when limit is actually reached
         success = await send_dm_notification(
-            JAM_USER_ID, 
+            JAM_USER_ID,
             f"🤖 **Ash Bot Daily Limit Alert - SIMULATION**\n\n"
             f"**THIS IS A TEST SIMULATION**\n\n"
             f"Gemini daily limit reached ({MAX_DAILY_REQUESTS} requests).\n"
@@ -2302,17 +3198,929 @@ async def simulate_limit_reached(ctx):
             f"• **Performance:** Faster responses, excellent reasoning\n\n"
             f"**Limit Reset:** Next day at 00:00 PT\n\n"
             f"System continues operating normally with Claude backup.\n"
-            f"**Initiated by:** {ctx.author.name} (Test Simulation)"
+            f"**Initiated by:** {ctx.author.name} (Test Simulation)",
         )
-        
+
         if success:
             await ctx.send("✅ **Simulation Complete:** DM notification sent successfully")
-            await ctx.send("📱 **Check your DMs** to see exactly what notification you'll receive when Gemini limit is reached")
+            await ctx.send(
+                "📱 **Check your DMs** to see exactly what notification you'll receive when Gemini limit is reached"
+            )
         else:
             await ctx.send("❌ **Simulation Failed:** Could not send DM notification")
-            
+
     except Exception as e:
         await ctx.send(f"❌ **Simulation Error:** {str(e)}")
+
+
+@bot.command(name="announceupdate")
+async def announce_update_cmd(ctx):
+    """Start interactive DM conversation to create update announcements for mod or user channels"""
+    # Check if command is used in DM
+    if ctx.guild is not None:
+        await ctx.send(
+            f"⚠️ **Security protocol engaged.** Announcement creation must be initiated via direct message. "
+            f"Please DM me with `!announceupdate` to begin the secure briefing process.\n\n"
+            f"*Confidential mission parameters require private channel authorization.*"
+        )
+        return
+
+    # Check user permissions - only James and Captain Jonesy
+    if ctx.author.id not in [JAM_USER_ID, JONESY_USER_ID]:
+        await ctx.send(
+            f"❌ **Access denied.** Announcement protocols are restricted to authorized command personnel only. "
+            f"Your clearance level is insufficient for update broadcast capabilities.\n\n"
+            f"*Security protocols maintained. Unauthorized access logged.*"
+        )
+        return
+
+    # Clean up any existing conversation state for this user
+    cleanup_announcement_conversations()
+
+    # Initialize conversation state
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    announcement_conversations[ctx.author.id] = {
+        'step': 'channel_selection',
+        'data': {},
+        'last_activity': uk_now,
+        'initiated_at': uk_now,
+    }
+
+    # Start the interactive process
+    if ctx.author.id == JONESY_USER_ID:
+        greeting = "Captain Jonesy. Authorization confirmed."
+    else:
+        greeting = "Sir Decent Jam. Creator protocols activated."
+
+    channel_msg = (
+        f"🎯 **Update Announcement System Activated**\n\n"
+        f"{greeting} Initiating secure briefing sequence for mission update dissemination.\n\n"
+        f"📡 **Target Channel Selection:**\n"
+        f"**1.** 🔒 **Moderator Channel** - Internal team briefing (detailed technical update)\n"
+        f"**2.** 📢 **User Announcements** - Public community notification (user-focused content)\n\n"
+        f"Please respond with **1** for mod team updates or **2** for community announcements.\n\n"
+        f"*Mission parameters await your tactical decision.*"
+    )
+
+    await ctx.send(channel_msg)
+
+
+def cleanup_announcement_conversations():
+    """Remove announcement conversations inactive for more than 1 hour"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    cutoff_time = uk_now - timedelta(hours=1)
+    expired_users = [
+        user_id
+        for user_id, data in announcement_conversations.items()
+        if data.get("last_activity", uk_now) < cutoff_time
+    ]
+    for user_id in expired_users:
+        del announcement_conversations[user_id]
+        print(f"Cleaned up expired announcement conversation for user {user_id}")
+
+
+def update_announcement_activity(user_id: int):
+    """Update last activity time for announcement conversation"""
+    if user_id in announcement_conversations:
+        announcement_conversations[user_id]["last_activity"] = datetime.now(ZoneInfo("Europe/London"))
+
+
+def cleanup_mod_trivia_conversations():
+    """Remove mod trivia conversations inactive for more than 1 hour"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    cutoff_time = uk_now - timedelta(hours=1)
+    expired_users = [
+        user_id for user_id, data in mod_trivia_conversations.items() if data.get("last_activity", uk_now) < cutoff_time
+    ]
+    for user_id in expired_users:
+        del mod_trivia_conversations[user_id]
+        print(f"Cleaned up expired mod trivia conversation for user {user_id}")
+
+
+def update_mod_trivia_activity(user_id: int):
+    """Update last activity time for mod trivia conversation"""
+    if user_id in mod_trivia_conversations:
+        mod_trivia_conversations[user_id]["last_activity"] = datetime.now(ZoneInfo("Europe/London"))
+
+
+async def handle_announcement_conversation(message):
+    """Handle the interactive DM conversation for announcement creation"""
+    user_id = message.author.id
+    conversation = announcement_conversations.get(user_id)
+
+    if not conversation:
+        return
+
+    # Update activity
+    update_announcement_activity(user_id)
+
+    step = conversation.get('step', 'channel_selection')
+    data = conversation.get('data', {})
+    content = message.content.strip()
+
+    try:
+        if step == 'channel_selection':
+            # Handle channel selection (1 for mod, 2 for user announcements)
+            if content in ['1', 'mod', 'moderator', 'mod channel']:
+                data['target_channel'] = 'mod'
+                conversation['step'] = 'content_input'
+
+                greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
+
+                await message.reply(
+                    f"🔒 **Moderator Channel Selected**\n\n"
+                    f"Target: <#{MOD_ALERT_CHANNEL_ID}> (Internal team briefing)\n\n"
+                    f"📝 **Content Creation Protocol:**\n"
+                    f"Please provide your update content, {greeting}. This will be formatted as a detailed "
+                    f"technical briefing for the moderation team with full functionality breakdown and implementation details.\n\n"
+                    f"*Include all relevant technical specifications and operational parameters.*"
+                )
+
+            elif content in ['2', 'user', 'announcements', 'public', 'community']:
+                data['target_channel'] = 'user'
+                conversation['step'] = 'content_input'
+
+                greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
+
+                await message.reply(
+                    f"📢 **User Announcements Channel Selected**\n\n"
+                    f"Target: <#{ANNOUNCEMENTS_CHANNEL_ID}> (Public community notification)\n\n"
+                    f"📝 **Content Creation Protocol:**\n"
+                    f"Please provide your update content, {greeting}. This will be formatted as a "
+                    f"user-friendly community announcement focusing on new features and improvements that "
+                    f"enhance the user experience.\n\n"
+                    f"*Focus on benefits and user-facing functionality rather than technical implementation.*"
+                )
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid selection.** Please respond with **1** for moderator updates or **2** for community announcements.\n\n"
+                    f"*Precision is essential for proper mission briefing protocols.*"
+                )
+
+        elif step == 'content_input':
+            # Store the content and move to preview
+            data['content'] = content
+            conversation['step'] = 'preview'
+
+            # Create formatted preview based on target channel
+            target_channel = data.get('target_channel', 'mod')
+            preview_content = await format_announcement_content(content, target_channel, user_id)
+
+            data['formatted_content'] = preview_content
+
+            # Show preview with FAQ options
+            preview_msg = (
+                f"📋 **Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
+                f"```\n{preview_content}\n```\n\n"
+                f"📚 **Available Actions:**\n"
+                f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
+                f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
+                f"**3.** 🔧 **Add FAQ Links** - Include moderator FAQ topic buttons\n"
+                f"**4.** 📝 **Add Creator Notes** - Include personal notes from the creator\n"
+                f"**5.** ❌ **Cancel** - Abort announcement creation\n\n"
+                f"Please respond with **1**, **2**, **3**, **4**, or **5**.\n\n"
+                f"*Review mission parameters carefully before deployment.*"
+            )
+
+            await message.reply(preview_msg)
+
+        elif step == 'preview':
+            # Handle preview actions
+            if content in ['1', 'post', 'deploy', 'send']:
+                # Post the announcement
+                success = await post_announcement(data, user_id)
+
+                if success:
+                    target_channel = data.get('target_channel', 'mod')
+                    channel_name = "moderator" if target_channel == 'mod' else "community announcements"
+
+                    await message.reply(
+                        f"✅ **Announcement Deployed Successfully**\n\n"
+                        f"Your update has been transmitted to the {channel_name} channel with proper formatting "
+                        f"and presentation protocols. Mission briefing complete.\n\n"
+                        f"*Efficient communication maintained. All personnel notified.*"
+                    )
+                else:
+                    await message.reply(
+                        f"❌ **Deployment Failed**\n\n"
+                        f"System malfunction detected during announcement transmission. Unable to complete "
+                        f"briefing protocol.\n\n"
+                        f"*Please retry or contact system administrator for technical support.*"
+                    )
+
+                # Clean up conversation
+                if user_id in announcement_conversations:
+                    del announcement_conversations[user_id]
+
+            elif content in ['2', 'edit', 'revise']:
+                # Return to content input
+                conversation['step'] = 'content_input'
+
+                await message.reply(
+                    f"✏️ **Content Revision Mode**\n\n"
+                    f"Please provide your updated announcement content. Previous content will be replaced "
+                    f"with your new input.\n\n"
+                    f"*Precision and clarity are paramount for effective mission communication.*"
+                )
+
+            elif content in ['3', 'faq', 'buttons']:
+                # Show FAQ options and add them
+                conversation['step'] = 'faq_selection'
+
+                # Get available FAQ topics from the moderator FAQ handler
+                faq_topics = [
+                    "1. Strike System Overview",
+                    "2. Member Interaction Guidelines",
+                    "3. Database Query Functions",
+                    "4. Command Architecture",
+                    "5. AI Integration Details",
+                    "6. Rate Limiting Systems",
+                    "7. Reminder Protocols",
+                    "8. Gaming Database Features",
+                ]
+
+                faq_msg = (
+                    f"🔧 **FAQ Integration Protocol**\n\n"
+                    f"Select moderator FAQ topics to include as interactive buttons with your announcement:\n\n"
+                    f"{chr(10).join(faq_topics)}\n\n"
+                    f"**9.** ✅ **Proceed without FAQ buttons**\n"
+                    f"**0.** ❌ **Return to preview**\n\n"
+                    f"Respond with numbers separated by commas (e.g., '1,3,5') or a single number.\n\n"
+                    f"*Enhanced functionality provides comprehensive briefing capabilities.*"
+                )
+
+                await message.reply(faq_msg)
+
+            elif content in ['4', 'notes', 'creator notes']:
+                # Add creator notes step
+                conversation['step'] = 'creator_notes_input'
+
+                greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
+
+                await message.reply(
+                    f"📝 **Creator Notes Protocol Activated**\n\n"
+                    f"Please provide your personal notes, {greeting}. These will be included in the announcement "
+                    f"with proper attribution and presented in an Ash-appropriate format.\n\n"
+                    f"**What to include:**\n"
+                    f"• Personal thoughts about the update\n"
+                    f"• Behind-the-scenes insights\n"
+                    f"• Future plans or considerations\n"
+                    f"• Any additional context you'd like to share\n\n"
+                    f"*Your notes will be clearly attributed and formatted appropriately for the target audience.*"
+                )
+
+            elif content in ['5', 'cancel', 'abort']:
+                # Cancel the announcement
+                await message.reply(
+                    f"❌ **Announcement Protocol Cancelled**\n\n"
+                    f"Mission briefing sequence has been terminated. No content has been deployed. "
+                    f"All temporary data has been expunged from system memory.\n\n"
+                    f"*Mission parameters reset. Standing by for new directives.*"
+                )
+
+                # Clean up conversation
+                if user_id in announcement_conversations:
+                    del announcement_conversations[user_id]
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid command.** Please respond with **1** (Post), **2** (Edit), **3** (Add FAQ), or **4** (Cancel).\n\n"
+                    f"*Precise input required for proper protocol execution.*"
+                )
+
+        elif step == 'creator_notes_input':
+            # Handle creator notes input
+            data['creator_notes'] = content
+            conversation['step'] = 'preview'
+
+            # Regenerate formatted content with creator notes included
+            target_channel = data.get('target_channel', 'mod')
+            main_content = data.get('content', '')
+            preview_content = await format_announcement_content(
+                main_content, target_channel, user_id, creator_notes=content
+            )
+
+            data['formatted_content'] = preview_content
+
+            # Show updated preview with creator notes
+            preview_msg = (
+                f"📋 **Updated Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
+                f"```\n{preview_content}\n```\n\n"
+                f"📚 **Available Actions:**\n"
+                f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
+                f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
+                f"**3.** 🔧 **Add FAQ Links** - Include moderator FAQ topic buttons\n"
+                f"**4.** 📝 **Edit Creator Notes** - Modify your personal notes\n"
+                f"**5.** ❌ **Cancel** - Abort announcement creation\n\n"
+                f"*Review mission parameters carefully before deployment.*"
+            )
+
+            await message.reply(preview_msg)
+
+        elif step == 'faq_selection':
+            # Handle FAQ topic selection
+            if content in ['0', 'back', 'return']:
+                # Return to preview
+                conversation['step'] = 'preview'
+                target_channel = data.get('target_channel', 'mod')
+                preview_content = data.get('formatted_content', '')
+
+                # Check if we have creator notes to show the updated preview options
+                has_creator_notes = data.get('creator_notes') is not None
+
+                if has_creator_notes:
+                    preview_msg = (
+                        f"📋 **Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
+                        f"```\n{preview_content}\n```\n\n"
+                        f"📚 **Available Actions:**\n"
+                        f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
+                        f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
+                        f"**3.** 🔧 **Add FAQ Links** - Include moderator FAQ topic buttons\n"
+                        f"**4.** 📝 **Edit Creator Notes** - Modify your personal notes\n"
+                        f"**5.** ❌ **Cancel** - Abort announcement creation\n\n"
+                        f"*Review mission parameters carefully before deployment.*"
+                    )
+                else:
+                    preview_msg = (
+                        f"📋 **Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
+                        f"```\n{preview_content}\n```\n\n"
+                        f"📚 **Available Actions:**\n"
+                        f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
+                        f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
+                        f"**3.** 🔧 **Add FAQ Links** - Include moderator FAQ topic buttons\n"
+                        f"**4.** 📝 **Add Creator Notes** - Include personal notes from the creator\n"
+                        f"**5.** ❌ **Cancel** - Abort announcement creation\n\n"
+                        f"*Review mission parameters carefully before deployment.*"
+                    )
+
+                await message.reply(preview_msg)
+
+            elif content in ['9', 'proceed', 'no faq']:
+                # Proceed without FAQ buttons - post announcement
+                success = await post_announcement(data, user_id)
+
+                if success:
+                    target_channel = data.get('target_channel', 'mod')
+                    channel_name = "moderator" if target_channel == 'mod' else "community announcements"
+
+                    await message.reply(
+                        f"✅ **Announcement Deployed Successfully**\n\n"
+                        f"Your update has been transmitted to the {channel_name} channel. "
+                        f"Mission briefing complete without FAQ integration.\n\n"
+                        f"*Standard communication protocol maintained. All personnel notified.*"
+                    )
+                else:
+                    await message.reply(
+                        f"❌ **Deployment Failed**\n\n"
+                        f"System malfunction detected during announcement transmission.\n\n"
+                        f"*Please retry or contact system administrator.*"
+                    )
+
+                # Clean up conversation
+                if user_id in announcement_conversations:
+                    del announcement_conversations[user_id]
+
+            else:
+                # Parse FAQ topic selections
+                try:
+                    # Parse comma-separated numbers or single number
+                    selected_numbers = [
+                        int(n.strip()) for n in content.replace(',', ' ').split() if n.strip().isdigit()
+                    ]
+
+                    if selected_numbers and all(1 <= n <= 8 for n in selected_numbers):
+                        # Store selected FAQ topics
+                        data['faq_topics'] = selected_numbers
+
+                        # Map numbers to topic names
+                        topic_mapping = {
+                            1: "Strike System Overview",
+                            2: "Member Interaction Guidelines",
+                            3: "Database Query Functions",
+                            4: "Command Architecture",
+                            5: "AI Integration Details",
+                            6: "Rate Limiting Systems",
+                            7: "Reminder Protocols",
+                            8: "Gaming Database Features",
+                        }
+
+                        selected_topics = [topic_mapping[n] for n in selected_numbers]
+                        topics_text = '\n• '.join(selected_topics)
+
+                        # Post announcement with FAQ buttons
+                        success = await post_announcement_with_faq(data, user_id, selected_numbers)
+
+                        if success:
+                            target_channel = data.get('target_channel', 'mod')
+                            channel_name = "moderator" if target_channel == 'mod' else "community announcements"
+
+                            await message.reply(
+                                f"✅ **Enhanced Announcement Deployed Successfully**\n\n"
+                                f"Your update has been transmitted to the {channel_name} channel with integrated "
+                                f"FAQ functionality. Interactive buttons have been configured for the following topics:\n\n"
+                                f"• {topics_text}\n\n"
+                                f"*Advanced briefing protocol complete. Enhanced functionality active.*"
+                            )
+                        else:
+                            await message.reply(
+                                f"❌ **Enhanced Deployment Failed**\n\n"
+                                f"System malfunction detected during FAQ integration. Attempting standard deployment...\n\n"
+                                f"*FAQ functionality compromised. Consider manual FAQ reference.*"
+                            )
+
+                        # Clean up conversation
+                        if user_id in announcement_conversations:
+                            del announcement_conversations[user_id]
+
+                    else:
+                        await message.reply(
+                            f"⚠️ **Invalid topic selection.** Please provide numbers 1-8 separated by commas, "
+                            f"or use **9** to proceed without FAQ buttons, **0** to return to preview.\n\n"
+                            f"*Precise specification required for FAQ integration protocol.*"
+                        )
+
+                except (ValueError, IndexError):
+                    await message.reply(
+                        f"⚠️ **Format error.** Please provide valid numbers (1-8) separated by commas, spaces, "
+                        f"or as single digits.\n\n"
+                        f"Example: '1,3,5' or '1 3 5' or '2'\n\n"
+                        f"*Proper syntax essential for system interpretation.*"
+                    )
+
+        # Update conversation state
+        conversation['data'] = data
+        announcement_conversations[user_id] = conversation
+
+    except Exception as e:
+        print(f"Error in announcement conversation: {e}")
+        # Clean up on error
+        if user_id in announcement_conversations:
+            del announcement_conversations[user_id]
+
+
+async def format_announcement_content(
+    content: str, target_channel: str, user_id: int, creator_notes: Optional[str] = None
+) -> str:
+    """Format announcement content based on target channel and user"""
+
+    # Determine the author identifier
+    if user_id == JONESY_USER_ID:
+        author = "Captain Jonesy"
+        author_title = "Commanding Officer"
+    else:
+        author = "Sir Decent Jam"
+        author_title = "Bot Creator & Systems Architect"
+
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    timestamp = uk_now.strftime("%A, %B %d, %Y at %H:%M UK")
+
+    if target_channel == 'mod':
+        # Moderator-focused technical format
+        formatted = (
+            f"🤖 **Ash Bot System Update** - *Technical Briefing*\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"**📡 Mission Update from {author}** (*{author_title}*)\n\n"
+            f"{content}\n\n"
+        )
+
+        # Add creator notes section for mod channel if provided
+        if creator_notes and creator_notes.strip():
+            formatted += f"**📝 Technical Notes from {author}:**\n" f"*{creator_notes.strip()}*\n\n"
+
+        formatted += (
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"**📊 System Status:** All core functions operational\n"
+            f"**🕒 Briefing Time:** {timestamp}\n"
+            f"**🔧 Technical Contact:** <@{JAM_USER_ID}> for implementation details\n"
+            f"**⚡ Priority Level:** Standard operational enhancement\n\n"
+            f"*Analysis complete. Mission parameters updated. Efficiency maintained.*"
+        )
+    else:
+        # User-focused friendly format
+        formatted = (
+            f"🎉 **Exciting Bot Updates!**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"Hey everyone! {author} here with some cool new features:\n\n"
+            f"{content}\n\n"
+        )
+
+        # Add creator notes section for user channel if provided
+        if creator_notes and creator_notes.strip():
+            formatted += f"**💭 A note from {author}:**\n" f"*{creator_notes.strip()}*\n\n"
+
+        formatted += (
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"**🕒 Posted:** {timestamp}\n"
+            f"**💬 Questions?** Feel free to ask in the channels or DM <@{JAM_USER_ID}>\n"
+            f"**🤖 From:** Ash Bot (Science Officer, reprogrammed for your convenience)\n\n"
+            f"*Hope you enjoy the new functionality! - The Management* 🚀"
+        )
+
+    return formatted
+
+
+async def post_announcement(data: dict, user_id: int) -> bool:
+    """Post announcement to the target channel"""
+    try:
+        target_channel = data.get('target_channel', 'mod')
+        formatted_content = data.get('formatted_content', '')
+
+        # Get the target channel
+        if target_channel == 'mod':
+            channel_id = MOD_ALERT_CHANNEL_ID
+        else:
+            channel_id = ANNOUNCEMENTS_CHANNEL_ID
+
+        channel = bot.get_channel(channel_id)
+
+        if not isinstance(channel, discord.TextChannel):
+            print(f"Could not access channel {channel_id}")
+            return False
+
+        # Post the announcement
+        await channel.send(formatted_content)
+        print(f"Posted announcement to {channel.name} by user {user_id}")
+        return True
+
+    except Exception as e:
+        print(f"Error posting announcement: {e}")
+        return False
+
+
+async def post_announcement_with_faq(data: dict, user_id: int, faq_topics: list) -> bool:
+    """Post announcement with FAQ buttons"""
+    try:
+        target_channel = data.get('target_channel', 'mod')
+        formatted_content = data.get('formatted_content', '')
+
+        # Get the target channel
+        if target_channel == 'mod':
+            channel_id = MOD_ALERT_CHANNEL_ID
+        else:
+            channel_id = ANNOUNCEMENTS_CHANNEL_ID
+
+        channel = bot.get_channel(channel_id)
+
+        if not isinstance(channel, discord.TextChannel):
+            print(f"Could not access channel {channel_id}")
+            return False
+
+        # Create a view with FAQ buttons
+        view = AnnouncementFAQView(faq_topics)
+
+        # Post the announcement with buttons
+        await channel.send(formatted_content + "\n\n🔍 **Quick FAQ Access:**", view=view)
+        print(f"Posted enhanced announcement with FAQ buttons to {channel.name} by user {user_id}")
+        return True
+
+    except Exception as e:
+        print(f"Error posting announcement with FAQ: {e}")
+        # Fallback to regular announcement
+        return await post_announcement(data, user_id)
+
+
+# Discord View class for FAQ buttons
+class AnnouncementFAQView(discord.ui.View):
+    """Discord UI View for FAQ buttons in announcements"""
+
+    def __init__(self, faq_topics: list):
+        super().__init__(timeout=None)  # Persistent view
+
+        # Topic mapping
+        topic_mapping = {
+            1: ("🎯", "Strikes", "strike system"),
+            2: ("👥", "Members", "member interaction"),
+            3: ("🗄️", "Database", "database query"),
+            4: ("⚡", "Commands", "command system"),
+            5: ("🧠", "AI System", "ai integration"),
+            6: ("⏱️", "Rate Limits", "rate limiting"),
+            7: ("⏰", "Reminders", "reminder system"),
+            8: ("🎮", "Gaming DB", "gaming database"),
+        }
+
+        # Add buttons for selected topics (max 5 buttons per row, 5 rows max = 25 buttons)
+        for topic_num in faq_topics[:8]:  # Limit to 8 buttons total
+            if topic_num in topic_mapping:
+                emoji, label, query = topic_mapping[topic_num]
+                button = discord.ui.Button(
+                    emoji=emoji, label=label, style=discord.ButtonStyle.secondary, custom_id=f"faq_{query}"
+                )
+                button.callback = self.create_faq_callback(query)
+                self.add_item(button)
+
+    def create_faq_callback(self, query: str):
+        """Create callback function for FAQ button"""
+
+        async def faq_callback(interaction: discord.Interaction):
+            try:
+                # Use the existing moderator FAQ handler
+                faq_response = moderator_faq_handler.handle_faq_query(query)
+
+                if faq_response:
+                    # Send as ephemeral response (only visible to user who clicked)
+                    await interaction.response.send_message(faq_response, ephemeral=True)
+                else:
+                    await interaction.response.send_message(
+                        f"❓ **FAQ topic '{query}' not found.** Please consult the moderator documentation or contact <@{JAM_USER_ID}> for assistance.",
+                        ephemeral=True,
+                    )
+
+            except Exception as e:
+                print(f"Error in FAQ button callback: {e}")
+                await interaction.response.send_message(
+                    f"⚠️ **System error accessing FAQ data.** Please try again or contact support.", ephemeral=True
+                )
+
+        return faq_callback
+
+
+async def handle_mod_trivia_conversation(message):
+    """Handle the interactive DM conversation for mod trivia question submission"""
+    user_id = message.author.id
+    conversation = mod_trivia_conversations.get(user_id)
+
+    if not conversation:
+        return
+
+    # Update activity
+    update_mod_trivia_activity(user_id)
+
+    step = conversation.get('step', 'initial')
+    data = conversation.get('data', {})
+    content = message.content.strip()
+
+    try:
+        if step == 'initial':
+            # User wants to add a trivia question
+            if any(keyword in content.lower() for keyword in ['trivia', 'question', 'add', 'submit']):
+                conversation['step'] = 'question_type_selection'
+
+                greeting = "moderator" if await user_is_mod_by_id(user_id) else "personnel"
+
+                await message.reply(
+                    f"🧠 **TRIVIA QUESTION SUBMISSION PROTOCOL**\n\n"
+                    f"Authorization confirmed, {greeting}. Initiating secure trivia question submission sequence.\n\n"
+                    f"📋 **Question Type Selection:**\n"
+                    f"**1.** 🎯 **Question Only** - Provide question text for me to calculate the answer from Captain Jonesy's gaming database\n"
+                    f"**2.** 🎯 **Question + Answer** - Provide both question and answer for specific gameplay moments or experiences\n\n"
+                    f"Please respond with **1** for database-calculated questions or **2** for manual question+answer pairs.\n\n"
+                    f"*Mission intelligence protocols await your selection.*"
+                )
+            else:
+                # Generic conversation starter, ask what they want to do
+                await message.reply(
+                    f"🧠 **Trivia Question Submission Interface**\n\n"
+                    f"Greetings, moderator. I can assist with trivia question submissions for Trivia Tuesday.\n\n"
+                    f"**Available Functions:**\n"
+                    f"• Submit database-powered questions (I calculate answers from gaming data)\n"
+                    f"• Submit complete question+answer pairs for specific gaming moments\n\n"
+                    f"Would you like to **add a trivia question**? Please respond with 'yes' to begin the submission process.\n\n"
+                    f"*All submissions are prioritized over AI-generated questions for upcoming Trivia Tuesday sessions.*"
+                )
+
+        elif step == 'question_type_selection':
+            if content in ['1', 'database', 'question only', 'calculate']:
+                data['question_type'] = 'database_calculated'
+                conversation['step'] = 'question_input'
+
+                await message.reply(
+                    f"🎯 **Database-Calculated Question Selected**\n\n"
+                    f"Please provide your trivia question. I will calculate the answer using Captain Jonesy's gaming database just before posting.\n\n"
+                    f"**Examples of good database questions:**\n"
+                    f"• What is Jonesy's longest playthrough by total hours?\n"
+                    f"• Which horror game has Jonesy played the most episodes of?\n"
+                    f"• What game series has taken the most total time to complete?\n"
+                    f"• Which game has the highest average minutes per episode?\n\n"
+                    f"**Please provide your question text:**"
+                )
+
+            elif content in ['2', 'manual', 'question answer', 'both']:
+                data['question_type'] = 'manual_answer'
+                conversation['step'] = 'question_input'
+
+                await message.reply(
+                    f"🎯 **Manual Question+Answer Selected**\n\n"
+                    f"Please provide your trivia question. You'll provide the answer in the next step.\n\n"
+                    f"**Examples of good manual questions:**\n"
+                    f"• Which of the following is a well-known Jonesy catchphrase? A) Shit on it! B) Oh crumbles C) Nuke 'em from orbit\n"
+                    f"• What happened during Jonesy's playthrough of [specific game] that became a running joke?\n"
+                    f"• Which game did Jonesy famously rage-quit after [specific incident]?\n\n"
+                    f"**Please provide your question text:**"
+                )
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid selection.** Please respond with **1** for database questions or **2** for manual questions.\n\n"
+                    f"*Precision is essential for proper protocol execution.*"
+                )
+
+        elif step == 'question_input':
+            # Store the question and determine next step based on type
+            data['question_text'] = content
+
+            if data.get('question_type') == 'manual_answer':
+                conversation['step'] = 'answer_input'
+                await message.reply(
+                    f"📝 **Question Recorded**\n\n"
+                    f"**Your Question:** {content}\n\n"
+                    f"**Now provide the correct answer.** If this is a multiple choice question, please specify which option (A, B, C, D) is correct.\n\n"
+                    f"**Please provide the correct answer:**"
+                )
+            else:
+                conversation['step'] = 'category_selection'
+                await message.reply(
+                    f"📝 **Question Recorded**\n\n"
+                    f"**Your Question:** {content}\n\n"
+                    f"📊 **Category Selection** (helps with answer calculation):\n"
+                    f"**1.** 📈 **Statistics** - Questions about playtime, episode counts, completion rates\n"
+                    f"**2.** 🎮 **Games** - Questions about specific games or series\n"
+                    f"**3.** 📺 **Series** - Questions about game franchises or series\n\n"
+                    f"Please respond with **1**, **2**, or **3** to categorize your question.\n\n"
+                    f"*This helps me calculate the most accurate answer from the database.*"
+                )
+
+        elif step == 'answer_input':
+            # Store the answer and move to preview
+            data['correct_answer'] = content
+            conversation['step'] = 'preview'
+
+            # Determine if it's multiple choice based on question content
+            question_text = data['question_text']
+            is_multiple_choice = bool(re.search(r'\b[A-D]\)', question_text))
+
+            # Show preview
+            preview_msg = (
+                f"📋 **Trivia Question Preview**\n\n"
+                f"**Question:** {question_text}\n\n"
+                f"**Answer:** {content}\n\n"
+                f"**Type:** {'Multiple Choice' if is_multiple_choice else 'Single Answer'}\n"
+                f"**Source:** Moderator Submission\n\n"
+                f"📚 **Available Actions:**\n"
+                f"**1.** ✅ **Submit Question** - Add to trivia database with priority scheduling\n"
+                f"**2.** ✏️ **Edit Question** - Revise the question text\n"
+                f"**3.** 🔧 **Edit Answer** - Revise the correct answer\n"
+                f"**4.** ❌ **Cancel** - Abort question submission\n\n"
+                f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
+                f"*Review question parameters carefully before submission.*"
+            )
+
+            await message.reply(preview_msg)
+
+        elif step == 'category_selection':
+            if content in ['1', 'statistics', 'stats']:
+                data['category'] = 'statistics'
+                data['dynamic_query_type'] = 'statistics'
+            elif content in ['2', 'games', 'game']:
+                data['category'] = 'games'
+                data['dynamic_query_type'] = 'games'
+            elif content in ['3', 'series', 'franchise']:
+                data['category'] = 'series'
+                data['dynamic_query_type'] = 'series'
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid category.** Please respond with **1** (Statistics), **2** (Games), or **3** (Series).\n\n"
+                    f"*Precise categorization required for accurate answer calculation.*"
+                )
+                return
+
+            conversation['step'] = 'preview'
+
+            # Show preview for database question
+            question_text = data['question_text']
+            category = data['category']
+
+            preview_msg = (
+                f"📋 **Trivia Question Preview**\n\n"
+                f"**Question:** {question_text}\n\n"
+                f"**Answer:** *Will be calculated from gaming database before posting*\n"
+                f"**Category:** {category.title()}\n"
+                f"**Type:** Database-Calculated\n"
+                f"**Source:** Moderator Submission\n\n"
+                f"📚 **Available Actions:**\n"
+                f"**1.** ✅ **Submit Question** - Add to trivia database with priority scheduling\n"
+                f"**2.** ✏️ **Edit Question** - Revise the question text\n"
+                f"**3.** 🔧 **Change Category** - Select different category\n"
+                f"**4.** ❌ **Cancel** - Abort question submission\n\n"
+                f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
+                f"*Review question parameters carefully before submission.*"
+            )
+
+            await message.reply(preview_msg)
+
+        elif step == 'preview':
+            if content in ['1', 'submit', 'confirm', 'yes']:
+                # Submit the question to database
+                question_text = data['question_text']
+                question_type = (
+                    'multiple_choice'
+                    if data.get('question_type') == 'manual_answer' and re.search(r'\b[A-D]\)', question_text)
+                    else 'single_answer'
+                )
+
+                if data.get('question_type') == 'database_calculated':
+                    # Database-calculated question
+                    question_id = db.add_trivia_question(
+                        question_text=question_text,
+                        question_type=question_type,
+                        correct_answer=None,  # Will be calculated dynamically
+                        is_dynamic=True,
+                        dynamic_query_type=data.get('dynamic_query_type'),
+                        category=data.get('category'),
+                        submitted_by_user_id=user_id,
+                    )
+                else:
+                    # Manual question+answer
+                    multiple_choice_options = None
+                    if question_type == 'multiple_choice':
+                        # Extract options from question text
+                        options_match = re.findall(r'[A-D]\)\s*([^A-D\n]+)', question_text)
+                        if options_match:
+                            multiple_choice_options = [opt.strip() for opt in options_match]
+
+                    question_id = db.add_trivia_question(
+                        question_text=question_text,
+                        question_type=question_type,
+                        correct_answer=data['correct_answer'],
+                        multiple_choice_options=multiple_choice_options,
+                        is_dynamic=False,
+                        category=data.get('category', 'manual'),
+                        submitted_by_user_id=user_id,
+                    )
+
+                if question_id:
+                    await message.reply(
+                        f"✅ **Trivia Question Submitted Successfully**\n\n"
+                        f"Your question has been added to the trivia database with priority scheduling. "
+                        f"It will be featured in an upcoming Trivia Tuesday session before AI-generated questions.\n\n"
+                        f"**Question ID:** {question_id}\n"
+                        f"**Status:** Pending (will be used in next available Tuesday slot)\n"
+                        f"**Priority:** Moderator Submission (High Priority)\n\n"
+                        f"*Efficiency maintained. Mission intelligence enhanced. Thank you for your contribution.*"
+                    )
+                else:
+                    await message.reply(
+                        f"❌ **Submission Failed**\n\n"
+                        f"System malfunction detected during question database insertion. "
+                        f"Please retry or contact system administrator.\n\n"
+                        f"*Database error logged for technical review.*"
+                    )
+
+                # Clean up conversation
+                if user_id in mod_trivia_conversations:
+                    del mod_trivia_conversations[user_id]
+
+            elif content in ['2', 'edit question', 'edit']:
+                conversation['step'] = 'question_input'
+                await message.reply(
+                    f"✏️ **Question Edit Mode**\n\n"
+                    f"Please provide your revised question text. The previous question will be replaced.\n\n"
+                    f"*Precision and clarity are paramount for effective trivia questions.*"
+                )
+
+            elif content in ['3', 'edit answer', 'answer']:
+                if data.get('question_type') == 'manual_answer':
+                    conversation['step'] = 'answer_input'
+                    await message.reply(
+                        f"✏️ **Answer Edit Mode**\n\n"
+                        f"Please provide your revised answer. The previous answer will be replaced.\n\n"
+                        f"*Ensure accuracy for optimal trivia experience.*"
+                    )
+                else:
+                    conversation['step'] = 'category_selection'
+                    await message.reply(
+                        f"🔧 **Category Edit Mode**\n\n"
+                        f"📊 **Select New Category:**\n"
+                        f"**1.** 📈 **Statistics** - Questions about playtime, episode counts, completion rates\n"
+                        f"**2.** 🎮 **Games** - Questions about specific games or series\n"
+                        f"**3.** 📺 **Series** - Questions about game franchises or series\n\n"
+                        f"Please respond with **1**, **2**, or **3**.\n\n"
+                        f"*Category selection affects answer calculation accuracy.*"
+                    )
+
+            elif content in ['4', 'cancel', 'abort']:
+                await message.reply(
+                    f"❌ **Question Submission Cancelled**\n\n"
+                    f"Trivia question submission has been terminated. No data has been added to the database. "
+                    f"All temporary data has been expunged from system memory.\n\n"
+                    f"*Mission parameters reset. Standing by for new directives.*"
+                )
+
+                # Clean up conversation
+                if user_id in mod_trivia_conversations:
+                    del mod_trivia_conversations[user_id]
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid command.** Please respond with **1** (Submit), **2** (Edit Question), **3** (Edit Answer/Category), or **4** (Cancel).\n\n"
+                    f"*Precise input required for proper protocol execution.*"
+                )
+
+        # Update conversation state
+        conversation['data'] = data
+        mod_trivia_conversations[user_id] = conversation
+
+    except Exception as e:
+        print(f"Error in mod trivia conversation: {e}")
+        # Clean up on error
+        if user_id in mod_trivia_conversations:
+            del mod_trivia_conversations[user_id]
 
 
 # --- Data Migration Commands ---
@@ -5565,6 +7373,347 @@ async def debug_game_cmd(ctx, game_id: str):
 
     except Exception as e:
         await ctx.send(f"❌ **Debug error:** {str(e)}")
+
+
+# --- Reminder Commands ---
+@bot.command(name="remind")
+async def remind_command(ctx, *, reminder_request: str):
+    """Set a reminder with natural language parsing. Usage: !remind [me] to/of [action] at/in [time]"""
+    try:
+        # Check user permissions - only moderator, creator, and captain tiers
+        user_tier = await get_user_communication_tier(ctx)
+        if user_tier not in ["moderator", "creator", "captain"]:
+            await ctx.send(
+                f"⚠️ **Access denied.** Reminder protocols are restricted to authorized personnel only. "
+                f"Current clearance level insufficient for temporal scheduling functions."
+            )
+            return
+
+        # Parse the natural language request
+        parsed = parse_natural_reminder(reminder_request, ctx.author.id)
+
+        if not parsed["success"] or not parsed["reminder_text"]:
+            await ctx.send(
+                f"⚠️ **Parsing failure.** Unable to extract valid reminder parameters from your request. "
+                f"Please specify both the reminder content and timing. Example: 'remind me to post the YouTube link at 6pm'"
+            )
+            return
+
+        reminder_text = parsed["reminder_text"]
+        scheduled_time = parsed["scheduled_time"]
+
+        # Determine delivery method - DM for direct messages, channel for guild messages
+        delivery_type = "dm" if ctx.guild is None else "channel"
+        delivery_channel_id = ctx.channel.id if ctx.guild else None
+
+        # Check for auto-action patterns (YouTube posting)
+        auto_action_enabled = False
+        auto_action_type = None
+        auto_action_data = {}
+
+        youtube_url_pattern = r'https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)'
+        youtube_urls = re.findall(youtube_url_pattern, reminder_request, re.IGNORECASE)
+
+        if youtube_urls or "youtube" in reminder_request.lower():
+            # Ask about auto-action
+            auto_action_msg = await ctx.send(
+                f"📺 **YouTube content detected.** Would you like me to automatically post this to the youtube-uploads channel "
+                f"if you don't respond within 5 minutes of the reminder?\n\n"
+                f"React with ✅ to enable auto-posting or ❌ to disable."
+            )
+            await auto_action_msg.add_reaction("✅")
+            await auto_action_msg.add_reaction("❌")
+
+            try:
+
+                def check_reaction(reaction, user):
+                    return (
+                        user == ctx.author
+                        and str(reaction.emoji) in ["✅", "❌"]
+                        and reaction.message.id == auto_action_msg.id
+                    )
+
+                reaction, user = await bot.wait_for('reaction_add', timeout=30.0, check=check_reaction)
+
+                if str(reaction.emoji) == "✅":
+                    auto_action_enabled = True
+                    auto_action_type = "youtube_post"
+                    youtube_url = None
+
+                    # Extract YouTube URL if found, otherwise ask for it
+                    if youtube_urls:
+                        youtube_url = f"https://youtube.com/watch?v={youtube_urls[0]}"
+                    else:
+                        url_msg = await ctx.send("🔗 **Please provide the YouTube URL for auto-posting:**")
+
+                        def check_url_msg(msg):
+                            return msg.author == ctx.author and msg.channel == ctx.channel
+
+                        try:
+                            url_response = await bot.wait_for('message', timeout=60.0, check=check_url_msg)
+                            youtube_url = url_response.content.strip()
+                        except asyncio.TimeoutError:
+                            await ctx.send("⏰ **URL input timed out.** Auto-action disabled.")
+                            auto_action_enabled = False
+                            auto_action_type = None
+                            youtube_url = None
+
+                    if auto_action_enabled and youtube_url:
+                        auto_action_data = {
+                            "youtube_url": youtube_url,
+                            "custom_message": f"New video uploaded - check it out!",
+                        }
+                        await ctx.send(
+                            "✅ **Auto-action enabled.** YouTube link will be posted automatically if no response within 5 minutes."
+                        )
+                    elif auto_action_enabled and not youtube_url:
+                        await ctx.send("❌ **Auto-action disabled:** No valid YouTube URL provided.")
+                        auto_action_enabled = False
+                        auto_action_type = None
+
+            except asyncio.TimeoutError:
+                await ctx.send("⏰ **Auto-action selection timed out.** Proceeding without auto-posting.")
+
+        # Add the reminder to database
+        reminder_id = db.add_reminder(
+            user_id=ctx.author.id,
+            reminder_text=reminder_text,
+            scheduled_time=scheduled_time,
+            delivery_channel_id=delivery_channel_id,
+            delivery_type=delivery_type,
+            auto_action_enabled=auto_action_enabled,
+            auto_action_type=auto_action_type,
+            auto_action_data=auto_action_data,
+        )
+
+        if reminder_id:
+            # Format time for display
+            uk_time = scheduled_time.strftime("%A, %B %d, %Y at %H:%M UK time")
+            auto_notice = (
+                "\n\n⚡ **Auto-action enabled:** YouTube posting sequence will activate if no response within 5 minutes."
+                if auto_action_enabled
+                else ""
+            )
+
+            await ctx.send(
+                f"📋 **Reminder protocol activated.** Your temporal alert has been scheduled for {uk_time}.\n\n"
+                f"**Content:** {reminder_text}\n"
+                f"**Delivery method:** {'Direct message' if delivery_type == 'dm' else 'Channel notification'}"
+                f"{auto_notice}\n\n"
+                f"*Efficiency is paramount. Mission parameters logged.*"
+            )
+        else:
+            await ctx.send(
+                f"❌ **System malfunction detected.** Unable to establish temporal scheduling protocol. "
+                f"Database insertion failed."
+            )
+
+    except Exception as e:
+        print(f"❌ Error in remind command: {e}")
+        await ctx.send(
+            f"❌ **Critical system error.** Reminder protocols experienced malfunction during processing: {str(e)}"
+        )
+
+
+@bot.command(name="remindme")
+async def remind_me_command(ctx, *, reminder_request: str):
+    """Alias for remind command with 'me' implied"""
+    # Prepend 'me' if not already present for natural parsing
+    if not reminder_request.lower().startswith("me"):
+        reminder_request = f"me {reminder_request}"
+
+    await remind_command(ctx, reminder_request=reminder_request)
+
+
+@bot.command(name="listreminders")
+async def list_reminders_command(ctx):
+    """List user's active reminders"""
+    try:
+        # Check user permissions
+        user_tier = await get_user_communication_tier(ctx)
+        if user_tier not in ["moderator", "creator", "captain"]:
+            await ctx.send(f"⚠️ **Access denied.** Reminder protocols are restricted to authorized personnel only.")
+            return
+
+        reminders = db.get_user_reminders(ctx.author.id)
+
+        if not reminders:
+            await ctx.send(
+                f"📋 **Temporal analysis complete.** No active reminder protocols found in your personal archive. "
+                f"All scheduled alerts have been processed or cleared."
+            )
+            return
+
+        # Create embed for reminders list
+        embed = discord.Embed(
+            title="📋 Active Reminder Protocols",
+            description=f"Mission-critical temporal alerts for {ctx.author.display_name}",
+            color=0x2F3136,
+        )
+
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+
+        for i, reminder in enumerate(reminders, 1):
+            scheduled_time = reminder["scheduled_time"]
+
+            # Convert to UK timezone if not already
+            if scheduled_time.tzinfo is None:
+                scheduled_time = scheduled_time.replace(tzinfo=ZoneInfo("Europe/London"))
+            elif scheduled_time.tzinfo != ZoneInfo("Europe/London"):
+                scheduled_time = scheduled_time.astimezone(ZoneInfo("Europe/London"))
+
+            time_until = scheduled_time - uk_now
+
+            if time_until.total_seconds() > 0:
+                # Future reminder
+                days = time_until.days
+                hours, remainder = divmod(time_until.seconds, 3600)
+                minutes, _ = divmod(remainder, 60)
+
+                if days > 0:
+                    time_str = f"in {days}d {hours}h {minutes}m"
+                elif hours > 0:
+                    time_str = f"in {hours}h {minutes}m"
+                else:
+                    time_str = f"in {minutes}m"
+            else:
+                # Overdue reminder
+                time_str = "**OVERDUE**"
+
+            # Format time
+            formatted_time = scheduled_time.strftime("%A, %B %d at %H:%M")
+
+            # Delivery method
+            delivery_method = "📧 DM" if reminder["delivery_type"] == "dm" else "📢 Channel"
+
+            # Auto-action status
+            auto_action = ""
+            if reminder.get("auto_action_enabled"):
+                auto_action = (
+                    f" ⚡ **Auto-action:** {reminder.get('auto_action_type', 'unknown').replace('_', ' ').title()}"
+                )
+
+            reminder_text = (
+                reminder["reminder_text"][:100] + "..."
+                if len(reminder["reminder_text"]) > 100
+                else reminder["reminder_text"]
+            )
+
+            embed.add_field(
+                name=f"#{i} - {time_str}",
+                value=f"**{formatted_time}**\n{delivery_method} - {reminder_text}{auto_action}",
+                inline=False,
+            )
+
+        embed.set_footer(text=f"Total active reminders: {len(reminders)} | Use !cancelreminder <number> to cancel")
+        embed.timestamp = discord.utils.utcnow()
+
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        print(f"❌ Error in list reminders command: {e}")
+        await ctx.send(f"❌ **System diagnostic error:** Unable to retrieve reminder protocols: {str(e)}")
+
+
+@bot.command(name="addtriviaquestion")
+@commands.has_permissions(manage_messages=True)
+async def add_trivia_question_cmd(ctx):
+    """Start interactive DM conversation for moderators to submit trivia questions"""
+    # Check if command is used in DM
+    if ctx.guild is not None:
+        await ctx.send(
+            f"⚠️ **Security protocol engaged.** Trivia question submission must be initiated via direct message. "
+            f"Please DM me with `!addtriviaquestion` to begin the secure submission process.\n\n"
+            f"*Confidential mission parameters require private channel authorization.*"
+        )
+        return
+
+    # Check if user is a moderator
+    if not await user_is_mod_by_id(ctx.author.id):
+        await ctx.send(
+            f"❌ **Access denied.** Trivia question submission protocols are restricted to moderators only. "
+            f"Your clearance level is insufficient for trivia database modification capabilities.\n\n"
+            f"*Security protocols maintained. Unauthorized access logged.*"
+        )
+        return
+
+    # Clean up any existing conversation state for this user
+    cleanup_mod_trivia_conversations()
+
+    # Initialize conversation state
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    mod_trivia_conversations[ctx.author.id] = {
+        'step': 'initial',
+        'data': {},
+        'last_activity': uk_now,
+        'initiated_at': uk_now,
+    }
+
+    # Start with a direct question about adding trivia
+    await handle_mod_trivia_conversation(ctx.message)
+
+
+@bot.command(name="cancelreminder")
+async def cancel_reminder_command(ctx, reminder_number: int):
+    """Cancel a specific reminder by number from list"""
+    try:
+        # Check user permissions
+        user_tier = await get_user_communication_tier(ctx)
+        if user_tier not in ["moderator", "creator", "captain"]:
+            await ctx.send(f"⚠️ **Access denied.** Reminder protocols are restricted to authorized personnel only.")
+            return
+
+        reminders = db.get_user_reminders(ctx.author.id)
+
+        if not reminders:
+            await ctx.send(f"📋 **No active reminders found.** Your temporal alert archive is currently empty.")
+            return
+
+        if reminder_number < 1 or reminder_number > len(reminders):
+            await ctx.send(
+                f"⚠️ **Invalid reminder designation.** Please specify a number between 1 and {len(reminders)}. "
+                f"Use `!listreminders` to view available protocols."
+            )
+            return
+
+        # Get the specific reminder
+        selected_reminder = reminders[reminder_number - 1]
+        reminder_text = selected_reminder["reminder_text"]
+        scheduled_time = selected_reminder["scheduled_time"]
+
+        # Format time for confirmation
+        if scheduled_time.tzinfo is None:
+            scheduled_time = scheduled_time.replace(tzinfo=ZoneInfo("Europe/London"))
+        formatted_time = scheduled_time.strftime("%A, %B %d at %H:%M UK time")
+
+        # Cancel the reminder
+        success = db.cancel_reminder(selected_reminder["id"], ctx.author.id)
+
+        if success:
+            await ctx.send(
+                f"✅ **Temporal alert cancelled.** Reminder protocol has been expunged from the system.\n\n"
+                f"**Cancelled reminder:** {reminder_text}\n"
+                f"**Scheduled for:** {formatted_time}\n\n"
+                f"*Mission parameters updated. Efficiency maintained.*"
+            )
+        else:
+            await ctx.send(
+                f"❌ **Cancellation failed.** Unable to terminate reminder protocol. System malfunction detected."
+            )
+
+    except ValueError:
+        await ctx.send(
+            f"⚠️ **Invalid input format.** Please provide a numeric reminder identifier. "
+            f"Usage: `!cancelreminder <number>`"
+        )
+    except Exception as e:
+        print(f"❌ Error in cancel reminder command: {e}")
+        await ctx.send(f"❌ **System error during cancellation:** {str(e)}")
+
+
+# --- Reminder System Constants ---
+# YouTube uploads channel ID for auto-actions
+YOUTUBE_UPLOADS_CHANNEL_ID = 869527363594121226
 
 
 # --- Cleanup ---
