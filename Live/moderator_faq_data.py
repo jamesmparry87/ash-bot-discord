@@ -216,7 +216,7 @@ FAQ_DATA = {
     },
     "tiers": {
         "patterns": ["explain tiers", "user tier", "user system"],
-        "title": "� **User Tier System Analysis**",
+        "title": "👑 **User Tier System Analysis**",
         "sections": [
             {"title": "Hierarchy (Highest to Lowest)", "content": ""},
             {
