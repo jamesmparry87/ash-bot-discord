@@ -9,41 +9,44 @@ def parse_games_list(games_text: str) -> List[Dict[str, str]]:
     """Parse the games list text into structured data"""
     games = []
     lines = games_text.strip().split('\n')
-    
+
     for line in lines:
         line = line.strip()
-        if not line or line.lower().startswith("games list") or line.lower().startswith("suggested so far"):
+        if not line or line.lower().startswith(
+                "games list") or line.lower().startswith("suggested so far"):
             continue
-        
+
         # Check if line has " - username" format
         if " - " in line:
-            parts = line.rsplit(" - ", 1)  # Split from the right to handle game names with dashes
+            # Split from the right to handle game names with dashes
+            parts = line.rsplit(" - ", 1)
             game_name = parts[0].strip()
             username = parts[1].strip()
         else:
             game_name = line.strip()
             username = ""  # No username provided
-        
+
         if game_name:
             if username:
                 reason = f"Suggested by {username}"
             else:
                 reason = "Community suggestion"
-            
+
             games.append({
                 'name': game_name,
                 'reason': reason,
                 'added_by': username
             })
-    
+
     return games
+
 
 def load_strikes_from_json(json_file_path: str) -> Dict[int, int]:
     """Load strikes data from JSON file"""
     try:
         with open(json_file_path, 'r') as f:
             data = json.load(f)
-        
+
         # Convert string keys to integers
         strikes_data = {}
         for user_id_str, count in data.items():
@@ -51,71 +54,77 @@ def load_strikes_from_json(json_file_path: str) -> Dict[int, int]:
                 user_id = int(user_id_str)
                 strikes_data[user_id] = int(count)
             except ValueError:
-                print(f"Warning: Invalid user ID or count: {user_id_str} -> {count}")
-        
+                print(
+                    f"Warning: Invalid user ID or count: {user_id_str} -> {count}")
+
         return strikes_data
     except Exception as e:
         print(f"Error loading strikes from JSON: {e}")
         return {}
 
+
 def migrate_strikes_data(json_file_path: str = "strikes.json") -> int:
     """Migrate strikes data from JSON file to database"""
     print("Loading strikes data from JSON...")
     strikes_data = load_strikes_from_json(json_file_path)
-    
+
     if not strikes_data:
         print("No strikes data found or failed to load.")
         return 0
-    
+
     print(f"Found {len(strikes_data)} users with strike data")
-    
+
     # Import to database
     imported_count = db.bulk_import_strikes(strikes_data)
     print(f"Successfully imported {imported_count} strike records to database")
-    
+
     return imported_count
+
 
 def migrate_games_data(games_text: str) -> int:
     """Migrate games data from text list to database"""
     print("Parsing games list...")
     games_data = parse_games_list(games_text)
-    
+
     if not games_data:
         print("No games data found or failed to parse.")
         return 0
-    
+
     print(f"Parsed {len(games_data)} game recommendations")
-    
+
     # Show sample of parsed data
     print("\nSample of parsed games:")
     for i, game in enumerate(games_data[:5]):
         print(f"  {i+1}. '{game['name']}' by '{game['added_by']}'")
     if len(games_data) > 5:
         print(f"  ... and {len(games_data) - 5} more")
-    
+
     # Import to database
     imported_count = db.bulk_import_games(games_data)
-    print(f"Successfully imported {imported_count} game recommendations to database")
-    
+    print(
+        f"Successfully imported {imported_count} game recommendations to database")
+
     return imported_count
+
 
 def full_migration(games_text: str, strikes_json_path: str = "strikes.json"):
     """Perform full data migration"""
     print("=== Starting Full Data Migration ===\n")
-    
+
     # Migrate strikes
     print("1. Migrating Strikes Data:")
     strikes_imported = migrate_strikes_data(strikes_json_path)
-    
-    print("\n" + "="*50 + "\n")
-    
+
+    print("\n" + "=" * 50 + "\n")
+
     # Migrate games
     print("2. Migrating Games Data:")
     games_imported = migrate_games_data(games_text)
-    
+
     print("\n=== Migration Complete ===")
     print(f"Total strikes imported: {strikes_imported}")
     print(f"Total games imported: {games_imported}")
+
 
 # Sample games text for testing
 SAMPLE_GAMES_TEXT = """
