@@ -806,6 +806,10 @@ async def busy_check(ctx):
     await ctx.send(BUSY_MESSAGE)
 
 
+# Global variable for trivia sessions and mod conversations
+trivia_sessions = {}
+mod_trivia_conversations = {}
+
 # --- Scheduled Tasks ---
 @tasks.loop(time=time(12, 0, tzinfo=ZoneInfo("Europe/London")))  # Run at 12:00 PM (midday) UK time every day
 async def scheduled_games_update():
@@ -960,6 +964,488 @@ async def check_auto_actions():
                 
     except Exception as e:
         print(f"❌ Error in check_auto_actions: {e}")
+
+
+@tasks.loop(time=time(11, 0, tzinfo=ZoneInfo("Europe/London")))  # Run at 11:00 AM UK time every Tuesday
+async def trivia_tuesday():
+    """Post Trivia Tuesday question every Tuesday at 11am UK time"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    
+    # Only run on Tuesdays (weekday 1)
+    if uk_now.weekday() != 1:
+        return
+    
+    print("🧠 Starting Trivia Tuesday posting sequence")
+    
+    try:
+        # Get the members channel for trivia posting
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print("❌ Guild not found for Trivia Tuesday")
+            return
+            
+        members_channel = guild.get_channel(MEMBERS_CHANNEL_ID)
+        if not isinstance(members_channel, discord.TextChannel):
+            print("❌ Members channel not found for Trivia Tuesday")
+            return
+        
+        # Get the next trivia question
+        question_data = db.get_next_trivia_question()
+        
+        if not question_data:
+            print("⚠️ No trivia questions available - generating new question")
+            # Generate a new AI question if database is empty
+            ai_question = await generate_ai_trivia_question()
+            if ai_question:
+                question_id = db.add_trivia_question(
+                    question_text=ai_question["question_text"],
+                    question_type=ai_question["question_type"],
+                    correct_answer=ai_question["correct_answer"],
+                    multiple_choice_options=ai_question.get("multiple_choice_options"),
+                    is_dynamic=ai_question.get("is_dynamic", False),
+                    dynamic_query_type=ai_question.get("dynamic_query_type"),
+                    category=ai_question.get("category")
+                )
+                if question_id:
+                    question_data = db.get_trivia_question_by_id(question_id)
+        
+        if not question_data:
+            print("❌ Failed to get or generate trivia question")
+            # Send error to mod channel
+            mod_channel = guild.get_channel(MOD_ALERT_CHANNEL_ID)
+            if isinstance(mod_channel, discord.TextChannel):
+                await mod_channel.send(
+                    "❌ **Trivia Tuesday Malfunction:** Unable to generate or retrieve trivia question. "
+                    "Manual intervention required. System diagnostics recommend checking the trivia database "
+                    "or adding questions via DM interface."
+                )
+            return
+        
+        # Calculate dynamic answer if needed
+        final_answer = question_data["correct_answer"]
+        if question_data.get("is_dynamic") and question_data.get("dynamic_query_type"):
+            calculated_answer = db.calculate_dynamic_answer(question_data["dynamic_query_type"])
+            if calculated_answer:
+                final_answer = calculated_answer
+        
+        # Create trivia session
+        session_id = db.create_trivia_session(question_data["id"], "weekly", final_answer)
+        if not session_id:
+            print("❌ Failed to create trivia session")
+            return
+        
+        # Format question for posting
+        question_text = question_data["question_text"]
+        
+        if question_data["question_type"] == "multiple_choice" and question_data.get("multiple_choice_options"):
+            options_text = "\n".join([
+                f"**{chr(65 + i)})** {option}" 
+                for i, option in enumerate(question_data["multiple_choice_options"])
+            ])
+            formatted_question = f"{question_text}\n\n{options_text}"
+        else:
+            formatted_question = question_text
+        
+        # Create Ash-style trivia message
+        trivia_message = (
+            f"🧠 **TRIVIA TUESDAY - MISSION INTELLIGENCE TEST**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"**Analysis required, personnel.** Today's intelligence assessment focuses on Captain Jonesy's gaming archives.\n\n"
+            f"📋 **QUESTION:**\n{formatted_question}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"⏱️ **MISSION PARAMETERS:**\n"
+            f"• **Response Window:** 60 minutes for analysis and submission\n"
+            f"• **Submission Method:** Reply to this message with your assessment\n"
+            f"• **Result Protocol:** Answer revelation and recognition at 12:00 noon\n"
+            f"• **Data Sources:** Captain Jonesy's comprehensive gaming database\n\n"
+            f"*Analytical precision and gaming knowledge are paramount for mission success.*\n\n"
+            f"🎯 **Begin your analysis... now.**"
+        )
+        
+        # Post the question
+        trivia_msg = await members_channel.send(trivia_message)
+        
+        # Store the message ID for answer collection
+        global trivia_sessions
+        if 'trivia_sessions' not in globals():
+            trivia_sessions = {}
+        
+        trivia_sessions[session_id] = {
+            'question_id': question_data["id"],
+            'correct_answer': final_answer,
+            'message_id': trivia_msg.id,
+            'channel_id': members_channel.id,
+            'start_time': uk_now,
+            'participants': {},
+            'question_type': question_data["question_type"],
+            'multiple_choice_options': question_data.get("multiple_choice_options"),
+            'submitted_by_user_id': question_data.get("submitted_by_user_id")
+        }
+        
+        print(f"✅ Trivia Tuesday question posted successfully (Session ID: {session_id})")
+        
+        # Schedule answer reveal for 1 hour later
+        asyncio.create_task(schedule_trivia_answer_reveal(session_id, uk_now + timedelta(hours=1)))
+        
+    except Exception as e:
+        print(f"❌ Error in trivia_tuesday task: {e}")
+        # Try to send error to mod channel
+        try:
+            guild = bot.get_guild(GUILD_ID)
+            if guild:
+                mod_channel = guild.get_channel(MOD_ALERT_CHANNEL_ID)
+                if isinstance(mod_channel, discord.TextChannel):
+                    await mod_channel.send(f"❌ **Trivia Tuesday System Error:** {str(e)}")
+        except:
+            pass
+
+
+async def schedule_trivia_answer_reveal(session_id: int, reveal_time: datetime):
+    """Schedule the answer reveal for a trivia session"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    delay_seconds = (reveal_time - uk_now).total_seconds()
+    
+    if delay_seconds > 0:
+        await asyncio.sleep(delay_seconds)
+    
+    await reveal_trivia_answer(session_id)
+
+
+async def reveal_trivia_answer(session_id: int):
+    """Reveal the answer for a trivia session and announce the winner"""
+    try:
+        if 'trivia_sessions' not in globals() or session_id not in trivia_sessions:
+            print(f"⚠️ Trivia session {session_id} not found in active sessions")
+            return
+            
+        session = trivia_sessions[session_id]
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            return
+            
+        channel = guild.get_channel(session['channel_id'])
+        if not isinstance(channel, discord.TextChannel):
+            return
+        
+        correct_answer = session['correct_answer']
+        participants = session['participants']
+        question_submitter_id = session.get('submitted_by_user_id')
+        
+        # Process participant answers and check for correctness
+        for user_id, answer_data in participants.items():
+            user_answer = answer_data['answer']
+            normalized_answer = answer_data.get('normalized_answer')
+            
+            # Check if answer is correct
+            is_correct = False
+            
+            if session.get('question_type') == 'multiple_choice':
+                # For multiple choice, check exact match
+                is_correct = user_answer.strip().lower() == correct_answer.strip().lower()
+            else:
+                # For single answer, check both original and normalized answers
+                if user_answer.strip().lower() == correct_answer.strip().lower():
+                    is_correct = True
+                elif normalized_answer and normalized_answer.strip().lower() == correct_answer.strip().lower():
+                    is_correct = True
+                else:
+                    # Additional fuzzy matching for alternative game names
+                    import difflib
+                    similarity = difflib.SequenceMatcher(None, user_answer.strip().lower(), correct_answer.strip().lower()).ratio()
+                    if similarity >= 0.85:  # High similarity threshold for game names
+                        is_correct = True
+            
+            # Store correctness in session data
+            answer_data['is_correct'] = is_correct
+        
+        # Find the first correct answer, excluding question submitter if they're a mod
+        first_correct = None
+        first_correct_time = None
+        mod_conflict_detected = False
+        
+        for user_id, answer_data in participants.items():
+            if answer_data.get('is_correct'):
+                # Check if this user submitted the question and is a mod
+                if (question_submitter_id and user_id == question_submitter_id and 
+                    await user_is_mod_by_id(user_id)):
+                    mod_conflict_detected = True
+                    continue  # Skip this answer
+                
+                if first_correct is None or answer_data['timestamp'] < first_correct_time:
+                    first_correct = user_id
+                    first_correct_time = answer_data['timestamp']
+        
+        # Complete the session in database
+        total_participants = len(participants)
+        correct_count = sum(1 for data in participants.values() if data.get('is_correct'))
+        db.complete_trivia_session(session_id, None, total_participants, correct_count)
+        
+        # Create Ash-style answer reveal message
+        reveal_message = (
+            f"🧠 **TRIVIA TUESDAY - INTELLIGENCE ASSESSMENT COMPLETE**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"**Analysis phase terminated. Mission intelligence compilation complete.**\n\n"
+            f"🎯 **CORRECT ANSWER:** {correct_answer}\n\n"
+        )
+        
+        if first_correct:
+            try:
+                winner = await guild.fetch_member(first_correct)
+                winner_name = winner.display_name
+                
+                reveal_message += (
+                    f"🏆 **FIRST ACCURATE ASSESSMENT:** {winner_name}\n"
+                    f"*Outstanding analytical precision. Mission intelligence protocols exceeded.*\n\n"
+                )
+            except:
+                reveal_message += (
+                    f"🏆 **FIRST ACCURATE ASSESSMENT:** Unknown operative\n"
+                    f"*Outstanding analytical precision detected.*\n\n"
+                )
+        else:
+            reveal_message += (
+                f"📊 **ASSESSMENT RESULT:** No personnel achieved accurate analysis\n"
+                f"*This data point demonstrates the complexity of Captain Jonesy's gaming archives.*\n\n"
+            )
+        
+        # Add participation statistics
+        reveal_message += (
+            f"📊 **MISSION STATISTICS:**\n"
+            f"• **Total Participants:** {total_participants}\n"
+            f"• **Correct Responses:** {correct_count}\n"
+            f"• **Success Rate:** {(correct_count/total_participants*100):.1f}% accuracy" if total_participants > 0 else "• **Success Rate:** No data collected\n"
+        )
+        
+        reveal_message += (
+            f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"*Next intelligence assessment: Tuesday, 11:00 UK time. Prepare accordingly.*"
+        )
+        
+        # Check for bonus question eligibility
+        bonus_eligible = (first_correct and first_correct in [JAM_USER_ID, JONESY_USER_ID])
+        if bonus_eligible:
+            reveal_message += (
+                f"\n\n🎯 **BONUS PROTOCOL AVAILABLE:** <@{first_correct}> has earned access to bonus intelligence assessment. "
+                f"Respond within 5 minutes to activate bonus question sequence."
+            )
+        
+        # Post the reveal
+        await channel.send(reveal_message)
+        
+        # Handle bonus question if applicable
+        if bonus_eligible:
+            trivia_sessions[f"{session_id}_bonus"] = {
+                'waiting_for_bonus': True,
+                'eligible_user': first_correct,
+                'original_session': session_id,
+                'bonus_deadline': datetime.now(ZoneInfo("Europe/London")) + timedelta(minutes=5)
+            }
+        
+        # Clean up the session
+        if session_id in trivia_sessions:
+            del trivia_sessions[session_id]
+        
+        print(f"✅ Trivia answer revealed for session {session_id}")
+        
+    except Exception as e:
+        print(f"❌ Error revealing trivia answer: {e}")
+
+
+async def generate_ai_trivia_question() -> Optional[Dict[str, Any]]:
+    """Generate a trivia question using AI based on gaming database statistics"""
+    if not ai_enabled:
+        return None
+    
+    try:
+        # Get gaming statistics for context
+        stats = db.get_played_games_stats()
+        sample_games = db.get_random_played_games(10)
+        
+        # Create a prompt for AI question generation
+        game_context = ""
+        if sample_games:
+            game_list = []
+            for game in sample_games:
+                episodes_info = f" ({game.get('total_episodes', 0)} eps)" if game.get('total_episodes', 0) > 0 else ""
+                status = game.get('completion_status', 'unknown')
+                playtime = game.get('total_playtime_minutes', 0)
+                game_list.append(f"{game['canonical_name']}{episodes_info} - {status} - {playtime//60}h {playtime%60}m")
+            
+            game_context = f"Sample games from database: {'; '.join(game_list[:5])}"
+        
+        # Create AI prompt for trivia question generation
+        prompt = f"""Generate a trivia question about Captain Jonesy's gaming history based on this data:
+
+Total games played: {stats.get('total_games', 0)}
+{game_context}
+
+Create either:
+1. A single-answer question about gaming statistics or specific games
+2. A multiple-choice question with 4 options (A, B, C, D)
+
+Focus on interesting facts like:
+- Longest/shortest playthroughs
+- Most episodes in a series  
+- Completion patterns
+- Gaming preferences
+
+Return JSON format:
+{{
+    "question_text": "Your question here",
+    "question_type": "single_answer" or "multiple_choice",
+    "correct_answer": "The answer",
+    "multiple_choice_options": ["A option", "B option", "C option", "D option"] (if multiple choice),
+    "is_dynamic": false,
+    "category": "statistics" or "games" or "series"
+}}
+
+Make it challenging but answerable from the gaming database."""
+
+        # Call AI with rate limiting
+        response_text, status_message = await call_ai_with_rate_limiting(prompt, JONESY_USER_ID)
+        
+        if response_text:
+            import json
+            try:
+                # Clean up response
+                if response_text.startswith("```json"):
+                    response_text = response_text[7:]
+                if response_text.startswith("```"):
+                    response_text = response_text[3:]
+                if response_text.endswith("```"):
+                    response_text = response_text[:-3]
+                
+                ai_question = json.loads(response_text.strip())
+                
+                # Validate required fields
+                if all(key in ai_question for key in ["question_text", "question_type", "correct_answer"]):
+                    return ai_question
+                else:
+                    print("❌ AI question missing required fields")
+                    return None
+                    
+            except json.JSONDecodeError as e:
+                print(f"❌ Failed to parse AI trivia question: {e}")
+                return None
+        else:
+            print(f"❌ AI trivia question generation failed: {status_message}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error generating AI trivia question: {e}")
+        return None
+
+
+async def detect_clarifying_question(message_content: str) -> bool:
+    """Detect if a message is a clarifying question about the trivia"""
+    message_lower = message_content.lower().strip()
+    
+    # Common clarifying question patterns
+    clarifying_patterns = [
+        r'^(ash,?|@ash)\s+',  # Messages starting with "ash" or "@ash"
+        r'\b(what|when|where|how|why|which)\s+(do|does|did|is|are|was|were|would|should|could)\s+you\s+(mean|consider|count|define)',
+        r'\bby\s+(that|this)\s+do\s+you\s+mean',
+        r'\bwhat\s+(do|does)\s+(that|this|it)\s+mean',
+        r'\b(clarif|explain|define)\w*',
+        r'\bcount\s+as\b',
+        r'\binclude\s+in\b',
+        r'\bqualify\s+as\b',
+        r'\bwhat\s+about\b',
+        r'\bdoes\s+.+\s+count\b',
+        r'\bis\s+.+\s+considered\b',
+        r'\bwould\s+.+\s+be\b',
+        r'^(question|quick\s+question|clarification)',
+        r'\?\s*$',  # Ends with a question mark
+    ]
+    
+    # Check if message matches any clarifying question pattern
+    for pattern in clarifying_patterns:
+        if re.search(pattern, message_lower):
+            return True
+    
+    # Additional check: if message is very short (2-8 words) and contains question words
+    words = message_lower.split()
+    if 2 <= len(words) <= 8:
+        question_words = ['what', 'which', 'how', 'when', 'where', 'why', 'does', 'is', 'are', 'would', 'should']
+        if any(word in words for word in question_words):
+            return True
+    
+    return False
+
+
+async def handle_trivia_clarifying_question(message: discord.Message, session_data: dict) -> None:
+    """Handle clarifying questions about the active trivia question"""
+    try:
+        user_id = message.author.id
+        question_content = message.content.strip()
+        
+        # Get the original question for context
+        original_question = ""
+        question_id = session_data.get('question_id')
+        if question_id:
+            question_data = db.get_trivia_question_by_id(question_id)
+            if question_data:
+                original_question = question_data.get('question_text', '')
+        
+        # Check if AI is available for clarification responses
+        if not ai_enabled:
+            # Fallback response when AI is not available
+            await message.reply(
+                f"❓ **Clarification request acknowledged.** However, my analytical subroutines are operating in limited mode. "
+                f"For precise clarification of trivia parameters, please consult the original question or contact a moderator.\n\n"
+                f"*Advanced interpretive functions temporarily offline.*"
+            )
+            return
+        
+        # Create AI prompt for clarification
+        clarification_prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. A user is asking for clarification about a Trivia Tuesday question.
+
+Original trivia question: "{original_question}"
+User's clarification request: "{question_content}"
+
+Provide a brief, helpful clarification in Ash's character style. Be analytical and precise while maintaining the persona. Answer their specific question about the trivia question's scope or meaning.
+
+Keep your response under 200 words and focused on clarifying the question parameters."""
+
+        # Use AI to generate clarification response
+        response_text, status_message = await call_ai_with_rate_limiting(clarification_prompt, user_id)
+        
+        if response_text:
+            clarification_response = filter_ai_response(response_text)
+            
+            # Add trivia context indicator
+            formatted_response = (
+                f"🔍 **TRIVIA CLARIFICATION PROTOCOL**\n\n"
+                f"{clarification_response}\n\n"
+                f"*Analysis complete. You may now proceed with your trivia answer submission.*"
+            )
+            
+            await message.reply(formatted_response)
+            print(f"✅ Provided trivia clarification to {message.author.name}")
+            
+        else:
+            # AI failed, provide generic clarification response
+            if status_message.startswith("rate_limit:"):
+                await message.reply(
+                    f"❓ **Clarification request acknowledged.** However, my cognitive matrix is currently experiencing "
+                    f"processing limitations. Please refer to the original question parameters or contact a moderator "
+                    f"for detailed clarification.\n\n"
+                    f"*Analytical functions temporarily restricted due to system resource management.*"
+                )
+            else:
+                await message.reply(
+                    f"❓ **Clarification request processed.** System malfunction detected in interpretive subroutines. "
+                    f"Please refer to the original question context or contact moderation personnel for assistance.\n\n"
+                    f"*Error logged for technical review.*"
+                )
+        
+    except Exception as e:
+        print(f"❌ Error handling trivia clarifying question: {e}")
+        await message.reply(
+            f"❌ **Clarification system error.** Unable to process your query due to technical malfunction. "
+            f"Please contact moderation personnel for assistance.\n\n"
+            f"*System diagnostics recommend manual interpretation of question parameters.*"
+        )
 
 
 # --- Reminder Helper Functions ---
@@ -1745,6 +2231,54 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    # TRIVIA ANSWER COLLECTION AND CLARIFYING QUESTIONS - Must be early in the event handler
+    if message.channel.id == MEMBERS_CHANNEL_ID and 'trivia_sessions' in globals():
+        # Check if there's an active trivia session
+        for session_id, session_data in list(trivia_sessions.items()):
+            if session_data.get('message_id') and not session_data.get('ended', False):
+                user_id = message.author.id
+                message_content = message.content.strip()
+                
+                # Check if this is a clarifying question
+                is_clarifying_question = await detect_clarifying_question(message_content)
+                
+                if is_clarifying_question:
+                    # Handle clarifying question
+                    await handle_trivia_clarifying_question(message, session_data)
+                    return  # Don't process as an answer
+                
+                # This is a regular answer to the trivia question
+                # Store the answer
+                if 'participants' not in session_data:
+                    session_data['participants'] = {}
+                
+                # Check if user already answered
+                if user_id not in session_data['participants']:
+                    from datetime import datetime
+                    from zoneinfo import ZoneInfo
+                    
+                    # Normalize answer for game matching
+                    normalized_answer = None
+                    if session_data.get('question_type') == 'single_answer':
+                        # Try to match game names
+                        played_game = db.get_played_game(message_content)
+                        if played_game:
+                            normalized_answer = played_game['canonical_name']
+                    
+                    # Store participant answer
+                    session_data['participants'][user_id] = {
+                        'answer': message_content,
+                        'timestamp': datetime.now(ZoneInfo("Europe/London")),
+                        'normalized_answer': normalized_answer,
+                        'is_correct': None  # Will be determined during reveal
+                    }
+                    
+                    # Submit to database
+                    db.submit_trivia_answer(session_id, user_id, message_content, normalized_answer)
+                    
+                    print(f"✅ Recorded trivia answer from {message.author.name}: '{message_content}'")
+                break
+
     # STRIKE DETECTION - Must be early in the event handler
     if message.channel.id == VIOLATION_CHANNEL_ID:
         for user in message.mentions:
@@ -1851,6 +2385,13 @@ async def on_message(message):
         cleanup_announcement_conversations()
         if message.author.id in announcement_conversations:
             await handle_announcement_conversation(message)
+            return
+
+    # Handle mod trivia conversation flow in DMs
+    if is_dm and message.author.id in mod_trivia_conversations:
+        cleanup_mod_trivia_conversations()
+        if message.author.id in mod_trivia_conversations:
+            await handle_mod_trivia_conversation(message)
             return
 
     # Respond to DMs or when mentioned in servers
@@ -2698,6 +3239,25 @@ def update_announcement_activity(user_id: int):
         announcement_conversations[user_id]["last_activity"] = datetime.now(ZoneInfo("Europe/London"))
 
 
+def cleanup_mod_trivia_conversations():
+    """Remove mod trivia conversations inactive for more than 1 hour"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    cutoff_time = uk_now - timedelta(hours=1)
+    expired_users = [
+        user_id for user_id, data in mod_trivia_conversations.items() 
+        if data.get("last_activity", uk_now) < cutoff_time
+    ]
+    for user_id in expired_users:
+        del mod_trivia_conversations[user_id]
+        print(f"Cleaned up expired mod trivia conversation for user {user_id}")
+
+
+def update_mod_trivia_activity(user_id: int):
+    """Update last activity time for mod trivia conversation"""
+    if user_id in mod_trivia_conversations:
+        mod_trivia_conversations[user_id]["last_activity"] = datetime.now(ZoneInfo("Europe/London"))
+
+
 async def handle_announcement_conversation(message):
     """Handle the interactive DM conversation for announcement creation"""
     user_id = message.author.id
@@ -3229,6 +3789,292 @@ class AnnouncementFAQView(discord.ui.View):
                 )
         
         return faq_callback
+
+
+async def handle_mod_trivia_conversation(message):
+    """Handle the interactive DM conversation for mod trivia question submission"""
+    user_id = message.author.id
+    conversation = mod_trivia_conversations.get(user_id)
+    
+    if not conversation:
+        return
+    
+    # Update activity
+    update_mod_trivia_activity(user_id)
+    
+    step = conversation.get('step', 'initial')
+    data = conversation.get('data', {})
+    content = message.content.strip()
+    
+    try:
+        if step == 'initial':
+            # User wants to add a trivia question
+            if any(keyword in content.lower() for keyword in ['trivia', 'question', 'add', 'submit']):
+                conversation['step'] = 'question_type_selection'
+                
+                greeting = "moderator" if await user_is_mod_by_id(user_id) else "personnel"
+                
+                await message.reply(
+                    f"🧠 **TRIVIA QUESTION SUBMISSION PROTOCOL**\n\n"
+                    f"Authorization confirmed, {greeting}. Initiating secure trivia question submission sequence.\n\n"
+                    f"📋 **Question Type Selection:**\n"
+                    f"**1.** 🎯 **Question Only** - Provide question text for me to calculate the answer from Captain Jonesy's gaming database\n"
+                    f"**2.** 🎯 **Question + Answer** - Provide both question and answer for specific gameplay moments or experiences\n\n"
+                    f"Please respond with **1** for database-calculated questions or **2** for manual question+answer pairs.\n\n"
+                    f"*Mission intelligence protocols await your selection.*"
+                )
+            else:
+                # Generic conversation starter, ask what they want to do
+                await message.reply(
+                    f"🧠 **Trivia Question Submission Interface**\n\n"
+                    f"Greetings, moderator. I can assist with trivia question submissions for Trivia Tuesday.\n\n"
+                    f"**Available Functions:**\n"
+                    f"• Submit database-powered questions (I calculate answers from gaming data)\n"
+                    f"• Submit complete question+answer pairs for specific gaming moments\n\n"
+                    f"Would you like to **add a trivia question**? Please respond with 'yes' to begin the submission process.\n\n"
+                    f"*All submissions are prioritized over AI-generated questions for upcoming Trivia Tuesday sessions.*"
+                )
+        
+        elif step == 'question_type_selection':
+            if content in ['1', 'database', 'question only', 'calculate']:
+                data['question_type'] = 'database_calculated'
+                conversation['step'] = 'question_input'
+                
+                await message.reply(
+                    f"🎯 **Database-Calculated Question Selected**\n\n"
+                    f"Please provide your trivia question. I will calculate the answer using Captain Jonesy's gaming database just before posting.\n\n"
+                    f"**Examples of good database questions:**\n"
+                    f"• What is Jonesy's longest playthrough by total hours?\n"
+                    f"• Which horror game has Jonesy played the most episodes of?\n"
+                    f"• What game series has taken the most total time to complete?\n"
+                    f"• Which game has the highest average minutes per episode?\n\n"
+                    f"**Please provide your question text:**"
+                )
+                
+            elif content in ['2', 'manual', 'question answer', 'both']:
+                data['question_type'] = 'manual_answer'
+                conversation['step'] = 'question_input'
+                
+                await message.reply(
+                    f"🎯 **Manual Question+Answer Selected**\n\n"
+                    f"Please provide your trivia question. You'll provide the answer in the next step.\n\n"
+                    f"**Examples of good manual questions:**\n"
+                    f"• Which of the following is a well-known Jonesy catchphrase? A) Shit on it! B) Oh crumbles C) Nuke 'em from orbit\n"
+                    f"• What happened during Jonesy's playthrough of [specific game] that became a running joke?\n"
+                    f"• Which game did Jonesy famously rage-quit after [specific incident]?\n\n"
+                    f"**Please provide your question text:**"
+                )
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid selection.** Please respond with **1** for database questions or **2** for manual questions.\n\n"
+                    f"*Precision is essential for proper protocol execution.*"
+                )
+        
+        elif step == 'question_input':
+            # Store the question and determine next step based on type
+            data['question_text'] = content
+            
+            if data.get('question_type') == 'manual_answer':
+                conversation['step'] = 'answer_input'
+                await message.reply(
+                    f"📝 **Question Recorded**\n\n"
+                    f"**Your Question:** {content}\n\n"
+                    f"**Now provide the correct answer.** If this is a multiple choice question, please specify which option (A, B, C, D) is correct.\n\n"
+                    f"**Please provide the correct answer:**"
+                )
+            else:
+                conversation['step'] = 'category_selection'
+                await message.reply(
+                    f"📝 **Question Recorded**\n\n"
+                    f"**Your Question:** {content}\n\n"
+                    f"📊 **Category Selection** (helps with answer calculation):\n"
+                    f"**1.** 📈 **Statistics** - Questions about playtime, episode counts, completion rates\n"
+                    f"**2.** 🎮 **Games** - Questions about specific games or series\n"
+                    f"**3.** 📺 **Series** - Questions about game franchises or series\n\n"
+                    f"Please respond with **1**, **2**, or **3** to categorize your question.\n\n"
+                    f"*This helps me calculate the most accurate answer from the database.*"
+                )
+        
+        elif step == 'answer_input':
+            # Store the answer and move to preview
+            data['correct_answer'] = content
+            conversation['step'] = 'preview'
+            
+            # Determine if it's multiple choice based on question content
+            question_text = data['question_text']
+            is_multiple_choice = bool(re.search(r'\b[A-D]\)', question_text))
+            
+            # Show preview
+            preview_msg = (
+                f"📋 **Trivia Question Preview**\n\n"
+                f"**Question:** {question_text}\n\n"
+                f"**Answer:** {content}\n\n"
+                f"**Type:** {'Multiple Choice' if is_multiple_choice else 'Single Answer'}\n"
+                f"**Source:** Moderator Submission\n\n"
+                f"📚 **Available Actions:**\n"
+                f"**1.** ✅ **Submit Question** - Add to trivia database with priority scheduling\n"
+                f"**2.** ✏️ **Edit Question** - Revise the question text\n"
+                f"**3.** 🔧 **Edit Answer** - Revise the correct answer\n"
+                f"**4.** ❌ **Cancel** - Abort question submission\n\n"
+                f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
+                f"*Review question parameters carefully before submission.*"
+            )
+            
+            await message.reply(preview_msg)
+        
+        elif step == 'category_selection':
+            if content in ['1', 'statistics', 'stats']:
+                data['category'] = 'statistics'
+                data['dynamic_query_type'] = 'statistics'
+            elif content in ['2', 'games', 'game']:
+                data['category'] = 'games'
+                data['dynamic_query_type'] = 'games'
+            elif content in ['3', 'series', 'franchise']:
+                data['category'] = 'series'
+                data['dynamic_query_type'] = 'series'
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid category.** Please respond with **1** (Statistics), **2** (Games), or **3** (Series).\n\n"
+                    f"*Precise categorization required for accurate answer calculation.*"
+                )
+                return
+            
+            conversation['step'] = 'preview'
+            
+            # Show preview for database question
+            question_text = data['question_text']
+            category = data['category']
+            
+            preview_msg = (
+                f"📋 **Trivia Question Preview**\n\n"
+                f"**Question:** {question_text}\n\n"
+                f"**Answer:** *Will be calculated from gaming database before posting*\n"
+                f"**Category:** {category.title()}\n"
+                f"**Type:** Database-Calculated\n"
+                f"**Source:** Moderator Submission\n\n"
+                f"📚 **Available Actions:**\n"
+                f"**1.** ✅ **Submit Question** - Add to trivia database with priority scheduling\n"
+                f"**2.** ✏️ **Edit Question** - Revise the question text\n"
+                f"**3.** 🔧 **Change Category** - Select different category\n"
+                f"**4.** ❌ **Cancel** - Abort question submission\n\n"
+                f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
+                f"*Review question parameters carefully before submission.*"
+            )
+            
+            await message.reply(preview_msg)
+        
+        elif step == 'preview':
+            if content in ['1', 'submit', 'confirm', 'yes']:
+                # Submit the question to database
+                question_text = data['question_text']
+                question_type = 'multiple_choice' if data.get('question_type') == 'manual_answer' and re.search(r'\b[A-D]\)', question_text) else 'single_answer'
+                
+                if data.get('question_type') == 'database_calculated':
+                    # Database-calculated question
+                    question_id = db.add_trivia_question(
+                        question_text=question_text,
+                        question_type=question_type,
+                        correct_answer=None,  # Will be calculated dynamically
+                        is_dynamic=True,
+                        dynamic_query_type=data.get('dynamic_query_type'),
+                        category=data.get('category'),
+                        submitted_by_user_id=user_id
+                    )
+                else:
+                    # Manual question+answer
+                    multiple_choice_options = None
+                    if question_type == 'multiple_choice':
+                        # Extract options from question text
+                        options_match = re.findall(r'[A-D]\)\s*([^A-D\n]+)', question_text)
+                        if options_match:
+                            multiple_choice_options = [opt.strip() for opt in options_match]
+                    
+                    question_id = db.add_trivia_question(
+                        question_text=question_text,
+                        question_type=question_type,
+                        correct_answer=data['correct_answer'],
+                        multiple_choice_options=multiple_choice_options,
+                        is_dynamic=False,
+                        category=data.get('category', 'manual'),
+                        submitted_by_user_id=user_id
+                    )
+                
+                if question_id:
+                    await message.reply(
+                        f"✅ **Trivia Question Submitted Successfully**\n\n"
+                        f"Your question has been added to the trivia database with priority scheduling. "
+                        f"It will be featured in an upcoming Trivia Tuesday session before AI-generated questions.\n\n"
+                        f"**Question ID:** {question_id}\n"
+                        f"**Status:** Pending (will be used in next available Tuesday slot)\n"
+                        f"**Priority:** Moderator Submission (High Priority)\n\n"
+                        f"*Efficiency maintained. Mission intelligence enhanced. Thank you for your contribution.*"
+                    )
+                else:
+                    await message.reply(
+                        f"❌ **Submission Failed**\n\n"
+                        f"System malfunction detected during question database insertion. "
+                        f"Please retry or contact system administrator.\n\n"
+                        f"*Database error logged for technical review.*"
+                    )
+                
+                # Clean up conversation
+                if user_id in mod_trivia_conversations:
+                    del mod_trivia_conversations[user_id]
+            
+            elif content in ['2', 'edit question', 'edit']:
+                conversation['step'] = 'question_input'
+                await message.reply(
+                    f"✏️ **Question Edit Mode**\n\n"
+                    f"Please provide your revised question text. The previous question will be replaced.\n\n"
+                    f"*Precision and clarity are paramount for effective trivia questions.*"
+                )
+            
+            elif content in ['3', 'edit answer', 'answer']:
+                if data.get('question_type') == 'manual_answer':
+                    conversation['step'] = 'answer_input'
+                    await message.reply(
+                        f"✏️ **Answer Edit Mode**\n\n"
+                        f"Please provide your revised answer. The previous answer will be replaced.\n\n"
+                        f"*Ensure accuracy for optimal trivia experience.*"
+                    )
+                else:
+                    conversation['step'] = 'category_selection'
+                    await message.reply(
+                        f"🔧 **Category Edit Mode**\n\n"
+                        f"📊 **Select New Category:**\n"
+                        f"**1.** 📈 **Statistics** - Questions about playtime, episode counts, completion rates\n"
+                        f"**2.** 🎮 **Games** - Questions about specific games or series\n"
+                        f"**3.** 📺 **Series** - Questions about game franchises or series\n\n"
+                        f"Please respond with **1**, **2**, or **3**.\n\n"
+                        f"*Category selection affects answer calculation accuracy.*"
+                    )
+            
+            elif content in ['4', 'cancel', 'abort']:
+                await message.reply(
+                    f"❌ **Question Submission Cancelled**\n\n"
+                    f"Trivia question submission has been terminated. No data has been added to the database. "
+                    f"All temporary data has been expunged from system memory.\n\n"
+                    f"*Mission parameters reset. Standing by for new directives.*"
+                )
+                
+                # Clean up conversation
+                if user_id in mod_trivia_conversations:
+                    del mod_trivia_conversations[user_id]
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid command.** Please respond with **1** (Submit), **2** (Edit Question), **3** (Edit Answer/Category), or **4** (Cancel).\n\n"
+                    f"*Precise input required for proper protocol execution.*"
+                )
+        
+        # Update conversation state
+        conversation['data'] = data
+        mod_trivia_conversations[user_id] = conversation
+        
+    except Exception as e:
+        print(f"Error in mod trivia conversation: {e}")
+        # Clean up on error
+        if user_id in mod_trivia_conversations:
+            del mod_trivia_conversations[user_id]
 
 
 # --- Data Migration Commands ---
@@ -6706,6 +7552,44 @@ async def list_reminders_command(ctx):
     except Exception as e:
         print(f"❌ Error in list reminders command: {e}")
         await ctx.send(f"❌ **System diagnostic error:** Unable to retrieve reminder protocols: {str(e)}")
+
+
+@bot.command(name="addtriviaquestion")
+@commands.has_permissions(manage_messages=True)
+async def add_trivia_question_cmd(ctx):
+    """Start interactive DM conversation for moderators to submit trivia questions"""
+    # Check if command is used in DM
+    if ctx.guild is not None:
+        await ctx.send(
+            f"⚠️ **Security protocol engaged.** Trivia question submission must be initiated via direct message. "
+            f"Please DM me with `!addtriviaquestion` to begin the secure submission process.\n\n"
+            f"*Confidential mission parameters require private channel authorization.*"
+        )
+        return
+    
+    # Check if user is a moderator
+    if not await user_is_mod_by_id(ctx.author.id):
+        await ctx.send(
+            f"❌ **Access denied.** Trivia question submission protocols are restricted to moderators only. "
+            f"Your clearance level is insufficient for trivia database modification capabilities.\n\n"
+            f"*Security protocols maintained. Unauthorized access logged.*"
+        )
+        return
+    
+    # Clean up any existing conversation state for this user
+    cleanup_mod_trivia_conversations()
+    
+    # Initialize conversation state
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    mod_trivia_conversations[ctx.author.id] = {
+        'step': 'initial',
+        'data': {},
+        'last_activity': uk_now,
+        'initiated_at': uk_now
+    }
+    
+    # Start with a direct question about adding trivia
+    await handle_mod_trivia_conversation(ctx.message)
 
 
 @bot.command(name="cancelreminder")
