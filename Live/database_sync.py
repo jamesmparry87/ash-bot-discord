@@ -13,14 +13,15 @@ Usage:
     python database_sync.py --force (skip confirmation)
 """
 
-import os
-import sys
 import argparse
 import logging
-from typing import Dict, List, Optional, Tuple, Any, Union
+import os
+import sys
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import psycopg2
-from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import connection as Connection
+from psycopg2.extras import RealDictCursor
 
 # Set up logging
 logging.basicConfig(
