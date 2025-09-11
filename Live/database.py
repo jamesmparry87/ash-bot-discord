@@ -1,8 +1,9 @@
+import logging
 import os
+from typing import Any, Dict, List, Optional, Union, cast
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
-import logging
-from typing import List, Dict, Optional, Any, Union, cast
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

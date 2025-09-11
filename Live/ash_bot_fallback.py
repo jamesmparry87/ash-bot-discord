@@ -1,26 +1,24 @@
 import asyncio
 import atexit
-from datetime import datetime, time, timedelta, timezone
 import difflib
 import json
 import os
-import discord
-from discord.ext import commands, tasks
-import sys
 import platform
 import re
 import signal
 import sqlite3
 import sys
+from datetime import datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Match, Optional
 from zoneinfo import ZoneInfo
 
 import discord
-from discord.ext import commands, tasks
-from moderator_faq_handler import ModeratorFAQHandler
 
 # Import database manager
 from database import DatabaseManager
+from discord.ext import commands, tasks
+from moderator_faq_handler import ModeratorFAQHandler
+
 db = DatabaseManager()
 
 # Try to import aiohttp, handle if not available
@@ -41,7 +39,7 @@ except ImportError:
 
 # Try to import anthropic, handle if not available
 try:
-    import anthropic # type: ignore
+    import anthropic  # type: ignore
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     print("⚠️ anthropic module not available - Claude features will be disabled")
@@ -2869,8 +2867,8 @@ async def time_check(ctx):
             await ctx.send("⚠️ **Access denied.** Time diagnostic protocols require elevated clearance.")
             return
 
-        from datetime import timezone
         import time
+        from datetime import timezone
 
         # Get various time representations with more precise timing
         uk_now = datetime.now(ZoneInfo("Europe/London"))
@@ -5021,8 +5019,9 @@ async def fetch_youtube_games(channel_id: str) -> List[str]:
     if not youtube_api_key:
         raise Exception("YOUTUBE_API_KEY not configured")
     
-    import aiohttp
     import asyncio
+
+    import aiohttp
     
     games = []
     
@@ -5095,8 +5094,9 @@ async def fetch_twitch_games(username: str) -> List[str]:
     if not twitch_client_id or not twitch_client_secret:
         raise Exception("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET not configured")
     
-    import aiohttp
     import asyncio
+
+    import aiohttp
     
     games = []
     
@@ -5874,7 +5874,7 @@ Respond with valid JSON only. Include all games listed above."""
 def parse_youtube_duration(duration: str) -> int:
     """Parse YouTube ISO 8601 duration format (PT1H23M45S) to seconds"""
     import re
-    
+
     # Remove PT prefix
     duration = duration.replace('PT', '')
     

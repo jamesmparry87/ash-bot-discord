@@ -2,18 +2,15 @@
 Tests for Discord bot commands and functionality.
 """
 
-from datetime import datetime, timedelta
+import asyncio
 import os
 import sys
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, call, patch
 from zoneinfo import ZoneInfo
 
-import pytest
-import asyncio
-from unittest.mock import MagicMock, patch, AsyncMock, call
-import sys
-import os
 import discord
+import pytest
 from discord.ext import commands
 
 # Add the Live directory to sys.path
@@ -141,7 +138,7 @@ class TestStrikeCommands:
     async def test_reset_strikes_command(self, mock_discord_context, mock_db, mock_discord_user):
         """Test the !resetstrikes command."""
         import ash_bot_fallback  # type: ignore
-        
+
         # Mock user permissions
         mock_discord_context.author.guild_permissions.manage_messages = True
 
@@ -160,7 +157,7 @@ class TestStrikeCommands:
     async def test_all_strikes_command(self, mock_discord_context, mock_db):
         """Test the !allstrikes command."""
         import ash_bot_fallback  # type: ignore
-        
+
         # Mock strike data
         mock_db.get_all_strikes.return_value = {123456789: 2, 987654321: 1}
         
@@ -199,8 +196,8 @@ class TestGameRecommendationCommands:
     @pytest.mark.asyncio
     async def test_add_game_command_success(self, mock_discord_context, mock_db):
         """Test successful game addition."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Mock database operations
         mock_db.game_exists.return_value = False
         mock_db.add_game_recommendation.return_value = True
@@ -227,8 +224,8 @@ class TestGameRecommendationCommands:
     @pytest.mark.asyncio
     async def test_add_game_command_duplicate(self, mock_discord_context, mock_db):
         """Test adding duplicate game."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Mock database to return that game exists
         mock_db.game_exists.return_value = True
 
@@ -244,8 +241,8 @@ class TestGameRecommendationCommands:
     @pytest.mark.asyncio
     async def test_list_games_command(self, mock_discord_context, mock_db):
         """Test listing games command."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Mock game data
         mock_games = [
             {'id': 1, 'name': 'Game 1', 'reason': 'Reason 1', 'added_by': 'User1'},
@@ -268,8 +265,8 @@ class TestGameRecommendationCommands:
     @pytest.mark.asyncio
     async def test_remove_game_command(self, mock_discord_context, mock_db):
         """Test removing a game by name."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Mock successful removal
         mock_db.remove_game_by_name.return_value = {"name": "Test Game", "reason": "Test"}
 
@@ -296,8 +293,8 @@ class TestPlayedGamesCommands:
     @pytest.mark.asyncio
     async def test_add_played_game_command(self, mock_discord_context, mock_db):
         """Test adding a played game."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Mock successful addition
         mock_db.add_played_game.return_value = True
         
@@ -322,8 +319,8 @@ class TestPlayedGamesCommands:
     @pytest.mark.asyncio
     async def test_game_info_command(self, mock_discord_context, mock_db, sample_game_data):
         """Test getting game information."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Mock getting game data
         mock_db.get_played_game.return_value = sample_game_data
 
@@ -340,8 +337,8 @@ class TestPlayedGamesCommands:
     @pytest.mark.asyncio
     async def test_search_played_games_command(self, mock_discord_context, mock_db, sample_game_data):
         """Test searching played games."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Mock search results
         mock_db.search_played_games.return_value = [sample_game_data]
 
@@ -363,8 +360,8 @@ class TestBotStatusCommands:
     @pytest.mark.asyncio
     async def test_ash_status_command(self, mock_discord_context, mock_db):
         """Test the !ashstatus command."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Mock strike data
         mock_db.get_all_strikes.return_value = {123: 1, 456: 2}
         
@@ -384,7 +381,7 @@ class TestBotStatusCommands:
     @pytest.mark.asyncio
     async def test_error_check_command(self, mock_discord_context):
         """Test the !errorcheck command."""
-        import ash_bot_fallback # type: ignore
+        import ash_bot_fallback  # type: ignore
         
         await ash_bot_fallback.error_check(mock_discord_context)
         
@@ -396,7 +393,7 @@ class TestBotStatusCommands:
     @pytest.mark.asyncio
     async def test_busy_check_command(self, mock_discord_context):
         """Test the !busycheck command."""
-        import ash_bot_fallback # type: ignore
+        import ash_bot_fallback  # type: ignore
         
         await ash_bot_fallback.busy_check(mock_discord_context)
         
@@ -412,8 +409,8 @@ class TestPermissionChecking:
     @pytest.mark.asyncio
     async def test_command_requires_manage_messages(self, mock_discord_context, mock_db, mock_discord_user):
         """Test that mod commands require manage_messages permission."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Set up user without permissions
         mock_discord_context.author.guild_permissions.manage_messages = False
         
@@ -428,8 +425,8 @@ class TestPermissionChecking:
     @pytest.mark.asyncio
     async def test_command_with_valid_permissions(self, mock_discord_context, mock_db, mock_discord_user):
         """Test that mod commands work with proper permissions."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Set up user with permissions
         mock_discord_context.author.guild_permissions.manage_messages = True
         
@@ -447,8 +444,8 @@ class TestMessageHandling:
     @pytest.mark.asyncio
     async def test_strike_detection_in_violation_channel(self, mock_discord_message, mock_db):
         """Test strike detection when user is mentioned in violation channel."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Set up violation channel
         mock_discord_message.channel.id = ash_bot_fallback.VIOLATION_CHANNEL_ID
         
@@ -483,8 +480,8 @@ class TestMessageHandling:
     @pytest.mark.asyncio 
     async def test_pineapple_pizza_enforcement(self, mock_discord_message):
         """Test pineapple pizza opinion enforcement."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Set up message that triggers pineapple enforcement
         mock_discord_message.content = "Pineapple doesn't belong on pizza"
         
@@ -502,8 +499,8 @@ class TestMessageHandling:
     @pytest.mark.asyncio
     async def test_ai_response_to_mention(self, mock_discord_message):
         """Test AI response when bot is mentioned."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Mock bot user
         mock_bot_user = MagicMock()
         mock_bot_user.id = 12345
@@ -546,8 +543,8 @@ class TestQueryRouting:
     
     def test_route_query_statistical(self):
         """Test routing of statistical queries."""
-        import ash_bot_fallback # type: ignore
-        
+        import ash_bot_fallback  # type: ignore
+
         # Test various statistical query patterns
         test_queries = [
             "what game series has the most minutes",
@@ -561,7 +558,7 @@ class TestQueryRouting:
     
     def test_route_query_game_status(self):
         """Test routing of game status queries."""
-        import ash_bot_fallback # type: ignore
+        import ash_bot_fallback  # type: ignore
         
         test_queries = [
             "has jonesy played Dark Souls",
@@ -587,7 +584,7 @@ class TestQueryRouting:
     
     def test_route_query_unknown(self):
         """Test routing of unrecognized queries."""
-        import ash_bot_fallback # type: ignore
+        import ash_bot_fallback  # type: ignore
         
         query_type, match = ash_bot_fallback.route_query("random unrelated question")
         assert query_type == "unknown"

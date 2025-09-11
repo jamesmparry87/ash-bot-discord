@@ -1,11 +1,12 @@
 """
 Tests for AI integration and response handling.
 """
-import pytest
 import asyncio
-from unittest.mock import MagicMock, patch, AsyncMock
-import sys
 import os
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Add the Live directory to sys.path
 live_path = os.path.join(os.path.dirname(__file__), '..', 'Live')
@@ -60,7 +61,7 @@ class TestAIResponseFiltering:
     def test_filter_ai_response_length_limit(self):
         """Test response length limiting."""
         import ash_bot_fallback  # type: ignore
-        
+
         # Create a response with many sentences
         sentences = [f"This is sentence {i}." for i in range(10)]
         long_response = " ".join(sentences)
@@ -79,7 +80,7 @@ class TestAIIntegration:
     async def test_ai_response_generation(self, mock_discord_message):
         """Test basic AI response generation."""
         import ash_bot_fallback  # type: ignore
-        
+
         # Mock bot user and setup
         mock_bot_user = MagicMock()
         mock_bot_user.id = 12345

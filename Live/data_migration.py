@@ -1,7 +1,9 @@
 import json
 import re
+from typing import Dict, List
+
 from database import db
-from typing import List, Dict
+
 
 def parse_games_list(games_text: str) -> List[Dict[str, str]]:
     """Parse the games list text into structured data"""
