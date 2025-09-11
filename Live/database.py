@@ -2223,7 +2223,7 @@ class DatabaseManager:
                     conn.commit()
                     logger.info(f"Cancelled reminder ID {reminder_id} for user {user_id}")
                     return dict(reminder)
-                
+
                 return None
         except Exception as e:
             logger.error(f"Error cancelling reminder: {e}")
@@ -2330,7 +2330,7 @@ class DatabaseManager:
                 # Build exclusion condition if exclude_user_id is provided
                 exclusion_condition = ""
                 query_params = []
-                
+
                 if exclude_user_id is not None:
                     exclusion_condition = "AND (submitted_by_user_id != %s OR submitted_by_user_id IS NULL)"
                     query_params = [exclude_user_id]
