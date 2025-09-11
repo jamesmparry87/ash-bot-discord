@@ -929,20 +929,20 @@ async def check_due_reminders():
     """Check for due reminders and deliver them"""
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
-        
+
         # Debug logging to help identify issues
         print(f"🕒 Reminder check running at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-        
+
         # Test database connection
         if not db.database_url:
             print("❌ No database URL configured - reminder system disabled")
             return
-            
+
         conn = db.get_connection()
         if not conn:
             print("❌ Database connection failed in reminder check")
             return
-        
+
         due_reminders = db.get_due_reminders(uk_now)
         print(f"📋 Found {len(due_reminders)} due reminders")
 
@@ -2606,10 +2606,10 @@ async def on_message(message):
             r"^do\s+you\s+know\s+who\s+i\s+am\s*[\?\.]?$",
             r"^tell\s+me\s+who\s+i\s+am\s*[\?\.]?$",
         ]
-        
+
         if any(re.search(pattern, lower_content) for pattern in identity_patterns):
             user_tier = await get_user_communication_tier(message)
-            
+
             # Captain alias gets special identity response
             if user_tier == "captain":
                 cleanup_expired_aliases()
@@ -3005,7 +3005,7 @@ async def time_check(ctx):
     try:
         # Check if user has permissions (allow in DMs for authorized users, or mods in guilds)
         is_authorized = False
-        
+
         if ctx.guild is None:  # DM
             # Allow JAM, JONESY, and moderators in DMs
             if ctx.author.id in [JAM_USER_ID, JONESY_USER_ID]:
@@ -3016,7 +3016,7 @@ async def time_check(ctx):
         else:  # Guild
             # Check standard mod permissions
             is_authorized = await user_is_mod(ctx)
-        
+
         if not is_authorized:
             await ctx.send("⚠️ **Access denied.** Time diagnostic protocols require elevated clearance.")
             return
@@ -3029,10 +3029,10 @@ async def time_check(ctx):
         utc_now = datetime.now(timezone.utc)
         pt_now = datetime.now(ZoneInfo("US/Pacific"))
         system_time = datetime.now()
-        
+
         # Get server system time info
         system_timezone = str(system_time.astimezone().tzinfo)
-        
+
         # Test database time with multiple queries for comparison
         db_time = None
         db_timezone = None
@@ -3057,11 +3057,11 @@ async def time_check(ctx):
                         db_unix_timestamp = float(result[3]) if result[3] else None
         except Exception as e:
             db_time = f"Error: {str(e)}"
-        
+
         # Check reminder system status with detailed diagnostics
         reminder_task_running = check_due_reminders.is_running()
         auto_action_task_running = check_auto_actions.is_running()
-        
+
         # Test reminder database connection
         reminder_db_test = "Unknown"
         try:
@@ -3069,18 +3069,18 @@ async def time_check(ctx):
             reminder_db_test = f"✅ Connected ({len(test_reminders)} found)"
         except Exception as e:
             reminder_db_test = f"❌ Error: {str(e)}"
-        
+
         # Calculate time differences and identify potential issues
         time_diffs = {}
-        
+
         # UK vs UTC should be 0 or 1 hour (depending on DST)
         uk_utc_diff = (uk_now - utc_now).total_seconds()
         time_diffs["uk_vs_utc"] = uk_utc_diff
-        
+
         # System vs UK time difference
         system_uk_diff = (system_time.astimezone(ZoneInfo("Europe/London")) - uk_now).total_seconds()
         time_diffs["system_vs_uk"] = system_uk_diff
-        
+
         # Database vs UK time difference (if available)
         if db_time and isinstance(db_time, datetime):
             if db_time.tzinfo is None:
@@ -3088,21 +3088,21 @@ async def time_check(ctx):
                 db_time_uk = db_time.replace(tzinfo=timezone.utc).astimezone(ZoneInfo("Europe/London"))
             else:
                 db_time_uk = db_time.astimezone(ZoneInfo("Europe/London"))
-            
+
             db_uk_diff = (db_time_uk - uk_now).total_seconds()
             time_diffs["db_vs_uk"] = db_uk_diff
-        
+
         # Identify significant time discrepancies
         issues_detected = []
         if abs(uk_utc_diff) > 7200:  # More than 2 hours difference
             issues_detected.append(f"⚠️ UK/UTC offset abnormal: {uk_utc_diff/3600:.1f}h (should be 0-1h)")
-        
+
         if abs(system_uk_diff) > 300:  # More than 5 minutes difference  
             issues_detected.append(f"⚠️ System clock drift: {system_uk_diff:.0f}s from UK time")
-        
+
         if "db_vs_uk" in time_diffs and abs(time_diffs["db_vs_uk"]) > 300:
             issues_detected.append(f"⚠️ Database clock drift: {time_diffs['db_vs_uk']:.0f}s from UK time")
-        
+
         time_report = (
             f"🕒 **COMPREHENSIVE TIME DIAGNOSTIC REPORT**\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -3124,7 +3124,7 @@ async def time_check(ctx):
             f"• **Auto-Action Task:** {'✅ Active' if auto_action_task_running else '❌ Stopped'}\n"
             f"• **Database Connection:** {reminder_db_test}\n\n"
         )
-        
+
         if issues_detected:
             time_report += f"**⚠️ ISSUES DETECTED:**\n"
             for issue in issues_detected:
@@ -3135,7 +3135,7 @@ async def time_check(ctx):
             time_report += f"• Restart bot if time drift is severe (>10 minutes)\n\n"
         else:
             time_report += f"**✅ TIME SYNCHRONIZATION STATUS:** All systems within acceptable parameters\n\n"
-        
+
         time_report += (
             f"**Unix Timestamps (for debugging):**\n"
             f"• **UK Time:** {int(uk_now.timestamp())}\n"
@@ -3143,9 +3143,9 @@ async def time_check(ctx):
             f"• **System Time:** {int(system_time.timestamp())}\n\n"
             f"*Analysis complete. Maximum time differential: {max(abs(diff) for diff in time_diffs.values() if isinstance(diff, (int, float))):.0f} seconds*"
         )
-        
+
         await ctx.send(time_report)
-        
+
     except Exception as e:
         await ctx.send(f"❌ **Time diagnostic error:** {str(e)}")
 
@@ -3156,28 +3156,28 @@ async def fix_timezone(ctx):
     """Attempt to fix timezone and time synchronization issues"""
     try:
         await ctx.send("🔧 **Initiating timezone synchronization protocol...**")
-        
+
         # Test current timezone data
         uk_now = datetime.now(ZoneInfo("Europe/London"))
         utc_now = datetime.now(timezone.utc)
-        
+
         # Calculate expected UK offset (should be 0 or 1 hour from UTC)
         expected_offset = 0  # UTC+0 in winter, UTC+1 in summer
         if uk_now.dst():
             expected_offset = 3600  # 1 hour in summer (BST)
-        
+
         actual_offset = (uk_now - utc_now).total_seconds()
-        
+
         await ctx.send(f"🔍 **Current timezone analysis:**")
         await ctx.send(f"• **Expected UK offset from UTC:** {expected_offset/3600:.1f} hours")
         await ctx.send(f"• **Actual UK offset from UTC:** {actual_offset/3600:.1f} hours")
-        
+
         timezone_issues = []
-        
+
         # Check for timezone data issues
         if abs(actual_offset - expected_offset) > 300:  # More than 5 minutes off
             timezone_issues.append("UK timezone calculation incorrect")
-        
+
         # Test database timezone settings
         db_timezone_issue = None
         try:
@@ -3188,24 +3188,24 @@ async def fix_timezone(ctx):
                     cur.execute("SHOW timezone")
                     current_tz = cur.fetchone()
                     current_tz_value = current_tz[0] if current_tz else "Unknown"
-                    
+
                     await ctx.send(f"• **Database timezone setting:** {current_tz_value}")
-                    
+
                     # Test setting database timezone to UTC for consistency
                     if current_tz_value.lower() not in ['utc', 'gmt']:
                         await ctx.send("🔧 **Setting database timezone to UTC for consistency...**")
                         cur.execute("SET timezone = 'UTC'")
-                        
+
                         # Verify the change
                         cur.execute("SHOW timezone")
                         new_tz = cur.fetchone()
                         new_tz_value = new_tz[0] if new_tz else "Unknown"
-                        
+
                         if new_tz_value.upper() == 'UTC':
                             await ctx.send("✅ **Database timezone set to UTC successfully**")
                         else:
                             timezone_issues.append(f"Failed to set database timezone (still {new_tz_value})")
-                    
+
                     # Test database time after timezone fix
                     cur.execute("SELECT NOW() as fixed_db_time")
                     fixed_time_result = cur.fetchone()
@@ -3215,18 +3215,18 @@ async def fix_timezone(ctx):
                             db_utc = fixed_db_time.replace(tzinfo=timezone.utc)
                             db_uk = db_utc.astimezone(ZoneInfo("Europe/London"))
                             db_time_diff = (db_uk - uk_now).total_seconds()
-                            
+
                             await ctx.send(f"• **Database time after fix:** {fixed_db_time}")
                             await ctx.send(f"• **Database vs UK time:** {db_time_diff:.0f} seconds")
-                            
+
                             if abs(db_time_diff) <= 60:
                                 await ctx.send("✅ **Database time synchronization: Normal**")
                             else:
                                 timezone_issues.append(f"Database still has time drift ({db_time_diff:.0f}s)")
-                        
+
         except Exception as e:
             timezone_issues.append(f"Database timezone test failed: {str(e)}")
-        
+
         # Test reminder system with current time
         await ctx.send("🔍 **Testing reminder system with current time...**")
         try:
@@ -3238,19 +3238,19 @@ async def fix_timezone(ctx):
                 scheduled_time=test_time,
                 delivery_type="dm"
             )
-            
+
             if reminder_id:
                 await ctx.send(f"✅ **Test reminder created:** ID {reminder_id}, scheduled for {test_time.strftime('%H:%M:%S UK')}")
                 await ctx.send("📋 **Monitor your DMs in 1 minute to verify reminder delivery**")
-                
+
                 # Store test reminder ID for cleanup
                 await ctx.send("⚠️ **Note:** This test reminder will auto-deliver in 1 minute. Monitor background task logs.")
             else:
                 timezone_issues.append("Failed to create test reminder")
-                
+
         except Exception as e:
             timezone_issues.append(f"Reminder system test failed: {str(e)}")
-        
+
         # Summary of fixes applied
         if not timezone_issues:
             await ctx.send(
@@ -3275,7 +3275,7 @@ async def fix_timezone(ctx):
                 f"• Manual system administrator intervention\n\n"
                 f"*Contact system administrator if issues persist.*"
             )
-        
+
     except Exception as e:
         await ctx.send(f"❌ **Timezone fix error:** {str(e)}")
 
@@ -3286,7 +3286,7 @@ async def ash_status(ctx):
     try:
         # Custom permission checking that works in both DMs and guilds
         is_authorized = False
-        
+
         if ctx.guild is None:  # DM
             # Allow JAM, JONESY, and moderators in DMs
             if ctx.author.id in [JAM_USER_ID, JONESY_USER_ID]:
@@ -3297,7 +3297,7 @@ async def ash_status(ctx):
         else:  # Guild
             # Check standard mod permissions
             is_authorized = await user_is_mod(ctx)
-        
+
         # Fix: The generic response should only be shown to unauthorized users in guilds
         # In DMs, unauthorized users should get a clearer message
         if not is_authorized:
@@ -3373,7 +3373,7 @@ async def ash_status(ctx):
             f"Total strikes: {total_strikes}\n\n"
             f"{ai_budget_info}"
         )
-        
+
     except Exception as e:
         await ctx.send(f"❌ **System diagnostic error:** {str(e)}")
 
