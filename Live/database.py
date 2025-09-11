@@ -2176,33 +2176,21 @@ class DatabaseManager:
 
         try:
             with conn.cursor() as cur:
+                # Build query dynamically to avoid repetition
+                set_clauses = ["status = %s"]
+                params: List[Any] = [status]
+
                 if status == "delivered" and delivered_at:
-                    cur.execute(
-                        """
-                        UPDATE reminders 
-                        SET status = %s, delivered_at = %s
-                        WHERE id = %s
-                    """,
-                        (status, delivered_at, reminder_id),
-                    )
+                    set_clauses.append("delivered_at = %s")
+                    params.append(delivered_at)
                 elif status == "auto_completed" and auto_executed_at:
-                    cur.execute(
-                        """
-                        UPDATE reminders 
-                        SET status = %s, auto_executed_at = %s
-                        WHERE id = %s
-                    """,
-                        (status, auto_executed_at, reminder_id),
-                    )
-                else:
-                    cur.execute(
-                        """
-                        UPDATE reminders 
-                        SET status = %s
-                        WHERE id = %s
-                    """,
-                        (status, reminder_id),
-                    )
+                    set_clauses.append("auto_executed_at = %s")
+                    params.append(auto_executed_at)
+
+                params.append(reminder_id)
+
+                query = f"UPDATE reminders SET {', '.join(set_clauses)} WHERE id = %s"
+                cur.execute(query, tuple(params))
 
                 conn.commit()
                 return cur.rowcount > 0
@@ -2219,29 +2207,23 @@ class DatabaseManager:
 
         try:
             with conn.cursor() as cur:
-                # Get the reminder and verify ownership
+                # Atomically update the reminder and return it if found
                 cur.execute(
                     """
-                    SELECT * FROM reminders 
+                    UPDATE reminders
+                    SET status = 'cancelled'
                     WHERE id = %s AND user_id = %s AND status = 'pending'
-                """,
+                    RETURNING *
+                    """,
                     (reminder_id, user_id),
                 )
                 reminder = cur.fetchone()
 
                 if reminder:
-                    # Update status to cancelled
-                    cur.execute(
-                        """
-                        UPDATE reminders 
-                        SET status = 'cancelled'
-                        WHERE id = %s
-                    """,
-                        (reminder_id,),
-                    )
                     conn.commit()
                     logger.info(f"Cancelled reminder ID {reminder_id} for user {user_id}")
                     return dict(reminder)
+                
                 return None
         except Exception as e:
             logger.error(f"Error cancelling reminder: {e}")
@@ -2345,26 +2327,33 @@ class DatabaseManager:
 
         try:
             with conn.cursor() as cur:
+                # Build exclusion condition if exclude_user_id is provided
+                exclusion_condition = ""
+                query_params = []
+                
+                if exclude_user_id is not None:
+                    exclusion_condition = "AND (submitted_by_user_id != %s OR submitted_by_user_id IS NULL)"
+                    query_params = [exclude_user_id]
+
                 # Priority 1: Recent mod-submitted questions (available status, unused within 4 weeks)
-                cur.execute(
-                    """
+                query1 = f"""
                     SELECT * FROM trivia_questions 
                     WHERE is_active = TRUE
                     AND status = 'available'
                     AND submitted_by_user_id IS NOT NULL
                     AND (last_used_at IS NULL OR last_used_at < CURRENT_TIMESTAMP - INTERVAL '4 weeks')
+                    {exclusion_condition}
                     ORDER BY created_at DESC, usage_count ASC
                     LIMIT 1
                 """
-                )
+                cur.execute(query1, query_params)
                 result = cur.fetchone()
 
                 if result:
                     return dict(result)
 
                 # Priority 2: AI-generated questions focusing on statistical anomalies (available status)
-                cur.execute(
-                    """
+                query2 = f"""
                     SELECT * FROM trivia_questions 
                     WHERE is_active = TRUE
                     AND status = 'available'
@@ -2372,26 +2361,27 @@ class DatabaseManager:
                     AND (category IN ('statistical_anomaly', 'completion_rate', 'playtime_insight') 
                          OR is_dynamic = TRUE)
                     AND (last_used_at IS NULL OR last_used_at < CURRENT_TIMESTAMP - INTERVAL '2 weeks')
+                    {exclusion_condition}
                     ORDER BY usage_count ASC, created_at ASC
                     LIMIT 1
                 """
-                )
+                cur.execute(query2, query_params)
                 result = cur.fetchone()
 
                 if result:
                     return dict(result)
 
                 # Priority 3: Any unused questions with available status
-                cur.execute(
-                    """
+                query3 = f"""
                     SELECT * FROM trivia_questions 
                     WHERE is_active = TRUE
                     AND status = 'available'
                     AND (last_used_at IS NULL OR last_used_at < CURRENT_TIMESTAMP - INTERVAL '1 week')
+                    {exclusion_condition}
                     ORDER BY usage_count ASC, created_at ASC
                     LIMIT 1
                 """
-                )
+                cur.execute(query3, query_params)
                 result = cur.fetchone()
 
                 return dict(result) if result else None
@@ -2831,55 +2821,42 @@ class DatabaseManager:
 
         try:
             with conn.cursor() as cur:
-                # Count by status
+                # Combined query using UNION ALL for efficiency
                 cur.execute(
                     """
-                    SELECT status, COUNT(*) as count 
+                    SELECT 'status' as dimension, status as value, COUNT(*) as count 
                     FROM trivia_questions 
                     WHERE is_active = TRUE
                     GROUP BY status
-                """
-                )
-                status_results = cur.fetchall()
-                status_counts: Dict[str, int] = {}
-                if status_results:
-                    for row in status_results:
-                        row_dict = dict(row)
-                        status_counts[str(row_dict["status"])] = int(row_dict["count"])
-
-                # Count by question type
-                cur.execute(
-                    """
-                    SELECT question_type, COUNT(*) as count 
-                    FROM trivia_questions 
+                    UNION ALL
+                    SELECT 'type' as dimension, question_type as value, COUNT(*) as count
+                    FROM trivia_questions
                     WHERE is_active = TRUE
                     GROUP BY question_type
-                """
-                )
-                type_results = cur.fetchall()
-                type_counts: Dict[str, int] = {}
-                if type_results:
-                    for row in type_results:
-                        row_dict = dict(row)
-                        type_counts[str(row_dict["question_type"])] = int(row_dict["count"])
-
-                # Count mod-submitted vs AI-generated
-                cur.execute(
-                    """
-                    SELECT 
-                        CASE WHEN submitted_by_user_id IS NOT NULL THEN 'mod_submitted' ELSE 'ai_generated' END as source,
-                        COUNT(*) as count 
-                    FROM trivia_questions 
+                    UNION ALL
+                    SELECT 'source' as dimension, CASE WHEN submitted_by_user_id IS NOT NULL THEN 'mod_submitted' ELSE 'ai_generated' END as value, COUNT(*) as count
+                    FROM trivia_questions
                     WHERE is_active = TRUE
                     GROUP BY (submitted_by_user_id IS NOT NULL)
-                """
+                    """
                 )
-                source_results = cur.fetchall()
+                results = cur.fetchall()
+                status_counts: Dict[str, int] = {}
+                type_counts: Dict[str, int] = {}
                 source_counts: Dict[str, int] = {}
-                if source_results:
-                    for row in source_results:
+
+                if results:
+                    for row in results:
                         row_dict = dict(row)
-                        source_counts[str(row_dict["source"])] = int(row_dict["count"])
+                        dimension = row_dict['dimension']
+                        value = str(row_dict['value'])
+                        count = int(row_dict['count'])
+                        if dimension == 'status':
+                            status_counts[value] = count
+                        elif dimension == 'type':
+                            type_counts[value] = count
+                        elif dimension == 'source':
+                            source_counts[value] = count
 
                 return {
                     "status_counts": status_counts,
