@@ -321,9 +321,20 @@ async def user_is_member_by_id(user_id: int) -> bool:
         return False
 
 
-async def get_user_communication_tier(message: discord.Message) -> str:
-    """Determine communication tier for user responses"""
-    user_id = message.author.id
+async def get_user_communication_tier(message_or_ctx) -> str:
+    """Determine communication tier for user responses
+    Accepts either discord.Message or commands.Context"""
+    
+    # Handle both Message and Context objects
+    if hasattr(message_or_ctx, 'author'):
+        user_id = message_or_ctx.author.id
+        user = message_or_ctx.author
+        guild = message_or_ctx.guild
+    else:
+        # Fallback - treat as user ID
+        user_id = message_or_ctx
+        user = None
+        guild = None
 
     # First check for active alias (debugging only)
     cleanup_expired_aliases()
@@ -337,12 +348,30 @@ async def get_user_communication_tier(message: discord.Message) -> str:
         return "captain"
     elif user_id == JAM_USER_ID:
         return "creator"
-    elif await user_is_mod(message):
-        return "moderator"
-    elif await user_is_member(message):
-        return "member"
-    else:
-        return "standard"
+    elif guild and user and isinstance(user, discord.Member):
+        # Check if user has mod permissions
+        if user.guild_permissions.manage_messages:
+            return "moderator"
+        # Check if user has member roles
+        member_roles = [role.id for role in user.roles]
+        if any(role_id in MEMBER_ROLE_IDS for role_id in member_roles):
+            return "member"
+    elif guild:
+        # For Context objects where we need to check permissions
+        try:
+            if hasattr(message_or_ctx, 'author') and hasattr(message_or_ctx.author, 'guild_permissions'):
+                if message_or_ctx.author.guild_permissions.manage_messages:
+                    return "moderator"
+            
+            # Check member roles for Context objects
+            if hasattr(message_or_ctx, 'author') and hasattr(message_or_ctx.author, 'roles'):
+                member_roles = [role.id for role in message_or_ctx.author.roles]
+                if any(role_id in MEMBER_ROLE_IDS for role_id in member_roles):
+                    return "member"
+        except AttributeError:
+            pass
+    
+    return "standard"
 
 
 # --- AI Setup (Gemini + Claude) ---
@@ -2850,6 +2879,9 @@ async def on_message(message):
             # tone
             is_captain_jonesy = message.author.id == JONESY_USER_ID
             is_creator = message.author.id == JAM_USER_ID
+
+            # Get user tier for AI prompt context
+            user_tier = await get_user_communication_tier(message)
 
             # Streamlined prompt construction
             prompt_parts = [
