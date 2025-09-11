@@ -162,9 +162,28 @@ jobs:
       run: |
         black --check --diff Live/ tests/ || echo "⚠️  Black formatting issues detected (non-blocking) - consider running 'black Live/ tests/' locally"
     
-    - name: Run isort import sorting check
+    - name: Auto-fix import sorting with isort
       run: |
-        isort --check-only --diff Live/ tests/
+        # Configure git for automated commits
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        
+        # Run isort to fix import order (without --check-only)
+        echo "🔧 Running isort to auto-fix import ordering..."
+        isort Live/ tests/
+        
+        # Check if there are any changes to commit
+        if git diff --quiet; then
+          echo "✅ No import sorting changes needed"
+        else
+          echo "📝 Import sorting changes detected, committing..."
+          git add Live/ tests/
+          git commit -m "chore: auto-fix import sorting with isort [skip ci]"
+          
+          # Push the changes back to the branch
+          git push
+          echo "✅ Import sorting fixes committed and pushed"
+        fi
     
     - name: Run flake8 linting
       run: |

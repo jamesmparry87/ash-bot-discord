@@ -2,21 +2,22 @@ import asyncio
 import atexit
 from datetime import datetime, time, timedelta
 import difflib
+import json
 import os
 import platform
 import re
 import signal
+import sqlite3
 import sys
 from typing import Any, Dict, List, Match, Optional
 from zoneinfo import ZoneInfo
-import json
 
 import discord
 from discord.ext import commands, tasks
+from moderator_faq_handler import ModeratorFAQHandler
 
 # Import database manager
 from database import DatabaseManager
-from moderator_faq_handler import ModeratorFAQHandler
 
 db = DatabaseManager()
 
