@@ -512,18 +512,24 @@ class TestMessageHandling:
                 with patch("ash_bot_fallback.BOT_PERSONA", {"enabled": True, "personality": "Test persona"}):
                     with patch("ash_bot_fallback.primary_ai", "gemini"):
                         with patch("ash_bot_fallback.gemini_model") as mock_gemini:
-                            # Mock AI response
-                            mock_response = MagicMock()
-                            mock_response.text = "Hello. I'm Ash. How can I help you?"
-                            mock_gemini.generate_content.return_value = mock_response
+                            # Mock the rate limiting system to allow AI calls
+                            with patch("ash_bot_fallback.check_rate_limits", return_value=(True, "OK")):
+                                with patch("ash_bot_fallback.record_ai_request") as mock_record:
+                                    # Mock AI response
+                                    mock_response = MagicMock()
+                                    mock_response.text = "Hello. I'm Ash. How can I help you?"
+                                    mock_gemini.generate_content.return_value = mock_response
 
-                            await ash_bot_fallback.on_message(mock_discord_message)
+                                    await ash_bot_fallback.on_message(mock_discord_message)
 
-                            # Verify AI was called
-                            mock_gemini.generate_content.assert_called()
+                                    # Verify AI was called
+                                    mock_gemini.generate_content.assert_called()
 
-                            # Verify response was sent
-                            mock_discord_message.reply.assert_called()
+                                    # Verify response was sent
+                                    mock_discord_message.reply.assert_called()
+
+                                    # Verify request was recorded
+                                    mock_record.assert_called()
 
 
 class TestQueryRouting:
