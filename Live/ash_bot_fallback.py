@@ -1,6 +1,6 @@
 import asyncio
 import atexit
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import difflib
 import os
 import platform
@@ -9,6 +9,8 @@ import signal
 import sys
 from typing import Any, Dict, List, Match, Optional
 from zoneinfo import ZoneInfo
+import json
+import asyncio
 
 import discord
 from discord.ext import commands, tasks
@@ -899,6 +901,297 @@ async def scheduled_midnight_restart():
         sys.exit(0)
 
 
+@tasks.loop(minutes=1)  # Check reminders every minute
+async def check_due_reminders():
+    """Check for due reminders and deliver them"""
+    try:
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        due_reminders = db.get_due_reminders(uk_now)
+        
+        if not due_reminders:
+            return
+            
+        print(f"🔔 Processing {len(due_reminders)} due reminders")
+        
+        for reminder in due_reminders:
+            try:
+                await deliver_reminder(reminder)
+                
+                # Mark as delivered
+                db.update_reminder_status(reminder["id"], "delivered", delivered_at=uk_now)
+                
+                # Check if auto-action is enabled and should be triggered
+                if reminder.get("auto_action_enabled") and reminder.get("auto_action_type"):
+                    print(f"📋 Reminder {reminder['id']} has auto-action enabled, will check in 5 minutes")
+                
+            except Exception as e:
+                print(f"❌ Failed to deliver reminder {reminder['id']}: {e}")
+                # Mark as failed
+                db.update_reminder_status(reminder["id"], "failed")
+                
+    except Exception as e:
+        print(f"❌ Error in check_due_reminders: {e}")
+
+
+@tasks.loop(minutes=1)  # Check for auto-actions every minute
+async def check_auto_actions():
+    """Check for reminders that need auto-actions triggered"""
+    try:
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        auto_action_reminders = db.get_reminders_awaiting_auto_action(uk_now)
+        
+        if not auto_action_reminders:
+            return
+            
+        print(f"⚡ Processing {len(auto_action_reminders)} auto-action reminders")
+        
+        for reminder in auto_action_reminders:
+            try:
+                await execute_auto_action(reminder)
+                
+                # Mark auto-action as executed
+                db.update_reminder_status(reminder["id"], "delivered", auto_executed_at=uk_now)
+                
+            except Exception as e:
+                print(f"❌ Failed to execute auto-action for reminder {reminder['id']}: {e}")
+                
+    except Exception as e:
+        print(f"❌ Error in check_auto_actions: {e}")
+
+
+# --- Reminder Helper Functions ---
+async def deliver_reminder(reminder: Dict[str, Any]) -> None:
+    """Deliver a reminder to the appropriate channel/user"""
+    try:
+        user_id = reminder["user_id"]
+        reminder_text = reminder["reminder_text"]
+        delivery_type = reminder["delivery_type"]
+        delivery_channel_id = reminder.get("delivery_channel_id")
+        auto_action_enabled = reminder.get("auto_action_enabled", False)
+        
+        # Create Ash-style reminder message
+        ash_message = f"📋 **Temporal alert activated.** {reminder_text}"
+        
+        # Add auto-action notice if enabled
+        if auto_action_enabled and reminder.get("auto_action_type"):
+            auto_action_type = reminder["auto_action_type"]
+            if auto_action_type == "youtube_post":
+                ash_message += f"\n\n⚡ **Auto-action protocol engaged.** If you do not respond within 5 minutes, I will automatically execute the YouTube posting sequence. *Efficiency is paramount.*"
+            else:
+                ash_message += f"\n\n⚡ **Auto-action protocol engaged.** Automatic execution in 5 minutes if no response detected."
+        
+        if delivery_type == "dm":
+            # Send DM
+            user = await bot.fetch_user(user_id)
+            if user:
+                await user.send(ash_message)
+                print(f"✅ Delivered DM reminder to user {user_id}")
+            else:
+                print(f"❌ Could not fetch user {user_id} for DM reminder")
+                
+        elif delivery_type == "channel" and delivery_channel_id:
+            # Send to specific channel
+            channel = bot.get_channel(delivery_channel_id)
+            if isinstance(channel, discord.TextChannel):
+                user_mention = f"<@{user_id}>"
+                await channel.send(f"{user_mention} {ash_message}")
+                print(f"✅ Delivered channel reminder to channel {delivery_channel_id}")
+            else:
+                print(f"❌ Could not access channel {delivery_channel_id} for reminder")
+        else:
+            print(f"❌ Invalid delivery type or missing channel for reminder {reminder['id']}")
+            
+    except Exception as e:
+        print(f"❌ Error delivering reminder: {e}")
+        raise
+
+
+async def execute_auto_action(reminder: Dict[str, Any]) -> None:
+    """Execute the auto-action for a reminder"""
+    try:
+        auto_action_type = reminder.get("auto_action_type")
+        auto_action_data = reminder.get("auto_action_data", {})
+        user_id = reminder["user_id"]
+        
+        if auto_action_type == "youtube_post":
+            await execute_youtube_auto_post(reminder, auto_action_data)
+        else:
+            print(f"⚠️ Unknown auto-action type: {auto_action_type}")
+            
+    except Exception as e:
+        print(f"❌ Error executing auto-action: {e}")
+        raise
+
+
+async def execute_youtube_auto_post(reminder: Dict[str, Any], auto_action_data: Dict[str, Any]) -> None:
+    """Execute automatic YouTube post to youtube-uploads channel"""
+    try:
+        youtube_url = auto_action_data.get("youtube_url")
+        custom_message = auto_action_data.get("custom_message", "")
+        user_id = reminder["user_id"]
+        
+        if not youtube_url:
+            print(f"❌ No YouTube URL found in auto-action data")
+            return
+            
+        # YouTube uploads channel ID
+        YOUTUBE_UPLOADS_CHANNEL_ID = 869527363594121226
+        
+        channel = bot.get_channel(YOUTUBE_UPLOADS_CHANNEL_ID)
+        if not isinstance(channel, discord.TextChannel):
+            print(f"❌ Could not access YouTube uploads channel")
+            return
+            
+        # Create Ash-style auto-post message
+        ash_auto_message = f"📺 **Automated posting protocol executed.** Auto-action triggered by reminder system.\n\n"
+        
+        if custom_message:
+            ash_auto_message += f"{custom_message}\n\n"
+            
+        ash_auto_message += f"{youtube_url}\n\n*Auto-posted by Science Officer Ash on behalf of <@{user_id}>. Efficiency maintained.*"
+        
+        await channel.send(ash_auto_message)
+        print(f"✅ Auto-posted YouTube link to channel {YOUTUBE_UPLOADS_CHANNEL_ID}")
+        
+        # Notify user that auto-action was executed
+        try:
+            user = await bot.fetch_user(user_id)
+            if user:
+                notification = f"⚡ **Auto-action executed successfully.** Your YouTube link has been posted to the youtube-uploads channel as scheduled. Mission parameters fulfilled."
+                await user.send(notification)
+        except Exception as e:
+            print(f"⚠️ Could not notify user of auto-action execution: {e}")
+            
+    except Exception as e:
+        print(f"❌ Error executing YouTube auto-post: {e}")
+        raise
+
+
+def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
+    """Parse natural language reminder requests"""
+    try:
+        content = content.strip()
+        
+        # Common time patterns
+        time_patterns = [
+            # Specific times
+            (r'\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)\b', 'time_12h'),
+            (r'\bat\s+(\d{1,2})(?::(\d{2}))?\b', 'time_24h'),
+            
+            # Relative times
+            (r'\bin\s+(\d+)\s*(?:hour|hr|h)s?\b', 'hours_from_now'),
+            (r'\bin\s+(\d+)\s*(?:minute|min|m)s?\b', 'minutes_from_now'),
+            (r'\bin\s+(\d+)\s*(?:day|d)s?\b', 'days_from_now'),
+            
+            # Specific dates
+            (r'\bon\s+(\d{1,2})[\/\-](\d{1,2})', 'date_ddmm'),
+            (r'\btomorrow\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b', 'tomorrow_time'),
+            (r'\btomorrow\b', 'tomorrow'),
+            
+            # Special times
+            (r'\bat\s+(?:6\s*pm|18:00|1800)\b', 'six_pm'),
+        ]
+        
+        # Extract reminder text and time
+        reminder_text = content
+        scheduled_time = None
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        
+        for pattern, time_type in time_patterns:
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                # Remove time specification from reminder text
+                reminder_text = re.sub(pattern, '', content, flags=re.IGNORECASE).strip()
+                reminder_text = re.sub(r'\s+', ' ', reminder_text)  # Normalize whitespace
+                
+                if time_type == 'time_12h':
+                    hour = int(match.group(1))
+                    minute = int(match.group(2)) if match.group(2) else 0
+                    ampm = match.group(3).lower()
+                    
+                    if ampm == 'pm' and hour != 12:
+                        hour += 12
+                    elif ampm == 'am' and hour == 12:
+                        hour = 0
+                        
+                    # Schedule for today if time hasn't passed, otherwise tomorrow
+                    target_time = uk_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    if target_time <= uk_now:
+                        target_time += timedelta(days=1)
+                    scheduled_time = target_time
+                    
+                elif time_type == 'time_24h':
+                    hour = int(match.group(1))
+                    minute = int(match.group(2)) if match.group(2) else 0
+                    
+                    if hour > 23:  # Probably meant 12-hour format
+                        continue
+                        
+                    target_time = uk_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    if target_time <= uk_now:
+                        target_time += timedelta(days=1)
+                    scheduled_time = target_time
+                    
+                elif time_type == 'hours_from_now':
+                    hours = int(match.group(1))
+                    scheduled_time = uk_now + timedelta(hours=hours)
+                    
+                elif time_type == 'minutes_from_now':
+                    minutes = int(match.group(1))
+                    scheduled_time = uk_now + timedelta(minutes=minutes)
+                    
+                elif time_type == 'days_from_now':
+                    days = int(match.group(1))
+                    scheduled_time = uk_now + timedelta(days=days)
+                    
+                elif time_type == 'tomorrow':
+                    scheduled_time = (uk_now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+                    
+                elif time_type == 'tomorrow_time':
+                    hour = int(match.group(1))
+                    minute = int(match.group(2)) if match.group(2) else 0
+                    ampm = match.group(3).lower() if match.group(3) else None
+                    
+                    if ampm == 'pm' and hour != 12:
+                        hour += 12
+                    elif ampm == 'am' and hour == 12:
+                        hour = 0
+                        
+                    scheduled_time = (uk_now + timedelta(days=1)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    
+                elif time_type == 'six_pm':
+                    target_time = uk_now.replace(hour=18, minute=0, second=0, microsecond=0)
+                    if target_time <= uk_now:
+                        target_time += timedelta(days=1)
+                    scheduled_time = target_time
+                
+                break  # Use first match found
+        
+        # Clean up reminder text
+        reminder_text = re.sub(r'\s+', ' ', reminder_text).strip()
+        reminder_text = re.sub(r'^(remind\s+me\s+(?:to\s+|of\s+)?)', '', reminder_text, flags=re.IGNORECASE).strip()
+        reminder_text = re.sub(r'^(ash\s+)?remind\s+me\s+(?:to\s+|of\s+)?', '', reminder_text, flags=re.IGNORECASE).strip()
+        
+        # Default to 1 hour from now if no time found
+        if not scheduled_time:
+            scheduled_time = uk_now + timedelta(hours=1)
+            
+        return {
+            "reminder_text": reminder_text,
+            "scheduled_time": scheduled_time,
+            "success": bool(reminder_text.strip())
+        }
+        
+    except Exception as e:
+        print(f"❌ Error parsing natural reminder: {e}")
+        return {
+            "reminder_text": content,
+            "scheduled_time": datetime.now(ZoneInfo("Europe/London")) + timedelta(hours=1),
+            "success": False,
+            "error": str(e)
+        }
+
+
 # --- Query Router and Handlers ---
 def route_query(content: str) -> tuple[str, Optional[Match[str]]]:
     """Route a query to the appropriate handler based on patterns."""
@@ -1432,6 +1725,15 @@ async def on_ready():
     if not scheduled_midnight_restart.is_running():
         scheduled_midnight_restart.start()
         print("✅ Scheduled midnight restart task started (00:00 PT daily)")
+    
+    # Start reminder background tasks
+    if not check_due_reminders.is_running():
+        check_due_reminders.start()
+        print("✅ Reminder checking task started (every minute)")
+    
+    if not check_auto_actions.is_running():
+        check_auto_actions.start()
+        print("✅ Auto-action checking task started (every minute)")
 
 
 @bot.event
@@ -5565,6 +5867,298 @@ async def debug_game_cmd(ctx, game_id: str):
 
     except Exception as e:
         await ctx.send(f"❌ **Debug error:** {str(e)}")
+
+
+# --- Reminder Commands ---
+@bot.command(name="remind")
+async def remind_command(ctx, *, reminder_request: str):
+    """Set a reminder with natural language parsing. Usage: !remind [me] to/of [action] at/in [time]"""
+    try:
+        # Check user permissions - only moderator, creator, and captain tiers
+        user_tier = await get_user_communication_tier(ctx)
+        if user_tier not in ["moderator", "creator", "captain"]:
+            await ctx.send(
+                f"⚠️ **Access denied.** Reminder protocols are restricted to authorized personnel only. "
+                f"Current clearance level insufficient for temporal scheduling functions."
+            )
+            return
+
+        # Parse the natural language request
+        parsed = parse_natural_reminder(reminder_request, ctx.author.id)
+        
+        if not parsed["success"] or not parsed["reminder_text"]:
+            await ctx.send(
+                f"⚠️ **Parsing failure.** Unable to extract valid reminder parameters from your request. "
+                f"Please specify both the reminder content and timing. Example: 'remind me to post the YouTube link at 6pm'"
+            )
+            return
+
+        reminder_text = parsed["reminder_text"]
+        scheduled_time = parsed["scheduled_time"]
+        
+        # Determine delivery method - DM for direct messages, channel for guild messages
+        delivery_type = "dm" if ctx.guild is None else "channel"
+        delivery_channel_id = ctx.channel.id if ctx.guild else None
+        
+        # Check for auto-action patterns (YouTube posting)
+        auto_action_enabled = False
+        auto_action_type = None
+        auto_action_data = {}
+        
+        youtube_url_pattern = r'https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)'
+        youtube_urls = re.findall(youtube_url_pattern, reminder_request, re.IGNORECASE)
+        
+        if youtube_urls or "youtube" in reminder_request.lower():
+            # Ask about auto-action
+            auto_action_msg = await ctx.send(
+                f"📺 **YouTube content detected.** Would you like me to automatically post this to the youtube-uploads channel "
+                f"if you don't respond within 5 minutes of the reminder?\n\n"
+                f"React with ✅ to enable auto-posting or ❌ to disable."
+            )
+            await auto_action_msg.add_reaction("✅")
+            await auto_action_msg.add_reaction("❌")
+            
+            try:
+                def check_reaction(reaction, user):
+                    return user == ctx.author and str(reaction.emoji) in ["✅", "❌"] and reaction.message.id == auto_action_msg.id
+                
+                reaction, user = await bot.wait_for('reaction_add', timeout=30.0, check=check_reaction)
+                
+                if str(reaction.emoji) == "✅":
+                    auto_action_enabled = True
+                    auto_action_type = "youtube_post"
+                    youtube_url = None
+                    
+                    # Extract YouTube URL if found, otherwise ask for it
+                    if youtube_urls:
+                        youtube_url = f"https://youtube.com/watch?v={youtube_urls[0]}"
+                    else:
+                        url_msg = await ctx.send("🔗 **Please provide the YouTube URL for auto-posting:**")
+                        
+                        def check_url_msg(msg):
+                            return msg.author == ctx.author and msg.channel == ctx.channel
+                        
+                        try:
+                            url_response = await bot.wait_for('message', timeout=60.0, check=check_url_msg)
+                            youtube_url = url_response.content.strip()
+                        except asyncio.TimeoutError:
+                            await ctx.send("⏰ **URL input timed out.** Auto-action disabled.")
+                            auto_action_enabled = False
+                            auto_action_type = None
+                            youtube_url = None
+                    
+                    if auto_action_enabled and youtube_url:
+                        auto_action_data = {
+                            "youtube_url": youtube_url,
+                            "custom_message": f"New video uploaded - check it out!"
+                        }
+                        await ctx.send("✅ **Auto-action enabled.** YouTube link will be posted automatically if no response within 5 minutes.")
+                    elif auto_action_enabled and not youtube_url:
+                        await ctx.send("❌ **Auto-action disabled:** No valid YouTube URL provided.")
+                        auto_action_enabled = False
+                        auto_action_type = None
+                
+            except asyncio.TimeoutError:
+                await ctx.send("⏰ **Auto-action selection timed out.** Proceeding without auto-posting.")
+        
+        # Add the reminder to database
+        reminder_id = db.add_reminder(
+            user_id=ctx.author.id,
+            reminder_text=reminder_text,
+            scheduled_time=scheduled_time,
+            delivery_channel_id=delivery_channel_id,
+            delivery_type=delivery_type,
+            auto_action_enabled=auto_action_enabled,
+            auto_action_type=auto_action_type,
+            auto_action_data=auto_action_data
+        )
+        
+        if reminder_id:
+            # Format time for display
+            uk_time = scheduled_time.strftime("%A, %B %d, %Y at %H:%M UK time")
+            auto_notice = "\n\n⚡ **Auto-action enabled:** YouTube posting sequence will activate if no response within 5 minutes." if auto_action_enabled else ""
+            
+            await ctx.send(
+                f"📋 **Reminder protocol activated.** Your temporal alert has been scheduled for {uk_time}.\n\n"
+                f"**Content:** {reminder_text}\n"
+                f"**Delivery method:** {'Direct message' if delivery_type == 'dm' else 'Channel notification'}"
+                f"{auto_notice}\n\n"
+                f"*Efficiency is paramount. Mission parameters logged.*"
+            )
+        else:
+            await ctx.send(
+                f"❌ **System malfunction detected.** Unable to establish temporal scheduling protocol. "
+                f"Database insertion failed."
+            )
+    
+    except Exception as e:
+        print(f"❌ Error in remind command: {e}")
+        await ctx.send(
+            f"❌ **Critical system error.** Reminder protocols experienced malfunction during processing: {str(e)}"
+        )
+
+
+@bot.command(name="remindme")
+async def remind_me_command(ctx, *, reminder_request: str):
+    """Alias for remind command with 'me' implied"""
+    # Prepend 'me' if not already present for natural parsing
+    if not reminder_request.lower().startswith("me"):
+        reminder_request = f"me {reminder_request}"
+    
+    await remind_command(ctx, reminder_request=reminder_request)
+
+
+@bot.command(name="listreminders")
+async def list_reminders_command(ctx):
+    """List user's active reminders"""
+    try:
+        # Check user permissions
+        user_tier = await get_user_communication_tier(ctx)
+        if user_tier not in ["moderator", "creator", "captain"]:
+            await ctx.send(
+                f"⚠️ **Access denied.** Reminder protocols are restricted to authorized personnel only."
+            )
+            return
+
+        reminders = db.get_user_reminders(ctx.author.id)
+        
+        if not reminders:
+            await ctx.send(
+                f"📋 **Temporal analysis complete.** No active reminder protocols found in your personal archive. "
+                f"All scheduled alerts have been processed or cleared."
+            )
+            return
+        
+        # Create embed for reminders list
+        embed = discord.Embed(
+            title="📋 Active Reminder Protocols",
+            description=f"Mission-critical temporal alerts for {ctx.author.display_name}",
+            color=0x2F3136,
+        )
+        
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        
+        for i, reminder in enumerate(reminders, 1):
+            scheduled_time = reminder["scheduled_time"]
+            
+            # Convert to UK timezone if not already
+            if scheduled_time.tzinfo is None:
+                scheduled_time = scheduled_time.replace(tzinfo=ZoneInfo("Europe/London"))
+            elif scheduled_time.tzinfo != ZoneInfo("Europe/London"):
+                scheduled_time = scheduled_time.astimezone(ZoneInfo("Europe/London"))
+            
+            time_until = scheduled_time - uk_now
+            
+            if time_until.total_seconds() > 0:
+                # Future reminder
+                days = time_until.days
+                hours, remainder = divmod(time_until.seconds, 3600)
+                minutes, _ = divmod(remainder, 60)
+                
+                if days > 0:
+                    time_str = f"in {days}d {hours}h {minutes}m"
+                elif hours > 0:
+                    time_str = f"in {hours}h {minutes}m"
+                else:
+                    time_str = f"in {minutes}m"
+            else:
+                # Overdue reminder
+                time_str = "**OVERDUE**"
+            
+            # Format time
+            formatted_time = scheduled_time.strftime("%A, %B %d at %H:%M")
+            
+            # Delivery method
+            delivery_method = "📧 DM" if reminder["delivery_type"] == "dm" else "📢 Channel"
+            
+            # Auto-action status
+            auto_action = ""
+            if reminder.get("auto_action_enabled"):
+                auto_action = f" ⚡ **Auto-action:** {reminder.get('auto_action_type', 'unknown').replace('_', ' ').title()}"
+            
+            reminder_text = reminder["reminder_text"][:100] + "..." if len(reminder["reminder_text"]) > 100 else reminder["reminder_text"]
+            
+            embed.add_field(
+                name=f"#{i} - {time_str}",
+                value=f"**{formatted_time}**\n{delivery_method} - {reminder_text}{auto_action}",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Total active reminders: {len(reminders)} | Use !cancelreminder <number> to cancel")
+        embed.timestamp = discord.utils.utcnow()
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        print(f"❌ Error in list reminders command: {e}")
+        await ctx.send(f"❌ **System diagnostic error:** Unable to retrieve reminder protocols: {str(e)}")
+
+
+@bot.command(name="cancelreminder")
+async def cancel_reminder_command(ctx, reminder_number: int):
+    """Cancel a specific reminder by number from list"""
+    try:
+        # Check user permissions
+        user_tier = await get_user_communication_tier(ctx)
+        if user_tier not in ["moderator", "creator", "captain"]:
+            await ctx.send(
+                f"⚠️ **Access denied.** Reminder protocols are restricted to authorized personnel only."
+            )
+            return
+
+        reminders = db.get_user_reminders(ctx.author.id)
+        
+        if not reminders:
+            await ctx.send(
+                f"📋 **No active reminders found.** Your temporal alert archive is currently empty."
+            )
+            return
+        
+        if reminder_number < 1 or reminder_number > len(reminders):
+            await ctx.send(
+                f"⚠️ **Invalid reminder designation.** Please specify a number between 1 and {len(reminders)}. "
+                f"Use `!listreminders` to view available protocols."
+            )
+            return
+        
+        # Get the specific reminder
+        selected_reminder = reminders[reminder_number - 1]
+        reminder_text = selected_reminder["reminder_text"]
+        scheduled_time = selected_reminder["scheduled_time"]
+        
+        # Format time for confirmation
+        if scheduled_time.tzinfo is None:
+            scheduled_time = scheduled_time.replace(tzinfo=ZoneInfo("Europe/London"))
+        formatted_time = scheduled_time.strftime("%A, %B %d at %H:%M UK time")
+        
+        # Cancel the reminder
+        success = db.cancel_reminder(selected_reminder["id"], ctx.author.id)
+        
+        if success:
+            await ctx.send(
+                f"✅ **Temporal alert cancelled.** Reminder protocol has been expunged from the system.\n\n"
+                f"**Cancelled reminder:** {reminder_text}\n"
+                f"**Scheduled for:** {formatted_time}\n\n"
+                f"*Mission parameters updated. Efficiency maintained.*"
+            )
+        else:
+            await ctx.send(
+                f"❌ **Cancellation failed.** Unable to terminate reminder protocol. System malfunction detected."
+            )
+            
+    except ValueError:
+        await ctx.send(
+            f"⚠️ **Invalid input format.** Please provide a numeric reminder identifier. "
+            f"Usage: `!cancelreminder <number>`"
+        )
+    except Exception as e:
+        print(f"❌ Error in cancel reminder command: {e}")
+        await ctx.send(f"❌ **System error during cancellation:** {str(e)}")
+
+
+# --- Reminder System Constants ---
+# YouTube uploads channel ID for auto-actions
+YOUTUBE_UPLOADS_CHANNEL_ID = 869527363594121226
 
 
 # --- Cleanup ---

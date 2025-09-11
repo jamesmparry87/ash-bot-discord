@@ -81,6 +81,27 @@ class DatabaseManager:
                 """
                 )
 
+                # Create reminders table
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS reminders (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        reminder_text TEXT NOT NULL,
+                        scheduled_time TIMESTAMP NOT NULL,
+                        delivery_channel_id BIGINT NULL,
+                        delivery_type VARCHAR(20) NOT NULL,
+                        auto_action_enabled BOOLEAN DEFAULT FALSE,
+                        auto_action_type VARCHAR(50) NULL,
+                        auto_action_data JSONB NULL,
+                        status VARCHAR(20) DEFAULT 'pending',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        delivered_at TIMESTAMP NULL,
+                        auto_executed_at TIMESTAMP NULL
+                    )
+                """
+                )
+
                 # Create played_games table with proper data types for manual editing
                 cur.execute(
                     """
@@ -1967,6 +1988,216 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting ranking context: {e}")
             return {"error": str(e)}
+
+    def add_reminder(
+        self,
+        user_id: int,
+        reminder_text: str,
+        scheduled_time: Any,  # Can be datetime or str
+        delivery_channel_id: Optional[int] = None,
+        delivery_type: str = "dm",
+        auto_action_enabled: bool = False,
+        auto_action_type: Optional[str] = None,
+        auto_action_data: Optional[Dict[str, Any]] = None
+    ) -> Optional[int]:
+        """Add a reminder to the database"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO reminders (
+                        user_id, reminder_text, scheduled_time, delivery_channel_id,
+                        delivery_type, auto_action_enabled, auto_action_type, auto_action_data,
+                        status, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending', CURRENT_TIMESTAMP)
+                    RETURNING id
+                """,
+                    (
+                        user_id,
+                        reminder_text,
+                        scheduled_time,
+                        delivery_channel_id,
+                        delivery_type,
+                        auto_action_enabled,
+                        auto_action_type,
+                        auto_action_data
+                    ),
+                )
+                result = cur.fetchone()
+                conn.commit()
+                
+                if result:
+                    reminder_id = int(result["id"])  # type: ignore
+                    logger.info(f"Added reminder ID {reminder_id} for user {user_id}")
+                    return reminder_id
+                return None
+        except Exception as e:
+            logger.error(f"Error adding reminder: {e}")
+            conn.rollback()
+            return None
+
+    def get_user_reminders(self, user_id: int, status: str = "pending") -> List[Dict[str, Any]]:
+        """Get all reminders for a user"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM reminders 
+                    WHERE user_id = %s AND status = %s
+                    ORDER BY scheduled_time ASC
+                """,
+                    (user_id, status),
+                )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting user reminders: {e}")
+            return []
+
+    def get_due_reminders(self, current_time) -> List[Dict[str, Any]]:
+        """Get all reminders that are due for delivery"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM reminders 
+                    WHERE status = 'pending' 
+                    AND scheduled_time <= %s
+                    ORDER BY scheduled_time ASC
+                """,
+                    (current_time,)
+                )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting due reminders: {e}")
+            return []
+
+    def update_reminder_status(
+        self, 
+        reminder_id: int, 
+        status: str, 
+        delivered_at: Optional[Any] = None,  # Can be datetime or str
+        auto_executed_at: Optional[Any] = None  # Can be datetime or str
+    ) -> bool:
+        """Update reminder status"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                if status == "delivered" and delivered_at:
+                    cur.execute(
+                        """
+                        UPDATE reminders 
+                        SET status = %s, delivered_at = %s
+                        WHERE id = %s
+                    """,
+                        (status, delivered_at, reminder_id),
+                    )
+                elif status == "auto_completed" and auto_executed_at:
+                    cur.execute(
+                        """
+                        UPDATE reminders 
+                        SET status = %s, auto_executed_at = %s
+                        WHERE id = %s
+                    """,
+                        (status, auto_executed_at, reminder_id),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE reminders 
+                        SET status = %s
+                        WHERE id = %s
+                    """,
+                        (status, reminder_id),
+                    )
+                
+                conn.commit()
+                return cur.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error updating reminder status: {e}")
+            conn.rollback()
+            return False
+
+    def cancel_reminder(self, reminder_id: int, user_id: int) -> Optional[Dict[str, Any]]:
+        """Cancel a reminder (only if it belongs to the user)"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                # Get the reminder and verify ownership
+                cur.execute(
+                    """
+                    SELECT * FROM reminders 
+                    WHERE id = %s AND user_id = %s AND status = 'pending'
+                """,
+                    (reminder_id, user_id),
+                )
+                reminder = cur.fetchone()
+
+                if reminder:
+                    # Update status to cancelled
+                    cur.execute(
+                        """
+                        UPDATE reminders 
+                        SET status = 'cancelled'
+                        WHERE id = %s
+                    """,
+                        (reminder_id,),
+                    )
+                    conn.commit()
+                    logger.info(f"Cancelled reminder ID {reminder_id} for user {user_id}")
+                    return dict(reminder)
+                return None
+        except Exception as e:
+            logger.error(f"Error cancelling reminder: {e}")
+            conn.rollback()
+            return None
+
+    def get_reminders_awaiting_auto_action(self, current_time) -> List[Dict[str, Any]]:
+        """Get reminders that are past delivery time and waiting for auto-action"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                # Calculate 5 minutes ago from current time
+                import datetime
+                five_minutes_ago = current_time - datetime.timedelta(minutes=5)
+                cur.execute(
+                    """
+                    SELECT * FROM reminders 
+                    WHERE status = 'delivered' 
+                    AND auto_action_enabled = TRUE
+                    AND auto_executed_at IS NULL
+                    AND delivered_at <= %s
+                    ORDER BY delivered_at ASC
+                """,
+                    (five_minutes_ago,)
+                )
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting reminders awaiting auto-action: {e}")
+            return []
 
     def close(self):
         """Close database connection"""
