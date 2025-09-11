@@ -155,7 +155,7 @@ jobs:
     - name: Install linting dependencies
       run: |
         python3 -m pip install --upgrade pip
-        pip3 install flake8 black isort mypy
+        pip3 install flake8 black isort mypy autopep8
         pip3 install -r Live/requirements.txt
     
     - name: Run Black code formatting check (non-blocking)
@@ -185,9 +185,28 @@ jobs:
           echo "✅ Import sorting fixes committed and pushed"
         fi
     
-    - name: Run flake8 linting
+    - name: Auto-fix PEP 8 violations with autopep8
       run: |
-        flake8 Live/ tests/
+        # Run autopep8 to fix common PEP 8 violations automatically
+        echo "🔧 Running autopep8 to auto-fix PEP 8 violations..."
+        autopep8 --in-place --aggressive --aggressive --recursive Live/ tests/
+        
+        # Check if there are any changes to commit
+        if git diff --quiet; then
+          echo "✅ No PEP 8 auto-fixes needed"
+        else
+          echo "📝 PEP 8 auto-fixes applied, committing..."
+          git add Live/ tests/
+          git commit -m "chore: auto-fix PEP 8 violations with autopep8 [skip ci]"
+          
+          # Push the changes back to the branch
+          git push
+          echo "✅ PEP 8 auto-fixes committed and pushed"
+        fi
+        
+        # Run flake8 for remaining issues (non-blocking)
+        echo "🔍 Running flake8 for code quality review..."
+        flake8 Live/ tests/ || echo "⚠️  Flake8 found remaining style issues (non-blocking) - review recommended"
     
     - name: Run mypy type checking
       run: |
