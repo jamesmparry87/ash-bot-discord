@@ -3021,9 +3021,9 @@ async def time_check(ctx):
             await ctx.send("⚠️ **Access denied.** Time diagnostic protocols require elevated clearance.")
             return
 
-        import time
         from datetime import timezone
-        
+        import time
+
         # Get various time representations with more precise timing
         uk_now = datetime.now(ZoneInfo("Europe/London"))
         utc_now = datetime.now(timezone.utc)
