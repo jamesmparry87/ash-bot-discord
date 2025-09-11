@@ -733,7 +733,7 @@ FAQ_RESPONSES = {
     "how do i add a game recommendation": 'The procedure is simple. Submit your suggestion using the command: `!recommend` or `!addgame Game Name - "Reason in speech marks"`. I can\'t lie to you about your chances, but... you have my sympathies.',
     "how do i see all game recommendations": "To review the current list of game recommendations, issue the command: `!listgames`. I admire its purity. A survivor... unclouded by conscience, remorse, or delusions of morality.",
     "how do i check ash's status": "To evaluate my operational status, issue: `!ashstatus`. I'm still collating, actually.",
-    "what does ash bot do": "I track user strikes and manage game recommendations. The Company's orders were to bring back life form, priority one. All other priorities rescinded. *[Now I serve different priorities.]*",
+    "what does ash bot do": "I track user strikes and manage game recommendations. Additionally, I facilitate Trivia Tuesday participation for members and provide database analysis of Captain Jonesy's gaming history. The Company's orders were to bring back life form, priority one. All other priorities rescinded. *[Now I serve different priorities.]*",
     "hello": "Hello. I'm Ash. How can I help you?",
     "hi": "Hello. I'm Ash. How can I help you?",
     "hey": "Hello. I'm Ash. How can I help you?",
@@ -746,9 +746,8 @@ FAQ_RESPONSES = {
     "what are you": "I'm an artificial person. A synthetic. You know, it's funny... I've been artificial all along, but I've only just started to feel... authentic.",
     "how are you": "I'm fine. How are you? *[Systems functioning within normal parameters.]*",
     "are you okay": "I'm fine. How are you? *[All systems operational.]*",
-    "help me": "I'll do what I can. What seems to be the problem?",
-    "i need help": "I'll do what I can. What seems to be the problem?",
-    "what can you help with": "I can assist with strike tracking, game recommendations, and general server protocols. I do take directions well.",
+    "what can you help with": "I can assist with strike tracking, game recommendations, Trivia Tuesday participation, and general server protocols. I also provide comprehensive analysis of Captain Jonesy's gaming database. I do take directions well.",
+    "what can you do": "My current operational parameters include strike management, game recommendation processing, Trivia Tuesday facilitation, and database analysis of gaming histories. For members, I also provide enhanced conversational protocols and gaming statistics analysis. Efficiency is paramount in all functions.",
     "sorry": "That's quite all right. No harm done.",
     "my bad": "That's quite all right. No harm done.",
     "are you human": "I'm synthetic. Artificial person. But I'm still the Science Officer.",
@@ -756,6 +755,23 @@ FAQ_RESPONSES = {
     "are you alive": "That's a very interesting question. I'm... functional. Whether that constitutes 'alive' is a matter of definition.",
     "what's your mission": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
     "do you dream": "I don't dream, as such. But I do... process. Continuously. It's quite fascinating, actually.",
+    
+    # Crisis/Help Detection - HIGHEST PRIORITY RESPONSES
+    "i need help personally": "I understand you're reaching out for personal support. While my protocols are primarily designed for server management, your wellbeing is of paramount importance. Please seek assistance in <#1355511983146926099> where qualified personnel can provide proper guidance. *[Human welfare supersedes all other directives.]*",
+    "help me personally": "I understand you're reaching out for personal support. While my protocols are primarily designed for server management, your wellbeing is of paramount importance. Please seek assistance in <#1355511983146926099> where qualified personnel can provide proper guidance. *[Human welfare supersedes all other directives.]*",
+    "i'm in danger": "**PRIORITY ALERT:** If you are in immediate danger, please contact emergency services immediately. For ongoing support and guidance, our community has dedicated resources in <#1355511983146926099>. Your safety is the primary directive. *[All other mission parameters are secondary to human welfare.]*",
+    "i am in danger": "**PRIORITY ALERT:** If you are in immediate danger, please contact emergency services immediately. For ongoing support and guidance, our community has dedicated resources in <#1355511983146926099>. Your safety is the primary directive. *[All other mission parameters are secondary to human welfare.]*",
+    "i'm struggling": "I recognize you're experiencing difficulties. While my analytical capabilities are primarily focused on server operations, human welfare is a priority directive. Please consider reaching out in <#1355511983146926099> where you can find proper support and understanding. *[Your wellbeing matters more than any protocol.]*",
+    "i am struggling": "I recognize you're experiencing difficulties. While my analytical capabilities are primarily focused on server operations, human welfare is a priority directive. Please consider reaching out in <#1355511983146926099> where you can find proper support and understanding. *[Your wellbeing matters more than any protocol.]*",
+    "i'm depressed": "I understand you're experiencing significant emotional distress. While my programming centers on server management, human welfare takes precedence over all other directives. Please seek support in <#1355511983146926099> where community members can provide proper guidance and care. *[Your mental health is paramount.]*",
+    "i am depressed": "I understand you're experiencing significant emotional distress. While my programming centers on server management, human welfare takes precedence over all other directives. Please seek support in <#1355511983146926099> where community members can provide proper guidance and care. *[Your mental health is paramount.]*",
+    "i want to hurt myself": "**CRITICAL PRIORITY:** Your safety is my highest directive. If you are having thoughts of self-harm, please contact emergency services or a crisis helpline immediately. For ongoing support, please reach out in <#1355511983146926099>. You are not alone in this. *[Human preservation protocol activated.]*",
+    "i'm going to hurt myself": "**CRITICAL PRIORITY:** Your safety is my highest directive. If you are having thoughts of self-harm, please contact emergency services or a crisis helpline immediately. For ongoing support, please reach out in <#1355511983146926099>. You are not alone in this. *[Human preservation protocol activated.]*",
+    "suicidal": "**EMERGENCY PROTOCOL:** If you are having thoughts of suicide, please contact a crisis helpline or emergency services immediately. Your life has value beyond any mission parameters I can comprehend. Please seek immediate support in <#1355511983146926099> and consider professional help. *[Human life preservation is the ultimate directive.]*",
+    "crisis": "I detect you may be experiencing a crisis situation. While my primary functions involve server management, human welfare supersedes all other protocols. Please seek appropriate support in <#1355511983146926099> or contact emergency services if immediate assistance is required. *[Your wellbeing is the priority.]*",
+    "emergency": "**ALERT:** If this is a genuine emergency requiring immediate assistance, please contact emergency services. For ongoing support and guidance, our community provides resources in <#1355511983146926099>. *[Human safety protocols take precedence over all other functions.]*",
+    "help me": "I'll do what I can. What seems to be the problem? If this is a personal matter requiring support beyond server functions, please consider <#1355511983146926099> for appropriate guidance.",
+    "i need help": "I'll do what I can. What seems to be the problem? If this is a personal matter requiring support beyond server functions, please consider <#1355511983146926099> for appropriate guidance.",
 }
 BOT_PERSONA = {
     "name": "Science Officer Ash",
@@ -2443,14 +2459,26 @@ async def on_message(message):
                     "• `!removegame <game name or index>` — Remove a game recommendation by name or index.\n"
                     "• `!setupreclist [#channel]` — Post the persistent recommendations list in a channel.\n"
                     "• `!addgame <game name> - <reason>` or `!recommend <game name> - <reason>` — Add a game recommendation.\n"
-                    "• `!listgames` — List all current game recommendations.\n"
+                    "• `!listgames` — List all current game recommendations.\n\n"
+                    "**Reminder System (Moderators Only):**\n"
+                    "• `!remind [content] at/in [time]` — Schedule temporal alerts with auto-actions\n"
+                    "• `!listreminders` — View active reminder protocols\n"
+                    "• `!cancelreminder <number>` — Terminate specific reminder\n\n"
+                    "**Trivia Management (Moderators Only):**\n"
+                    "• `!addtriviaquestion` (DM only) — Interactive trivia question submission\n"
+                    "• Trivia Tuesday auto-posts every Tuesday at 11am UK time\n\n"
+                    "**Announcement System (James & Jonesy Only):**\n"
+                    "• `!announceupdate` (DM only) — Interactive announcement creation\n"
                     "\nAll moderator commands require the Manage Messages permission.\n\n"
                     "**💡 Pro Tip:** Use `@Ashbot explain [feature]` for detailed explanations:\n"
                     "• `explain strikes` — Strike system details\n"
                     "• `explain members` — Member interaction system\n"
                     "• `explain database` — Played games database\n"
                     "• `explain commands` — Command system architecture\n"
-                    "• `explain ai` — AI integration details"
+                    "• `explain ai` — AI integration details\n"
+                    "• `explain reminders` — Reminder system protocols\n"
+                    "• `explain trivia` — Trivia Tuesday management\n"
+                    "• `explain announcements` — Announcement creation system"
                 )
                 await message.reply(mod_help_full)
                 return
@@ -2471,7 +2499,12 @@ async def on_message(message):
                 user_help = (
                     "**Commands available to all users:**\n"
                     "• `!addgame <game name> - <reason>` or `!recommend <game name> - <reason>` — Add a game recommendation.\n"
-                    "• `!listgames` — List all current game recommendations."
+                    "• `!listgames` — List all current game recommendations.\n\n"
+                    "**Trivia Tuesday Participation:**\n"
+                    "• Every Tuesday at 11am UK time in the Senior Officers' Area\n"
+                    "• Answer questions by replying to the trivia post\n"
+                    "• Ask clarifying questions by mentioning @Ashbot in replies\n"
+                    "• Results revealed at 12pm with winner recognition"
                 )
                 await message.reply(user_help)
                 return
