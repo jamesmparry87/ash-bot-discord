@@ -5,7 +5,8 @@ This module provides a clean, maintainable FAQ system that replaces
 the hardcoded if/elif chain in the main bot file.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from moderator_faq_data import FAQ_DATA
 
 
