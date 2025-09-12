@@ -103,9 +103,7 @@ def acquire_lock() -> Optional[Any]:
             # Try to acquire the lock
             try:
                 lock_file = open(LOCK_FILE, 'w')
-                fcntl.flock(
-                    lock_file.fileno(), int(
-                        LOCK_EX | LOCK_NB))  # type: ignore
+                fcntl.flock(lock_file.fileno(), LOCK_EX | LOCK_NB)  # type: ignore
                 lock_file.write(str(os.getpid()))
                 lock_file.flush()
                 return lock_file
