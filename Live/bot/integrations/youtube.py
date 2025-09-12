@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 # Database import
-from ..database import db, DatabaseManager
+from ..database import DatabaseManager, db
 
 
 async def fetch_youtube_games(channel_id: str) -> List[str]:

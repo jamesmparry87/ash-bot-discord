@@ -12,7 +12,7 @@ Handles all background scheduled tasks including:
 import asyncio
 import json
 from datetime import datetime, time, timedelta
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional
 from zoneinfo import ZoneInfo
 
 import discord
@@ -21,7 +21,7 @@ from discord.ext import tasks
 from ..config import GUILD_ID
 
 # Database and config imports
-from ..database import db, DatabaseManager
+from ..database import DatabaseManager, db
 
 if TYPE_CHECKING:
     # Type hint for Pylance to understand db is a DatabaseManager instance when not None
