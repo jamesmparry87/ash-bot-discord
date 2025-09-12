@@ -2,6 +2,16 @@
 
 A sophisticated Discord moderation and AI assistant bot featuring strike tracking, game recommendations, and personality-driven interactions.
 
+## 🚀 For Developers & AI Assistants
+
+**IMPORTANT**: This project uses a modular architecture optimized for AI-assisted development. Before making any code changes, **ALWAYS read `PROJECT_MAP.md` first** - it provides a comprehensive task-to-file mapping that eliminates the need to search through the entire codebase.
+
+- 📋 **Quick Reference**: `PROJECT_MAP.md` - Maps specific tasks to the correct files
+- 🔧 **Architecture Guide**: `Live/REFACTORING_APPROACH.md` - Explains the modular structure
+- 🧪 **Testing**: Use `Live/test_basic_modules.py` for individual modules or `Live/test_refactored.py` for integration testing
+
+The modular design reduces context window usage by 90%+ compared to the original monolithic file, making debugging and editing significantly more efficient.
+
 ## Features
 
 - **Strike Management**: Automatic strike tracking with database persistence
@@ -189,4 +199,3 @@ Thank you for helping to honor his memory.
 ## About
 
 This bot was originally created by James Michael Parry (Decent_Jam) for Jonesyspacecat's Discord server in Summer 2025.
-

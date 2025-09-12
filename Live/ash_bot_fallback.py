@@ -104,8 +104,8 @@ def acquire_lock() -> Optional[Any]:
             try:
                 lock_file = open(LOCK_FILE, 'w')
                 fcntl.flock(
-                    lock_file.fileno(), int(
-                        LOCK_EX | LOCK_NB))  # type: ignore
+                    lock_file.fileno(),
+                    LOCK_EX | LOCK_NB)  # type: ignore
                 lock_file.write(str(os.getpid()))
                 lock_file.flush()
                 return lock_file
@@ -3911,6 +3911,73 @@ def update_mod_trivia_activity(user_id: int):
             ZoneInfo("Europe/London"))
 
 
+async def create_ai_announcement_content(
+        user_content: str,
+        target_channel: str,
+        user_id: int) -> str:
+    """Create AI-enhanced announcement content in Ash's style based on user input"""
+    try:
+        if not ai_enabled:
+            print("AI not enabled, returning original content")
+            return user_content
+
+        # Determine the author for context
+        if user_id == JONESY_USER_ID:
+            author = "Captain Jonesy"
+            author_context = "the commanding officer"
+        else:
+            author = "Sir Decent Jam"
+            author_context = "the bot creator and systems architect"
+
+        # Create AI prompt based on target channel
+        if target_channel == 'mod':
+            prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. You need to rewrite this announcement content in your analytical, technical style for a moderator briefing.
+
+Original content from {author} ({author_context}):
+"{user_content}"
+
+Rewrite this as a technical briefing for moderators in Ash's voice. Be analytical, precise, and focus on:
+- Technical implementation details
+- Operational efficiency improvements
+- System functionality enhancements
+- Mission-critical parameters
+
+Use phrases like "Analysis indicates", "System diagnostics confirm", "Operational parameters enhanced", etc.
+Keep it professional but maintain Ash's clinical, analytical personality.
+Write 2-4 sentences maximum. Be concise but comprehensive."""
+
+        else:  # user channel
+            prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. You need to rewrite this announcement content in a user-friendly way while maintaining some of Ash's analytical personality.
+
+Original content from {author} ({author_context}):
+"{user_content}"
+
+Rewrite this as a community announcement that's accessible to regular users but still has Ash's analytical undertones. Focus on:
+- User benefits and improvements
+- How features enhance the user experience
+- Clear, helpful explanations
+- Practical usage information
+
+Be helpful and informative, but keep subtle hints of Ash's analytical nature.
+Write 2-4 sentences maximum. Make it engaging and user-focused."""
+
+        # Call AI with rate limiting
+        response_text, status_message = await call_ai_with_rate_limiting(prompt, user_id)
+
+        if response_text:
+            enhanced_content = filter_ai_response(response_text)
+            print(
+                f"AI content enhancement successful: {len(enhanced_content)} characters")
+            return enhanced_content
+        else:
+            print(f"AI content enhancement failed: {status_message}")
+            return user_content  # Fallback to original content
+
+    except Exception as e:
+        print(f"Error in AI content enhancement: {e}")
+        return user_content  # Fallback to original content
+
+
 async def handle_announcement_conversation(message):
     """Handle the interactive DM conversation for announcement creation"""
     user_id = message.author.id
@@ -3966,44 +4033,92 @@ async def handle_announcement_conversation(message):
                 )
 
         elif step == 'content_input':
-            # Store the content and move to preview
-            data['content'] = content
-            conversation['step'] = 'preview'
+            # Store the raw content for later reference
+            data['raw_content'] = content
 
-            # Create formatted preview based on target channel
+            # Create AI-enhanced content in Ash's style
             target_channel = data.get('target_channel', 'mod')
-            preview_content = await format_announcement_content(content, target_channel, user_id)
+            greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
 
-            data['formatted_content'] = preview_content
+            await message.reply(
+                f"🧠 **AI Content Creation Protocol Initiated**\n\n"
+                f"Processing your input through my cognitive matrix, {greeting}. I will craft this update "
+                f"in my own words and style while preserving your intended meaning and technical accuracy.\n\n"
+                f"**Your Input:** {content[:200]}{'...' if len(content) > 200 else ''}\n\n"
+                f"*Analyzing content parameters and generating Ash-appropriate prose...*"
+            )
 
-            # Show preview with FAQ options
-            preview_msg = (
-                f"📋 **Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
-                f"```\n{preview_content}\n```\n\n"
-                f"📚 **Available Actions:**\n"
-                f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
-                f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
-                f"**3.** 🔧 **Add FAQ Links** - Include moderator FAQ topic buttons\n"
-                f"**4.** 📝 **Add Creator Notes** - Include personal notes from the creator\n"
-                f"**5.** ❌ **Cancel** - Abort announcement creation\n\n"
-                f"Please respond with **1**, **2**, **3**, **4**, or **5**.\n\n"
-                f"*Review mission parameters carefully before deployment.*")
+            # Use AI to create content in Ash's style
+            enhanced_content = await create_ai_announcement_content(content, target_channel, user_id)
 
-            await message.reply(preview_msg)
+            if enhanced_content and enhanced_content.strip():
+                # Store both AI and raw content
+                data['ai_content'] = enhanced_content
+                # Use AI content as primary content
+                data['content'] = enhanced_content
+                conversation['step'] = 'preview'
+
+                # Create formatted preview using AI content
+                preview_content = await format_announcement_content(enhanced_content, target_channel, user_id)
+                data['formatted_content'] = preview_content
+
+                # Show AI-enhanced preview
+                preview_msg = (
+                    f"📋 **AI-Enhanced Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
+                    f"```\n{preview_content}\n```\n\n"
+                    f"✨ **Content created in Ash's analytical style based on your specifications**\n\n"
+                    f"📚 **Available Actions:**\n"
+                    f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
+                    f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
+                    f"**3.** 🔧 **Add FAQ Links** - Include moderator FAQ topic buttons\n"
+                    f"**4.** 📝 **Add Creator Notes** - Include personal notes from the creator\n"
+                    f"**5.** ❌ **Cancel** - Abort announcement creation\n\n"
+                    f"Please respond with **1**, **2**, **3**, **4**, or **5**.\n\n"
+                    f"*Review mission parameters carefully before deployment.*")
+
+                await message.reply(preview_msg)
+            else:
+                # AI failed, fall back to original content
+                data['content'] = content  # Store original content as primary
+                conversation['step'] = 'preview'
+                preview_content = await format_announcement_content(content, target_channel, user_id)
+                data['formatted_content'] = preview_content
+
+                await message.reply(
+                    f"⚠️ **AI content creation failed.** Proceeding with your original content.\n\n"
+                    f"📋 **Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
+                    f"```\n{preview_content}\n```\n\n"
+                    f"📚 **Available Actions:**\n"
+                    f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
+                    f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
+                    f"**3.** 🔧 **Add FAQ Links** - Include moderator FAQ topic buttons\n"
+                    f"**4.** 📝 **Add Creator Notes** - Include personal notes from the creator\n"
+                    f"**5.** ❌ **Cancel** - Abort announcement creation\n\n"
+                    f"*Review mission parameters carefully before deployment.*")
 
         elif step == 'preview':
-            # Handle preview actions
+            # Handle preview actions with fixed numbering
             if content in ['1', 'post', 'deploy', 'send']:
-                # Post the announcement
-                success = await post_announcement(data, user_id)
+                # Check if FAQ topics are selected and use appropriate posting
+                # function
+                faq_topics = data.get('faq_topics')
+
+                if faq_topics:
+                    # Post with FAQ buttons
+                    success = await post_announcement_with_faq(data, user_id, faq_topics)
+                else:
+                    # Post regular announcement
+                    success = await post_announcement(data, user_id)
 
                 if success:
                     target_channel = data.get('target_channel', 'mod')
                     channel_name = "moderator" if target_channel == 'mod' else "community announcements"
 
+                    faq_notice = " with interactive FAQ buttons" if faq_topics else ""
+
                     await message.reply(
                         f"✅ **Announcement Deployed Successfully**\n\n"
-                        f"Your update has been transmitted to the {channel_name} channel with proper formatting "
+                        f"Your update has been transmitted to the {channel_name} channel{faq_notice} with proper formatting "
                         f"and presentation protocols. Mission briefing complete.\n\n"
                         f"*Efficient communication maintained. All personnel notified.*"
                     )
@@ -4034,23 +4149,22 @@ async def handle_announcement_conversation(message):
                 # Show FAQ options and add them
                 conversation['step'] = 'faq_selection'
 
-                # Get available FAQ topics from the moderator FAQ handler
+                # Updated FAQ topics list with the 7 selected topics
                 faq_topics = [
                     "1. Strike System Overview",
                     "2. Member Interaction Guidelines",
                     "3. Database Query Functions",
                     "4. Command Architecture",
-                    "5. AI Integration Details",
-                    "6. Rate Limiting Systems",
-                    "7. Reminder Protocols",
-                    "8. Gaming Database Features",
+                    "5. Reminder Protocols",
+                    "6. Trivia Management",
+                    "7. Game Query System",
                 ]
 
                 faq_msg = (
                     f"🔧 **FAQ Integration Protocol**\n\n"
                     f"Select moderator FAQ topics to include as interactive buttons with your announcement:\n\n"
                     f"{chr(10).join(faq_topics)}\n\n"
-                    f"**9.** ✅ **Proceed without FAQ buttons**\n"
+                    f"**8.** ✅ **Proceed without FAQ buttons**\n"
                     f"**0.** ❌ **Return to preview**\n\n"
                     f"Respond with numbers separated by commas (e.g., '1,3,5') or a single number.\n\n"
                     f"*Enhanced functionality provides comprehensive briefing capabilities.*")
@@ -4058,7 +4172,7 @@ async def handle_announcement_conversation(message):
                 await message.reply(faq_msg)
 
             elif content in ['4', 'notes', 'creator notes']:
-                # Add creator notes step
+                # Add creator notes step - always available as option 4
                 conversation['step'] = 'creator_notes_input'
 
                 greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
@@ -4076,7 +4190,7 @@ async def handle_announcement_conversation(message):
                 )
 
             elif content in ['5', 'cancel', 'abort']:
-                # Cancel the announcement
+                # Cancel the announcement - always option 5
                 await message.reply(
                     f"❌ **Announcement Protocol Cancelled**\n\n"
                     f"Mission briefing sequence has been terminated. No content has been deployed. "
@@ -4089,28 +4203,34 @@ async def handle_announcement_conversation(message):
                     del announcement_conversations[user_id]
             else:
                 await message.reply(
-                    f"⚠️ **Invalid command.** Please respond with **1** (Post), **2** (Edit), **3** (Add FAQ), or **4** (Cancel).\n\n"
+                    f"⚠️ **Invalid command.** Please respond with **1** (Post), **2** (Edit), **3** (Add FAQ), **4** (Creator Notes), or **5** (Cancel).\n\n"
                     f"*Precise input required for proper protocol execution.*"
                 )
 
         elif step == 'creator_notes_input':
-            # Handle creator notes input
+            # Handle creator notes input - enhanced with better content
+            # management
             data['creator_notes'] = content
             conversation['step'] = 'preview'
 
             # Regenerate formatted content with creator notes included
             target_channel = data.get('target_channel', 'mod')
-            main_content = data.get('content', '')
+            # Use primary content (AI-enhanced or original)
+            main_content = data.get('content', data.get('raw_content', ''))
+
+            # Regenerate formatted content with creator notes
             preview_content = await format_announcement_content(
                 main_content, target_channel, user_id, creator_notes=content
             )
-
             data['formatted_content'] = preview_content
+
+            greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
 
             # Show updated preview with creator notes
             preview_msg = (
                 f"📋 **Updated Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
                 f"```\n{preview_content}\n```\n\n"
+                f"✅ **Creator notes successfully integrated, {greeting}.**\n\n"
                 f"📚 **Available Actions:**\n"
                 f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
                 f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
@@ -4158,30 +4278,25 @@ async def handle_announcement_conversation(message):
 
                 await message.reply(preview_msg)
 
-            elif content in ['9', 'proceed', 'no faq']:
-                # Proceed without FAQ buttons - post announcement
-                success = await post_announcement(data, user_id)
+            elif content in ['8', 'proceed', 'no faq']:
+                # Return to preview instead of auto-posting - this fixes the
+                # issue
+                conversation['step'] = 'preview'
+                target_channel = data.get('target_channel', 'mod')
+                preview_content = data.get('formatted_content', '')
 
-                if success:
-                    target_channel = data.get('target_channel', 'mod')
-                    channel_name = "moderator" if target_channel == 'mod' else "community announcements"
+                preview_msg = (
+                    f"📋 **Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
+                    f"```\n{preview_content}\n```\n\n"
+                    f"📚 **Available Actions:**\n"
+                    f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
+                    f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
+                    f"**3.** 🔧 **Add FAQ Links** - Include moderator FAQ topic buttons\n"
+                    f"**4.** 📝 **Add Creator Notes** - Include personal notes from the creator\n"
+                    f"**5.** ❌ **Cancel** - Abort announcement creation\n\n"
+                    f"*Review mission parameters carefully before deployment.*")
 
-                    await message.reply(
-                        f"✅ **Announcement Deployed Successfully**\n\n"
-                        f"Your update has been transmitted to the {channel_name} channel. "
-                        f"Mission briefing complete without FAQ integration.\n\n"
-                        f"*Standard communication protocol maintained. All personnel notified.*"
-                    )
-                else:
-                    await message.reply(
-                        f"❌ **Deployment Failed**\n\n"
-                        f"System malfunction detected during announcement transmission.\n\n"
-                        f"*Please retry or contact system administrator.*"
-                    )
-
-                # Clean up conversation
-                if user_id in announcement_conversations:
-                    del announcement_conversations[user_id]
+                await message.reply(preview_msg)
 
             else:
                 # Parse FAQ topic selections
@@ -4191,61 +4306,64 @@ async def handle_announcement_conversation(message):
                         ',', ' ').split() if n.strip().isdigit()]
 
                     if selected_numbers and all(
-                            1 <= n <= 8 for n in selected_numbers):
-                        # Store selected FAQ topics
+                            1 <= n <= 7 for n in selected_numbers):
+                        # Store selected FAQ topics and return to preview
                         data['faq_topics'] = selected_numbers
+                        conversation['step'] = 'preview'
 
-                        # Map numbers to topic names
+                        # Updated mapping for the 7 selected topics
                         topic_mapping = {
                             1: "Strike System Overview",
                             2: "Member Interaction Guidelines",
                             3: "Database Query Functions",
                             4: "Command Architecture",
-                            5: "AI Integration Details",
-                            6: "Rate Limiting Systems",
-                            7: "Reminder Protocols",
-                            8: "Gaming Database Features",
+                            5: "Reminder Protocols",
+                            6: "Trivia Management",
+                            7: "Game Query System",
                         }
 
-                        selected_topics = [topic_mapping[n]
-                                           for n in selected_numbers]
+                        selected_topics = [
+                            topic_mapping.get(
+                                n, f"Topic {n}") for n in selected_numbers]
                         topics_text = '\n• '.join(selected_topics)
 
-                        # Post announcement with FAQ buttons
-                        success = await post_announcement_with_faq(data, user_id, selected_numbers)
+                        # Update formatted content to include FAQ info
+                        target_channel = data.get('target_channel', 'mod')
+                        main_content = data.get('content', '')
+                        creator_notes = data.get('creator_notes')
+                        preview_content = await format_announcement_content(
+                            main_content, target_channel, user_id, creator_notes=creator_notes
+                        )
 
-                        if success:
-                            target_channel = data.get('target_channel', 'mod')
-                            channel_name = "moderator" if target_channel == 'mod' else "community announcements"
+                        # Add FAQ indicator to preview
+                        preview_content += f"\n\n🔍 **FAQ Topics Selected:** {len(selected_numbers)} interactive buttons will be added"
+                        data['formatted_content'] = preview_content
 
-                            await message.reply(
-                                f"✅ **Enhanced Announcement Deployed Successfully**\n\n"
-                                f"Your update has been transmitted to the {channel_name} channel with integrated "
-                                f"FAQ functionality. Interactive buttons have been configured for the following topics:\n\n"
-                                f"• {topics_text}\n\n"
-                                f"*Advanced briefing protocol complete. Enhanced functionality active.*"
-                            )
-                        else:
-                            await message.reply(
-                                f"❌ **Enhanced Deployment Failed**\n\n"
-                                f"System malfunction detected during FAQ integration. Attempting standard deployment...\n\n"
-                                f"*FAQ functionality compromised. Consider manual FAQ reference.*"
-                            )
+                        # Show preview with FAQ selection confirmed
+                        preview_msg = (
+                            f"📋 **Announcement Preview with FAQ** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
+                            f"```\n{preview_content}\n```\n\n"
+                            f"✅ **FAQ Topics Selected:**\n• {topics_text}\n\n"
+                            f"📚 **Available Actions:**\n"
+                            f"**1.** ✅ **Post Announcement** - Deploy with FAQ buttons\n"
+                            f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
+                            f"**3.** 🔧 **Change FAQ Selection** - Select different FAQ topics\n"
+                            f"**4.** 📝 **Add/Edit Creator Notes** - Include personal notes\n"
+                            f"**5.** ❌ **Cancel** - Abort announcement creation\n\n"
+                            f"*Review mission parameters carefully before deployment.*")
 
-                        # Clean up conversation
-                        if user_id in announcement_conversations:
-                            del announcement_conversations[user_id]
+                        await message.reply(preview_msg)
 
                     else:
                         await message.reply(
-                            f"⚠️ **Invalid topic selection.** Please provide numbers 1-8 separated by commas, "
-                            f"or use **9** to proceed without FAQ buttons, **0** to return to preview.\n\n"
+                            f"⚠️ **Invalid topic selection.** Please provide numbers 1-7 separated by commas, "
+                            f"or use **8** to proceed without FAQ buttons, **0** to return to preview.\n\n"
                             f"*Precise specification required for FAQ integration protocol.*"
                         )
 
                 except (ValueError, IndexError):
                     await message.reply(
-                        f"⚠️ **Format error.** Please provide valid numbers (1-8) separated by commas, spaces, "
+                        f"⚠️ **Format error.** Please provide valid numbers (1-7) separated by commas, spaces, "
                         f"or as single digits.\n\n"
                         f"Example: '1,3,5' or '1 3 5' or '2'\n\n"
                         f"*Proper syntax essential for system interpretation.*"
@@ -4392,16 +4510,15 @@ class AnnouncementFAQView(discord.ui.View):
     def __init__(self, faq_topics: list):
         super().__init__(timeout=None)  # Persistent view
 
-        # Topic mapping
+        # Topic mapping - Updated to match the 7 selected FAQ topics
         topic_mapping = {
-            1: ("🎯", "Strikes", "strike system"),
+            1: ("🎯", "Strikes", "strikes"),
             2: ("👥", "Members", "member interaction"),
-            3: ("🗄️", "Database", "database query"),
-            4: ("⚡", "Commands", "command system"),
-            5: ("🧠", "AI System", "ai integration"),
-            6: ("⏱️", "Rate Limits", "rate limiting"),
-            7: ("⏰", "Reminders", "reminder system"),
-            8: ("🎮", "Gaming DB", "gaming database"),
+            3: ("🗄️", "Database", "database"),
+            4: ("⚡", "Commands", "commands"),
+            5: ("⏰", "Reminders", "reminders"),
+            6: ("🧠", "Trivia", "trivia"),
+            7: ("🎮", "Game Queries", "game_queries"),
         }
 
         # Add buttons for selected topics (max 5 buttons per row, 5 rows max =
