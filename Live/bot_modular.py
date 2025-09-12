@@ -72,7 +72,7 @@ except ImportError as e:
 # Import ModeratorFAQHandler system
 try:
     from moderator_faq_handler import ModeratorFAQHandler
-    
+
     # Initialize the FAQ handler with current configuration
     moderator_faq_handler = ModeratorFAQHandler(
         violation_channel_id=VIOLATION_CHANNEL_ID,
@@ -943,8 +943,8 @@ async def ash_status(ctx):
         # AI System Status with detailed diagnostics
         try:
             from bot.handlers.ai_handler import (
-                get_ai_status,
                 ai_enabled,
+                get_ai_status,
             )
             
             ai_status = get_ai_status()
