@@ -512,10 +512,13 @@ async def update_youtube_playlist_data(
                                 # Update database with new data
                                 canonical_name = game.get('canonical_name')
                                 if canonical_name and total_playtime_minutes > 0:
-                                    # Get the game by name first, then update it
-                                    existing_game = db.get_played_game(canonical_name) # type: ignore
+                                    # Get the game by name first, then update
+                                    # it
+                                    existing_game = db.get_played_game(
+                                        canonical_name)  # type: ignore
                                     if existing_game:
-                                        success = db.update_played_game(existing_game['id'], total_playtime_minutes=total_playtime_minutes) # type: ignore
+                                        success = db.update_played_game(
+                                            existing_game['id'], total_playtime_minutes=total_playtime_minutes)  # type: ignore
                                         if success:
                                             updated_count += 1
 

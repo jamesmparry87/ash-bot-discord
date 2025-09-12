@@ -24,7 +24,8 @@ from ..config import GUILD_ID
 from ..database import DatabaseManager, db
 
 if TYPE_CHECKING:
-    # Type hint for Pylance to understand db is a DatabaseManager instance when not None
+    # Type hint for Pylance to understand db is a DatabaseManager instance
+    # when not None
     assert db is not None
 
 # Import integrations
@@ -122,11 +123,13 @@ async def check_due_reminders():
 
         print(f"✅ Database instance available: {type(db).__name__}")
 
-        if not hasattr(db, 'database_url') or not db.database_url:  # type: ignore
+        if not hasattr(
+                db, 'database_url') or not db.database_url:  # type: ignore
             print("❌ No database URL configured - reminder system disabled")
             return
 
-        print(f"✅ Database URL configured: {db.database_url[:20]}...")  # type: ignore
+        # type: ignore
+        print(f"✅ Database URL configured: {db.database_url[:20]}...")
 
         # Test database connection with detailed logging
         try:
@@ -206,7 +209,8 @@ async def check_due_reminders():
                 traceback.print_exc()
                 # Mark as failed
                 try:
-                    db.update_reminder_status(reminder.get('id'), "failed") # type: ignore
+                    db.update_reminder_status(
+                        reminder.get('id'), "failed")  # type: ignore
                     print(f"⚠️ Reminder {reminder.get('id')} marked as failed")
                 except Exception as mark_e:
                     print(f"❌ Could not mark reminder as failed: {mark_e}")
@@ -226,7 +230,8 @@ async def check_auto_actions():
     """Check for reminders that need auto-actions triggered"""
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
-        auto_action_reminders = db.get_reminders_awaiting_auto_action(uk_now) # type: ignore
+        auto_action_reminders = db.get_reminders_awaiting_auto_action(
+            uk_now)  # type: ignore
 
         if not auto_action_reminders:
             return
@@ -239,7 +244,7 @@ async def check_auto_actions():
                 await execute_auto_action(reminder)
 
                 # Mark auto-action as executed
-                db.update_reminder_status( # type: ignore
+                db.update_reminder_status(  # type: ignore
                     reminder["id"], "delivered", auto_executed_at=uk_now)
 
                 print(
