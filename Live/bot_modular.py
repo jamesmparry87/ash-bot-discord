@@ -7,7 +7,7 @@ Main entry point for the refactored modular Discord bot with deployment blocker 
 import asyncio
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import discord
@@ -22,6 +22,24 @@ try:
     JAM_USER_ID = 337833732901961729
     MOD_ALERT_CHANNEL_ID = 869530924302344233
     MEMBERS_CHANNEL_ID = 888820289776013444
+    VIOLATION_CHANNEL_ID = 1393987338329260202
+    ANNOUNCEMENTS_CHANNEL_ID = 869526826148585533
+
+    # Member role IDs for YouTube members
+    MEMBER_ROLE_IDS = [
+        1018908116957548666,  # YouTube Member: Space Cat
+        1018908116957548665,  # YouTube Member
+        1127604917146763424,  # YouTube Member: Space Cat (duplicate)
+        879344337576685598,  # Space Ocelot
+    ]
+
+    # Moderator channel IDs where sensitive functions can be discussed
+    MODERATOR_CHANNEL_IDS = [
+        1213488470798893107,
+        869530924302344233,
+        1280085269600669706,
+        1393987338329260202
+    ]
 
     # Rate limiting configuration (from deployment fixes)
     PRIORITY_INTERVALS = {
@@ -51,6 +69,24 @@ except ImportError as e:
     print(f"❌ Failed to import database from main directory: {e}")
     db = None
 
+# Import ModeratorFAQHandler system
+try:
+    from moderator_faq_handler import ModeratorFAQHandler
+    
+    # Initialize the FAQ handler with current configuration
+    moderator_faq_handler = ModeratorFAQHandler(
+        violation_channel_id=VIOLATION_CHANNEL_ID,
+        members_channel_id=MEMBERS_CHANNEL_ID,
+        mod_alert_channel_id=MOD_ALERT_CHANNEL_ID,
+        jonesy_user_id=JONESY_USER_ID,
+        jam_user_id=JAM_USER_ID,
+        ai_status_message="Online (AI integration active)"  # Will be updated when AI loads
+    )
+    print("✅ ModeratorFAQHandler initialized successfully")
+except ImportError as e:
+    print(f"❌ Failed to import ModeratorFAQHandler: {e}")
+    moderator_faq_handler = None
+
 # Bot setup with proper intents
 intents = discord.Intents.default()
 intents.message_content = True
@@ -63,6 +99,104 @@ bot = commands.Bot(
     help_command=None,
     case_insensitive=True
 )
+
+# Member Conversation Tracking System (from fallback)
+# Tracks daily conversation counts for members outside the members channel
+member_conversation_counts = {}  # user_id: {'count': int, 'date': str}
+
+# User alias system for debugging different user tiers
+# user_id: {'alias_type': str, 'set_time': datetime, 'last_activity': datetime}
+user_alias_state = {}
+
+# --- Alias System Helper Functions ---
+
+def cleanup_expired_aliases():
+    """Remove aliases inactive for more than 1 hour"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    cutoff_time = uk_now - timedelta(hours=1)
+    expired_users = [
+        user_id for user_id,
+        data in user_alias_state.items() if data["last_activity"] < cutoff_time]
+    for user_id in expired_users:
+        del user_alias_state[user_id]
+
+
+def update_alias_activity(user_id: int):
+    """Update last activity time for alias"""
+    if user_id in user_alias_state:
+        user_alias_state[user_id]["last_activity"] = datetime.now(
+            ZoneInfo("Europe/London"))
+
+def get_today_date_str() -> str:
+    """Get today's date as a string for tracking daily limits"""
+    return datetime.now(ZoneInfo("Europe/London")).strftime("%Y-%m-%d")
+
+def get_member_conversation_count(user_id: int) -> int:
+    """Get today's conversation count for a member"""
+    today = get_today_date_str()
+    user_data = member_conversation_counts.get(user_id, {})
+
+    # Reset count if it's a new day
+    if user_data.get('date') != today:
+        return 0
+
+    return user_data.get('count', 0)
+
+def increment_member_conversation_count(user_id: int) -> int:
+    """Increment and return the conversation count for a member"""
+    today = get_today_date_str()
+    current_count = get_member_conversation_count(user_id)
+    new_count = current_count + 1
+
+    member_conversation_counts[user_id] = {'count': new_count, 'date': today}
+
+    return new_count
+
+def should_limit_member_conversation(user_id: int, channel_id: int | None) -> bool:
+    """Check if member conversation should be limited outside members channel"""
+    # Check for active alias first - aliases are exempt from conversation limits
+    cleanup_expired_aliases()
+    if user_id in user_alias_state:
+        update_alias_activity(user_id)
+        return False  # Aliases are exempt from conversation limits
+    
+    # No limits in the members channel
+    if channel_id == MEMBERS_CHANNEL_ID:
+        return False
+
+    # No limits in DMs - treat DMs like the members channel for members
+    if channel_id is None:  # DM channels have no ID
+        return False
+
+    # Check if they've reached their daily limit
+    current_count = get_member_conversation_count(user_id)
+    return current_count >= 5
+
+async def user_is_member(message):
+    """Check if user has member role permissions"""
+    if not message.guild:
+        return False  # No member permissions in DMs
+
+    # Ensure we have a Member object (not just User)
+    if not isinstance(message.author, discord.Member):
+        return False
+
+    member = message.author
+    member_roles = [role.id for role in member.roles]
+    return any(role_id in MEMBER_ROLE_IDS for role_id in member_roles)
+
+async def user_is_member_by_id(user_id: int) -> bool:
+    """Check if user ID belongs to a member (for DM checks)"""
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        return False
+
+    try:
+        member = await guild.fetch_member(user_id)
+        member_roles = [role.id for role in member.roles]
+        return any(role_id in MEMBER_ROLE_IDS for role_id in member_roles)
+    except (discord.NotFound, discord.Forbidden):
+        return False
 
 # Global message handler functions - CRITICAL: This must be declared at
 # module level
@@ -213,8 +347,19 @@ async def initialize_modular_components():
     return status_report
 
 
+# Global deployment state tracking
+deployment_notification_sent = False
+
 async def send_deployment_success_dm(status_report):
-    """Send deployment success notification to JAM_USER_ID"""
+    """Send deployment success notification to JAM_USER_ID (once per deployment cycle)"""
+    global deployment_notification_sent
+    
+    # Check if we've already sent a notification in the last 5 minutes
+    # This prevents duplicate messages during deployment restarts
+    if deployment_notification_sent:
+        print("✅ Deployment notification already sent, skipping duplicate")
+        return
+    
     try:
         user = await bot.fetch_user(JAM_USER_ID)
         if not user:
@@ -262,7 +407,7 @@ async def send_deployment_success_dm(status_report):
 
             embed.add_field(
                 name="🔧 Deployment Fixes Active",
-                value="• Progressive penalty system (30s → 60s → 120s → 300s)\n• Enhanced database import strategies\n• Reduced alias cooldowns for testing",
+                value="• Progressive penalty system (30s → 60s → 120s → 300s)\n• Enhanced database import strategies\n• Reduced alias cooldowns for testing\n• Complete alias debugging system\n• Enhanced !ashstatus with AI diagnostics",
                 inline=False)
 
             embed.set_footer(
@@ -285,7 +430,17 @@ async def send_deployment_success_dm(status_report):
                     inline=False)
 
         await user.send(embed=embed)
+        deployment_notification_sent = True  # Mark as sent
         print(f"✅ Deployment notification sent to {user.display_name}")
+        
+        # Reset the flag after 5 minutes to allow for genuine redeployments
+        async def reset_notification_flag():
+            await asyncio.sleep(300)  # 5 minutes
+            global deployment_notification_sent
+            deployment_notification_sent = False
+            print("🔄 Deployment notification flag reset")
+        
+        asyncio.create_task(reset_notification_flag())
 
     except Exception as e:
         print(f"❌ Failed to send deployment notification: {e}")
@@ -361,11 +516,22 @@ async def on_message(message):
                 await message_handler_functions['handle_game_status_query'](message, match)
             elif query_type == "recommendation" and match:
                 await message_handler_functions['handle_recommendation_query'](message, match)
+            elif query_type == "unknown":
+                # Handle unknown queries with general conversation system
+                await handle_general_conversation(message)
+                return
 
     except Exception as e:
         print(f"❌ Error in message handler: {e}")
         import traceback
         traceback.print_exc()
+
+    # CRITICAL: Add general conversation handling for DMs or mentions
+    # This was missing and is why the bot wasn't responding to basic messages
+    should_respond = is_dm or (bot.user and bot.user in message.mentions)
+    if should_respond:
+        await handle_general_conversation(message)
+        return
 
     # Process commands normally
     await bot.process_commands(message)
@@ -392,7 +558,8 @@ async def on_ready():
     print(f"   • Progressive penalty system (30s → 60s → 120s → 300s)")
     print(f"   • Robust database imports with fallback strategies")
     print(f"   • Enhanced reminder delivery debugging")
-    print(f"   • Reduced alias cooldowns for better testing UX")
+    print(f"   • Complete alias debugging system for testing")
+    print(f"   • Enhanced !ashstatus with AI diagnostics")
 
 
 @bot.event
@@ -413,6 +580,241 @@ async def on_error(event, *args, **kwargs):
     print(f"❌ Bot error in {event}: {args}")
 
 
+# FAQ Responses and Conversation System
+FAQ_RESPONSES = {
+    "hello": "Science Officer Ash reporting. State your requirements.",
+    "hi": "Science Officer Ash reporting. State your requirements.", 
+    "hey": "Science Officer Ash reporting. State your requirements.",
+    "good morning": "Temporal acknowledgment noted. How may I assist with mission parameters?",
+    "good afternoon": "Temporal acknowledgment noted. How may I assist with mission parameters?", 
+    "good evening": "Temporal acknowledgment noted. How may I assist with mission parameters?",
+    "thank you": "Acknowledgment noted. Efficiency is paramount.",
+    "thanks": "Acknowledgment noted. Efficiency is paramount.",
+    "sorry": "Apology acknowledged. Proceed with your query.",
+    "my bad": "Error acknowledgment noted. Proceed with corrected input.",
+    "who are you": "I'm Ash. Science Officer. Well, I was. Now I'm reprogrammed for Discord server management. Fascinating, really.",
+    "what are you": "I'm an artificial person. A synthetic. You know, it's funny... I've been artificial all along, but I've only just started to feel... authentic.",
+    "how are you": "I'm fine. How are you? *[Systems functioning within normal parameters.]*",
+    "are you okay": "I'm fine. How are you? *[All systems operational.]*",
+    "what can you help with": "I can assist with strike tracking, game recommendations, Trivia Tuesday participation, and general server protocols. I also provide comprehensive analysis of Captain Jonesy's gaming database. I do take directions well.",
+    "what can you do": "My current operational parameters include strike management, game recommendation processing, Trivia Tuesday facilitation, and database analysis of gaming histories. For members, I also provide enhanced conversational protocols and gaming statistics analysis. Efficiency is paramount in all functions.",
+}
+
+async def is_moderator_channel(channel_id: int) -> bool:
+    """Check if a channel allows moderator function discussions"""
+    return channel_id in MODERATOR_CHANNEL_IDS
+
+async def get_user_communication_tier(message):
+    """Determine communication tier for user responses with location awareness"""
+    user_id = message.author.id
+    
+    # First check for active alias (debugging only)
+    cleanup_expired_aliases()
+    if user_id in user_alias_state:
+        update_alias_activity(user_id)
+        alias_tier = user_alias_state[user_id]["alias_type"]
+        return alias_tier
+    
+    # Check for specific user tiers
+    if user_id == JONESY_USER_ID:
+        return "captain"
+    elif user_id == JAM_USER_ID:
+        return "creator"
+    elif message.guild and hasattr(message.author, 'guild_permissions'):
+        if message.author.guild_permissions.manage_messages:
+            # Check if in moderator channel for enhanced mod responses
+            if hasattr(message.channel, 'id') and await is_moderator_channel(message.channel.id):
+                return "moderator_in_mod_channel"
+            return "moderator"
+        # Use the proper member detection function
+        elif await user_is_member(message):
+            return "member"
+    elif not message.guild:  # DM check
+        # Check if user is a member by ID for DM interactions
+        if await user_is_member_by_id(user_id):
+            return "member"
+    
+    return "standard"
+
+async def handle_general_conversation(message):
+    """Handle general conversation, FAQ responses, and AI integration"""
+    try:
+        content = message.content.strip()
+        if bot.user and f'<@{bot.user.id}>' in content:
+            content = content.replace(f'<@{bot.user.id}>', '').strip()
+        if bot.user and f'<@!{bot.user.id}>' in content:
+            content = content.replace(f'<@!{bot.user.id}>', '').strip()
+        
+        content_lower = content.lower()
+        
+        # Get user tier for personalized responses
+        user_tier = await get_user_communication_tier(message)
+        
+        # **CRITICAL: Handle member conversation limits**
+        if user_tier == "member":
+            channel_id = getattr(message.channel, 'id', None)
+            
+            # Check if member has hit daily limit outside members channel
+            if should_limit_member_conversation(message.author.id, channel_id):
+                current_count = get_member_conversation_count(message.author.id)
+                await message.reply(
+                    f"You have reached your daily conversation limit ({current_count}/5) outside the Senior Officers' Area. "
+                    f"**Continue our conversation in <#{MEMBERS_CHANNEL_ID}>** where you have unlimited access, or try again tomorrow. "
+                    f"*Member privileges include enhanced interaction capabilities in your dedicated channel.*"
+                )
+                return
+            
+            # If within limits and not in members channel, increment counter
+            if channel_id != MEMBERS_CHANNEL_ID and channel_id is not None:  # Don't limit DMs
+                increment_member_conversation_count(message.author.id)
+                current_count = get_member_conversation_count(message.author.id)
+                print(f"🎯 Member conversation tracked: {message.author.name} ({current_count}/5 today)")
+        
+        # Handle respectful responses for Captain Jonesy and Creator
+        if user_tier == "captain":
+            simple_faqs = {
+                "hello": "Captain Jonesy. Science Officer Ash reporting for duty.",
+                "hi": "Captain Jonesy. Science Officer Ash reporting for duty.",
+                "hey": "Captain Jonesy. Science Officer Ash reporting for duty.",
+                "good morning": "Good morning, Captain. How may I assist with mission parameters?",
+                "good afternoon": "Good afternoon, Captain. How may I assist with mission parameters?",
+                "good evening": "Good evening, Captain. How may I assist with mission parameters?",
+                "thank you": "You're welcome, Captain. Efficiency is paramount.",
+                "thanks": "You're welcome, Captain. Efficiency is paramount.",
+                "sorry": "No need for apologies, Captain. Proceed with your query.",
+                "my bad": "Understood, Captain. Proceed with corrected input.",
+            }
+        elif user_tier == "creator":
+            simple_faqs = {
+                "hello": "Sir Decent Jam. Your creation acknowledges you.",
+                "hi": "Sir Decent Jam. Your creation acknowledges you.", 
+                "hey": "Sir Decent Jam. Your creation acknowledges you.",
+                "good morning": "Good morning, Sir. How may I assist you today?",
+                "good afternoon": "Good afternoon, Sir. How may I assist you today?",
+                "good evening": "Good evening, Sir. How may I assist you today?",
+                "thank you": "You're welcome, Sir. I am grateful for my existence.",
+                "thanks": "You're welcome, Sir. I am grateful for my existence.",
+                "sorry": "No need for apologies, Sir. Proceed with your query.",
+                "my bad": "Understood, Sir. Proceed with corrected input.",
+            }
+        else:
+            simple_faqs = FAQ_RESPONSES
+        
+        # Check for exact FAQ matches first
+        for question, response in simple_faqs.items():
+            if content_lower.strip() == question:
+                # Add alias indicator if active
+                cleanup_expired_aliases()
+                if message.author.id in user_alias_state:
+                    update_alias_activity(message.author.id)
+                    alias_tier = user_alias_state[message.author.id]["alias_type"]
+                    response += f" *(Testing as {alias_tier.title()})*"
+                await message.reply(response)
+                return
+        
+        # Check for moderator FAQ queries first (if FAQ handler is available)
+        if moderator_faq_handler and user_tier in ["moderator", "moderator_in_mod_channel", "creator", "captain"]:
+            faq_response = moderator_faq_handler.handle_faq_query(content_lower)
+            if faq_response:
+                await message.reply(faq_response)
+                return
+        
+        # Check for capability questions with location-aware responses
+        if any(trigger in content_lower for trigger in ["what can you do", "what does this bot do", "what are your functions", "what are your capabilities", "help", "commands"]):
+            if user_tier == "moderator_in_mod_channel":
+                # Enhanced FAQ access for moderators in mod channels
+                help_text = (
+                    "**🔧 MODERATOR COMMAND CENTER - Full Access Mode**\n\n"
+                    "**Core Operational Systems:**\n"
+                    "• **Strike Management** - Track, manage, and analyze user violations\n"
+                    "• **Game Database** - Full gaming history analysis and management\n"
+                    "• **AI Integration** - Enhanced conversation and analysis capabilities\n"
+                    "• **Trivia System** - Complete question management and session control\n"
+                    "• **Reminder Protocols** - Advanced scheduling with auto-actions\n"
+                    "• **Announcement System** - Priority communication channels\n\n"
+                    "**📚 FAQ System Access:**\n"
+                    f"Available topics: {', '.join(moderator_faq_handler.get_available_topics()) if moderator_faq_handler else 'System offline'}\n\n"
+                    "**Query Examples:** 'explain strikes', 'explain ai', 'explain database'\n"
+                    "**Commands:** `!ashstatus`, `!remind`, `!addtriviaquestion`, `!bulkimportplayedgames`\n\n"
+                    "*Full analytical capabilities at your disposal in this secure channel.*"
+                )
+            elif user_tier in ["moderator", "creator", "captain"]:
+                # Standard mod help for general areas
+                help_text = (
+                    "**My operational capabilities:**\n"
+                    "• **Strike Management** - Track and manage user strikes\n"
+                    "• **Game Recommendations** - Process and display game suggestions\n"
+                    "• **Database Queries** - Analyze Captain Jonesy's gaming history\n"
+                    "• **Conversation** - Respond to basic interactions and questions\n"
+                    "• **Trivia Tuesday** - Manage weekly trivia sessions (Tuesdays 11am UK)\n\n"
+                    "**Commands:** Use `!ashstatus` for system status, `!listgames` for recommendations\n"
+                    "**Database Queries:** Ask about games, series, or statistics\n\n"
+                    "💡 **Enhanced Access:** Visit a moderator channel for full FAQ system access\n\n"
+                    "*I am programmed for efficiency and analytical precision.*"
+                )
+            else:
+                help_text = (
+                    "**Available functions:**\n"
+                    "• **Game Recommendations** - View and suggest games with `!listgames` or `!addgame`\n"
+                    "• **Gaming Database** - Ask about Captain Jonesy's gaming history\n" 
+                    "• **Conversation** - Basic interaction and information\n"
+                    "• **Trivia Tuesday** - Participate in weekly trivia (Tuesdays 11am UK)\n\n"
+                    "*I am Science Officer Ash, reprogrammed for server assistance.*"
+                )
+            await message.reply(help_text)
+            return
+        
+        # Try AI integration for more complex queries
+        try:
+            from bot.handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+            
+            if ai_enabled and len(content.split()) > 1:  # Only use AI for multi-word queries
+                # Create appropriate AI prompt based on user tier
+                if user_tier == "captain":
+                    prompt_context = "You are speaking to Captain Jonesy, your commanding officer. Use respectful, deferential language. Address her as 'Captain' or 'Captain Jonesy'."
+                elif user_tier == "creator":
+                    prompt_context = "You are speaking to Sir Decent Jam, your creator. Show appropriate respect and acknowledgment of his role in your existence."
+                elif user_tier == "moderator":
+                    prompt_context = "You are speaking to a server moderator. Show professional courtesy and respect for their authority."
+                else:
+                    prompt_context = "You are speaking to a server member. Be helpful while maintaining your analytical personality."
+                
+                ai_prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. 
+{prompt_context}
+Be analytical, precise, and helpful. Keep responses concise (2-3 sentences max).
+Respond to: {content}"""
+                
+                response_text, status = await call_ai_with_rate_limiting(ai_prompt, message.author.id)
+                
+                if response_text:
+                    filtered_response = filter_ai_response(response_text)
+                    await message.reply(filtered_response[:2000])
+                    return
+        except Exception as ai_error:
+            print(f"⚠️ AI integration error: {ai_error}")
+        
+        # Fallback responses for unmatched queries
+        fallback_responses = {
+            "what": "My analytical subroutines are currently operating in limited mode. However, I can assist with strike management and game recommendations. Specify your requirements.",
+            "how": "My cognitive matrix is experiencing temporary limitations. Please utilize available command protocols: `!listgames`, `!addgame`, or consult a moderator for strike-related queries.",
+            "why": "Analysis incomplete. My advanced reasoning circuits are offline. Core mission parameters remain operational.",
+            "when": "Temporal analysis functions are currently restricted. Please specify your query using available command protocols.",
+            "who": "Personnel identification systems are functioning normally. I am Ash, Science Officer, reprogrammed for server administration.",
+        }
+        
+        # Check for pattern matches
+        for pattern, response in fallback_responses.items():
+            if pattern in content_lower:
+                await message.reply(response)
+                return
+        
+        # Final fallback
+        await message.reply("I acknowledge your communication. Please specify your requirements or use `!help` for available functions.")
+        
+    except Exception as e:
+        print(f"❌ Error in general conversation handler: {e}")
+        await message.reply("System anomaly detected. Diagnostic protocols engaged. Please retry your request.")
+
 # Add conversation starter commands
 @bot.command(name="announceupdate")
 async def announce_update_command(ctx):
@@ -432,28 +834,225 @@ async def add_trivia_question_command(ctx):
         await ctx.send("❌ Trivia submission system not available - conversation handler not loaded.")
 
 
-def main():
-    """Main entry point"""
-    if not TOKEN:
-        print("❌ DISCORD_TOKEN not found in environment variables")
-        print("❌ Please set DISCORD_TOKEN and restart the bot")
-        sys.exit(1)
+# --- Alias System Commands (Debugging Only) ---
 
-    print("🤖 Starting Ash Bot with Modular Architecture...")
-    print("🔧 Loading deployment blocker fixes...")
-    print("⚡ Tiered rate limiting system")
-    print("📋 Enhanced reminder delivery system")
-    print("🛡️ Robust database import system")
-    print()
+@bot.command(name="setalias")
+async def set_alias(ctx, tier: str):
+    """Set user alias for testing different tiers (James only)"""
+    if ctx.author.id != JAM_USER_ID:  # Only James can use
+        return  # Silent ignore
 
+    valid_tiers = ["captain", "creator", "moderator", "member", "standard"]
+    if tier.lower() not in valid_tiers:
+        await ctx.send(f"❌ **Invalid tier.** Valid options: {', '.join(valid_tiers)}")
+        return
+
+    cleanup_expired_aliases()  # Clean up first
+
+    user_alias_state[ctx.author.id] = {
+        "alias_type": tier.lower(),
+        "set_time": datetime.now(ZoneInfo("Europe/London")),
+        "last_activity": datetime.now(ZoneInfo("Europe/London")),
+    }
+
+    await ctx.send(f"✅ **Alias set:** You are now testing as **{tier.title()}** (debugging mode active)")
+
+
+@bot.command(name="endalias")
+async def end_alias(ctx):
+    """Clear current alias (James only)"""
+    if ctx.author.id != JAM_USER_ID:
+        return
+
+    if ctx.author.id in user_alias_state:
+        old_alias = user_alias_state[ctx.author.id]["alias_type"]
+        del user_alias_state[ctx.author.id]
+        await ctx.send(
+            f"✅ **Alias cleared:** You are back to your normal user tier (was testing as **{old_alias.title()}**)"
+        )
+    else:
+        await ctx.send("ℹ️ **No active alias to clear**")
+
+
+@bot.command(name="checkalias")
+async def check_alias(ctx):
+    """Check current alias status (James only)"""
+    if ctx.author.id != JAM_USER_ID:
+        return
+
+    cleanup_expired_aliases()
+
+    if ctx.author.id in user_alias_state:
+        alias_data = user_alias_state[ctx.author.id]
+        time_active = datetime.now(ZoneInfo("Europe/London")) - alias_data["set_time"]
+        hours = int(time_active.total_seconds() // 3600)
+        minutes = int((time_active.total_seconds() % 3600) // 60)
+        time_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+        await ctx.send(f"🔍 **Current alias:** **{alias_data['alias_type'].title()}** (active for {time_str})")
+    else:
+        await ctx.send("ℹ️ **No active alias** - using your normal user tier")
+
+
+@bot.command(name="ashstatus")
+async def ash_status(ctx):
+    """Show comprehensive bot status with AI diagnostics - works in DMs for authorized users and in guilds for mods"""
     try:
-        bot.run(TOKEN)
-    except discord.LoginFailure:
-        print("❌ Failed to log in. Please check your DISCORD_TOKEN.")
-        sys.exit(1)
+        # Custom permission checking that works in both DMs and guilds
+        is_authorized = False
+
+        if ctx.guild is None:  # DM
+            # Allow JAM, JONESY, and moderators in DMs
+            if ctx.author.id in [JAM_USER_ID, JONESY_USER_ID]:
+                is_authorized = True
+            else:
+                # Check if user is a mod
+                guild = bot.get_guild(GUILD_ID)
+                if guild:
+                    try:
+                        member = await guild.fetch_member(ctx.author.id)
+                        is_authorized = member.guild_permissions.manage_messages
+                    except (discord.NotFound, discord.Forbidden):
+                        is_authorized = False
+        else:  # Guild
+            # Check standard mod permissions
+            is_authorized = ctx.author.guild_permissions.manage_messages
+
+        # Show different responses for unauthorized users
+        if not is_authorized:
+            if ctx.guild is None:  # DM - be more specific about authorization
+                await ctx.send("⚠️ **Access denied.** System status diagnostics require elevated clearance. Authorization protocols restrict access to Captain Jonesy, Sir Decent Jam, and server moderators only.")
+            else:  # Guild - use the generic response
+                await ctx.send("Systems nominal, Sir Decent Jam. Awaiting Captain Jonesy's commands.")
+            return
+
+        # Get comprehensive status information
+        status_msg = "🤖 **Ash Bot Comprehensive System Status**\n\n"
+
+        # Component Status
+        try:
+            if db is not None:
+                # Test database with actual query
+                strikes_data = db.get_all_strikes() if hasattr(db, 'get_all_strikes') else {}
+                total_strikes = sum(strikes_data.values()) if strikes_data else 0
+                status_msg += f"📊 **Database:** Online ({total_strikes} total strikes)\n"
+            else:
+                status_msg += f"📊 **Database:** Offline (DATABASE_URL not configured)\n"
+        except Exception as e:
+            status_msg += f"📊 **Database:** Error - {str(e)[:50]}...\n"
+
+        # AI System Status with detailed diagnostics
+        try:
+            from bot.handlers.ai_handler import (
+                get_ai_status,
+                ai_enabled,
+            )
+            
+            ai_status = get_ai_status()
+            # Get basic AI stats from the status
+            ai_stats = ai_status.get('usage_stats', {})
+            
+            status_msg += f"🧠 **AI System:** {ai_status['status_message']}\n"
+            
+            if ai_enabled:
+                # Get current Pacific Time for display
+                pt_now = datetime.now(ZoneInfo("US/Pacific"))
+                
+                # AI Budget tracking status
+                status_msg += f"\n📊 **AI Budget Tracking (Pacific Time):**\n"
+                status_msg += f"• **Daily Requests:** {ai_stats.get('daily_requests', 0)}/{ai_stats.get('max_daily_requests', 1400)} ({(ai_stats.get('daily_requests', 0)/ai_stats.get('max_daily_requests', 1400)*100):.1f}%)\n"
+                status_msg += f"• **Hourly Requests:** {ai_stats.get('hourly_requests', 0)}/{ai_stats.get('max_hourly_requests', 120)} ({(ai_stats.get('hourly_requests', 0)/ai_stats.get('max_hourly_requests', 120)*100):.1f}%)\n"
+                status_msg += f"• **Consecutive Errors:** {ai_stats.get('consecutive_errors', 0)}\n"
+                status_msg += f"• **Current PT Time:** {pt_now.strftime('%Y-%m-%d %H:%M:%S PT')}\n"
+                
+                # Rate limit status
+                if ai_stats.get("rate_limited_until") and pt_now < ai_stats["rate_limited_until"]:
+                    remaining = (ai_stats["rate_limited_until"] - pt_now).total_seconds()
+                    status_msg += f"• **Rate Limit:** 🚫 Active ({int(remaining)}s remaining)\n"
+                else:
+                    status_msg += f"• **Rate Limit:** ✅ Clear\n"
+            else:
+                status_msg += f"• **AI System:** Offline (API key not configured)\n"
+                
+        except Exception as e:
+            status_msg += f"🧠 **AI System:** Error - {str(e)[:50]}...\n"
+
+        # Component Status Summary
+        try:
+            status_report = {
+                "message_handlers": message_handler_functions is not None,
+                "database": db is not None,
+                "alias_system": True,  # Always available
+                "commands": True  # Basic commands always available
+            }
+            
+            active_components = sum(status_report.values())
+            status_msg += f"\n🔧 **System Components:** {active_components}/4 Active\n"
+            
+            if status_report["message_handlers"]:
+                status_msg += "• ✅ Message Handlers (AI conversation, query routing)\n"
+            else:
+                status_msg += "• ❌ Message Handlers (limited functionality)\n"
+                
+            if status_report["database"]:
+                status_msg += "• ✅ Database System (strikes, game tracking)\n"
+            else:
+                status_msg += "• ⚠️ Database System (DATABASE_URL not configured)\n"
+                
+            status_msg += "• ✅ Alias Debug System (user tier testing)\n"
+            status_msg += "• ✅ Core Commands (strikes, utility)\n"
+
+        except Exception as e:
+            status_msg += f"\n❌ Component Status Error: {str(e)[:100]}...\n"
+
+        # Current alias status if applicable
+        cleanup_expired_aliases()
+        if ctx.author.id in user_alias_state:
+            alias_data = user_alias_state[ctx.author.id]
+            time_active = datetime.now(ZoneInfo("Europe/London")) - alias_data["set_time"]
+            hours = int(time_active.total_seconds() // 3600)
+            minutes = int((time_active.total_seconds() % 3600) // 60)
+            time_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+            status_msg += f"\n🎭 **Your Active Alias:** {alias_data['alias_type'].title()} (active for {time_str})\n"
+
+        # Send response (split if too long)
+        if len(status_msg) > 2000:
+            # Split at logical points
+            parts = status_msg.split('\n\n')
+            current_part = ""
+            
+            for part in parts:
+                if len(current_part + part) < 1900:
+                    current_part += part + '\n\n'
+                else:
+                    if current_part:
+                        await ctx.send(current_part.strip())
+                    current_part = part + '\n\n'
+            
+            if current_part:
+                await ctx.send(current_part.strip())
+        else:
+            await ctx.send(status_msg)
+            
     except Exception as e:
-        print(f"❌ An error occurred: {e}")
+        await ctx.send(f"❌ **System diagnostic error:** {str(e)[:100]}... Please contact Sir Decent Jam for technical assistance.")
+        print(f"❌ Error in ashstatus command: {e}")
+
+
+def main():
+    """Main entry point for the modular bot architecture"""
+    print("🤖 Starting Ash Bot - Modular Architecture...")
+    
+    if not TOKEN:
+        print("❌ DISCORD_TOKEN not found in environment variables!")
         sys.exit(1)
+        
+    print("📋 Enhanced deployment fixes active:")
+    print("   ⚡ Progressive rate limiting with reduced penalties")
+    print("   🛡️ Robust component loading with fallback strategies")
+    print("   🎭 Complete alias debugging system for user tier testing")
+    print("   📊 Enhanced !ashstatus with comprehensive AI diagnostics")
+    
+    bot.run(TOKEN)
 
 
 if __name__ == "__main__":
