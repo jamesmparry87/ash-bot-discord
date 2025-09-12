@@ -135,14 +135,14 @@ async def initialize_modular_components():
         # Import message handler functions
         global message_handler_functions
         from bot.handlers.message_handler import (
-            handle_strike_detection,
-            handle_pineapple_pizza_enforcement,
-            route_query,
-            handle_statistical_query,
-            handle_genre_query,
-            handle_year_query,
             handle_game_status_query,
-            handle_recommendation_query
+            handle_genre_query,
+            handle_pineapple_pizza_enforcement,
+            handle_recommendation_query,
+            handle_statistical_query,
+            handle_strike_detection,
+            handle_year_query,
+            route_query,
         )
         
         message_handler_functions = {

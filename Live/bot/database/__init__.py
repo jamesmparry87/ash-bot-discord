@@ -3,8 +3,8 @@ Database Integration Module for Bot Components
 Provides database access to modular components
 """
 
-import sys
 import os
+import sys
 
 # Add the parent directory to sys.path to import the main database
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
