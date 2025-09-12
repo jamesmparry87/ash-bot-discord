@@ -980,7 +980,7 @@ async def set_reminder(ctx, *, content: Optional[str] = None):
 
         # Try to parse the natural language reminder
         try:
-            from bot.tasks.reminders import parse_natural_reminder, format_reminder_time, validate_reminder_text
+            from bot.tasks.reminders import format_reminder_time, parse_natural_reminder, validate_reminder_text
             
             parsed = parse_natural_reminder(content, ctx.author.id)
             
