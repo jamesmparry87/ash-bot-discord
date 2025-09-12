@@ -6,6 +6,7 @@ Main entry point for the refactored modular Discord bot with deployment blocker 
 
 import asyncio
 import os
+import re
 import sys
 from datetime import datetime, timedelta
 from typing import Optional
@@ -461,13 +462,19 @@ async def send_deployment_success_dm(status_report):
 
 @bot.event
 async def on_message(message):
-    """Handle incoming messages"""
+    """Handle incoming messages with comprehensive DM and query detection"""
     # Ignore bot messages
     if message.author.bot:
         return
 
     # Check if this is a DM
     is_dm = isinstance(message.channel, discord.DMChannel)
+    
+    # Check if bot is mentioned
+    is_mentioned = bot.user and bot.user in message.mentions
+    
+    # Check for implicit game queries (even without mentions)
+    is_implicit_game_query = detect_implicit_game_query(message.content)
 
     # Handle DM conversation flows first
     if is_dm:
@@ -496,7 +503,11 @@ async def on_message(message):
     # Check if message handlers are loaded
     if 'message_handler_functions' not in globals() or message_handler_functions is None:
         print(f"⚠️ Message handlers not loaded, processing commands only")
-        # Process commands only
+        # Still handle basic conversation for DMs
+        if is_dm:
+            await handle_general_conversation(message)
+            return
+        # Process commands only for guild messages
         await bot.process_commands(message)
         return
 
@@ -509,28 +520,42 @@ async def on_message(message):
         if await message_handler_functions['handle_pineapple_pizza_enforcement'](message):
             return
 
-        # Handle queries directed at the bot
-        content = message.content.lower()
-        if bot.user and (
-                f'<@{bot.user.id}>' in message.content or f'<@!{bot.user.id}>' in message.content or content.startswith('ash')):
-            print(
-                f"🔍 Processing query from user {message.author.id}: {content[:50]}...")
-            # Route and handle queries
-            query_type, match = message_handler_functions['route_query'](
-                content)
+        # Determine if we should process this message for queries
+        should_process_query = (
+            is_dm or  # All DMs get processed
+            is_mentioned or  # Explicit mentions
+            message.content.lower().startswith('ash') or  # "ash" prefix
+            is_implicit_game_query  # Implicit game queries like "Has Jonesy played Gears of War?"
+        )
 
-            if query_type == "statistical" and match:
+        if should_process_query:
+            content = message.content
+            # Clean mentions from content for processing
+            if bot.user:
+                content = content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '').strip()
+            
+            print(f"🔍 Processing {'DM' if is_dm else 'guild'} {'implicit query' if is_implicit_game_query and not is_mentioned else 'message'} from user {message.author.id}: {content[:50]}...")
+            
+            # Route and handle queries
+            query_type, match = message_handler_functions['route_query'](content)
+
+            if query_type == "statistical":
                 await message_handler_functions['handle_statistical_query'](message, content)
+                return
             elif query_type == "genre" and match:
                 await message_handler_functions['handle_genre_query'](message, match)
+                return
             elif query_type == "year" and match:
                 await message_handler_functions['handle_year_query'](message, match)
+                return
             elif query_type == "game_status" and match:
                 await message_handler_functions['handle_game_status_query'](message, match)
+                return
             elif query_type == "recommendation" and match:
                 await message_handler_functions['handle_recommendation_query'](message, match)
-            elif query_type == "unknown":
-                # Handle unknown queries with general conversation system
+                return
+            else:
+                # Handle with general conversation system
                 await handle_general_conversation(message)
                 return
 
@@ -539,14 +564,12 @@ async def on_message(message):
         import traceback
         traceback.print_exc()
 
-    # CRITICAL: Add general conversation handling for DMs or mentions
-    # This was missing and is why the bot wasn't responding to basic messages
-    should_respond = is_dm or (bot.user and bot.user in message.mentions)
-    if should_respond:
+    # Handle general conversation for DMs or mentions that didn't match specific patterns
+    if is_dm or is_mentioned:
         await handle_general_conversation(message)
         return
 
-    # Process commands normally
+    # Process commands normally (guild messages that don't need conversation)
     await bot.process_commands(message)
 
 
@@ -849,6 +872,32 @@ Respond to: {content}"""
     except Exception as e:
         print(f"❌ Error in general conversation handler: {e}")
         await message.reply("System anomaly detected. Diagnostic protocols engaged. Please retry your request.")
+
+
+def detect_implicit_game_query(content: str) -> bool:
+    """Detect if a message is likely a game-related query even without explicit bot mention"""
+    content_lower = content.lower()
+    
+    # Game query patterns
+    game_query_patterns = [
+        r"has\s+jonesy\s+played",
+        r"did\s+jonesy\s+play",
+        r"has\s+captain\s+jonesy\s+played",
+        r"did\s+captain\s+jonesy\s+play",
+        r"what\s+games?\s+has\s+jonesy",
+        r"what\s+games?\s+did\s+jonesy",
+        r"which\s+games?\s+has\s+jonesy",
+        r"which\s+games?\s+did\s+jonesy",
+        r"what.*game.*most.*playtime",
+        r"which.*game.*most.*episodes",
+        r"what.*game.*longest.*complete",
+        r"is\s+.+\s+recommended",
+        r"who\s+recommended\s+.+",
+        r"what.*recommend.*",
+        r"jonesy.*gaming\s+(history|database|archive)",
+    ]
+    
+    return any(re.search(pattern, content_lower) for pattern in game_query_patterns)
 
 # Add conversation starter commands
 
