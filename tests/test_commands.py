@@ -388,18 +388,26 @@ class TestBotStatusCommands:
         # Mock strike data
         mock_db.get_all_strikes.return_value = {123: 1, 456: 2}
 
+        # Mock user as JAM_USER_ID to pass authorization checks
+        mock_discord_context.author.id = 337833732901961729  # JAM_USER_ID
+        
+        # Mock guild context (not DM)
+        mock_discord_context.guild = MagicMock()
+
         with patch('ash_bot_fallback.db', mock_db):
             with patch('ash_bot_fallback.ai_enabled', True):
                 with patch('ash_bot_fallback.ai_status_message', "Online (Test AI)"):
                     with patch('ash_bot_fallback.BOT_PERSONA', {'enabled': True}):
-                        await ash_bot_fallback.ash_status(mock_discord_context)
+                        # Mock the mod permission check to return True
+                        with patch('ash_bot_fallback.user_is_mod', return_value=True):
+                            await ash_bot_fallback.ash_status(mock_discord_context)
 
-                        # Verify response contains status information
-                        mock_discord_context.send.assert_called_once()
-                        call_args = mock_discord_context.send.call_args[0][0]
-                        assert "AI: Online (Test AI)" in call_args
-                        assert "Total strikes: 3" in call_args
-                        assert "Persona: Enabled" in call_args
+                            # Verify response contains status information
+                            mock_discord_context.send.assert_called_once()
+                            call_args = mock_discord_context.send.call_args[0][0]
+                            assert "AI: Online (Test AI)" in call_args
+                            assert "Total strikes: 3" in call_args
+                            assert "Persona: Enabled" in call_args
 
     @pytest.mark.asyncio
     async def test_error_check_command(self, mock_discord_context):

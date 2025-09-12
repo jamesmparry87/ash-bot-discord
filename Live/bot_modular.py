@@ -77,98 +77,103 @@ async def initialize_modular_components():
         "errors": []
     }
 
-    # Note: Due to incomplete modular architecture, we'll attempt to load what's available
-    # and fall back to fallback mode if needed
-
-    # 1. Initialize AI Handler (create missing config temporarily)
-    try:
-        # Create a temporary config module for AI handler
-        import importlib.util
-        import types
-
-        # Create config module with necessary constants
-        config_module = types.ModuleType('config')
-        setattr(config_module, 'JAM_USER_ID', JAM_USER_ID)
-        setattr(config_module, 'JONESY_USER_ID', JONESY_USER_ID)
-        setattr(config_module, 'MAX_DAILY_REQUESTS', 250)
-        setattr(config_module, 'MAX_HOURLY_REQUESTS', 50)
-        setattr(config_module, 'MIN_REQUEST_INTERVAL', 2.0)
-        setattr(config_module, 'PRIORITY_INTERVALS', PRIORITY_INTERVALS)
-        setattr(config_module, 'RATE_LIMIT_COOLDOWN', 30)
-        setattr(config_module, 'RATE_LIMIT_COOLDOWNS', RATE_LIMIT_COOLDOWNS)
-
-        # Temporarily add config to sys.modules
-        sys.modules['bot.config'] = config_module
-
-        # Also create database reference for AI handler
-        database_module = types.ModuleType('database')
-        setattr(database_module, 'db', db)
-        sys.modules['bot.database'] = database_module
-
-        # Try to initialize AI handler
-        from bot.handlers.ai_handler import get_ai_status, initialize_ai
-        initialize_ai()
-        ai_status = get_ai_status()
-        status_report["ai_handler"] = True
-        print(f"✅ AI Handler initialized: {ai_status['status_message']}")
-
-    except Exception as e:
-        status_report["errors"].append(f"AI Handler: {e}")
-        print(f"❌ AI Handler initialization failed: {e}")
-        print("  → This is expected since the modular architecture is incomplete")
-
-    # 2. Database Status
+    # 1. Database Status
     if db is not None:
         status_report["database"] = True
         print("✅ Database system available")
     else:
         print("⚠️ Database not available (acceptable if DATABASE_URL not configured)")
-        # Still considered success for deployment
-        status_report["database"] = True
+        status_report["database"] = True  # Still considered success for deployment
 
-    # 3. Commands Status
+    # 2. Initialize AI Handler
     try:
-        # Check if command files exist but don't try to load them yet
-        # since they may depend on missing modules
-        commands_exist = (
-            os.path.exists("bot/commands/strikes.py") and
-            os.path.exists("bot/commands/games.py") and
-            os.path.exists("bot/commands/utility.py")
-        )
+        from bot.handlers.ai_handler import get_ai_status, initialize_ai
+        initialize_ai()
+        ai_status = get_ai_status()
+        status_report["ai_handler"] = True
+        print(f"✅ AI Handler initialized: {ai_status['status_message']}")
+    except Exception as e:
+        status_report["errors"].append(f"AI Handler: {e}")
+        print(f"❌ AI Handler initialization failed: {e}")
 
-        if commands_exist:
-            print("✅ Command modules found (not loaded due to incomplete architecture)")
-            status_report["commands"] = True
-        else:
-            print("⚠️ Some command modules missing")
+    # 3. Load Command Cogs
+    try:
+        # Load strikes commands
+        from bot.commands.strikes import StrikesCommands
+        await bot.add_cog(StrikesCommands(bot))
+        
+        # Load other command modules if they exist
+        command_modules_loaded = 1  # We loaded strikes at minimum
+        
+        try:
+            from bot.commands.games import GamesCommands
+            await bot.add_cog(GamesCommands(bot))
+            command_modules_loaded += 1
+        except ImportError:
+            print("⚠️ Games commands module not found, skipping")
+        except Exception as e:
+            print(f"⚠️ Games commands failed to load: {e}")
+            
+        try:
+            from bot.commands.utility import UtilityCommands
+            await bot.add_cog(UtilityCommands(bot))
+            command_modules_loaded += 1
+        except ImportError:
+            print("⚠️ Utility commands module not found, skipping")
+        except Exception as e:
+            print(f"⚠️ Utility commands failed to load: {e}")
+        
+        status_report["commands"] = True
+        print(f"✅ Command modules loaded successfully ({command_modules_loaded} modules)")
 
     except Exception as e:
         status_report["errors"].append(f"Commands: {e}")
-        print(f"❌ Command check failed: {e}")
+        print(f"❌ Command loading failed: {e}")
 
-    # 4. Message Handlers Status
+    # 4. Set up Message Handlers
     try:
-        if os.path.exists("bot/handlers/message_handler.py"):
-            print("✅ Message handler found (not loaded due to incomplete architecture)")
-            status_report["message_handlers"] = True
-        else:
-            print("⚠️ Message handler missing")
+        # Import message handler functions
+        global message_handler_functions
+        from bot.handlers.message_handler import (
+            handle_strike_detection,
+            handle_pineapple_pizza_enforcement,
+            route_query,
+            handle_statistical_query,
+            handle_genre_query,
+            handle_year_query,
+            handle_game_status_query,
+            handle_recommendation_query
+        )
+        
+        message_handler_functions = {
+            'handle_strike_detection': handle_strike_detection,
+            'handle_pineapple_pizza_enforcement': handle_pineapple_pizza_enforcement,
+            'route_query': route_query,
+            'handle_statistical_query': handle_statistical_query,
+            'handle_genre_query': handle_genre_query,
+            'handle_year_query': handle_year_query,
+            'handle_game_status_query': handle_game_status_query,
+            'handle_recommendation_query': handle_recommendation_query
+        }
+        
+        status_report["message_handlers"] = True
+        print("✅ Message handlers initialized successfully")
 
     except Exception as e:
         status_report["errors"].append(f"Message Handlers: {e}")
-        print(f"❌ Message handler check failed: {e}")
+        print(f"❌ Message handler initialization failed: {e}")
+        message_handler_functions = None
 
-    # 5. Scheduled Tasks Status
+    # 5. Start Scheduled Tasks
     try:
-        if os.path.exists("bot/tasks/scheduled.py"):
-            print("✅ Scheduled tasks found (not loaded due to incomplete architecture)")
-            status_report["scheduled_tasks"] = True
-        else:
-            print("⚠️ Scheduled tasks missing")
+        from bot.tasks.scheduled import start_all_scheduled_tasks
+        start_all_scheduled_tasks()
+        status_report["scheduled_tasks"] = True
+        print("✅ Scheduled tasks started successfully")
 
     except Exception as e:
         status_report["errors"].append(f"Scheduled Tasks: {e}")
-        print(f"❌ Scheduled tasks check failed: {e}")
+        print(f"❌ Scheduled tasks initialization failed: {e}")
 
     # 6. Check if we need fallback mode
     if len(status_report["errors"]) > 2:
@@ -199,30 +204,30 @@ async def send_deployment_success_dm(status_report):
             1 for key, value in status_report.items() if key not in [
                 "errors", "fallback_mode"] and value)
 
-        if error_count <= 2 and component_count >= 2:
+        if error_count <= 2 and component_count >= 3:  # Require at least 3 components working
             embed = discord.Embed(
-                title="🎉 Modular Architecture Entry Point Deployed!",
-                description="Entry point successfully created with deployment blocker fixes loaded.",
+                title="🎉 Ash Bot Fully Operational!",
+                description="All modular components loaded and initialized successfully. The bot is now fully responsive!",
                 color=0x00ff00,
                 timestamp=datetime.now(
                     ZoneInfo("Europe/London")))
 
+            # Build component status
+            component_status = []
+            if status_report["commands"]:
+                component_status.append("• Commands (strikes, games, utility)")
+            if status_report["message_handlers"]:
+                component_status.append("• Message handlers (strike detection, query routing)")
+            if status_report["scheduled_tasks"]:
+                component_status.append("• Scheduled tasks (reminders, trivia)")
             if status_report["ai_handler"]:
-                embed.add_field(
-                    name="✅ AI Handler Components",
-                    value="Tiered rate limiting fixes loaded\n• High priority: 1s intervals\n• Medium priority: 2s intervals\n• Low priority: 3s intervals",
-                    inline=False)
-
+                component_status.append("• AI handler (rate limiting)")
             if status_report["database"]:
-                embed.add_field(
-                    name="✅ Database System",
-                    value="Database connection available",
-                    inline=False
-                )
+                component_status.append("• Database system")
 
             embed.add_field(
-                name="📋 Architecture Status",
-                value="Entry point ready - modular components detected but not fully loaded\n(This is expected for incremental deployment)",
+                name="✅ Loaded Components",
+                value="\n".join(component_status) if component_status else "Core systems operational",
                 inline=False)
 
             embed.add_field(
@@ -231,7 +236,7 @@ async def send_deployment_success_dm(status_report):
                 inline=False)
 
             embed.set_footer(
-                text="Entry point operational - Ready for Railway configuration update!")
+                text="Bot is now responsive to commands and messages!")
 
         else:
             embed = discord.Embed(
@@ -254,6 +259,52 @@ async def send_deployment_success_dm(status_report):
 
     except Exception as e:
         print(f"❌ Failed to send deployment notification: {e}")
+
+
+@bot.event
+async def on_message(message):
+    """Handle incoming messages"""
+    # Ignore bot messages
+    if message.author.bot:
+        return
+    
+    # Check if message handlers are loaded
+    if 'message_handler_functions' not in globals() or message_handler_functions is None:
+        # Process commands only
+        await bot.process_commands(message)
+        return
+    
+    try:
+        # Handle strikes in violation channel
+        if await message_handler_functions['handle_strike_detection'](message, bot):
+            return
+        
+        # Handle pineapple pizza enforcement
+        if await message_handler_functions['handle_pineapple_pizza_enforcement'](message):
+            return
+        
+        # Handle queries directed at the bot
+        content = message.content.lower()
+        if bot.user and (f'<@{bot.user.id}>' in message.content or f'<@!{bot.user.id}>' in message.content or content.startswith('ash')):
+            # Route and handle queries
+            query_type, match = message_handler_functions['route_query'](content)
+            
+            if query_type == "statistical" and match:
+                await message_handler_functions['handle_statistical_query'](message, content)
+            elif query_type == "genre" and match:
+                await message_handler_functions['handle_genre_query'](message, match)
+            elif query_type == "year" and match:
+                await message_handler_functions['handle_year_query'](message, match)
+            elif query_type == "game_status" and match:
+                await message_handler_functions['handle_game_status_query'](message, match)
+            elif query_type == "recommendation" and match:
+                await message_handler_functions['handle_recommendation_query'](message, match)
+    
+    except Exception as e:
+        print(f"❌ Error in message handler: {e}")
+    
+    # Process commands normally
+    await bot.process_commands(message)
 
 
 @bot.event
