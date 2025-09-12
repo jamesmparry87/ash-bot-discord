@@ -64,7 +64,8 @@ bot = commands.Bot(
     case_insensitive=True
 )
 
-# Global message handler functions - CRITICAL: This must be declared at module level
+# Global message handler functions - CRITICAL: This must be declared at
+# module level
 message_handler_functions = None
 
 # Import conversation handlers for DM functionality
@@ -87,8 +88,8 @@ except ImportError as e:
     mod_trivia_conversations = {}
     handle_announcement_conversation = None
     handle_mod_trivia_conversation = None
-    cleanup_announcement_conversations = lambda: None
-    cleanup_mod_trivia_conversations = lambda: None
+    def cleanup_announcement_conversations(): return None
+    def cleanup_mod_trivia_conversations(): return None
     start_announcement_conversation = None
     start_trivia_conversation = None
 
@@ -299,26 +300,28 @@ async def on_message(message):
 
     # Check if this is a DM
     is_dm = isinstance(message.channel, discord.DMChannel)
-    
+
     # Handle DM conversation flows first
     if is_dm:
         try:
             # Clean up expired conversations
             cleanup_announcement_conversations()
             cleanup_mod_trivia_conversations()
-            
+
             # Handle announcement conversation flow in DMs
             if message.author.id in announcement_conversations and handle_announcement_conversation is not None:
-                print(f"🔄 Processing announcement conversation for user {message.author.id}")
+                print(
+                    f"🔄 Processing announcement conversation for user {message.author.id}")
                 await handle_announcement_conversation(message)
                 return
-            
-            # Handle mod trivia conversation flow in DMs  
+
+            # Handle mod trivia conversation flow in DMs
             if message.author.id in mod_trivia_conversations and handle_mod_trivia_conversation is not None:
-                print(f"🔄 Processing mod trivia conversation for user {message.author.id}")
+                print(
+                    f"🔄 Processing mod trivia conversation for user {message.author.id}")
                 await handle_mod_trivia_conversation(message)
                 return
-                
+
         except Exception as e:
             print(f"❌ Error in DM conversation handler: {e}")
 
@@ -342,7 +345,8 @@ async def on_message(message):
         content = message.content.lower()
         if bot.user and (
                 f'<@{bot.user.id}>' in message.content or f'<@!{bot.user.id}>' in message.content or content.startswith('ash')):
-            print(f"🔍 Processing query from user {message.author.id}: {content[:50]}...")
+            print(
+                f"🔍 Processing query from user {message.author.id}: {content[:50]}...")
             # Route and handle queries
             query_type, match = message_handler_functions['route_query'](
                 content)

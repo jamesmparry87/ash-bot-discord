@@ -35,8 +35,10 @@ def test_conversation_handler_imports():
             start_trivia_conversation,
         )
         print("✅ All conversation handler modules imported successfully")
-        print(f"   - Announcement conversations: {type(announcement_conversations).__name__}")
-        print(f"   - Trivia conversations: {type(mod_trivia_conversations).__name__}")
+        print(
+            f"   - Announcement conversations: {type(announcement_conversations).__name__}")
+        print(
+            f"   - Trivia conversations: {type(mod_trivia_conversations).__name__}")
         return True
     except ImportError as e:
         print(f"❌ Import error: {e}")
@@ -81,7 +83,7 @@ async def test_announcement_conversation_flow():
         # Verify step progression
         assert announcement_conversations[user_id]['step'] == 'content_input'
         assert announcement_conversations[user_id]['data']['target_channel'] == 'mod'
-        
+
         # 3. Test content input
         mock_message.content = "Test announcement content for modular bot testing"
         await handle_announcement_conversation(mock_message)
@@ -197,17 +199,17 @@ async def test_dm_command_permissions():
         mock_ctx.send = AsyncMock()
 
         await start_announcement_conversation(mock_ctx)
-        
+
         # Should succeed (no error raised, conversation started)
         mock_ctx.send.assert_called_once()
-        
+
         # Reset mock
         mock_ctx.send.reset_mock()
 
         # Test unauthorized user
         mock_ctx.author.id = 999999999  # Random unauthorized ID
         await start_announcement_conversation(mock_ctx)
-        
+
         # Should send access denied message
         mock_ctx.send.assert_called_once()
         call_content = mock_ctx.send.call_args[0][0]
@@ -238,7 +240,7 @@ async def test_conversation_cleanup():
         # Add expired conversation
         uk_now = datetime.now(ZoneInfo("Europe/London"))
         old_time = uk_now - timedelta(hours=2)  # 2 hours ago (expired)
-        
+
         test_user_id = 999999999
         announcement_conversations[test_user_id] = {
             'step': 'content_input',
@@ -283,7 +285,7 @@ async def test_ai_content_enhancement():
             enhanced = await create_ai_announcement_content(
                 original_content, 'mod', 337833732901961729
             )
-            
+
             # Should return original content when AI is disabled
             assert enhanced == original_content
 
@@ -307,17 +309,17 @@ async def test_announcement_formatting():
         # Test mod channel formatting
         content = "Test update content"
         user_id = 337833732901961729  # JAM_USER_ID
-        
+
         formatted_mod = await format_announcement_content(content, 'mod', user_id)
-        
+
         # Verify mod formatting
         assert "Technical Briefing" in formatted_mod
         assert "Sir Decent Jam" in formatted_mod
         assert content in formatted_mod
-        
+
         # Test user channel formatting
         formatted_user = await format_announcement_content(content, 'user', user_id)
-        
+
         # Verify user formatting
         assert "Exciting Bot Updates" in formatted_user
         assert "Sir Decent Jam" in formatted_user

@@ -147,7 +147,7 @@ def main():
         print(
             "\nThe bot has been successfully refactored from a 5000+ line monolithic file")
         print("into focused modules of 100-300 lines each, achieving massive context reduction!")
-        
+
         print("\n📋 COMPREHENSIVE TESTING AVAILABLE:")
         print("   Run test_dm_conversations.py for DM functionality validation")
         print("   Run test_modular_integration.py for end-to-end bot testing")

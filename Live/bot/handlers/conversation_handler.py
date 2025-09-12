@@ -213,22 +213,30 @@ async def post_announcement(data: dict, user_id: int) -> bool:
             channel_id = ANNOUNCEMENTS_CHANNEL_ID
 
         # Need bot instance - get it from the global scope where it's available
-        # This works because the conversation handler is called from the main bot module
+        # This works because the conversation handler is called from the main
+        # bot module
         import discord
         from discord.ext import commands
 
-        # Get bot instance from the calling context - we'll search for it in globals
+        # Get bot instance from the calling context - we'll search for it in
+        # globals
         bot_instance = None
         import sys
         for name, obj in sys.modules.items():
-            if hasattr(obj, 'bot') and isinstance(getattr(obj, 'bot'), commands.Bot):
+            if hasattr(
+                obj,
+                'bot') and isinstance(
+                getattr(
+                    obj,
+                    'bot'),
+                    commands.Bot):
                 bot_instance = getattr(obj, 'bot')
                 break
-        
+
         if bot_instance is None:
             print(f"❌ Could not find bot instance for announcement posting")
             return False
-        
+
         bot = bot_instance
 
         channel = bot.get_channel(channel_id)
@@ -667,7 +675,7 @@ async def handle_mod_trivia_conversation(message):
 
                 if data.get('question_type') == 'database_calculated':
                     # Database-calculated question
-                    question_id = db.add_trivia_question( # type: ignore
+                    question_id = db.add_trivia_question(  # type: ignore
                         question_text=question_text,
                         question_type=question_type,
                         correct_answer=None,  # Will be calculated dynamically
@@ -687,7 +695,7 @@ async def handle_mod_trivia_conversation(message):
                             multiple_choice_options = [
                                 opt.strip() for opt in options_match]
 
-                    question_id = db.add_trivia_question( # type: ignore
+                    question_id = db.add_trivia_question(  # type: ignore
                         question_text=question_text,
                         question_type=question_type,
                         correct_answer=data['correct_answer'],
