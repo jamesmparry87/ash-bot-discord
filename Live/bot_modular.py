@@ -1497,7 +1497,7 @@ async def toggle_ai(ctx):
         
         # Toggle the status (this would need to be implemented in ai_handler)
         try:
-            from bot.handlers.ai_handler import toggle_ai_system # type: ignore
+            from bot.handlers.ai_handler import toggle_ai_system  # type: ignore
             new_status = toggle_ai_system()
             
             status_text = "**enabled**" if new_status else "**disabled**"
@@ -1535,7 +1535,7 @@ async def set_persona(ctx, *, persona_description: Optional[str] = None):
         # Handle reset command
         if persona_description.lower() == "reset":
             try:
-                from bot.handlers.ai_handler import reset_persona # type: ignore
+                from bot.handlers.ai_handler import reset_persona  # type: ignore
                 reset_persona()
                 await ctx.send("✅ **AI persona reset** to default Science Officer Ash personality.")
             except ImportError:
@@ -1544,7 +1544,7 @@ async def set_persona(ctx, *, persona_description: Optional[str] = None):
         
         # Set new persona
         try:
-            from bot.handlers.ai_handler import set_ai_persona # type: ignore
+            from bot.handlers.ai_handler import set_ai_persona  # type: ignore
             success = set_ai_persona(persona_description)
             
             if success:

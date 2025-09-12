@@ -10,10 +10,10 @@ Handles comprehensive trivia management including:
 
 from datetime import datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import discord
 from discord.ext import commands
-from zoneinfo import ZoneInfo
 
 from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..database import db
