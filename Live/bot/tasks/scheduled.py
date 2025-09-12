@@ -12,7 +12,7 @@ Handles all background scheduled tasks including:
 import asyncio
 import json
 from datetime import datetime, time, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 import discord
@@ -21,7 +21,11 @@ from discord.ext import tasks
 from ..config import GUILD_ID
 
 # Database and config imports
-from ..database import db
+from ..database import db, DatabaseManager
+
+if TYPE_CHECKING:
+    # Type hint for Pylance to understand db is a DatabaseManager instance when not None
+    assert db is not None
 
 # Import integrations
 from ..integrations.youtube import execute_youtube_auto_post
@@ -118,15 +122,15 @@ async def check_due_reminders():
 
         print(f"✅ Database instance available: {type(db).__name__}")
 
-        if not hasattr(db, 'database_url') or not db.database_url:
+        if not hasattr(db, 'database_url') or not db.database_url:  # type: ignore
             print("❌ No database URL configured - reminder system disabled")
             return
 
-        print(f"✅ Database URL configured: {db.database_url[:20]}...")
+        print(f"✅ Database URL configured: {db.database_url[:20]}...")  # type: ignore
 
         # Test database connection with detailed logging
         try:
-            conn = await db.get_connection()
+            conn = db.get_connection()  # type: ignore
             if not conn:
                 print("❌ Database connection failed in reminder check")
                 return
@@ -137,7 +141,7 @@ async def check_due_reminders():
 
         # Get due reminders with detailed logging
         try:
-            due_reminders = db.get_due_reminders(uk_now)
+            due_reminders = db.get_due_reminders(uk_now)  # type: ignore
             print(
                 f"📋 Database query successful - found {len(due_reminders) if due_reminders else 0} due reminders")
 
@@ -183,7 +187,7 @@ async def check_due_reminders():
                 await deliver_reminder(reminder)
 
                 # Mark as delivered
-                db.update_reminder_status(
+                db.update_reminder_status(  # type: ignore
                     reminder_id, "delivered", delivered_at=uk_now)
                 print(
                     f"✅ Reminder {reminder_id} delivered and marked as delivered")
@@ -202,7 +206,7 @@ async def check_due_reminders():
                 traceback.print_exc()
                 # Mark as failed
                 try:
-                    db.update_reminder_status(reminder.get('id'), "failed")
+                    db.update_reminder_status(reminder.get('id'), "failed") # type: ignore
                     print(f"⚠️ Reminder {reminder.get('id')} marked as failed")
                 except Exception as mark_e:
                     print(f"❌ Could not mark reminder as failed: {mark_e}")
@@ -222,7 +226,7 @@ async def check_auto_actions():
     """Check for reminders that need auto-actions triggered"""
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
-        auto_action_reminders = db.get_reminders_awaiting_auto_action(uk_now)
+        auto_action_reminders = db.get_reminders_awaiting_auto_action(uk_now) # type: ignore
 
         if not auto_action_reminders:
             return
@@ -235,7 +239,7 @@ async def check_auto_actions():
                 await execute_auto_action(reminder)
 
                 # Mark auto-action as executed
-                db.update_reminder_status(
+                db.update_reminder_status( # type: ignore
                     reminder["id"], "delivered", auto_executed_at=uk_now)
 
                 print(

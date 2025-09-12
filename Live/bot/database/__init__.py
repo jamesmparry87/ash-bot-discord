@@ -5,10 +5,20 @@ Provides database access to modular components
 
 import os
 import sys
+from typing import TYPE_CHECKING, Optional
 
 # Add the parent directory to sys.path to import the main database
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+if TYPE_CHECKING:
+    from database import DatabaseManager
+else:
+    try:
+        from database import DatabaseManager
+    except ImportError:
+        DatabaseManager = None
+
+# Import the db instance
 try:
     from database import db
     print("✅ Bot database integration loaded successfully")
@@ -19,5 +29,4 @@ except Exception as e:
     print(f"❌ Database initialization error: {e}")
     db = None
 
-# Export the database instance
-__all__ = ['db']
+__all__ = ['db', 'DatabaseManager']

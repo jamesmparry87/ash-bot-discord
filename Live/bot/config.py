@@ -11,6 +11,9 @@ GUILD_ID = 869525857562161182
 JONESY_USER_ID = 651329927895056384
 JAM_USER_ID = 337833732901961729
 
+# Bot Configuration
+LOCK_FILE = "bot.lock"
+
 # Channel Configuration
 MOD_ALERT_CHANNEL_ID = 869530924302344233
 MEMBERS_CHANNEL_ID = 888820289776013444
@@ -19,7 +22,15 @@ VIOLATION_CHANNEL_ID = 869530924302344233  # Same as mod alert for now
 # Member Role Configuration
 MEMBER_ROLE_IDS = [
     869526205166702652,  # Senior Officers
-    888820135262765096,  # Members
+    888820289776013444,  # Members
+]
+
+# Moderator channel IDs where sensitive functions can be discussed
+MODERATOR_CHANNEL_IDS = [
+    1213488470798893107,
+    869530924302344233,
+    1280085269600669706,
+    1393987338329260202
 ]
 
 # Rate Limiting Configuration (from deployment fixes)

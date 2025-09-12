@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 # Database import
-from ..database import db
+from ..database import db, DatabaseManager
 
 
 async def fetch_youtube_games(channel_id: str) -> List[str]:
@@ -512,13 +512,12 @@ async def update_youtube_playlist_data(
                                 # Update database with new data
                                 canonical_name = game.get('canonical_name')
                                 if canonical_name and total_playtime_minutes > 0:
-                                    query = """
-                                        UPDATE played_games
-                                        SET total_playtime_minutes = $1
-                                        WHERE canonical_name = $2
-                                    """
-                                    await db.execute(query, total_playtime_minutes, canonical_name)
-                                    updated_count += 1
+                                    # Get the game by name first, then update it
+                                    existing_game = db.get_played_game(canonical_name) # type: ignore
+                                    if existing_game:
+                                        success = db.update_played_game(existing_game['id'], total_playtime_minutes=total_playtime_minutes) # type: ignore
+                                        if success:
+                                            updated_count += 1
 
                 except Exception as e:
                     print(
