@@ -4,13 +4,14 @@ Ash Bot - Modular Architecture Entry Point
 Main entry point for the refactored modular Discord bot with deployment blocker fixes.
 """
 
+import asyncio
 import os
 import sys
-import asyncio
-import discord
-from discord.ext import commands
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+import discord
+from discord.ext import commands
 
 # Import configuration directly from environment and fallback file
 try:
@@ -83,7 +84,7 @@ async def initialize_modular_components():
         # Create a temporary config module for AI handler
         import importlib.util
         import types
-        
+
         # Create config module with necessary constants
         config_module = types.ModuleType('config')
         setattr(config_module, 'JAM_USER_ID', JAM_USER_ID)
@@ -104,7 +105,7 @@ async def initialize_modular_components():
         sys.modules['bot.database'] = database_module
         
         # Try to initialize AI handler
-        from bot.handlers.ai_handler import initialize_ai, get_ai_status
+        from bot.handlers.ai_handler import get_ai_status, initialize_ai
         initialize_ai()
         ai_status = get_ai_status()
         status_report["ai_handler"] = True
