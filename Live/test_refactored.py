@@ -2,8 +2,8 @@
 """
 Test script to verify the refactored bot modules work correctly
 """
-import sys
 import os
+import sys
 
 # Add the current directory to the path
 sys.path.insert(0, os.path.dirname(__file__))
@@ -14,7 +14,7 @@ def test_imports():
     
     try:
         # Test config import
-        from bot.config import TOKEN, GUILD_ID, JONESY_USER_ID, BOT_PERSONA
+        from bot.config import BOT_PERSONA, GUILD_ID, JONESY_USER_ID, TOKEN
         print("✅ Config module imported successfully")
         print(f"   - Guild ID: {GUILD_ID}")
         print(f"   - TOKEN configured: {'Yes' if TOKEN else 'No'}")
@@ -26,7 +26,7 @@ def test_imports():
     
     try:
         # Test database import
-        from bot.database import db, DatabaseManager
+        from bot.database import DatabaseManager, db
         print("✅ Database module imported successfully")
         print(f"   - DatabaseManager available: {'Yes' if DatabaseManager else 'No'}")
         print(f"   - Database instance: {'Connected' if db else 'Not available'}")

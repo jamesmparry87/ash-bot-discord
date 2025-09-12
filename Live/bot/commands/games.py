@@ -3,12 +3,13 @@ Game recommendation commands for Ash Bot
 Handles adding, listing, and managing game recommendations
 """
 
-import discord
-from discord.ext import commands
 from typing import Optional
 
-from ..database import db, DatabaseManager
+import discord
+from discord.ext import commands
+
 from ..config import JAM_USER_ID
+from ..database import DatabaseManager, db
 
 
 class GamesCommands(commands.Cog):

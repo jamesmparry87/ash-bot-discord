@@ -9,7 +9,6 @@ This module contains integration handlers for external services like:
 Phase 3 integrations extracted from main bot file.
 """
 
-from . import youtube
-from . import twitch
+from . import twitch, youtube
 
 __all__ = ['youtube', 'twitch']

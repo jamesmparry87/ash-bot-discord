@@ -12,18 +12,19 @@ Handles all background scheduled tasks including:
 import asyncio
 import json
 from datetime import datetime, time, timedelta
+from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
-from typing import Dict, Any, Optional
+
 import discord
 from discord.ext import tasks
 
+from ..config import GUILD_ID
+
 # Database and config imports
 from ..database import db
-from ..config import GUILD_ID
 
 # Import integrations
 from ..integrations.youtube import execute_youtube_auto_post
-
 
 # Global state for trivia
 active_trivia_sessions = {}
@@ -250,8 +251,8 @@ async def trivia_tuesday():
     print(f"🧠 Trivia Tuesday task triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
 
     try:
-        from ..main import bot  # Import here to avoid circular imports
         from ..handlers.ai_handler import generate_ai_trivia_question
+        from ..main import bot  # Import here to avoid circular imports
         
         guild = bot.get_guild(GUILD_ID)
         if not guild:

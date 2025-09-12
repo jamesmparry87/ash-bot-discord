@@ -2,8 +2,8 @@
 """
 Basic test of core refactored modules (without Discord dependencies)
 """
-import sys
 import os
+import sys
 
 # Add the current directory to the path
 sys.path.insert(0, os.path.dirname(__file__))
@@ -15,9 +15,13 @@ def test_core_modules():
     # Test 1: Config module
     try:
         from bot.config import (
-            GUILD_ID, JONESY_USER_ID, JAM_USER_ID, 
-            VIOLATION_CHANNEL_ID, BOT_PERSONA, FAQ_RESPONSES,
-            PINEAPPLE_NEGATIVE_PATTERNS
+            BOT_PERSONA,
+            FAQ_RESPONSES,
+            GUILD_ID,
+            JAM_USER_ID,
+            JONESY_USER_ID,
+            PINEAPPLE_NEGATIVE_PATTERNS,
+            VIOLATION_CHANNEL_ID,
         )
         print("✅ Config module: SUCCESS")
         print(f"   - Constants loaded: {len([x for x in dir() if 'ID' in str(x)])} IDs")
@@ -31,7 +35,7 @@ def test_core_modules():
     
     # Test 2: Database module  
     try:
-        from bot.database import db, DatabaseManager
+        from bot.database import DatabaseManager, db
         print("✅ Database module: SUCCESS")
         print(f"   - DatabaseManager class: {'Available' if DatabaseManager else 'Missing'}")
         print(f"   - Database instance: {'Connected' if db else 'Not configured'}")

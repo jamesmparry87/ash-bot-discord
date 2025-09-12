@@ -8,12 +8,13 @@ Handles all Twitch API interactions including:
 - Game series detection
 """
 
+import asyncio
 import os
 import re
-import asyncio
-from typing import Dict, List, Any, Optional
-import aiohttp
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import aiohttp
 
 # Database import
 from ..database import db

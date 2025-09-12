@@ -5,15 +5,21 @@ Handles AI integration, rate limiting, and response processing for the Discord b
 Supports both Gemini and Claude APIs with automatic fallback functionality.
 """
 
-import os
 import json
+import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from ..config import (
-    JONESY_USER_ID, JAM_USER_ID, MAX_DAILY_REQUESTS, MAX_HOURLY_REQUESTS,
-    MIN_REQUEST_INTERVAL, RATE_LIMIT_COOLDOWN, PRIORITY_INTERVALS, RATE_LIMIT_COOLDOWNS
+    JAM_USER_ID,
+    JONESY_USER_ID,
+    MAX_DAILY_REQUESTS,
+    MAX_HOURLY_REQUESTS,
+    MIN_REQUEST_INTERVAL,
+    PRIORITY_INTERVALS,
+    RATE_LIMIT_COOLDOWN,
+    RATE_LIMIT_COOLDOWNS,
 )
 from ..database import db
 
@@ -232,8 +238,8 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int, context: str = "
 
     # Import user alias state from utils module
     try:
-        from ..utils.permissions import user_alias_state, cleanup_expired_aliases, update_alias_activity
-        
+        from ..utils.permissions import cleanup_expired_aliases, update_alias_activity, user_alias_state
+
         # Improved alias rate limiting with better UX
         cleanup_expired_aliases()
         if user_id in user_alias_state:

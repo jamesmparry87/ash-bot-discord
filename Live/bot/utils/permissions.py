@@ -3,15 +3,13 @@ User permissions and tier checking utilities
 Handles user role detection, permission checking, and tier assignment
 """
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
+
 import discord
 from discord.ext import commands
 
-from ..config import (
-    JONESY_USER_ID, JAM_USER_ID, MEMBER_ROLE_IDS, 
-    MODERATOR_CHANNEL_IDS, MEMBERS_CHANNEL_ID
-)
+from ..config import JAM_USER_ID, JONESY_USER_ID, MEMBER_ROLE_IDS, MEMBERS_CHANNEL_ID, MODERATOR_CHANNEL_IDS
 
 # Global state for tracking
 member_conversation_counts: Dict[int, Dict[str, Any]] = {}

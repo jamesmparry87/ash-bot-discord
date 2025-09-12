@@ -3,10 +3,10 @@ Test script for the modular command architecture
 Tests that command modules can be loaded and basic functionality works
 """
 
-import sys
-import os
 import asyncio
-from unittest.mock import Mock, AsyncMock
+import os
+import sys
+from unittest.mock import AsyncMock, Mock
 
 # Add the bot directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'bot'))
@@ -16,7 +16,7 @@ def test_module_imports():
     print("🧪 Testing module imports...")
     
     try:
-        from bot.commands import strikes, games, utility
+        from bot.commands import games, strikes, utility
         print("✅ All command modules imported successfully")
         return True
     except ImportError as e:
@@ -28,10 +28,10 @@ def test_cog_creation():
     print("🧪 Testing cog instantiation...")
     
     try:
-        from bot.commands.strikes import StrikesCommands
         from bot.commands.games import GamesCommands
+        from bot.commands.strikes import StrikesCommands
         from bot.commands.utility import UtilityCommands
-        
+
         # Mock bot object
         mock_bot = Mock()
         
@@ -57,7 +57,7 @@ def test_database_imports():
     print("🧪 Testing database imports...")
     
     try:
-        from bot.database import db, DatabaseManager
+        from bot.database import DatabaseManager, db
         print("✅ Database modules imported successfully")
         print(f"  - Database instance: {'Available' if db else 'None'}")
         return True
@@ -70,10 +70,7 @@ def test_config_imports():
     print("🧪 Testing config imports...")
     
     try:
-        from bot.config import (
-            TOKEN, GUILD_ID, JONESY_USER_ID, JAM_USER_ID,
-            FAQ_RESPONSES, BOT_PERSONA
-        )
+        from bot.config import BOT_PERSONA, FAQ_RESPONSES, GUILD_ID, JAM_USER_ID, JONESY_USER_ID, TOKEN
         print("✅ Config modules imported successfully")
         print(f"  - FAQ responses: {len(FAQ_RESPONSES) if FAQ_RESPONSES else 0} entries")
         print(f"  - Bot persona: {'Configured' if BOT_PERSONA else 'None'}")
@@ -87,9 +84,7 @@ def test_utils_imports():
     print("🧪 Testing utils imports...")
     
     try:
-        from bot.utils.permissions import (
-            get_user_communication_tier, user_is_mod, user_is_member
-        )
+        from bot.utils.permissions import get_user_communication_tier, user_is_member, user_is_mod
         print("✅ Utils modules imported successfully")
         return True
     except ImportError as e:

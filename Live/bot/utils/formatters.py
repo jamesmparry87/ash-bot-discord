@@ -4,8 +4,8 @@ Text Formatters Module
 Handles text formatting, display utilities, and content presentation
 """
 
-from typing import List, Dict, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 
 def format_game_list(games: List[Dict[str, Any]], max_display: int = 10, show_episodes: bool = True, show_playtime: bool = True) -> str:
@@ -268,7 +268,7 @@ def format_key_value_pairs(data: Dict[str, Any], separator: str = ": ") -> str:
 def clean_markdown(text: str) -> str:
     """Clean markdown formatting from text"""
     import re
-    
+
     # Remove markdown formatting
     text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Bold
     text = re.sub(r'\*(.*?)\*', r'\1', text)      # Italic

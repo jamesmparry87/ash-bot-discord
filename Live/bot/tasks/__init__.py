@@ -9,7 +9,6 @@ This module contains background tasks, scheduled operations, and utility functio
 Phase 4 tasks extracted from main bot file.
 """
 
-from . import scheduled
-from . import reminders
+from . import reminders, scheduled
 
 __all__ = ['scheduled', 'reminders']

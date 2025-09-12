@@ -9,22 +9,32 @@ import platform
 import signal
 import sys
 from datetime import datetime
+from typing import Any, Optional
 from zoneinfo import ZoneInfo
-from typing import Optional, Any
 
 import discord
 from discord.ext import commands
 
 # Import our modular components
 from .config import (
-    TOKEN, GUILD_ID, JONESY_USER_ID, JAM_USER_ID, 
-    VIOLATION_CHANNEL_ID, MOD_ALERT_CHANNEL_ID,
-    MEMBERS_CHANNEL_ID, LOCK_FILE, BOT_PERSONA, FAQ_RESPONSES
+    BOT_PERSONA,
+    FAQ_RESPONSES,
+    GUILD_ID,
+    JAM_USER_ID,
+    JONESY_USER_ID,
+    LOCK_FILE,
+    MEMBERS_CHANNEL_ID,
+    MOD_ALERT_CHANNEL_ID,
+    TOKEN,
+    VIOLATION_CHANNEL_ID,
 )
 from .database import db
 from .utils.permissions import (
-    get_user_communication_tier, user_is_mod, user_is_member,
-    should_limit_member_conversation, increment_member_conversation_count
+    get_user_communication_tier,
+    increment_member_conversation_count,
+    should_limit_member_conversation,
+    user_is_member,
+    user_is_mod,
 )
 
 # Import existing moderator FAQ handler from Live directory
@@ -100,7 +110,7 @@ async def load_command_modules():
     """Load all command modules (cogs)"""
     try:
         # Load command modules
-        from .commands import strikes, games, utility
+        from .commands import games, strikes, utility
         
         strikes.setup(bot)
         print("✅ Loaded strikes commands module")

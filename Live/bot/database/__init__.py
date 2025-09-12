@@ -3,9 +3,9 @@ Database module for Ash Bot
 Handles all database operations including strikes, games, played games, reminders, and trivia
 """
 
-import sys
 import os
-from typing import Optional, Any
+import sys
+from typing import Any, Optional
 
 # Import with robust path handling for both development and production
 DatabaseManager = None

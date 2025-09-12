@@ -3,12 +3,13 @@ Strike management commands for Ash Bot
 Handles user strike tracking, viewing, and administration
 """
 
-import discord
-from discord.ext import commands
 from typing import Optional
 
-from ..database import db, DatabaseManager
+import discord
+from discord.ext import commands
+
 from ..config import JONESY_USER_ID
+from ..database import DatabaseManager, db
 
 
 class StrikesCommands(commands.Cog):

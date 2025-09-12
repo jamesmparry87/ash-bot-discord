@@ -7,23 +7,22 @@ Manages conversation state and user flows for complex multi-step interactions.
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
 
 import discord
 from discord.ext import commands
 
 from ..config import (
-    JONESY_USER_ID, JAM_USER_ID, MOD_ALERT_CHANNEL_ID, ANNOUNCEMENTS_CHANNEL_ID,
-    YOUTUBE_UPLOADS_CHANNEL_ID
+    ANNOUNCEMENTS_CHANNEL_ID,
+    JAM_USER_ID,
+    JONESY_USER_ID,
+    MOD_ALERT_CHANNEL_ID,
+    YOUTUBE_UPLOADS_CHANNEL_ID,
 )
 from ..database import db
-from ..utils.permissions import (
-    get_user_communication_tier, user_is_mod_by_id
-)
-from .ai_handler import (
-    ai_enabled, call_ai_with_rate_limiting, filter_ai_response
-)
+from ..utils.permissions import get_user_communication_tier, user_is_mod_by_id
+from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
 
 # Global conversation state management
 # user_id: {'step': str, 'data': dict, 'last_activity': datetime}

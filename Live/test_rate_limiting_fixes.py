@@ -4,8 +4,8 @@ Test script to validate the rate limiting and reminder system fixes
 """
 
 import asyncio
-import sys
 import os
+import sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -79,7 +79,7 @@ def test_priority_determination():
 def test_database_import():
     """Test that database imports work with the new robust system"""
     try:
-        from bot.database import db, DatabaseManager
+        from bot.database import DatabaseManager, db
         
         print("🧪 Testing Database Import System...")
         

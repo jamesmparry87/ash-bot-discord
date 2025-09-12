@@ -9,8 +9,8 @@ Handles the main message processing logic for the Discord bot, including:
 - FAQ responses and user tier detection
 """
 
-import re
 import difflib
+import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Match, Optional, Tuple
 from zoneinfo import ZoneInfo
@@ -19,20 +19,32 @@ import discord
 from discord.ext import commands
 
 from ..config import (
-    JONESY_USER_ID, JAM_USER_ID, VIOLATION_CHANNEL_ID, MOD_ALERT_CHANNEL_ID,
-    MEMBERS_CHANNEL_ID, MEMBER_ROLE_IDS, FAQ_RESPONSES, BOT_PERSONA,
-    ERROR_MESSAGE, BUSY_MESSAGE
+    BOT_PERSONA,
+    BUSY_MESSAGE,
+    ERROR_MESSAGE,
+    FAQ_RESPONSES,
+    JAM_USER_ID,
+    JONESY_USER_ID,
+    MEMBER_ROLE_IDS,
+    MEMBERS_CHANNEL_ID,
+    MOD_ALERT_CHANNEL_ID,
+    VIOLATION_CHANNEL_ID,
 )
 from ..database import db
 from ..utils.permissions import (
-    user_alias_state, cleanup_expired_aliases, update_alias_activity,
-    get_user_communication_tier, user_is_mod, user_is_mod_by_id,
-    member_conversation_counts, get_today_date_str, get_member_conversation_count,
-    increment_member_conversation_count, should_limit_member_conversation
+    cleanup_expired_aliases,
+    get_member_conversation_count,
+    get_today_date_str,
+    get_user_communication_tier,
+    increment_member_conversation_count,
+    member_conversation_counts,
+    should_limit_member_conversation,
+    update_alias_activity,
+    user_alias_state,
+    user_is_mod,
+    user_is_mod_by_id,
 )
-from .ai_handler import (
-    ai_enabled, call_ai_with_rate_limiting, filter_ai_response
-)
+from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
 
 
 async def handle_strike_detection(message: discord.Message, bot: commands.Bot) -> bool:
