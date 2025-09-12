@@ -469,10 +469,10 @@ async def on_message(message):
 
     # Check if this is a DM
     is_dm = isinstance(message.channel, discord.DMChannel)
-    
+
     # Check if bot is mentioned
     is_mentioned = bot.user and bot.user in message.mentions
-    
+
     # Check for implicit game queries (even without mentions)
     is_implicit_game_query = detect_implicit_game_query(message.content)
 
@@ -532,12 +532,18 @@ async def on_message(message):
             content = message.content
             # Clean mentions from content for processing
             if bot.user:
-                content = content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '').strip()
-            
-            print(f"🔍 Processing {'DM' if is_dm else 'guild'} {'implicit query' if is_implicit_game_query and not is_mentioned else 'message'} from user {message.author.id}: {content[:50]}...")
-            
+                content = content.replace(
+                    f'<@{bot.user.id}>',
+                    '').replace(
+                    f'<@!{bot.user.id}>',
+                    '').strip()
+
+            print(
+                f"🔍 Processing {'DM' if is_dm else 'guild'} {'implicit query' if is_implicit_game_query and not is_mentioned else 'message'} from user {message.author.id}: {content[:50]}...")
+
             # Route and handle queries
-            query_type, match = message_handler_functions['route_query'](content)
+            query_type, match = message_handler_functions['route_query'](
+                content)
 
             if query_type == "statistical":
                 await message_handler_functions['handle_statistical_query'](message, content)
@@ -564,7 +570,8 @@ async def on_message(message):
         import traceback
         traceback.print_exc()
 
-    # Handle general conversation for DMs or mentions that didn't match specific patterns
+    # Handle general conversation for DMs or mentions that didn't match
+    # specific patterns
     if is_dm or is_mentioned:
         await handle_general_conversation(message)
         return
@@ -877,7 +884,7 @@ Respond to: {content}"""
 def detect_implicit_game_query(content: str) -> bool:
     """Detect if a message is likely a game-related query even without explicit bot mention"""
     content_lower = content.lower()
-    
+
     # Game query patterns
     game_query_patterns = [
         r"has\s+jonesy\s+played",
@@ -896,8 +903,9 @@ def detect_implicit_game_query(content: str) -> bool:
         r"what.*recommend.*",
         r"jonesy.*gaming\s+(history|database|archive)",
     ]
-    
-    return any(re.search(pattern, content_lower) for pattern in game_query_patterns)
+
+    return any(re.search(pattern, content_lower)
+               for pattern in game_query_patterns)
 
 # Add conversation starter commands
 
