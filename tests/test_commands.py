@@ -390,7 +390,7 @@ class TestBotStatusCommands:
 
         # Mock user as JAM_USER_ID to pass authorization checks
         mock_discord_context.author.id = 337833732901961729  # JAM_USER_ID
-        
+
         # Mock guild context (not DM)
         mock_discord_context.guild = MagicMock()
 

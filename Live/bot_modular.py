@@ -83,7 +83,8 @@ async def initialize_modular_components():
         print("✅ Database system available")
     else:
         print("⚠️ Database not available (acceptable if DATABASE_URL not configured)")
-        status_report["database"] = True  # Still considered success for deployment
+        # Still considered success for deployment
+        status_report["database"] = True
 
     # 2. Initialize AI Handler
     try:
@@ -101,10 +102,10 @@ async def initialize_modular_components():
         # Load strikes commands
         from bot.commands.strikes import StrikesCommands
         await bot.add_cog(StrikesCommands(bot))
-        
+
         # Load other command modules if they exist
         command_modules_loaded = 1  # We loaded strikes at minimum
-        
+
         try:
             from bot.commands.games import GamesCommands
             await bot.add_cog(GamesCommands(bot))
@@ -113,7 +114,7 @@ async def initialize_modular_components():
             print("⚠️ Games commands module not found, skipping")
         except Exception as e:
             print(f"⚠️ Games commands failed to load: {e}")
-            
+
         try:
             from bot.commands.utility import UtilityCommands
             await bot.add_cog(UtilityCommands(bot))
@@ -122,9 +123,10 @@ async def initialize_modular_components():
             print("⚠️ Utility commands module not found, skipping")
         except Exception as e:
             print(f"⚠️ Utility commands failed to load: {e}")
-        
+
         status_report["commands"] = True
-        print(f"✅ Command modules loaded successfully ({command_modules_loaded} modules)")
+        print(
+            f"✅ Command modules loaded successfully ({command_modules_loaded} modules)")
 
     except Exception as e:
         status_report["errors"].append(f"Commands: {e}")
@@ -144,7 +146,7 @@ async def initialize_modular_components():
             handle_year_query,
             route_query,
         )
-        
+
         message_handler_functions = {
             'handle_strike_detection': handle_strike_detection,
             'handle_pineapple_pizza_enforcement': handle_pineapple_pizza_enforcement,
@@ -153,9 +155,8 @@ async def initialize_modular_components():
             'handle_genre_query': handle_genre_query,
             'handle_year_query': handle_year_query,
             'handle_game_status_query': handle_game_status_query,
-            'handle_recommendation_query': handle_recommendation_query
-        }
-        
+            'handle_recommendation_query': handle_recommendation_query}
+
         status_report["message_handlers"] = True
         print("✅ Message handlers initialized successfully")
 
@@ -217,18 +218,18 @@ async def send_deployment_success_dm(status_report):
             if status_report["commands"]:
                 component_status.append("• Commands (strikes, games, utility)")
             if status_report["message_handlers"]:
-                component_status.append("• Message handlers (strike detection, query routing)")
+                component_status.append(
+                    "• Message handlers (strike detection, query routing)")
             if status_report["scheduled_tasks"]:
-                component_status.append("• Scheduled tasks (reminders, trivia)")
+                component_status.append(
+                    "• Scheduled tasks (reminders, trivia)")
             if status_report["ai_handler"]:
                 component_status.append("• AI handler (rate limiting)")
             if status_report["database"]:
                 component_status.append("• Database system")
 
-            embed.add_field(
-                name="✅ Loaded Components",
-                value="\n".join(component_status) if component_status else "Core systems operational",
-                inline=False)
+            embed.add_field(name="✅ Loaded Components", value="\n".join(
+                component_status) if component_status else "Core systems operational", inline=False)
 
             embed.add_field(
                 name="🔧 Deployment Fixes Active",
@@ -267,28 +268,30 @@ async def on_message(message):
     # Ignore bot messages
     if message.author.bot:
         return
-    
+
     # Check if message handlers are loaded
     if 'message_handler_functions' not in globals() or message_handler_functions is None:
         # Process commands only
         await bot.process_commands(message)
         return
-    
+
     try:
         # Handle strikes in violation channel
         if await message_handler_functions['handle_strike_detection'](message, bot):
             return
-        
+
         # Handle pineapple pizza enforcement
         if await message_handler_functions['handle_pineapple_pizza_enforcement'](message):
             return
-        
+
         # Handle queries directed at the bot
         content = message.content.lower()
-        if bot.user and (f'<@{bot.user.id}>' in message.content or f'<@!{bot.user.id}>' in message.content or content.startswith('ash')):
+        if bot.user and (
+                f'<@{bot.user.id}>' in message.content or f'<@!{bot.user.id}>' in message.content or content.startswith('ash')):
             # Route and handle queries
-            query_type, match = message_handler_functions['route_query'](content)
-            
+            query_type, match = message_handler_functions['route_query'](
+                content)
+
             if query_type == "statistical" and match:
                 await message_handler_functions['handle_statistical_query'](message, content)
             elif query_type == "genre" and match:
@@ -299,10 +302,10 @@ async def on_message(message):
                 await message_handler_functions['handle_game_status_query'](message, match)
             elif query_type == "recommendation" and match:
                 await message_handler_functions['handle_recommendation_query'](message, match)
-    
+
     except Exception as e:
         print(f"❌ Error in message handler: {e}")
-    
+
     # Process commands normally
     await bot.process_commands(message)
 
