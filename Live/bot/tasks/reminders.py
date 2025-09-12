@@ -15,21 +15,26 @@ from ..integrations.youtube import extract_youtube_urls, has_youtube_content
 def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
     """Parse natural language reminder requests"""
     try:
-        # Common time patterns
+        # Enhanced time patterns with more flexible matching
         time_patterns = [
-            # Specific times
-            (r'\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)\b', 'time_12h'),
-            (r'\bat\s+(\d{1,2})(?::(\d{2}))?\b', 'time_24h'),
-
-            # Relative times
-            (r'\bin\s+(\d+)\s*(?:hour|hr|h)s?\b', 'hours_from_now'),
+            # Simple relative times (most common)
             (r'\bin\s+(\d+)\s*(?:minute|min|m)s?\b', 'minutes_from_now'),
+            (r'\bin\s+(\d+)\s*(?:hour|hr|h)s?\b', 'hours_from_now'),
+            (r'\bin\s+(\d+)\s*(?:second|sec|s)\b', 'seconds_from_now'),
             (r'\bin\s+(\d+)\s*(?:day|d)s?\b', 'days_from_now'),
 
+            # Specific times with flexible format
+            (r'\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)\b', 'time_12h'),
+            (r'\bat\s+(\d{1,2})(?::(\d{2}))?\b', 'time_24h'),
+            (r'\bat\s+(\d{1,2})\.(\d{2})\s*(am|pm|AM|PM)?\b', 'time_dot_format'),
+
+            # Flexible PM times
+            (r'\bfor\s+(\d{1,2})(?::(\d{2}))?\s*pm\b', 'for_pm_time'),
+            (r'\bfor\s+(\d{1,2})\.(\d{2})\s*pm\b', 'for_pm_dot_time'),
+            (r'\bset\s+reminder\s+for\s+(\d{1,2})(?::(\d{2}))?\s*pm\b', 'set_reminder_pm'),
+
             # Tomorrow patterns
-            (
-                r'\btomorrow\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b',
-                'tomorrow_time'),
+            (r'\btomorrow\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b', 'tomorrow_time'),
             (r'\btomorrow\b', 'tomorrow'),
 
             # Special times
@@ -116,6 +121,54 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
                     scheduled_time = (uk_now + timedelta(days=1)).replace(
                         hour=hour, minute=minute, second=0, microsecond=0
                     )
+
+                elif time_type == 'seconds_from_now':
+                    seconds = int(match.group(1))
+                    scheduled_time = uk_now + timedelta(seconds=seconds)
+
+                elif time_type == 'time_dot_format':
+                    hour = int(match.group(1))
+                    minute = int(match.group(2)) if match.group(2) else 0
+                    am_pm = match.group(3).lower() if match.group(3) else None
+
+                    if am_pm == 'pm' and hour != 12:
+                        hour += 12
+                    elif am_pm == 'am' and hour == 12:
+                        hour = 0
+
+                    target_time = uk_now.replace(
+                        hour=hour, minute=minute, second=0, microsecond=0)
+                    if target_time <= uk_now:
+                        target_time += timedelta(days=1)
+                    scheduled_time = target_time
+
+                elif time_type in ['for_pm_time', 'set_reminder_pm']:
+                    hour = int(match.group(1))
+                    minute = int(match.group(2)) if match.group(2) else 0
+                    
+                    # Always PM for these patterns
+                    if hour != 12:
+                        hour += 12
+
+                    target_time = uk_now.replace(
+                        hour=hour, minute=minute, second=0, microsecond=0)
+                    if target_time <= uk_now:
+                        target_time += timedelta(days=1)
+                    scheduled_time = target_time
+
+                elif time_type == 'for_pm_dot_time':
+                    hour = int(match.group(1))
+                    minute = int(match.group(2))
+                    
+                    # Always PM for this pattern
+                    if hour != 12:
+                        hour += 12
+
+                    target_time = uk_now.replace(
+                        hour=hour, minute=minute, second=0, microsecond=0)
+                    if target_time <= uk_now:
+                        target_time += timedelta(days=1)
+                    scheduled_time = target_time
 
                 elif time_type == 'six_pm':
                     target_time = uk_now.replace(

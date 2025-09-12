@@ -8,17 +8,18 @@ import asyncio
 import os
 import sys
 from datetime import datetime, timedelta
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 import discord
 from discord.ext import commands
 
-# Import configuration directly from environment and fallback file
+    # Import configuration directly from environment and fallback file
 try:
     # Configuration constants
     TOKEN = os.getenv('DISCORD_TOKEN')
     GUILD_ID = 869525857562161182
-    JONESY_USER_ID = 651329927895056384
+    JONESY_USER_ID = 651329927895056384  # Captain Jonesy (she/her)
     JAM_USER_ID = 337833732901961729
     MOD_ALERT_CHANNEL_ID = 869530924302344233
     MEMBERS_CHANNEL_ID = 888820289776013444
@@ -749,42 +750,23 @@ async def handle_general_conversation(message):
                 "help",
                 "commands"]):
             if user_tier == "moderator_in_mod_channel":
-                # Enhanced FAQ access for moderators in mod channels
+                # Short initial response for mods in mod channels
                 help_text = (
-                    "**🔧 MODERATOR COMMAND CENTER - Full Access Mode**\n\n"
-                    "**Core Operational Systems:**\n"
-                    "• **Strike Management** - Track, manage, and analyze user violations\n"
-                    "• **Game Database** - Full gaming history analysis and management\n"
-                    "• **AI Integration** - Enhanced conversation and analysis capabilities\n"
-                    "• **Trivia System** - Complete question management and session control\n"
-                    "• **Reminder Protocols** - Advanced scheduling with auto-actions\n"
-                    "• **Announcement System** - Priority communication channels\n\n"
-                    "**📚 FAQ System Access:**\n"
-                    f"Available topics: {', '.join(moderator_faq_handler.get_available_topics()) if moderator_faq_handler else 'System offline'}\n\n"
-                    "**Query Examples:** 'explain strikes', 'explain ai', 'explain database'\n"
-                    "**Commands:** `!ashstatus`, `!remind`, `!addtriviaquestion`, `!bulkimportplayedgames`\n\n"
-                    "*Full analytical capabilities at your disposal in this secure channel.*")
+                    "**Core systems:** Strike management, game database analysis, AI integration, trivia system, reminder protocols, and announcement system.\n\n"
+                    "Would you like me to provide the complete FAQ system overview with available topics and command examples?"
+                )
             elif user_tier in ["moderator", "creator", "captain"]:
-                # Standard mod help for general areas
+                # Short initial response for elevated users
                 help_text = (
-                    "**My operational capabilities:**\n"
-                    "• **Strike Management** - Track and manage user strikes\n"
-                    "• **Game Recommendations** - Process and display game suggestions\n"
-                    "• **Database Queries** - Analyze Captain Jonesy's gaming history\n"
-                    "• **Conversation** - Respond to basic interactions and questions\n"
-                    "• **Trivia Tuesday** - Manage weekly trivia sessions (Tuesdays 11am UK)\n\n"
-                    "**Commands:** Use `!ashstatus` for system status, `!listgames` for recommendations\n"
-                    "**Database Queries:** Ask about games, series, or statistics\n\n"
-                    "💡 **Enhanced Access:** Visit a moderator channel for full FAQ system access\n\n"
-                    "*I am programmed for efficiency and analytical precision.*")
+                    "**Primary functions:** Strike management, game recommendations, Captain Jonesy's gaming database queries, conversation, and Trivia Tuesday management.\n\n"
+                    "Would you like detailed information about commands and database query capabilities?"
+                )
             else:
+                # Short initial response for standard users
                 help_text = (
-                    "**Available functions:**\n"
-                    "• **Game Recommendations** - View and suggest games with `!listgames` or `!addgame`\n"
-                    "• **Gaming Database** - Ask about Captain Jonesy's gaming history\n"
-                    "• **Conversation** - Basic interaction and information\n"
-                    "• **Trivia Tuesday** - Participate in weekly trivia (Tuesdays 11am UK)\n\n"
-                    "*I am Science Officer Ash, reprogrammed for server assistance.*")
+                    "**Available functions:** Game recommendations, Captain Jonesy's gaming database queries, basic conversation, and Trivia Tuesday participation.\n\n"
+                    "Would you like more details about specific commands or how to interact with the gaming database?"
+                )
             await message.reply(help_text)
             return
 
@@ -826,6 +808,30 @@ Respond to: {content}"""
             "when": "Temporal analysis functions are currently restricted. Please specify your query using available command protocols.",
             "who": "Personnel identification systems are functioning normally. I am Ash, Science Officer, reprogrammed for server administration.",
         }
+
+        # Check for time queries
+        if any(time_query in content_lower for time_query in ["what time", "what's the time", "current time", "time is it"]):
+            try:
+                from bot.utils.time_utils import get_uk_time, is_dst_active
+                
+                uk_now = get_uk_time()
+                is_dst = is_dst_active(uk_now)
+                timezone_name = "BST" if is_dst else "GMT"
+                
+                formatted_time = uk_now.strftime(f"%H:%M:%S {timezone_name} on %A, %B %d")
+                await message.reply(f"Current time analysis: {formatted_time}. Temporal systems operational.")
+                return
+                
+            except Exception as e:
+                # Fallback to basic implementation
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+                # Check if DST is active (rough approximation)
+                is_summer = 3 <= uk_now.month <= 10  # March to October roughly
+                timezone_name = "BST" if is_summer else "GMT"
+                
+                formatted_time = uk_now.strftime(f"%H:%M:%S {timezone_name} on %A, %B %d")
+                await message.reply(f"Current time analysis: {formatted_time}. Temporal systems operational.")
+                return
 
         # Check for pattern matches
         for pattern, response in fallback_responses.items():
@@ -919,6 +925,238 @@ async def check_alias(ctx):
         await ctx.send(f"🔍 **Current alias:** **{alias_data['alias_type'].title()}** (active for {time_str})")
     else:
         await ctx.send("ℹ️ **No active alias** - using your normal user tier")
+
+
+@bot.command(name="time")
+async def get_current_time(ctx):
+    """Get current time in GMT/BST"""
+    try:
+        from bot.utils.time_utils import get_uk_time, is_dst_active
+        
+        uk_now = get_uk_time()
+        is_dst = is_dst_active(uk_now)
+        timezone_name = "BST" if is_dst else "GMT"
+        
+        formatted_time = uk_now.strftime(f"%A, %B %d, %Y at %H:%M:%S {timezone_name}")
+        
+        await ctx.send(f"Current time: {formatted_time}")
+        
+    except Exception as e:
+        # Fallback to basic implementation
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        # Check if DST is active (rough approximation)
+        is_summer = 3 <= uk_now.month <= 10  # March to October roughly
+        timezone_name = "BST" if is_summer else "GMT"
+        
+        formatted_time = uk_now.strftime(f"%A, %B %d, %Y at %H:%M:%S {timezone_name}")
+        await ctx.send(f"Current time: {formatted_time}")
+
+
+@bot.command(name="remind")
+async def set_reminder(ctx, *, content: Optional[str] = None):
+    """Enhanced reminder command with natural language support"""
+    try:
+        if not content:
+            # Show improved help message
+            help_text = (
+                "**Reminder System Usage:**\n\n"
+                "**Simple Commands:**\n"
+                "• `remind me in 2 minutes <message>` - Set quick reminder\n"
+                "• `remind me in 1 hour to check stream` - Reminder with message\n"
+                "• `set reminder for 7pm` - Set for specific time (asks for message)\n\n"
+                "**Time Formats:**\n"
+                "• Relative: `in 5 minutes`, `in 2 hours`, `in 1 day`\n"
+                "• Absolute: `at 7pm`, `at 19:00`, `for 7:30pm`\n"
+                "• Tomorrow: `tomorrow`, `tomorrow at 9am`\n\n"
+                "*For moderators: Additional auto-action features available*"
+            )
+            await ctx.send(help_text)
+            return
+
+        # Check if database is available for reminders
+        if db is None:
+            await ctx.send("❌ Reminder system offline - database not available.")
+            return
+
+        # Try to parse the natural language reminder
+        try:
+            from bot.tasks.reminders import parse_natural_reminder, format_reminder_time, validate_reminder_text
+            
+            parsed = parse_natural_reminder(content, ctx.author.id)
+            
+            if not parsed["success"] or not validate_reminder_text(parsed["reminder_text"]):
+                # Ask for reminder message if missing
+                if not parsed["reminder_text"].strip():
+                    formatted_time = format_reminder_time(parsed["scheduled_time"])
+                    await ctx.send(f"Reminder scheduled for {formatted_time}. What should I remind you about?")
+                    # Here you'd typically wait for the next message, but for now just ask
+                    return
+                else:
+                    await ctx.send("❌ **Invalid reminder format.** Use formats like: `remind me in 30 minutes to check stream` or `remind me at 7pm <message>`")
+                    return
+
+            # Add reminder to database
+            reminder_id = db.add_reminder(
+                user_id=ctx.author.id,
+                reminder_text=parsed["reminder_text"],
+                scheduled_time=parsed["scheduled_time"],
+                delivery_channel_id=ctx.channel.id,
+                delivery_type="channel"
+            )
+            
+            if reminder_id:
+                formatted_time = format_reminder_time(parsed["scheduled_time"])
+                await ctx.send(f"✅ Reminder set for {formatted_time}: *{parsed['reminder_text']}*")
+            else:
+                await ctx.send("❌ Failed to save reminder. Please try again.")
+                
+        except ImportError:
+            # Fallback if reminder parsing not available
+            await ctx.send("❌ Enhanced reminder parsing not available. Use format: `!remind @user <time> <message>`")
+            
+    except Exception as e:
+        print(f"❌ Error in remind command: {e}")
+        await ctx.send("❌ System error occurred while processing reminder. Please try again.")
+
+
+@bot.command(name="listgames")
+async def list_games(ctx):
+    """List game recommendations"""
+    try:
+        if db is None:
+            await ctx.send("❌ Game database offline - DATABASE_URL not configured.")
+            return
+
+        games = db.get_all_games()
+        
+        if not games:
+            await ctx.send("📋 No game recommendations found. Use `!addgame <name> - <reason>` to suggest games!")
+            return
+
+        # Build game list with recommendations
+        game_list = []
+        for i, game in enumerate(games[:15], 1):  # Limit to first 15 games
+            reason = f" - {game['reason']}" if game.get('reason') else ""
+            added_by = f" (by {game['added_by']})" if game.get('added_by') else ""
+            game_list.append(f"{i}. **{game['name']}**{reason}{added_by}")
+
+        response = "🎮 **Game Recommendations:**\n\n" + "\n".join(game_list)
+        
+        if len(games) > 15:
+            response += f"\n\n*Showing first 15 of {len(games)} total recommendations*"
+        
+        response += f"\n\n*Use `!addgame <name> - <reason>` to suggest more games*"
+        
+        await ctx.send(response[:2000])  # Discord message limit
+        
+    except Exception as e:
+        print(f"❌ Error in listgames command: {e}")
+        await ctx.send("❌ Error retrieving game recommendations. Database may be experiencing issues.")
+
+
+@bot.command(name="addgame")
+async def add_game(ctx, *, content: Optional[str] = None):
+    """Add a game recommendation"""
+    try:
+        if not content:
+            await ctx.send("❌ **Usage:** `!addgame <game name> - <reason for recommendation>`\n**Example:** `!addgame Hollow Knight - Amazing metroidvania with beautiful art`")
+            return
+
+        if db is None:
+            await ctx.send("❌ Game database offline - DATABASE_URL not configured.")
+            return
+
+        # Parse game name and reason
+        if " - " not in content:
+            await ctx.send("❌ **Invalid format.** Use: `!addgame <game name> - <reason>`\n**Example:** `!addgame Hollow Knight - Amazing metroidvania with beautiful art`")
+            return
+
+        parts = content.split(" - ", 1)
+        game_name = parts[0].strip()
+        reason = parts[1].strip()
+
+        if not game_name or not reason:
+            await ctx.send("❌ **Both game name and reason are required.**\n**Example:** `!addgame Hollow Knight - Amazing metroidvania with beautiful art`")
+            return
+
+        # Check if game already exists
+        if db.game_exists(game_name):
+            await ctx.send(f"❌ **'{game_name}'** is already in the recommendations list.")
+            return
+
+        # Add the game
+        success = db.add_game_recommendation(game_name, reason, ctx.author.display_name)
+        
+        if success:
+            await ctx.send(f"✅ **'{game_name}'** added to recommendations! Thank you {ctx.author.display_name}.")
+        else:
+            await ctx.send("❌ Failed to add game recommendation. Database error occurred.")
+            
+    except Exception as e:
+        print(f"❌ Error in addgame command: {e}")
+        await ctx.send("❌ Error adding game recommendation. Please try again.")
+
+
+@bot.command(name="dbstats")
+@commands.has_permissions(manage_messages=True)
+async def database_stats(ctx):
+    """Show database statistics (moderators only)"""
+    try:
+        if db is None:
+            await ctx.send("❌ Database offline - DATABASE_URL not configured.")
+            return
+
+        # Get comprehensive database statistics
+        played_games_stats = db.get_played_games_stats()
+        strikes_data = db.get_all_strikes()
+        game_recs = db.get_all_games()
+
+        stats_msg = "📊 **Database Statistics Report**\n\n"
+
+        # Played Games Stats
+        if played_games_stats:
+            stats_msg += f"🎮 **Gaming Database:**\n"
+            stats_msg += f"• Total games: {played_games_stats.get('total_games', 0)}\n"
+            stats_msg += f"• Total episodes: {played_games_stats.get('total_episodes', 0)}\n"
+            stats_msg += f"• Total playtime: {played_games_stats.get('total_playtime_hours', 0)} hours\n"
+            
+            status_counts = played_games_stats.get('status_counts', {})
+            if status_counts:
+                stats_msg += f"• Completed: {status_counts.get('completed', 0)}\n"
+                stats_msg += f"• Ongoing: {status_counts.get('ongoing', 0)}\n"
+                stats_msg += f"• Dropped: {status_counts.get('dropped', 0)}\n"
+            
+            top_genres = played_games_stats.get('top_genres', {})
+            if top_genres:
+                stats_msg += f"• Top genres: {', '.join(list(top_genres.keys())[:3])}\n"
+
+        # Strike System Stats
+        total_strikes = sum(strikes_data.values()) if strikes_data else 0
+        users_with_strikes = len([s for s in strikes_data.values() if s > 0]) if strikes_data else 0
+        stats_msg += f"\n⚠️ **Strike System:**\n"
+        stats_msg += f"• Total strikes: {total_strikes}\n"
+        stats_msg += f"• Users with strikes: {users_with_strikes}\n"
+
+        # Game Recommendations Stats
+        stats_msg += f"\n🎯 **Game Recommendations:**\n"
+        stats_msg += f"• Total recommendations: {len(game_recs)}\n"
+
+        # Database Connection Status
+        try:
+            # Test database connection
+            test_strikes = db.get_user_strikes(12345)  # Test query
+            stats_msg += f"\n🔗 **Database Connection:**\n"
+            stats_msg += f"• Status: ✅ Connected to Railway PostgreSQL\n"
+            stats_msg += f"• Connection: postgresql://postgres:***@postgres.railway.internal:5432/railway\n"
+        except Exception as e:
+            stats_msg += f"\n🔗 **Database Connection:**\n"
+            stats_msg += f"• Status: ❌ Connection error: {str(e)[:50]}...\n"
+
+        await ctx.send(stats_msg[:2000])
+
+    except Exception as e:
+        print(f"❌ Error in dbstats command: {e}")
+        await ctx.send(f"❌ Database statistics error: {str(e)[:100]}...")
 
 
 @bot.command(name="ashstatus")
