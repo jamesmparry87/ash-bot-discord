@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from ..config import (
     JONESY_USER_ID, JAM_USER_ID, MAX_DAILY_REQUESTS, MAX_HOURLY_REQUESTS,
-    MIN_REQUEST_INTERVAL, RATE_LIMIT_COOLDOWN
+    MIN_REQUEST_INTERVAL, RATE_LIMIT_COOLDOWN, PRIORITY_INTERVALS, RATE_LIMIT_COOLDOWNS
 )
 from ..database import db
 
@@ -45,12 +45,24 @@ primary_ai = None
 backup_ai = None
 
 # AI Usage Tracking and Rate Limiting
+try:
+    # Try US/Pacific first, fallback to America/Los_Angeles if not available
+    pacific_tz = ZoneInfo("US/Pacific")
+except:
+    try:
+        pacific_tz = ZoneInfo("America/Los_Angeles") 
+    except:
+        # Ultimate fallback - use UTC if timezone data is unavailable
+        from datetime import timezone
+        pacific_tz = timezone.utc
+        print("⚠️ Pacific timezone not available, using UTC for AI rate limiting")
+
 ai_usage_stats = {
     "daily_requests": 0,
     "hourly_requests": 0,
     "last_request_time": None,
-    "last_hour_reset": datetime.now(ZoneInfo("US/Pacific")).hour,
-    "last_day_reset": datetime.now(ZoneInfo("US/Pacific")).date(),
+    "last_hour_reset": datetime.now(pacific_tz).hour,
+    "last_day_reset": datetime.now(pacific_tz).date(),
     "consecutive_errors": 0,
     "last_error_time": None,
     "rate_limited_until": None,
@@ -60,7 +72,7 @@ ai_usage_stats = {
 def reset_daily_usage():
     """Reset daily usage counter at midnight PT"""
     global ai_usage_stats
-    pt_now = datetime.now(ZoneInfo("US/Pacific"))
+    pt_now = datetime.now(pacific_tz)
 
     if pt_now.date() > ai_usage_stats["last_day_reset"]:
         ai_usage_stats["daily_requests"] = 0
@@ -71,7 +83,7 @@ def reset_daily_usage():
 def reset_hourly_usage():
     """Reset hourly usage counter"""
     global ai_usage_stats
-    pt_now = datetime.now(ZoneInfo("US/Pacific"))
+    pt_now = datetime.now(pacific_tz)
 
     if pt_now.hour != ai_usage_stats["last_hour_reset"]:
         ai_usage_stats["hourly_requests"] = 0
@@ -79,15 +91,56 @@ def reset_hourly_usage():
         print(f"🔄 Hourly AI usage reset at {pt_now.strftime('%H:00 PT')}")
 
 
-def check_rate_limits() -> Tuple[bool, str]:
-    """Check if we can make an AI request without hitting rate limits"""
+def determine_request_priority(prompt: str, user_id: int, context: str = "") -> str:
+    """Determine the priority level of an AI request based on context"""
+    prompt_lower = prompt.lower()
+    context_lower = context.lower()
+    
+    # Low priority: Auto-actions, background tasks, announcements (check first for efficiency)
+    low_priority_contexts = ["auto", "background", "scheduled", "announcement"]
+    if any(keyword in context_lower for keyword in low_priority_contexts):
+        return "low"
+    if "announcement" in prompt_lower or "rewrite" in prompt_lower:
+        return "low"
+    
+    # High priority: Trivia, direct questions, critical interactions
+    high_priority_contexts = ["trivia", "question", "urgent", "critical"]
+    if any(keyword in context_lower for keyword in high_priority_contexts):
+        return "high"
+    if any(keyword in prompt_lower for keyword in ["trivia", "question?", "what is", "who is", "when is", "where is", "how is"]):
+        return "high"
+    
+    # Medium priority: General chat responses, routine interactions
+    if any(keyword in prompt_lower for keyword in ["hello", "hi", "thank", "help", "explain"]):
+        return "medium"
+    
+    # Default to medium priority
+    return "medium"
+
+
+def get_progressive_penalty_duration(consecutive_errors: int) -> int:
+    """Get progressive penalty duration based on error count"""
+    if consecutive_errors < 3:
+        return 0  # No penalty for first few errors
+    elif consecutive_errors == 3:
+        return RATE_LIMIT_COOLDOWNS["first"]   # 30 seconds
+    elif consecutive_errors == 4:
+        return RATE_LIMIT_COOLDOWNS["second"]  # 60 seconds  
+    elif consecutive_errors == 5:
+        return RATE_LIMIT_COOLDOWNS["third"]   # 120 seconds
+    else:
+        return RATE_LIMIT_COOLDOWNS["persistent"]  # 300 seconds
+
+
+def check_rate_limits(priority: str = "medium") -> Tuple[bool, str]:
+    """Check if we can make an AI request without hitting rate limits with priority support"""
     global ai_usage_stats
 
     # Reset counters if needed
     reset_daily_usage()
     reset_hourly_usage()
 
-    pt_now = datetime.now(ZoneInfo("US/Pacific"))
+    pt_now = datetime.now(pacific_tz)
 
     # Check if we're in a rate limit cooldown
     if ai_usage_stats["rate_limited_until"]:
@@ -99,20 +152,24 @@ def check_rate_limits() -> Tuple[bool, str]:
 
     # Check daily limit
     if ai_usage_stats["daily_requests"] >= MAX_DAILY_REQUESTS:
-        ai_usage_stats["rate_limited_until"] = pt_now + timedelta(seconds=RATE_LIMIT_COOLDOWN)
+        penalty_duration = get_progressive_penalty_duration(ai_usage_stats["consecutive_errors"])
+        ai_usage_stats["rate_limited_until"] = pt_now + timedelta(seconds=penalty_duration)
         return False, f"Daily request limit reached ({MAX_DAILY_REQUESTS})"
 
     # Check hourly limit
     if ai_usage_stats["hourly_requests"] >= MAX_HOURLY_REQUESTS:
-        ai_usage_stats["rate_limited_until"] = pt_now + timedelta(seconds=RATE_LIMIT_COOLDOWN)
+        penalty_duration = get_progressive_penalty_duration(ai_usage_stats["consecutive_errors"])
+        ai_usage_stats["rate_limited_until"] = pt_now + timedelta(seconds=penalty_duration)
         return False, f"Hourly request limit reached ({MAX_HOURLY_REQUESTS})"
 
-    # Check minimum interval between requests
+    # Check priority-based minimum interval between requests
     if ai_usage_stats["last_request_time"]:
         time_since_last = (pt_now - ai_usage_stats["last_request_time"]).total_seconds()
-        if time_since_last < MIN_REQUEST_INTERVAL:
-            remaining = MIN_REQUEST_INTERVAL - time_since_last
-            return False, f"Too soon since last request, wait {remaining:.1f}s"
+        required_interval = PRIORITY_INTERVALS.get(priority, MIN_REQUEST_INTERVAL)
+        
+        if time_since_last < required_interval:
+            remaining = required_interval - time_since_last
+            return False, f"Too soon since last {priority} priority request, wait {remaining:.1f}s"
 
     return True, "OK"
 
@@ -120,7 +177,7 @@ def check_rate_limits() -> Tuple[bool, str]:
 def record_ai_request():
     """Record that an AI request was made"""
     global ai_usage_stats
-    pt_now = datetime.now(ZoneInfo("US/Pacific"))
+    pt_now = datetime.now(pacific_tz)
 
     ai_usage_stats["daily_requests"] += 1
     ai_usage_stats["hourly_requests"] += 1
@@ -131,7 +188,7 @@ def record_ai_request():
 def record_ai_error():
     """Record that an AI request failed"""
     global ai_usage_stats
-    pt_now = datetime.now(ZoneInfo("US/Pacific"))
+    pt_now = datetime.now(pacific_tz)
 
     ai_usage_stats["consecutive_errors"] += 1
     ai_usage_stats["last_error_time"] = pt_now
@@ -155,14 +212,17 @@ async def send_dm_notification(bot, user_id: int, message: str) -> bool:
     return False
 
 
-async def call_ai_with_rate_limiting(prompt: str, user_id: int) -> Tuple[Optional[str], str]:
+async def call_ai_with_rate_limiting(prompt: str, user_id: int, context: str = "") -> Tuple[Optional[str], str]:
     """Make an AI call with proper rate limiting and error handling"""
     global ai_usage_stats
 
-    # Check rate limits first
-    can_request, reason = check_rate_limits()
+    # Determine request priority based on context
+    priority = determine_request_priority(prompt, user_id, context)
+    
+    # Check rate limits first with priority consideration
+    can_request, reason = check_rate_limits(priority)
     if not can_request:
-        print(f"⚠️ AI request blocked: {reason}")
+        print(f"⚠️ AI request blocked ({priority} priority): {reason}")
 
         # Note: DM notification would need bot instance - handled by calling function
         # if "Daily request limit reached" in reason and primary_ai == "gemini":
@@ -186,15 +246,15 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int) -> Tuple[Optiona
                     datetime.now(ZoneInfo("Europe/London")) - alias_data["last_ai_request"]
                 ).total_seconds()
 
-                # Reduced cooldown and progressive restrictions
-                base_cooldown = 4.0  # Reduced from 10 to 4 seconds
+                # Reduced cooldown and progressive restrictions - more user-friendly
+                base_cooldown = 2.0  # Reduced from 4 to 2 seconds for better testing UX
 
-                # Apply progressive cooldowns based on recent usage
+                # Apply progressive cooldowns based on recent usage (less aggressive)
                 recent_requests = alias_data.get("recent_request_count", 0)
-                if recent_requests > 5:  # After 5 requests in session
-                    base_cooldown = 8.0  # Increase to 8 seconds
-                elif recent_requests > 10:  # After 10 requests
-                    base_cooldown = 15.0  # Increase to 15 seconds
+                if recent_requests > 8:  # Increased threshold from 5 to 8
+                    base_cooldown = 4.0  # Reduced from 8 to 4 seconds
+                elif recent_requests > 15:  # Increased threshold from 10 to 15
+                    base_cooldown = 8.0  # Reduced from 15 to 8 seconds
 
                 if time_since_alias_request < base_cooldown:
                     remaining_time = base_cooldown - time_since_alias_request

@@ -103,57 +103,104 @@ async def scheduled_midnight_restart():
 
 @tasks.loop(minutes=1)  # Check reminders every minute
 async def check_due_reminders():
-    """Check for due reminders and deliver them"""
+    """Check for due reminders and deliver them with enhanced debugging"""
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
 
-        print(
-            f"🕒 Reminder check running at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-
-        if not db or not db.database_url:
+        print(f"🕒 Reminder check running at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+        
+        # Enhanced database diagnostics
+        if not db:
+            print("❌ Database instance (db) is None - reminder system disabled")
+            return
+        
+        print(f"✅ Database instance available: {type(db).__name__}")
+        
+        if not hasattr(db, 'database_url') or not db.database_url:
             print("❌ No database URL configured - reminder system disabled")
             return
+            
+        print(f"✅ Database URL configured: {db.database_url[:20]}...")
 
-        # Get database connection
-        conn = await db.get_connection()
-        if not conn:
-            print("❌ Database connection failed in reminder check")
+        # Test database connection with detailed logging
+        try:
+            conn = await db.get_connection()
+            if not conn:
+                print("❌ Database connection failed in reminder check")
+                return
+            print("✅ Database connection successful")
+        except Exception as conn_e:
+            print(f"❌ Database connection error: {conn_e}")
             return
 
-        due_reminders = db.get_due_reminders(uk_now)
-        print(f"📋 Found {len(due_reminders)} due reminders")
+        # Get due reminders with detailed logging
+        try:
+            due_reminders = db.get_due_reminders(uk_now)
+            print(f"📋 Database query successful - found {len(due_reminders) if due_reminders else 0} due reminders")
+            
+            if due_reminders:
+                for i, reminder in enumerate(due_reminders):
+                    print(f"  📌 Reminder {i+1}: ID={reminder.get('id')}, User={reminder.get('user_id')}, Text='{reminder.get('reminder_text', '')[:30]}...', Due={reminder.get('due_at')}")
+            
+        except Exception as query_e:
+            print(f"❌ Database query for due reminders failed: {query_e}")
+            import traceback
+            traceback.print_exc()
+            return
 
         if not due_reminders:
+            print("📋 No due reminders to process")
             return
 
         print(f"🔔 Processing {len(due_reminders)} due reminders")
 
+        # Import bot here to test bot availability
+        try:
+            from ..main import bot
+            if not bot:
+                print("❌ Bot instance not available for reminder delivery")
+                return
+            print(f"✅ Bot instance available: {bot.user.name if bot.user else 'Not logged in'}")
+        except ImportError as bot_e:
+            print(f"❌ Could not import bot instance: {bot_e}")
+            return
+
+        successful_deliveries = 0
+        failed_deliveries = 0
+
         for reminder in due_reminders:
             try:
-                print(
-                    f"📤 Delivering reminder {reminder['id']}: {reminder['reminder_text'][:50]}...")
+                reminder_id = reminder.get('id')
+                reminder_text = reminder.get('reminder_text', '')
+                print(f"📤 Delivering reminder {reminder_id}: {reminder_text[:50]}...")
+                
                 await deliver_reminder(reminder)
 
                 # Mark as delivered
-                db.update_reminder_status(
-                    reminder["id"], "delivered", delivered_at=uk_now)
-                print(f"✅ Reminder {reminder['id']} delivered successfully")
+                db.update_reminder_status(reminder_id, "delivered", delivered_at=uk_now)
+                print(f"✅ Reminder {reminder_id} delivered and marked as delivered")
+                successful_deliveries += 1
 
                 # Check if auto-action is enabled and should be triggered
-                if reminder.get("auto_action_enabled") and reminder.get(
-                        "auto_action_type"):
-                    print(
-                        f"📋 Reminder {reminder['id']} has auto-action enabled, will check in 5 minutes")
+                if reminder.get("auto_action_enabled") and reminder.get("auto_action_type"):
+                    print(f"📋 Reminder {reminder_id} has auto-action enabled, will check in 5 minutes")
 
             except Exception as e:
-                print(f"❌ Failed to deliver reminder {reminder['id']}: {e}")
+                print(f"❌ Failed to deliver reminder {reminder.get('id')}: {e}")
                 import traceback
                 traceback.print_exc()
                 # Mark as failed
-                db.update_reminder_status(reminder["id"], "failed")
+                try:
+                    db.update_reminder_status(reminder.get('id'), "failed")
+                    print(f"⚠️ Reminder {reminder.get('id')} marked as failed")
+                except Exception as mark_e:
+                    print(f"❌ Could not mark reminder as failed: {mark_e}")
+                failed_deliveries += 1
+
+        print(f"📊 Reminder delivery summary: {successful_deliveries} successful, {failed_deliveries} failed")
 
     except Exception as e:
-        print(f"❌ Error in check_due_reminders: {e}")
+        print(f"❌ Critical error in check_due_reminders: {e}")
         import traceback
         traceback.print_exc()
 

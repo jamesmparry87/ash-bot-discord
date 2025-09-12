@@ -45,8 +45,27 @@ ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
 # --- AI Rate Limiting Constants ---
 MAX_DAILY_REQUESTS = 1400  # Conservative limit below 1500
 MAX_HOURLY_REQUESTS = 120  # Conservative limit below 2000/60min = 133
-MIN_REQUEST_INTERVAL = 3.0  # Minimum seconds between AI requests
-RATE_LIMIT_COOLDOWN = 300   # 5 minutes cooldown after hitting limits
+
+# Tiered Rate Limiting - Different intervals based on request priority
+PRIORITY_INTERVALS = {
+    "high": 1.0,     # Trivia answers, direct questions, critical interactions
+    "medium": 2.0,   # General chat responses, routine interactions
+    "low": 3.0       # Auto-actions, background tasks, non-critical operations
+}
+
+# Default interval for non-categorized requests
+MIN_REQUEST_INTERVAL = 2.0  # Reduced from 3.0 for better UX
+
+# Progressive penalty system - much more user-friendly
+RATE_LIMIT_COOLDOWNS = {
+    "first": 30,     # 30 seconds for first offense (was 300)
+    "second": 60,    # 1 minute for second offense  
+    "third": 120,    # 2 minutes for third offense
+    "persistent": 300 # 5 minutes for persistent violations
+}
+
+# Legacy constant for backward compatibility
+RATE_LIMIT_COOLDOWN = 30   # Default cooldown reduced from 5 minutes to 30 seconds
 
 # --- File Paths ---
 LOCK_FILE = "bot.lock"
