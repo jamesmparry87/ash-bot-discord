@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import commands
 
-    # Import configuration directly from environment and fallback file
+# Import configuration directly from environment and fallback file
 try:
     # Configuration constants
     TOKEN = os.getenv('DISCORD_TOKEN')
@@ -753,20 +753,17 @@ async def handle_general_conversation(message):
                 # Short initial response for mods in mod channels
                 help_text = (
                     "**Core systems:** Strike management, game database analysis, AI integration, trivia system, reminder protocols, and announcement system.\n\n"
-                    "Would you like me to provide the complete FAQ system overview with available topics and command examples?"
-                )
+                    "Would you like me to provide the complete FAQ system overview with available topics and command examples?")
             elif user_tier in ["moderator", "creator", "captain"]:
                 # Short initial response for elevated users
                 help_text = (
                     "**Primary functions:** Strike management, game recommendations, Captain Jonesy's gaming database queries, conversation, and Trivia Tuesday management.\n\n"
-                    "Would you like detailed information about commands and database query capabilities?"
-                )
+                    "Would you like detailed information about commands and database query capabilities?")
             else:
                 # Short initial response for standard users
                 help_text = (
                     "**Available functions:** Game recommendations, Captain Jonesy's gaming database queries, basic conversation, and Trivia Tuesday participation.\n\n"
-                    "Would you like more details about specific commands or how to interact with the gaming database?"
-                )
+                    "Would you like more details about specific commands or how to interact with the gaming database?")
             await message.reply(help_text)
             return
 
@@ -810,26 +807,33 @@ Respond to: {content}"""
         }
 
         # Check for time queries
-        if any(time_query in content_lower for time_query in ["what time", "what's the time", "current time", "time is it"]):
+        if any(
+            time_query in content_lower for time_query in [
+                "what time",
+                "what's the time",
+                "current time",
+                "time is it"]):
             try:
                 from bot.utils.time_utils import get_uk_time, is_dst_active
-                
+
                 uk_now = get_uk_time()
                 is_dst = is_dst_active(uk_now)
                 timezone_name = "BST" if is_dst else "GMT"
-                
-                formatted_time = uk_now.strftime(f"%H:%M:%S {timezone_name} on %A, %B %d")
+
+                formatted_time = uk_now.strftime(
+                    f"%H:%M:%S {timezone_name} on %A, %B %d")
                 await message.reply(f"Current time analysis: {formatted_time}. Temporal systems operational.")
                 return
-                
+
             except Exception as e:
                 # Fallback to basic implementation
                 uk_now = datetime.now(ZoneInfo("Europe/London"))
                 # Check if DST is active (rough approximation)
                 is_summer = 3 <= uk_now.month <= 10  # March to October roughly
                 timezone_name = "BST" if is_summer else "GMT"
-                
-                formatted_time = uk_now.strftime(f"%H:%M:%S {timezone_name} on %A, %B %d")
+
+                formatted_time = uk_now.strftime(
+                    f"%H:%M:%S {timezone_name} on %A, %B %d")
                 await message.reply(f"Current time analysis: {formatted_time}. Temporal systems operational.")
                 return
 
@@ -932,23 +936,25 @@ async def get_current_time(ctx):
     """Get current time in GMT/BST"""
     try:
         from bot.utils.time_utils import get_uk_time, is_dst_active
-        
+
         uk_now = get_uk_time()
         is_dst = is_dst_active(uk_now)
         timezone_name = "BST" if is_dst else "GMT"
-        
-        formatted_time = uk_now.strftime(f"%A, %B %d, %Y at %H:%M:%S {timezone_name}")
-        
+
+        formatted_time = uk_now.strftime(
+            f"%A, %B %d, %Y at %H:%M:%S {timezone_name}")
+
         await ctx.send(f"Current time: {formatted_time}")
-        
+
     except Exception as e:
         # Fallback to basic implementation
         uk_now = datetime.now(ZoneInfo("Europe/London"))
         # Check if DST is active (rough approximation)
         is_summer = 3 <= uk_now.month <= 10  # March to October roughly
         timezone_name = "BST" if is_summer else "GMT"
-        
-        formatted_time = uk_now.strftime(f"%A, %B %d, %Y at %H:%M:%S {timezone_name}")
+
+        formatted_time = uk_now.strftime(
+            f"%A, %B %d, %Y at %H:%M:%S {timezone_name}")
         await ctx.send(f"Current time: {formatted_time}")
 
 
@@ -968,8 +974,7 @@ async def set_reminder(ctx, *, content: Optional[str] = None):
                 "• Relative: `in 5 minutes`, `in 2 hours`, `in 1 day`\n"
                 "• Absolute: `at 7pm`, `at 19:00`, `for 7:30pm`\n"
                 "• Tomorrow: `tomorrow`, `tomorrow at 9am`\n\n"
-                "*For moderators: Additional auto-action features available*"
-            )
+                "*For moderators: Additional auto-action features available*")
             await ctx.send(help_text)
             return
 
@@ -981,15 +986,18 @@ async def set_reminder(ctx, *, content: Optional[str] = None):
         # Try to parse the natural language reminder
         try:
             from bot.tasks.reminders import format_reminder_time, parse_natural_reminder, validate_reminder_text
-            
+
             parsed = parse_natural_reminder(content, ctx.author.id)
-            
-            if not parsed["success"] or not validate_reminder_text(parsed["reminder_text"]):
+
+            if not parsed["success"] or not validate_reminder_text(
+                    parsed["reminder_text"]):
                 # Ask for reminder message if missing
                 if not parsed["reminder_text"].strip():
-                    formatted_time = format_reminder_time(parsed["scheduled_time"])
+                    formatted_time = format_reminder_time(
+                        parsed["scheduled_time"])
                     await ctx.send(f"Reminder scheduled for {formatted_time}. What should I remind you about?")
-                    # Here you'd typically wait for the next message, but for now just ask
+                    # Here you'd typically wait for the next message, but for
+                    # now just ask
                     return
                 else:
                     await ctx.send("❌ **Invalid reminder format.** Use formats like: `remind me in 30 minutes to check stream` or `remind me at 7pm <message>`")
@@ -1003,17 +1011,17 @@ async def set_reminder(ctx, *, content: Optional[str] = None):
                 delivery_channel_id=ctx.channel.id,
                 delivery_type="channel"
             )
-            
+
             if reminder_id:
                 formatted_time = format_reminder_time(parsed["scheduled_time"])
                 await ctx.send(f"✅ Reminder set for {formatted_time}: *{parsed['reminder_text']}*")
             else:
                 await ctx.send("❌ Failed to save reminder. Please try again.")
-                
+
         except ImportError:
             # Fallback if reminder parsing not available
             await ctx.send("❌ Enhanced reminder parsing not available. Use format: `!remind @user <time> <message>`")
-            
+
     except Exception as e:
         print(f"❌ Error in remind command: {e}")
         await ctx.send("❌ System error occurred while processing reminder. Please try again.")
@@ -1028,7 +1036,7 @@ async def list_games(ctx):
             return
 
         games = db.get_all_games()
-        
+
         if not games:
             await ctx.send("📋 No game recommendations found. Use `!addgame <name> - <reason>` to suggest games!")
             return
@@ -1037,18 +1045,19 @@ async def list_games(ctx):
         game_list = []
         for i, game in enumerate(games[:15], 1):  # Limit to first 15 games
             reason = f" - {game['reason']}" if game.get('reason') else ""
-            added_by = f" (by {game['added_by']})" if game.get('added_by') else ""
+            added_by = f" (by {game['added_by']})" if game.get(
+                'added_by') else ""
             game_list.append(f"{i}. **{game['name']}**{reason}{added_by}")
 
         response = "🎮 **Game Recommendations:**\n\n" + "\n".join(game_list)
-        
+
         if len(games) > 15:
             response += f"\n\n*Showing first 15 of {len(games)} total recommendations*"
-        
+
         response += f"\n\n*Use `!addgame <name> - <reason>` to suggest more games*"
-        
+
         await ctx.send(response[:2000])  # Discord message limit
-        
+
     except Exception as e:
         print(f"❌ Error in listgames command: {e}")
         await ctx.send("❌ Error retrieving game recommendations. Database may be experiencing issues.")
@@ -1085,13 +1094,14 @@ async def add_game(ctx, *, content: Optional[str] = None):
             return
 
         # Add the game
-        success = db.add_game_recommendation(game_name, reason, ctx.author.display_name)
-        
+        success = db.add_game_recommendation(
+            game_name, reason, ctx.author.display_name)
+
         if success:
             await ctx.send(f"✅ **'{game_name}'** added to recommendations! Thank you {ctx.author.display_name}.")
         else:
             await ctx.send("❌ Failed to add game recommendation. Database error occurred.")
-            
+
     except Exception as e:
         print(f"❌ Error in addgame command: {e}")
         await ctx.send("❌ Error adding game recommendation. Please try again.")
@@ -1119,20 +1129,21 @@ async def database_stats(ctx):
             stats_msg += f"• Total games: {played_games_stats.get('total_games', 0)}\n"
             stats_msg += f"• Total episodes: {played_games_stats.get('total_episodes', 0)}\n"
             stats_msg += f"• Total playtime: {played_games_stats.get('total_playtime_hours', 0)} hours\n"
-            
+
             status_counts = played_games_stats.get('status_counts', {})
             if status_counts:
                 stats_msg += f"• Completed: {status_counts.get('completed', 0)}\n"
                 stats_msg += f"• Ongoing: {status_counts.get('ongoing', 0)}\n"
                 stats_msg += f"• Dropped: {status_counts.get('dropped', 0)}\n"
-            
+
             top_genres = played_games_stats.get('top_genres', {})
             if top_genres:
                 stats_msg += f"• Top genres: {', '.join(list(top_genres.keys())[:3])}\n"
 
         # Strike System Stats
         total_strikes = sum(strikes_data.values()) if strikes_data else 0
-        users_with_strikes = len([s for s in strikes_data.values() if s > 0]) if strikes_data else 0
+        users_with_strikes = len(
+            [s for s in strikes_data.values() if s > 0]) if strikes_data else 0
         stats_msg += f"\n⚠️ **Strike System:**\n"
         stats_msg += f"• Total strikes: {total_strikes}\n"
         stats_msg += f"• Users with strikes: {users_with_strikes}\n"

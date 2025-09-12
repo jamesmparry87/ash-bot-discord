@@ -26,15 +26,20 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             # Specific times with flexible format
             (r'\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)\b', 'time_12h'),
             (r'\bat\s+(\d{1,2})(?::(\d{2}))?\b', 'time_24h'),
-            (r'\bat\s+(\d{1,2})\.(\d{2})\s*(am|pm|AM|PM)?\b', 'time_dot_format'),
+            (r'\bat\s+(\d{1,2})\.(\d{2})\s*(am|pm|AM|PM)?\b',
+             'time_dot_format'),
 
             # Flexible PM times
             (r'\bfor\s+(\d{1,2})(?::(\d{2}))?\s*pm\b', 'for_pm_time'),
             (r'\bfor\s+(\d{1,2})\.(\d{2})\s*pm\b', 'for_pm_dot_time'),
-            (r'\bset\s+reminder\s+for\s+(\d{1,2})(?::(\d{2}))?\s*pm\b', 'set_reminder_pm'),
+            (
+                r'\bset\s+reminder\s+for\s+(\d{1,2})(?::(\d{2}))?\s*pm\b',
+                'set_reminder_pm'),
 
             # Tomorrow patterns
-            (r'\btomorrow\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b', 'tomorrow_time'),
+            (
+                r'\btomorrow\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b',
+                'tomorrow_time'),
             (r'\btomorrow\b', 'tomorrow'),
 
             # Special times
@@ -145,7 +150,7 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
                 elif time_type in ['for_pm_time', 'set_reminder_pm']:
                     hour = int(match.group(1))
                     minute = int(match.group(2)) if match.group(2) else 0
-                    
+
                     # Always PM for these patterns
                     if hour != 12:
                         hour += 12
@@ -159,7 +164,7 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
                 elif time_type == 'for_pm_dot_time':
                     hour = int(match.group(1))
                     minute = int(match.group(2))
-                    
+
                     # Always PM for this pattern
                     if hour != 12:
                         hour += 12
