@@ -71,13 +71,13 @@ message_handler_functions = None
 try:
     from bot.handlers.conversation_handler import (
         announcement_conversations,
-        mod_trivia_conversations,
-        handle_announcement_conversation,
-        handle_mod_trivia_conversation,
         cleanup_announcement_conversations,
         cleanup_mod_trivia_conversations,
+        handle_announcement_conversation,
+        handle_mod_trivia_conversation,
+        mod_trivia_conversations,
         start_announcement_conversation,
-        start_trivia_conversation
+        start_trivia_conversation,
     )
     print("✅ Conversation handlers imported successfully")
 except ImportError as e:

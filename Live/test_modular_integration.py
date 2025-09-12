@@ -50,7 +50,7 @@ async def test_modular_component_initialization():
 
     try:
         import bot_modular
-        
+
         # Test the initialization function
         status_report = await bot_modular.initialize_modular_components()
         
@@ -87,7 +87,7 @@ async def test_command_cog_loading():
     try:
         import bot_modular
         from discord.ext import commands
-        
+
         # Create a test bot instance
         test_bot = commands.Bot(command_prefix='!', intents=bot_modular.intents)
         
@@ -144,7 +144,7 @@ async def test_message_handler_integration():
 
     try:
         import bot_modular
-        
+
         # Initialize components to load message handlers
         await bot_modular.initialize_modular_components()
         
@@ -186,7 +186,7 @@ async def test_dm_vs_guild_message_routing():
     try:
         import bot_modular
         import discord
-        
+
         # Initialize components
         await bot_modular.initialize_modular_components()
         
@@ -244,7 +244,7 @@ async def test_conversation_command_integration():
 
     try:
         import bot_modular
-        
+
         # Test that conversation commands exist
         bot = bot_modular.bot
         
@@ -276,7 +276,7 @@ async def test_fallback_behavior():
     original_handlers = None
     try:
         import bot_modular
-        
+
         # Simulate message handler functions being None (failed to load)
         original_handlers = bot_modular.message_handler_functions
         bot_modular.message_handler_functions = None
@@ -323,7 +323,7 @@ async def test_global_variable_initialization():
 
     try:
         import bot_modular
-        
+
         # Check message_handler_functions is declared at module level
         assert hasattr(bot_modular, 'message_handler_functions'), "message_handler_functions not declared"
         

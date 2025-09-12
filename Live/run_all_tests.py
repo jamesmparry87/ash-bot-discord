@@ -11,6 +11,7 @@ import sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+
 def run_test_script(script_path, test_name):
     """Run a test script and return the result"""
     print(f"\n{'='*60}")

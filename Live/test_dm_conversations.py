@@ -26,13 +26,13 @@ def test_conversation_handler_imports():
     try:
         from bot.handlers.conversation_handler import (
             announcement_conversations,
-            mod_trivia_conversations,
-            handle_announcement_conversation,
-            handle_mod_trivia_conversation,
-            start_announcement_conversation,
-            start_trivia_conversation,
             cleanup_announcement_conversations,
             cleanup_mod_trivia_conversations,
+            handle_announcement_conversation,
+            handle_mod_trivia_conversation,
+            mod_trivia_conversations,
+            start_announcement_conversation,
+            start_trivia_conversation,
         )
         print("✅ All conversation handler modules imported successfully")
         print(f"   - Announcement conversations: {type(announcement_conversations).__name__}")
@@ -49,10 +49,7 @@ async def test_announcement_conversation_flow():
 
     user_id = None  # Initialize to None for safe cleanup
     try:
-        from bot.handlers.conversation_handler import (
-            announcement_conversations,
-            handle_announcement_conversation
-        )
+        from bot.handlers.conversation_handler import announcement_conversations, handle_announcement_conversation
 
         # Mock user and message objects
         mock_user = MagicMock()
@@ -118,10 +115,7 @@ async def test_trivia_conversation_flow():
 
     user_id = None  # Initialize to None for safe cleanup
     try:
-        from bot.handlers.conversation_handler import (
-            mod_trivia_conversations,
-            handle_mod_trivia_conversation
-        )
+        from bot.handlers.conversation_handler import handle_mod_trivia_conversation, mod_trivia_conversations
 
         # Mock user and message objects
         mock_user = MagicMock()
@@ -236,9 +230,9 @@ async def test_conversation_cleanup():
     try:
         from bot.handlers.conversation_handler import (
             announcement_conversations,
-            mod_trivia_conversations,
             cleanup_announcement_conversations,
             cleanup_mod_trivia_conversations,
+            mod_trivia_conversations,
         )
 
         # Add expired conversation

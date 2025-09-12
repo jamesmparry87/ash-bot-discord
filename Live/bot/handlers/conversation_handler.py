@@ -216,7 +216,7 @@ async def post_announcement(data: dict, user_id: int) -> bool:
         # This works because the conversation handler is called from the main bot module
         import discord
         from discord.ext import commands
-        
+
         # Get bot instance from the calling context - we'll search for it in globals
         bot_instance = None
         import sys

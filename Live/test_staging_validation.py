@@ -55,12 +55,12 @@ async def test_dm_conversation_functionality():
 
     try:
         from bot.handlers.conversation_handler import (
+            announcement_conversations,
+            mod_trivia_conversations,
             start_announcement_conversation,
             start_trivia_conversation,
-            announcement_conversations,
-            mod_trivia_conversations
         )
-        
+
         # Test announcement conversation command
         mock_ctx = MagicMock()
         mock_ctx.guild = None  # DM context
@@ -137,7 +137,7 @@ async def test_message_handling_functionality():
 
     try:
         import bot_modular
-        
+
         # Initialize components
         await bot_modular.initialize_modular_components()
         
@@ -179,12 +179,8 @@ async def test_ai_integration_functionality():
     print("🧪 Testing AI integration functionality...")
 
     try:
-        from bot.handlers.ai_handler import (
-            get_ai_status,
-            check_rate_limits,
-            determine_request_priority
-        )
-        
+        from bot.handlers.ai_handler import check_rate_limits, determine_request_priority, get_ai_status
+
         # Test AI status
         ai_status = get_ai_status()
         print(f"   - AI Status: {ai_status['status_message']}")
@@ -252,7 +248,7 @@ async def test_scheduled_tasks_functionality():
 
     try:
         from bot.tasks.scheduled import start_all_scheduled_tasks
-        
+
         # Test that scheduled tasks can be started without error
         start_all_scheduled_tasks()
         print("   - Scheduled tasks initialization: Success")
@@ -280,12 +276,8 @@ async def test_permissions_and_security():
     print("🧪 Testing permissions and security...")
 
     try:
-        from bot.utils.permissions import (
-            get_user_communication_tier,
-            user_is_mod,
-            user_is_mod_by_id
-        )
-        
+        from bot.utils.permissions import get_user_communication_tier, user_is_mod, user_is_mod_by_id
+
         # Test communication tier checking
         tier = get_user_communication_tier(337833732901961729)  # JAM_USER_ID
         print(f"   - Communication tier system: {tier}")
@@ -311,7 +303,7 @@ async def test_end_to_end_bot_functionality():
 
     try:
         import bot_modular
-        
+
         # Test bot initialization
         status_report = await bot_modular.initialize_modular_components()
         successful_components = sum(1 for key, value in status_report.items() 
