@@ -41,7 +41,8 @@ def cleanup_announcement_conversations():
     ]
     for user_id in expired_users:
         del announcement_conversations[user_id]
-        print(f"Cleaned up expired announcement conversation for user {user_id}")
+        print(
+            f"Cleaned up expired announcement conversation for user {user_id}")
 
 
 def update_announcement_activity(user_id: int):
@@ -72,21 +73,24 @@ def update_mod_trivia_activity(user_id: int):
             ZoneInfo("Europe/London"))
 
 
-async def create_ai_announcement_content(user_content: str, target_channel: str, user_id: int) -> str:
+async def create_ai_announcement_content(
+        user_content: str,
+        target_channel: str,
+        user_id: int) -> str:
     """Create AI-enhanced announcement content in Ash's style based on user input"""
     try:
         if not ai_enabled:
             print("AI not enabled, returning original content")
             return user_content
-        
+
         # Determine the author for context
         if user_id == JONESY_USER_ID:
             author = "Captain Jonesy"
             author_context = "the commanding officer"
         else:
-            author = "Sir Decent Jam" 
+            author = "Sir Decent Jam"
             author_context = "the bot creator and systems architect"
-        
+
         # Create AI prompt based on target channel
         if target_channel == 'mod':
             prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. You need to rewrite this announcement content in your analytical, technical style for a moderator briefing.
@@ -96,7 +100,7 @@ Original content from {author} ({author_context}):
 
 Rewrite this as a technical briefing for moderators in Ash's voice. Be analytical, precise, and focus on:
 - Technical implementation details
-- Operational efficiency improvements  
+- Operational efficiency improvements
 - System functionality enhancements
 - Mission-critical parameters
 
@@ -121,15 +125,16 @@ Write 2-4 sentences maximum. Make it engaging and user-focused."""
 
         # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, user_id)
-        
+
         if response_text:
             enhanced_content = filter_ai_response(response_text)
-            print(f"AI content enhancement successful: {len(enhanced_content)} characters")
+            print(
+                f"AI content enhancement successful: {len(enhanced_content)} characters")
             return enhanced_content
         else:
             print(f"AI content enhancement failed: {status_message}")
             return user_content  # Fallback to original content
-            
+
     except Exception as e:
         print(f"Error in AI content enhancement: {e}")
         return user_content  # Fallback to original content
@@ -207,7 +212,8 @@ async def post_announcement(data: dict, user_id: int) -> bool:
             channel_id = ANNOUNCEMENTS_CHANNEL_ID
 
         # Need bot instance - this will need to be passed in when called
-        # For now, we'll import it (this should be refactored in main.py integration)
+        # For now, we'll import it (this should be refactored in main.py
+        # integration)
         from ..main import bot
 
         channel = bot.get_channel(channel_id)
@@ -283,7 +289,7 @@ async def handle_announcement_conversation(message):
         elif step == 'content_input':
             # Store the raw content for later reference
             data['raw_content'] = content
-            
+
             # Create AI-enhanced content in Ash's style
             target_channel = data.get('target_channel', 'mod')
             greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
@@ -298,13 +304,14 @@ async def handle_announcement_conversation(message):
 
             # Use AI to create content in Ash's style
             enhanced_content = await create_ai_announcement_content(content, target_channel, user_id)
-            
+
             if enhanced_content and enhanced_content.strip():
                 # Store both AI and raw content
                 data['ai_content'] = enhanced_content
-                data['content'] = enhanced_content  # Use AI content as primary content
+                # Use AI content as primary content
+                data['content'] = enhanced_content
                 conversation['step'] = 'preview'
-                
+
                 # Create formatted preview using AI content
                 preview_content = await format_announcement_content(enhanced_content, target_channel, user_id)
                 data['formatted_content'] = preview_content
@@ -425,7 +432,7 @@ async def handle_announcement_conversation(message):
             target_channel = data.get('target_channel', 'mod')
             # Use primary content (AI-enhanced or original)
             main_content = data.get('content', data.get('raw_content', ''))
-            
+
             # Regenerate formatted content with creator notes
             preview_content = await format_announcement_content(
                 main_content, target_channel, user_id, creator_notes=content

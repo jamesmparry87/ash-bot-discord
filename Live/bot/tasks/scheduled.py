@@ -41,7 +41,7 @@ async def scheduled_games_update():
 
     try:
         from ..main import bot  # Import here to avoid circular imports
-        
+
         guild = bot.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for scheduled update")
@@ -63,7 +63,7 @@ async def scheduled_games_update():
             "🔄 **Weekly Games Update:** Automatic Sunday midday update initiated. "
             "Refreshing ongoing games data and statistics."
         )
-        
+
         print("✅ Scheduled games update completed")
 
     except Exception as e:
@@ -80,7 +80,7 @@ async def scheduled_midnight_restart():
 
     try:
         from ..main import bot  # Import here to avoid circular imports
-        
+
         guild = bot.get_guild(GUILD_ID)
         if guild:
             # Find mod channel
@@ -108,19 +108,20 @@ async def check_due_reminders():
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
 
-        print(f"🕒 Reminder check running at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-        
+        print(
+            f"🕒 Reminder check running at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+
         # Enhanced database diagnostics
         if not db:
             print("❌ Database instance (db) is None - reminder system disabled")
             return
-        
+
         print(f"✅ Database instance available: {type(db).__name__}")
-        
+
         if not hasattr(db, 'database_url') or not db.database_url:
             print("❌ No database URL configured - reminder system disabled")
             return
-            
+
         print(f"✅ Database URL configured: {db.database_url[:20]}...")
 
         # Test database connection with detailed logging
@@ -137,12 +138,14 @@ async def check_due_reminders():
         # Get due reminders with detailed logging
         try:
             due_reminders = db.get_due_reminders(uk_now)
-            print(f"📋 Database query successful - found {len(due_reminders) if due_reminders else 0} due reminders")
-            
+            print(
+                f"📋 Database query successful - found {len(due_reminders) if due_reminders else 0} due reminders")
+
             if due_reminders:
                 for i, reminder in enumerate(due_reminders):
-                    print(f"  📌 Reminder {i+1}: ID={reminder.get('id')}, User={reminder.get('user_id')}, Text='{reminder.get('reminder_text', '')[:30]}...', Due={reminder.get('due_at')}")
-            
+                    print(
+                        f"  📌 Reminder {i+1}: ID={reminder.get('id')}, User={reminder.get('user_id')}, Text='{reminder.get('reminder_text', '')[:30]}...', Due={reminder.get('due_at')}")
+
         except Exception as query_e:
             print(f"❌ Database query for due reminders failed: {query_e}")
             import traceback
@@ -161,7 +164,8 @@ async def check_due_reminders():
             if not bot:
                 print("❌ Bot instance not available for reminder delivery")
                 return
-            print(f"✅ Bot instance available: {bot.user.name if bot.user else 'Not logged in'}")
+            print(
+                f"✅ Bot instance available: {bot.user.name if bot.user else 'Not logged in'}")
         except ImportError as bot_e:
             print(f"❌ Could not import bot instance: {bot_e}")
             return
@@ -173,21 +177,27 @@ async def check_due_reminders():
             try:
                 reminder_id = reminder.get('id')
                 reminder_text = reminder.get('reminder_text', '')
-                print(f"📤 Delivering reminder {reminder_id}: {reminder_text[:50]}...")
-                
+                print(
+                    f"📤 Delivering reminder {reminder_id}: {reminder_text[:50]}...")
+
                 await deliver_reminder(reminder)
 
                 # Mark as delivered
-                db.update_reminder_status(reminder_id, "delivered", delivered_at=uk_now)
-                print(f"✅ Reminder {reminder_id} delivered and marked as delivered")
+                db.update_reminder_status(
+                    reminder_id, "delivered", delivered_at=uk_now)
+                print(
+                    f"✅ Reminder {reminder_id} delivered and marked as delivered")
                 successful_deliveries += 1
 
                 # Check if auto-action is enabled and should be triggered
-                if reminder.get("auto_action_enabled") and reminder.get("auto_action_type"):
-                    print(f"📋 Reminder {reminder_id} has auto-action enabled, will check in 5 minutes")
+                if reminder.get("auto_action_enabled") and reminder.get(
+                        "auto_action_type"):
+                    print(
+                        f"📋 Reminder {reminder_id} has auto-action enabled, will check in 5 minutes")
 
             except Exception as e:
-                print(f"❌ Failed to deliver reminder {reminder.get('id')}: {e}")
+                print(
+                    f"❌ Failed to deliver reminder {reminder.get('id')}: {e}")
                 import traceback
                 traceback.print_exc()
                 # Mark as failed
@@ -198,7 +208,8 @@ async def check_due_reminders():
                     print(f"❌ Could not mark reminder as failed: {mark_e}")
                 failed_deliveries += 1
 
-        print(f"📊 Reminder delivery summary: {successful_deliveries} successful, {failed_deliveries} failed")
+        print(
+            f"📊 Reminder delivery summary: {successful_deliveries} successful, {failed_deliveries} failed")
 
     except Exception as e:
         print(f"❌ Critical error in check_due_reminders: {e}")
@@ -248,12 +259,13 @@ async def trivia_tuesday():
     if uk_now.weekday() != 1:
         return
 
-    print(f"🧠 Trivia Tuesday task triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+    print(
+        f"🧠 Trivia Tuesday task triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
 
     try:
         from ..handlers.ai_handler import generate_ai_trivia_question
         from ..main import bot  # Import here to avoid circular imports
-        
+
         guild = bot.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for Trivia Tuesday")
@@ -280,8 +292,8 @@ async def trivia_tuesday():
         question_text = question_data.get("question", "")
         if question_data.get("question_type") == "multiple_choice":
             options = question_data.get("multiple_choice_options", [])
-            options_text = "\n".join([f"**{chr(65+i)}.** {option}" 
-                                    for i, option in enumerate(options)])
+            options_text = "\n".join([f"**{chr(65+i)}.** {option}"
+                                      for i, option in enumerate(options)])
             formatted_question = f"{question_text}\n\n{options_text}"
         else:
             formatted_question = question_text
@@ -294,8 +306,7 @@ async def trivia_tuesday():
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🎯 **Mission Parameters:** Reply with your analysis. First correct response receives priority recognition.\n"
             f"⏰ **Intelligence Deadline:** 60 minutes from deployment.\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        )
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
         # Post trivia message
         trivia_post = await members_channel.send(trivia_message)
@@ -337,7 +348,8 @@ async def trivia_tuesday():
             pass
 
 
-async def schedule_trivia_answer_reveal(session_id: int, reveal_time: datetime):
+async def schedule_trivia_answer_reveal(
+        session_id: int, reveal_time: datetime):
     """Schedule the answer reveal for a trivia session"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
     delay_seconds = (reveal_time - uk_now).total_seconds()
@@ -352,7 +364,7 @@ async def reveal_trivia_answer(session_id: int):
     """Reveal the answer for a trivia session"""
     try:
         from ..main import bot
-        
+
         if session_id not in active_trivia_sessions:
             return
 
@@ -387,7 +399,7 @@ async def reveal_trivia_answer(session_id: int):
 
         if first_correct:
             reveal_message += f"🏆 **Priority Recognition:** <@{first_correct}> - First correct analysis\n"
-            
+
         if len(correct_answers) > 1:
             reveal_message += f"✅ **Additional Correct Responses:** {len(correct_answers)-1} personnel\n"
         elif len(correct_answers) == 0:
@@ -400,7 +412,7 @@ async def reveal_trivia_answer(session_id: int):
 
         # Mark session as completed
         session_data['status'] = 'completed'
-        
+
         print(f"✅ Trivia answer revealed for session {session_id}")
 
     except Exception as e:
@@ -413,7 +425,7 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
     """Deliver a reminder to the appropriate channel/user"""
     try:
         from ..main import bot
-        
+
         user_id = reminder["user_id"]
         reminder_text = reminder["reminder_text"]
         delivery_type = reminder["delivery_type"]
@@ -510,12 +522,12 @@ def stop_all_scheduled_tasks():
             check_auto_actions,
             trivia_tuesday
         ]
-        
+
         for task in tasks_to_stop:
             if task.is_running():
                 task.stop()
-        
+
         print("✅ All scheduled tasks stopped")
-        
+
     except Exception as e:
         print(f"❌ Error stopping scheduled tasks: {e}")

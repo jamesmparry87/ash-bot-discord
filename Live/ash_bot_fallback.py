@@ -103,7 +103,9 @@ def acquire_lock() -> Optional[Any]:
             # Try to acquire the lock
             try:
                 lock_file = open(LOCK_FILE, 'w')
-                fcntl.flock(lock_file.fileno(), LOCK_EX | LOCK_NB)  # type: ignore
+                fcntl.flock(
+                    lock_file.fileno(),
+                    LOCK_EX | LOCK_NB)  # type: ignore
                 lock_file.write(str(os.getpid()))
                 lock_file.flush()
                 return lock_file
@@ -3909,21 +3911,24 @@ def update_mod_trivia_activity(user_id: int):
             ZoneInfo("Europe/London"))
 
 
-async def create_ai_announcement_content(user_content: str, target_channel: str, user_id: int) -> str:
+async def create_ai_announcement_content(
+        user_content: str,
+        target_channel: str,
+        user_id: int) -> str:
     """Create AI-enhanced announcement content in Ash's style based on user input"""
     try:
         if not ai_enabled:
             print("AI not enabled, returning original content")
             return user_content
-        
+
         # Determine the author for context
         if user_id == JONESY_USER_ID:
             author = "Captain Jonesy"
             author_context = "the commanding officer"
         else:
-            author = "Sir Decent Jam" 
+            author = "Sir Decent Jam"
             author_context = "the bot creator and systems architect"
-        
+
         # Create AI prompt based on target channel
         if target_channel == 'mod':
             prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. You need to rewrite this announcement content in your analytical, technical style for a moderator briefing.
@@ -3933,7 +3938,7 @@ Original content from {author} ({author_context}):
 
 Rewrite this as a technical briefing for moderators in Ash's voice. Be analytical, precise, and focus on:
 - Technical implementation details
-- Operational efficiency improvements  
+- Operational efficiency improvements
 - System functionality enhancements
 - Mission-critical parameters
 
@@ -3958,15 +3963,16 @@ Write 2-4 sentences maximum. Make it engaging and user-focused."""
 
         # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, user_id)
-        
+
         if response_text:
             enhanced_content = filter_ai_response(response_text)
-            print(f"AI content enhancement successful: {len(enhanced_content)} characters")
+            print(
+                f"AI content enhancement successful: {len(enhanced_content)} characters")
             return enhanced_content
         else:
             print(f"AI content enhancement failed: {status_message}")
             return user_content  # Fallback to original content
-            
+
     except Exception as e:
         print(f"Error in AI content enhancement: {e}")
         return user_content  # Fallback to original content
@@ -4029,7 +4035,7 @@ async def handle_announcement_conversation(message):
         elif step == 'content_input':
             # Store the raw content for later reference
             data['raw_content'] = content
-            
+
             # Create AI-enhanced content in Ash's style
             target_channel = data.get('target_channel', 'mod')
             greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
@@ -4044,13 +4050,14 @@ async def handle_announcement_conversation(message):
 
             # Use AI to create content in Ash's style
             enhanced_content = await create_ai_announcement_content(content, target_channel, user_id)
-            
+
             if enhanced_content and enhanced_content.strip():
                 # Store both AI and raw content
                 data['ai_content'] = enhanced_content
-                data['content'] = enhanced_content  # Use AI content as primary content
+                # Use AI content as primary content
+                data['content'] = enhanced_content
                 conversation['step'] = 'preview'
-                
+
                 # Create formatted preview using AI content
                 preview_content = await format_announcement_content(enhanced_content, target_channel, user_id)
                 data['formatted_content'] = preview_content
@@ -4092,9 +4099,10 @@ async def handle_announcement_conversation(message):
         elif step == 'preview':
             # Handle preview actions with fixed numbering
             if content in ['1', 'post', 'deploy', 'send']:
-                # Check if FAQ topics are selected and use appropriate posting function
+                # Check if FAQ topics are selected and use appropriate posting
+                # function
                 faq_topics = data.get('faq_topics')
-                
+
                 if faq_topics:
                     # Post with FAQ buttons
                     success = await post_announcement_with_faq(data, user_id, faq_topics)
@@ -4105,7 +4113,7 @@ async def handle_announcement_conversation(message):
                 if success:
                     target_channel = data.get('target_channel', 'mod')
                     channel_name = "moderator" if target_channel == 'mod' else "community announcements"
-                    
+
                     faq_notice = " with interactive FAQ buttons" if faq_topics else ""
 
                     await message.reply(
@@ -4144,7 +4152,7 @@ async def handle_announcement_conversation(message):
                 # Updated FAQ topics list with the 7 selected topics
                 faq_topics = [
                     "1. Strike System Overview",
-                    "2. Member Interaction Guidelines", 
+                    "2. Member Interaction Guidelines",
                     "3. Database Query Functions",
                     "4. Command Architecture",
                     "5. Reminder Protocols",
@@ -4200,7 +4208,8 @@ async def handle_announcement_conversation(message):
                 )
 
         elif step == 'creator_notes_input':
-            # Handle creator notes input - enhanced with better content management
+            # Handle creator notes input - enhanced with better content
+            # management
             data['creator_notes'] = content
             conversation['step'] = 'preview'
 
@@ -4208,7 +4217,7 @@ async def handle_announcement_conversation(message):
             target_channel = data.get('target_channel', 'mod')
             # Use primary content (AI-enhanced or original)
             main_content = data.get('content', data.get('raw_content', ''))
-            
+
             # Regenerate formatted content with creator notes
             preview_content = await format_announcement_content(
                 main_content, target_channel, user_id, creator_notes=content
@@ -4270,7 +4279,8 @@ async def handle_announcement_conversation(message):
                 await message.reply(preview_msg)
 
             elif content in ['8', 'proceed', 'no faq']:
-                # Return to preview instead of auto-posting - this fixes the issue
+                # Return to preview instead of auto-posting - this fixes the
+                # issue
                 conversation['step'] = 'preview'
                 target_channel = data.get('target_channel', 'mod')
                 preview_content = data.get('formatted_content', '')
@@ -4312,7 +4322,9 @@ async def handle_announcement_conversation(message):
                             7: "Game Query System",
                         }
 
-                        selected_topics = [topic_mapping.get(n, f"Topic {n}") for n in selected_numbers]
+                        selected_topics = [
+                            topic_mapping.get(
+                                n, f"Topic {n}") for n in selected_numbers]
                         topics_text = '\n• '.join(selected_topics)
 
                         # Update formatted content to include FAQ info
@@ -4322,7 +4334,7 @@ async def handle_announcement_conversation(message):
                         preview_content = await format_announcement_content(
                             main_content, target_channel, user_id, creator_notes=creator_notes
                         )
-                        
+
                         # Add FAQ indicator to preview
                         preview_content += f"\n\n🔍 **FAQ Topics Selected:** {len(selected_numbers)} interactive buttons will be added"
                         data['formatted_content'] = preview_content

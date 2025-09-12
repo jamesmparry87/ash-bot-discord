@@ -88,10 +88,15 @@ class UtilityCommands(commands.Cog):
                 strikes_data = database.get_all_strikes()
                 total_strikes = sum(strikes_data.values())
 
-                # If bulk query returns 0 but we know there should be strikes, use individual queries
+                # If bulk query returns 0 but we know there should be strikes,
+                # use individual queries
                 if total_strikes == 0:
                     # Known user IDs from the JSON file (fallback method)
-                    known_users = [371536135580549122, 337833732901961729, 710570041220923402, 906475895907291156]
+                    known_users = [
+                        371536135580549122,
+                        337833732901961729,
+                        710570041220923402,
+                        906475895907291156]
                     individual_total = 0
                     for user_id in known_users:
                         try:
@@ -142,7 +147,8 @@ class UtilityCommands(commands.Cog):
     async def time_check(self, ctx):
         """Comprehensive time diagnostic command to debug time-related issues"""
         try:
-            # Check if user has permissions (allow in DMs for authorized users, or mods in guilds)
+            # Check if user has permissions (allow in DMs for authorized users,
+            # or mods in guilds)
             is_authorized = False
 
             if ctx.guild is None:  # DM
@@ -194,7 +200,8 @@ class UtilityCommands(commands.Cog):
                             db_time = result[0]
                             db_utc_time = result[1]
                             db_timezone = result[2]
-                            db_unix_timestamp = float(result[3]) if result[3] else None
+                            db_unix_timestamp = float(
+                                result[3]) if result[3] else None
             except Exception as e:
                 db_time = f"Error: {str(e)}"
 
@@ -206,14 +213,19 @@ class UtilityCommands(commands.Cog):
             time_diffs["uk_vs_utc"] = uk_utc_diff
 
             # System vs UK time difference
-            system_uk_diff = (system_time.astimezone(ZoneInfo("Europe/London")) - uk_now).total_seconds()
+            system_uk_diff = (
+                system_time.astimezone(
+                    ZoneInfo("Europe/London")) -
+                uk_now).total_seconds()
             time_diffs["system_vs_uk"] = system_uk_diff
 
             # Database vs UK time difference (if available)
             if db_time and isinstance(db_time, datetime):
                 if db_time.tzinfo is None:
                     # Assume database time is UTC if no timezone
-                    db_time_uk = db_time.replace(tzinfo=timezone.utc).astimezone(ZoneInfo("Europe/London"))
+                    db_time_uk = db_time.replace(
+                        tzinfo=timezone.utc).astimezone(
+                        ZoneInfo("Europe/London"))
                 else:
                     db_time_uk = db_time.astimezone(ZoneInfo("Europe/London"))
 
@@ -255,7 +267,8 @@ class UtilityCommands(commands.Cog):
             strikes = database.get_all_strikes()
 
             total_games = len(games)
-            total_users_with_strikes = len([s for s in strikes.values() if s > 0])
+            total_users_with_strikes = len(
+                [s for s in strikes.values() if s > 0])
             total_strikes = sum(strikes.values())
 
             # Count unique contributors
@@ -275,13 +288,16 @@ class UtilityCommands(commands.Cog):
                 for game in games:
                     contributor = game.get('added_by', '')
                     if contributor:
-                        top_contributors[contributor] = top_contributors.get(contributor, 0) + 1
+                        top_contributors[contributor] = top_contributors.get(
+                            contributor, 0) + 1
 
                 # Sort by contribution count
-                sorted_contributors = sorted(top_contributors.items(), key=lambda x: x[1], reverse=True)
+                sorted_contributors = sorted(
+                    top_contributors.items(), key=lambda x: x[1], reverse=True)
 
                 stats_msg += f"\n**Top Contributors:**\n"
-                for i, (contributor, count) in enumerate(sorted_contributors[:5]):
+                for i, (contributor, count) in enumerate(
+                        sorted_contributors[:5]):
                     stats_msg += f"{i+1}. {contributor}: {count} games\n"
 
             await ctx.send(stats_msg)

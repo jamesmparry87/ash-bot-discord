@@ -54,10 +54,10 @@ backup_ai = None
 try:
     # Try US/Pacific first, fallback to America/Los_Angeles if not available
     pacific_tz = ZoneInfo("US/Pacific")
-except:
+except BaseException:
     try:
-        pacific_tz = ZoneInfo("America/Los_Angeles") 
-    except:
+        pacific_tz = ZoneInfo("America/Los_Angeles")
+    except BaseException:
         # Ultimate fallback - use UTC if timezone data is unavailable
         from datetime import timezone
         pacific_tz = timezone.utc
@@ -83,7 +83,8 @@ def reset_daily_usage():
     if pt_now.date() > ai_usage_stats["last_day_reset"]:
         ai_usage_stats["daily_requests"] = 0
         ai_usage_stats["last_day_reset"] = pt_now.date()
-        print(f"🔄 Daily AI usage reset at {pt_now.strftime('%Y-%m-%d %H:%M:%S PT')}")
+        print(
+            f"🔄 Daily AI usage reset at {pt_now.strftime('%Y-%m-%d %H:%M:%S PT')}")
 
 
 def reset_hourly_usage():
@@ -97,29 +98,47 @@ def reset_hourly_usage():
         print(f"🔄 Hourly AI usage reset at {pt_now.strftime('%H:00 PT')}")
 
 
-def determine_request_priority(prompt: str, user_id: int, context: str = "") -> str:
+def determine_request_priority(
+        prompt: str,
+        user_id: int,
+        context: str = "") -> str:
     """Determine the priority level of an AI request based on context"""
     prompt_lower = prompt.lower()
     context_lower = context.lower()
-    
-    # Low priority: Auto-actions, background tasks, announcements (check first for efficiency)
+
+    # Low priority: Auto-actions, background tasks, announcements (check first
+    # for efficiency)
     low_priority_contexts = ["auto", "background", "scheduled", "announcement"]
     if any(keyword in context_lower for keyword in low_priority_contexts):
         return "low"
     if "announcement" in prompt_lower or "rewrite" in prompt_lower:
         return "low"
-    
+
     # High priority: Trivia, direct questions, critical interactions
     high_priority_contexts = ["trivia", "question", "urgent", "critical"]
     if any(keyword in context_lower for keyword in high_priority_contexts):
         return "high"
-    if any(keyword in prompt_lower for keyword in ["trivia", "question?", "what is", "who is", "when is", "where is", "how is"]):
+    if any(
+        keyword in prompt_lower for keyword in [
+            "trivia",
+            "question?",
+            "what is",
+            "who is",
+            "when is",
+            "where is",
+            "how is"]):
         return "high"
-    
+
     # Medium priority: General chat responses, routine interactions
-    if any(keyword in prompt_lower for keyword in ["hello", "hi", "thank", "help", "explain"]):
+    if any(
+        keyword in prompt_lower for keyword in [
+            "hello",
+            "hi",
+            "thank",
+            "help",
+            "explain"]):
         return "medium"
-    
+
     # Default to medium priority
     return "medium"
 
@@ -131,7 +150,7 @@ def get_progressive_penalty_duration(consecutive_errors: int) -> int:
     elif consecutive_errors == 3:
         return RATE_LIMIT_COOLDOWNS["first"]   # 30 seconds
     elif consecutive_errors == 4:
-        return RATE_LIMIT_COOLDOWNS["second"]  # 60 seconds  
+        return RATE_LIMIT_COOLDOWNS["second"]  # 60 seconds
     elif consecutive_errors == 5:
         return RATE_LIMIT_COOLDOWNS["third"]   # 120 seconds
     else:
@@ -151,28 +170,36 @@ def check_rate_limits(priority: str = "medium") -> Tuple[bool, str]:
     # Check if we're in a rate limit cooldown
     if ai_usage_stats["rate_limited_until"]:
         if pt_now < ai_usage_stats["rate_limited_until"]:
-            remaining = (ai_usage_stats["rate_limited_until"] - pt_now).total_seconds()
+            remaining = (
+                ai_usage_stats["rate_limited_until"] -
+                pt_now).total_seconds()
             return False, f"Rate limited for {int(remaining)} more seconds"
         else:
             ai_usage_stats["rate_limited_until"] = None
 
     # Check daily limit
     if ai_usage_stats["daily_requests"] >= MAX_DAILY_REQUESTS:
-        penalty_duration = get_progressive_penalty_duration(ai_usage_stats["consecutive_errors"])
-        ai_usage_stats["rate_limited_until"] = pt_now + timedelta(seconds=penalty_duration)
+        penalty_duration = get_progressive_penalty_duration(
+            ai_usage_stats["consecutive_errors"])
+        ai_usage_stats["rate_limited_until"] = pt_now + \
+            timedelta(seconds=penalty_duration)
         return False, f"Daily request limit reached ({MAX_DAILY_REQUESTS})"
 
     # Check hourly limit
     if ai_usage_stats["hourly_requests"] >= MAX_HOURLY_REQUESTS:
-        penalty_duration = get_progressive_penalty_duration(ai_usage_stats["consecutive_errors"])
-        ai_usage_stats["rate_limited_until"] = pt_now + timedelta(seconds=penalty_duration)
+        penalty_duration = get_progressive_penalty_duration(
+            ai_usage_stats["consecutive_errors"])
+        ai_usage_stats["rate_limited_until"] = pt_now + \
+            timedelta(seconds=penalty_duration)
         return False, f"Hourly request limit reached ({MAX_HOURLY_REQUESTS})"
 
     # Check priority-based minimum interval between requests
     if ai_usage_stats["last_request_time"]:
-        time_since_last = (pt_now - ai_usage_stats["last_request_time"]).total_seconds()
-        required_interval = PRIORITY_INTERVALS.get(priority, MIN_REQUEST_INTERVAL)
-        
+        time_since_last = (
+            pt_now - ai_usage_stats["last_request_time"]).total_seconds()
+        required_interval = PRIORITY_INTERVALS.get(
+            priority, MIN_REQUEST_INTERVAL)
+
         if time_since_last < required_interval:
             remaining = required_interval - time_since_last
             return False, f"Too soon since last {priority} priority request, wait {remaining:.1f}s"
@@ -201,8 +228,10 @@ def record_ai_error():
 
     # If we have too many consecutive errors, apply temporary cooldown
     if ai_usage_stats["consecutive_errors"] >= 3:
-        ai_usage_stats["rate_limited_until"] = pt_now + timedelta(seconds=RATE_LIMIT_COOLDOWN)
-        print(f"⚠️ Too many consecutive AI errors, applying {RATE_LIMIT_COOLDOWN}s cooldown")
+        ai_usage_stats["rate_limited_until"] = pt_now + \
+            timedelta(seconds=RATE_LIMIT_COOLDOWN)
+        print(
+            f"⚠️ Too many consecutive AI errors, applying {RATE_LIMIT_COOLDOWN}s cooldown")
 
 
 async def send_dm_notification(bot, user_id: int, message: str) -> bool:
@@ -218,13 +247,14 @@ async def send_dm_notification(bot, user_id: int, message: str) -> bool:
     return False
 
 
-async def call_ai_with_rate_limiting(prompt: str, user_id: int, context: str = "") -> Tuple[Optional[str], str]:
+async def call_ai_with_rate_limiting(
+        prompt: str, user_id: int, context: str = "") -> Tuple[Optional[str], str]:
     """Make an AI call with proper rate limiting and error handling"""
     global ai_usage_stats
 
     # Determine request priority based on context
     priority = determine_request_priority(prompt, user_id, context)
-    
+
     # Check rate limits first with priority consideration
     can_request, reason = check_rate_limits(priority)
     if not can_request:
@@ -249,13 +279,16 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int, context: str = "
 
             if alias_data.get("last_ai_request"):
                 time_since_alias_request = (
-                    datetime.now(ZoneInfo("Europe/London")) - alias_data["last_ai_request"]
-                ).total_seconds()
+                    datetime.now(
+                        ZoneInfo("Europe/London")) -
+                    alias_data["last_ai_request"]).total_seconds()
 
-                # Reduced cooldown and progressive restrictions - more user-friendly
+                # Reduced cooldown and progressive restrictions - more
+                # user-friendly
                 base_cooldown = 2.0  # Reduced from 4 to 2 seconds for better testing UX
 
-                # Apply progressive cooldowns based on recent usage (less aggressive)
+                # Apply progressive cooldowns based on recent usage (less
+                # aggressive)
                 recent_requests = alias_data.get("recent_request_count", 0)
                 if recent_requests > 8:  # Increased threshold from 5 to 8
                     base_cooldown = 4.0  # Reduced from 8 to 4 seconds
@@ -264,7 +297,8 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int, context: str = "
 
                 if time_since_alias_request < base_cooldown:
                     remaining_time = base_cooldown - time_since_alias_request
-                    print(f"⚠️ Alias AI request blocked: {alias_type} testing cooldown ({remaining_time:.1f}s remaining)")
+                    print(
+                        f"⚠️ Alias AI request blocked: {alias_type} testing cooldown ({remaining_time:.1f}s remaining)")
                     return None, f"alias_cooldown:{alias_type}:{remaining_time:.1f}"
 
             # Update alias AI request tracking
@@ -284,9 +318,13 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int, context: str = "
         # Try primary AI first
         if primary_ai == "gemini" and gemini_model is not None:
             try:
-                print(f"Making Gemini request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
-                generation_config = {"max_output_tokens": 300, "temperature": 0.7}
-                response = gemini_model.generate_content(prompt, generation_config=generation_config)
+                print(
+                    f"Making Gemini request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
+                generation_config = {
+                    "max_output_tokens": 300,
+                    "temperature": 0.7}
+                response = gemini_model.generate_content(
+                    prompt, generation_config=generation_config)
                 if response and hasattr(response, "text") and response.text:
                     response_text = response.text
                     record_ai_request()
@@ -298,13 +336,15 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int, context: str = "
                 # Try Claude backup if available
                 if backup_ai == "claude" and claude_client is not None:
                     try:
-                        print(f"Trying Claude backup (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
+                        print(
+                            f"Trying Claude backup (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
                         response = claude_client.messages.create(
                             model="claude-3-haiku-20240307",
                             max_tokens=300,
                             messages=[{"role": "user", "content": prompt}],
                         )
-                        if response and hasattr(response, "content") and response.content:
+                        if response and hasattr(
+                                response, "content") and response.content:
                             claude_text = response.content[0].text if response.content else ""
                             if claude_text:
                                 response_text = claude_text
@@ -316,13 +356,15 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int, context: str = "
 
         elif primary_ai == "claude" and claude_client is not None:
             try:
-                print(f"Making Claude request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
+                print(
+                    f"Making Claude request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
                 response = claude_client.messages.create(
-                    model="claude-3-haiku-20240307", 
-                    max_tokens=300, 
+                    model="claude-3-haiku-20240307",
+                    max_tokens=300,
                     messages=[{"role": "user", "content": prompt}]
                 )
-                if response and hasattr(response, "content") and response.content:
+                if response and hasattr(
+                        response, "content") and response.content:
                     claude_text = response.content[0].text if response.content else ""
                     if claude_text:
                         response_text = claude_text
@@ -335,10 +377,14 @@ async def call_ai_with_rate_limiting(prompt: str, user_id: int, context: str = "
                 # Try Gemini backup if available
                 if backup_ai == "gemini" and gemini_model is not None:
                     try:
-                        print(f"Trying Gemini backup (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
-                        generation_config = {"max_output_tokens": 300, "temperature": 0.7}
-                        response = gemini_model.generate_content(prompt, generation_config=generation_config)
-                        if response and hasattr(response, "text") and response.text:
+                        print(
+                            f"Trying Gemini backup (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
+                        generation_config = {
+                            "max_output_tokens": 300, "temperature": 0.7}
+                        response = gemini_model.generate_content(
+                            prompt, generation_config=generation_config)
+                        if response and hasattr(
+                                response, "text") and response.text:
                             response_text = response.text
                             record_ai_request()
                             print(f"✅ Gemini backup request successful")
@@ -411,10 +457,15 @@ def filter_ai_response(response_text: str) -> str:
     return result
 
 
-def setup_ai_provider(name: str, api_key: Optional[str], module: Optional[Any], is_available: bool) -> bool:
+def setup_ai_provider(
+        name: str,
+        api_key: Optional[str],
+        module: Optional[Any],
+        is_available: bool) -> bool:
     """Initialize and test an AI provider (Gemini or Claude)."""
     if not api_key:
-        print(f"⚠️ {name.upper()}_API_KEY not found - {name.title()} features disabled")
+        print(
+            f"⚠️ {name.upper()}_API_KEY not found - {name.title()} features disabled")
         return False
     if not is_available or module is None:
         print(f"⚠️ {name} module not available - {name.title()} features disabled")
@@ -426,18 +477,21 @@ def setup_ai_provider(name: str, api_key: Optional[str], module: Optional[Any], 
             module.configure(api_key=api_key)
             gemini_model = module.GenerativeModel('gemini-1.5-flash')
             test_response = gemini_model.generate_content("Test")
-            if test_response and hasattr(test_response, 'text') and test_response.text:
+            if test_response and hasattr(
+                    test_response, 'text') and test_response.text:
                 print(f"✅ Gemini AI test successful")
                 return True
         elif name == "claude":
             global claude_client
             claude_client = module.Anthropic(api_key=api_key)
             test_response = claude_client.messages.create(
-                model="claude-3-haiku-20240307", 
-                max_tokens=10, 
+                model="claude-3-haiku-20240307",
+                max_tokens=10,
                 messages=[{"role": "user", "content": "Test"}]
             )
-            if test_response and hasattr(test_response, "content") and test_response.content:
+            if test_response and hasattr(
+                    test_response,
+                    "content") and test_response.content:
                 print(f"✅ Claude AI test successful")
                 return True
 
@@ -468,10 +522,12 @@ async def generate_ai_trivia_question() -> Optional[Dict[str, Any]]:
         if sample_games:
             game_list = []
             for game in sample_games:
-                episodes_info = f" ({game.get('total_episodes', 0)} eps)" if game.get('total_episodes', 0) > 0 else ""
+                episodes_info = f" ({game.get('total_episodes', 0)} eps)" if game.get(
+                    'total_episodes', 0) > 0 else ""
                 status = game.get('completion_status', 'unknown')
                 playtime = game.get('total_playtime_minutes', 0)
-                game_list.append(f"{game['canonical_name']}{episodes_info} - {status} - {playtime//60}h {playtime%60}m")
+                game_list.append(
+                    f"{game['canonical_name']}{episodes_info} - {status} - {playtime//60}h {playtime%60}m")
 
             game_context = f"Sample games from database: {'; '.join(game_list[:5])}"
 
@@ -519,7 +575,11 @@ Make it challenging but answerable from the gaming database."""
                 ai_question = json.loads(response_text.strip())
 
                 # Validate required fields
-                if all(key in ai_question for key in ["question_text", "question_type", "correct_answer"]):
+                if all(
+                    key in ai_question for key in [
+                        "question_text",
+                        "question_type",
+                        "correct_answer"]):
                     return ai_question
                 else:
                     print("❌ AI question missing required fields")
@@ -537,21 +597,24 @@ Make it challenging but answerable from the gaming database."""
         return None
 
 
-async def create_ai_announcement_content(user_content: str, target_channel: str, user_id: int) -> str:
+async def create_ai_announcement_content(
+        user_content: str,
+        target_channel: str,
+        user_id: int) -> str:
     """Create AI-enhanced announcement content in Ash's style based on user input"""
     try:
         if not ai_enabled:
             print("AI not enabled, returning original content")
             return user_content
-        
+
         # Determine the author for context
         if user_id == JONESY_USER_ID:
             author = "Captain Jonesy"
             author_context = "the commanding officer"
         else:
-            author = "Sir Decent Jam" 
+            author = "Sir Decent Jam"
             author_context = "the bot creator and systems architect"
-        
+
         # Create AI prompt based on target channel
         if target_channel == 'mod':
             prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. You need to rewrite this announcement content in your analytical, technical style for a moderator briefing.
@@ -561,7 +624,7 @@ Original content from {author} ({author_context}):
 
 Rewrite this as a technical briefing for moderators in Ash's voice. Be analytical, precise, and focus on:
 - Technical implementation details
-- Operational efficiency improvements  
+- Operational efficiency improvements
 - System functionality enhancements
 - Mission-critical parameters
 
@@ -586,15 +649,16 @@ Write 2-4 sentences maximum. Make it engaging and user-focused."""
 
         # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, user_id)
-        
+
         if response_text:
             enhanced_content = filter_ai_response(response_text)
-            print(f"AI content enhancement successful: {len(enhanced_content)} characters")
+            print(
+                f"AI content enhancement successful: {len(enhanced_content)} characters")
             return enhanced_content
         else:
             print(f"AI content enhancement failed: {status_message}")
             return user_content  # Fallback to original content
-            
+
     except Exception as e:
         print(f"Error in AI content enhancement: {e}")
         return user_content  # Fallback to original content
@@ -603,10 +667,15 @@ Write 2-4 sentences maximum. Make it engaging and user-focused."""
 def initialize_ai():
     """Initialize AI providers and set global status"""
     global ai_enabled, ai_status_message, primary_ai, backup_ai
-    
+
     # Setup AI providers
-    gemini_ok = setup_ai_provider("gemini", GEMINI_API_KEY, genai, GENAI_AVAILABLE)
-    claude_ok = setup_ai_provider("claude", ANTHROPIC_API_KEY, anthropic, ANTHROPIC_AVAILABLE)
+    gemini_ok = setup_ai_provider(
+        "gemini", GEMINI_API_KEY, genai, GENAI_AVAILABLE)
+    claude_ok = setup_ai_provider(
+        "claude",
+        ANTHROPIC_API_KEY,
+        anthropic,
+        ANTHROPIC_AVAILABLE)
 
     if gemini_ok:
         primary_ai = "gemini"

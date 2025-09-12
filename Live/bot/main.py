@@ -46,6 +46,8 @@ except ImportError:
     ModeratorFAQHandler = None
 
 # --- Lock File Management ---
+
+
 def acquire_lock() -> Optional[Any]:
     """Cross-platform file locking for single instance"""
     if platform.system() == "Windows":
@@ -62,12 +64,14 @@ def acquire_lock() -> Optional[Any]:
         try:
             import fcntl
             lock_file = open(LOCK_FILE, 'w')
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)  # type: ignore
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX |
+                        fcntl.LOCK_NB)  # type: ignore
             lock_file.write(str(os.getpid()))
             lock_file.flush()
             return lock_file
         except (ImportError, IOError, OSError, AttributeError):
-            print("⚠️ fcntl module not available or lock failed. Skipping single-instance lock.")
+            print(
+                "⚠️ fcntl module not available or lock failed. Skipping single-instance lock.")
             try:
                 lock_file = open(LOCK_FILE, 'w')
                 lock_file.write(str(os.getpid()))
@@ -76,6 +80,7 @@ def acquire_lock() -> Optional[Any]:
             except Exception:
                 pass
             return None
+
 
 # Acquire lock
 lock_file = acquire_lock()
@@ -102,41 +107,46 @@ if ModeratorFAQHandler:
         mod_alert_channel_id=MOD_ALERT_CHANNEL_ID,
         jonesy_user_id=JONESY_USER_ID,
         jam_user_id=JAM_USER_ID,
-        ai_status_message="Online (Refactored)",  # Will be updated from AI handler
+        # Will be updated from AI handler
+        ai_status_message="Online (Refactored)",
     )
 
 # --- Core Event Handlers ---
+
+
 async def load_command_modules():
     """Load all command modules (cogs)"""
     try:
         # Load command modules
         from .commands import games, strikes, utility
-        
+
         strikes.setup(bot)
         print("✅ Loaded strikes commands module")
-        
+
         games.setup(bot)
         print("✅ Loaded games commands module")
-        
+
         utility.setup(bot)
         print("✅ Loaded utility commands module")
-        
+
         print(f"✅ All command modules loaded successfully")
-        
+
     except Exception as e:
         print(f"❌ Error loading command modules: {e}")
         import traceback
         traceback.print_exc()
 
+
 @bot.event
 async def on_ready():
     print(f"🤖 Ash Bot (Refactored) is ready. Logged in as {bot.user}")
-    
+
     # Load command modules
     await load_command_modules()
-    
+
     # TODO: Start scheduled tasks
     # TODO: Initialize AI handlers
+
 
 @bot.event
 async def on_message(message):
@@ -148,28 +158,31 @@ async def on_message(message):
     # TODO: Handle trivia answer collection
     # TODO: Handle pineapple pizza enforcement
     # TODO: Handle AI personality responses
-    
+
     # Process commands
     await bot.process_commands(message)
 
 # --- Basic Commands (to test functionality) ---
+
+
 @bot.command(name="test")
 async def test_command(ctx):
     """Test command to verify refactored bot is working"""
     user_tier = await get_user_communication_tier(ctx, bot)
     db_status = "Connected" if db else "Not available"
-    
+
     embed = discord.Embed(
         title="🧪 Refactored Bot Test",
         description="Testing modular bot functionality",
         color=0x2F3136
     )
-    
+
     embed.add_field(name="User Tier", value=user_tier.title(), inline=True)
     embed.add_field(name="Database", value=db_status, inline=True)
     embed.add_field(name="Status", value="✅ Core modules loaded", inline=False)
-    
+
     await ctx.send(embed=embed)
+
 
 @bot.command(name="ashstatus")
 async def ash_status(ctx):
@@ -177,17 +190,17 @@ async def ash_status(ctx):
     try:
         # Check user permissions
         is_authorized = False
-        
+
         if ctx.guild is None:  # DM
             if ctx.author.id in [JAM_USER_ID, JONESY_USER_ID]:
                 is_authorized = True
         else:  # Guild
             is_authorized = await user_is_mod(ctx)
-        
+
         if not is_authorized:
             await ctx.send("Systems nominal, Sir Decent Jam. Awaiting Captain Jonesy's commands.")
             return
-            
+
         # Basic status info for authorized users
         await ctx.send(
             f"🤖 Ash Bot (Refactored) Status:\n"
@@ -196,24 +209,28 @@ async def ash_status(ctx):
             f"Status: Operational (refactored architecture)\n\n"
             f"*Analysis complete. Mission parameters updated.*"
         )
-        
+
     except Exception as e:
         await ctx.send(f"❌ **System diagnostic error:** {str(e)}")
 
 # --- Cleanup Functions ---
+
+
 def cleanup():
     """Cleanup function for graceful shutdown"""
     try:
         if lock_file:
             lock_file.close()
         os.remove(LOCK_FILE)
-    except:
+    except BaseException:
         pass
+
 
 def signal_handler(sig, frame):
     print("\n🛑 Shutdown requested...")
     cleanup()
     sys.exit(0)
+
 
 # Register cleanup handlers
 atexit.register(cleanup)
@@ -221,12 +238,14 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 # --- Main Entry Point ---
+
+
 def main():
     """Main entry point for the refactored bot"""
     if not TOKEN:
         print("❌ DISCORD_TOKEN environment variable not set. Exiting.")
         sys.exit(1)
-    
+
     try:
         print("🚀 Starting Ash Bot (Refactored)...")
         bot.run(TOKEN)
@@ -234,6 +253,7 @@ def main():
         print("\n🛑 Bot stopped by user")
     finally:
         cleanup()
+
 
 if __name__ == "__main__":
     main()

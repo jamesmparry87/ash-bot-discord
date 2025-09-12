@@ -53,9 +53,10 @@ async def fetch_youtube_games(channel_id: str) -> List[str]:
                             params = {
                                 'part': 'snippet',
                                 'playlistId': uploads_playlist_id,
-                                'maxResults': min(50, max_videos - video_count),
-                                'key': youtube_api_key
-                            }
+                                'maxResults': min(
+                                    50,
+                                    max_videos - video_count),
+                                'key': youtube_api_key}
                             if next_page_token:
                                 params['pageToken'] = next_page_token
 
@@ -64,11 +65,13 @@ async def fetch_youtube_games(channel_id: str) -> List[str]:
                                     data = await response.json()
                                     for item in data['items']:
                                         title = item['snippet']['title']
-                                        # Extract game name from title (basic parsing)
-                                        game_name = extract_game_name_from_title(title)
+                                        # Extract game name from title (basic
+                                        # parsing)
+                                        game_name = extract_game_name_from_title(
+                                            title)
                                         if game_name and game_name not in games:
                                             games.append(game_name)
-                                    
+
                                     video_count += len(data['items'])
                                     next_page_token = data.get('nextPageToken')
                                     if not next_page_token:
@@ -84,14 +87,15 @@ async def fetch_youtube_games(channel_id: str) -> List[str]:
     return games
 
 
-async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, Any]]:
+async def fetch_comprehensive_youtube_games(
+        channel_id: str) -> List[Dict[str, Any]]:
     """Fetch comprehensive game data from YouTube channel using playlists as primary source"""
     youtube_api_key = os.getenv('YOUTUBE_API_KEY')
     if not youtube_api_key:
         raise Exception("YOUTUBE_API_KEY not configured")
 
     games_data = []
-    
+
     async with aiohttp.ClientSession() as session:
         try:
             # STEP 1: Get all playlists from the channel (primary source)
@@ -106,23 +110,26 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
             async with session.get(url, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
-                    
+
                     for playlist in data['items']:
                         playlist_id = playlist['id']
                         playlist_title = playlist['snippet']['title']
                         video_count = playlist['contentDetails']['itemCount']
-                        
+
                         # Skip if not a game playlist or has very few videos
                         if video_count < 3:
                             continue
-                            
+
                         # Skip certain types of playlists
-                        skip_patterns = ['shorts', 'live', 'stream', 'highlight', 'clip']
-                        if any(pattern in playlist_title.lower() for pattern in skip_patterns):
+                        skip_patterns = [
+                            'shorts', 'live', 'stream', 'highlight', 'clip']
+                        if any(pattern in playlist_title.lower()
+                               for pattern in skip_patterns):
                             continue
 
                         # Extract canonical game name from playlist title
-                        canonical_name = extract_game_name_from_title(playlist_title)
+                        canonical_name = extract_game_name_from_title(
+                            playlist_title)
                         if not canonical_name:
                             continue
 
@@ -149,8 +156,9 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
                                 for item in playlist_data['items']:
                                     video_id = item['snippet']['resourceId']['videoId']
                                     video_ids.append(video_id)
-                                    
-                                    # Get first video date for series start date
+
+                                    # Get first video date for series start
+                                    # date
                                     if not first_video_date:
                                         first_video_date = item['snippet']['publishedAt']
 
@@ -168,7 +176,8 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
                                     videos_data = await videos_response.json()
                                     for video in videos_data['items']:
                                         duration = video["contentDetails"]["duration"]
-                                        duration_minutes = parse_youtube_duration(duration) // 60
+                                        duration_minutes = parse_youtube_duration(
+                                            duration) // 60
                                         total_playtime_seconds += duration_minutes * 60
 
                         total_playtime_minutes = total_playtime_seconds // 60
@@ -181,11 +190,13 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
                             'twitch_vod_urls': [],
                             'notes': f"Auto-imported from YouTube playlist '{playlist_title}'. {video_count} episodes, {total_playtime_minutes//60}h {total_playtime_minutes%60}m total.",
                             'date_started': first_video_date,
-                            'alternative_names': [playlist_title, canonical_name]
-                        }
+                            'alternative_names': [
+                                playlist_title,
+                                canonical_name]}
                         games_data.append(game_data)
 
-                # STEP 2: Fallback - check uploads playlist for games not in dedicated playlists
+                # STEP 2: Fallback - check uploads playlist for games not in
+                # dedicated playlists
                 try:
                     # Get channel uploads playlist
                     url = f"https://www.googleapis.com/youtube/v3/channels"
@@ -200,7 +211,7 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
                             data = await response.json()
                             if data['items']:
                                 uploads_playlist_id = data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
-                                
+
                                 # Get videos from uploads playlist
                                 fallback_games = await parse_videos_for_games(session, uploads_playlist_id, youtube_api_key)
                                 games_data.extend(fallback_games)
@@ -209,20 +220,22 @@ async def fetch_comprehensive_youtube_games(channel_id: str) -> List[Dict[str, A
                     print(f"Warning: Could not fetch uploads playlist: {e}")
 
         except Exception as e:
-            raise Exception(f"Failed to fetch comprehensive YouTube games: {str(e)}")
+            raise Exception(
+                f"Failed to fetch comprehensive YouTube games: {str(e)}")
 
     return games_data
 
 
-async def parse_videos_for_games(session, uploads_playlist_id: str, youtube_api_key: str) -> List[Dict[str, Any]]:
+async def parse_videos_for_games(
+        session, uploads_playlist_id: str, youtube_api_key: str) -> List[Dict[str, Any]]:
     """Parse individual videos to extract game data (fallback method)"""
     games_data = []
     max_videos = 200
     video_count = 0
-    
+
     # Track series of videos for same games
     game_series = {}
-    
+
     try:
         next_page_token = None
         while video_count < max_videos:
@@ -242,7 +255,7 @@ async def parse_videos_for_games(session, uploads_playlist_id: str, youtube_api_
                     for item in data['items']:
                         title = item['snippet']['title']
                         published_at = item['snippet']['publishedAt']
-                        
+
                         # Extract game name
                         game_name = extract_game_name_from_title(title)
                         if game_name:
@@ -253,10 +266,11 @@ async def parse_videos_for_games(session, uploads_playlist_id: str, youtube_api_
                                     'total_episodes': 0,
                                     'video_titles': []
                                 }
-                            
+
                             game_series[game_name]['total_episodes'] += 1
-                            game_series[game_name]['video_titles'].append(title)
-                    
+                            game_series[game_name]['video_titles'].append(
+                                title)
+
                     video_count += len(data['items'])
                     next_page_token = data.get('nextPageToken')
                     if not next_page_token:
@@ -266,9 +280,11 @@ async def parse_videos_for_games(session, uploads_playlist_id: str, youtube_api_
 
         # Convert series data to game data format
         for game_name, series_info in game_series.items():
-            if series_info['total_episodes'] >= 3:  # Only include games with multiple episodes
-                estimated_playtime = series_info['total_episodes'] * 30  # Estimate 30 min per episode
-                
+            # Only include games with multiple episodes
+            if series_info['total_episodes'] >= 3:
+                # Estimate 30 min per episode
+                estimated_playtime = series_info['total_episodes'] * 30
+
                 game_data = {
                     'canonical_name': game_name,
                     'series_name': game_name,
@@ -277,8 +293,7 @@ async def parse_videos_for_games(session, uploads_playlist_id: str, youtube_api_
                     'twitch_vod_urls': [],
                     'notes': f"Auto-imported from YouTube videos. {series_info['total_episodes']} episodes found.",
                     'date_started': series_info['first_video_date'],
-                    'alternative_names': [game_name]
-                }
+                    'alternative_names': [game_name]}
                 games_data.append(game_data)
 
     except Exception as e:
@@ -291,28 +306,28 @@ def parse_youtube_duration(duration: str) -> int:
     """Parse YouTube ISO 8601 duration format (PT1H23M45S) to seconds"""
     if not duration.startswith('PT'):
         return 0
-    
+
     duration = duration[2:]  # Remove 'PT'
     total_seconds = 0
-    
+
     # Parse hours
     if 'H' in duration:
         hours_match = re.search(r'(\d+)H', duration)
         if hours_match:
             total_seconds += int(hours_match.group(1)) * 3600
-    
+
     # Parse minutes
     if 'M' in duration:
         minutes_match = re.search(r'(\d+)M', duration)
         if minutes_match:
             total_seconds += int(minutes_match.group(1)) * 60
-    
+
     # Parse seconds
     if 'S' in duration:
         seconds_match = re.search(r'(\d+)S', duration)
         if seconds_match:
             total_seconds += int(seconds_match.group(1))
-    
+
     return total_seconds
 
 
@@ -320,7 +335,7 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     """Extract game name from video/playlist title using various patterns"""
     # Remove common prefixes/suffixes
     cleaned_title = title.strip()
-    
+
     # Remove episode numbers and common patterns
     patterns_to_remove = [
         r'\s*-\s*Episode\s*\d+.*$',
@@ -333,35 +348,46 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         r'\s*-\s*Ep\s*\d+.*$',
         r'\s*S\d+E\d+.*$',
     ]
-    
+
     for pattern in patterns_to_remove:
         cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
-    
+
     # Remove common streaming/gaming words
-    streaming_words = ['stream', 'streaming', 'gameplay', 'playthrough', 'let\'s play', 'gaming']
+    streaming_words = [
+        'stream',
+        'streaming',
+        'gameplay',
+        'playthrough',
+        'let\'s play',
+        'gaming']
     for word in streaming_words:
-        cleaned_title = re.sub(rf'\b{word}\b', '', cleaned_title, flags=re.IGNORECASE)
-    
+        cleaned_title = re.sub(
+            rf'\b{word}\b',
+            '',
+            cleaned_title,
+            flags=re.IGNORECASE)
+
     # Clean up whitespace and punctuation
     cleaned_title = re.sub(r'\s+', ' ', cleaned_title).strip()
     cleaned_title = cleaned_title.strip(' -|:')
-    
+
     # Return None if title is too short or generic
     if len(cleaned_title) < 2:
         return None
-    
+
     generic_terms = ['live', 'stream', 'gaming', 'playing', 'game']
     if cleaned_title.lower() in generic_terms:
         return None
-    
+
     return cleaned_title
 
 
-async def execute_youtube_auto_post(reminder: Dict[str, Any], auto_action_data: Dict[str, Any]) -> None:
+async def execute_youtube_auto_post(
+        reminder: Dict[str, Any], auto_action_data: Dict[str, Any]) -> None:
     """Execute automatic YouTube post to youtube-uploads channel"""
     try:
         from ..main import bot  # Import here to avoid circular imports
-        
+
         youtube_url = auto_action_data.get("youtube_url")
         custom_message = auto_action_data.get("custom_message", "")
         user_id = reminder.get("user_id")
@@ -394,7 +420,8 @@ async def execute_youtube_auto_post(reminder: Dict[str, Any], auto_action_data: 
                     notification = f"⚡ **Auto-action executed successfully.** Your YouTube link has been posted to the youtube-uploads channel as scheduled. Mission parameters fulfilled."
                     await user.send(notification)
                 else:
-                    print(f"❌ Could not find user {user_id} to send notification")
+                    print(
+                        f"❌ Could not find user {user_id} to send notification")
         else:
             print(f"❌ Could not find youtube-uploads channel")
 
@@ -402,7 +429,8 @@ async def execute_youtube_auto_post(reminder: Dict[str, Any], auto_action_data: 
         print(f"❌ Error executing YouTube auto-post: {e}")
 
 
-async def update_youtube_playlist_data(games_data: List[Dict[str, Any]]) -> int:
+async def update_youtube_playlist_data(
+        games_data: List[Dict[str, Any]]) -> int:
     """Update YouTube playlist data for games that have playlist URLs"""
     try:
         if not db:
@@ -422,10 +450,11 @@ async def update_youtube_playlist_data(games_data: List[Dict[str, Any]]) -> int:
                         continue
 
                     # Extract playlist ID
-                    playlist_id_match = re.search(r'list=([a-zA-Z0-9_-]+)', playlist_url)
+                    playlist_id_match = re.search(
+                        r'list=([a-zA-Z0-9_-]+)', playlist_url)
                     if not playlist_id_match:
                         continue
-                    
+
                     playlist_id = playlist_id_match.group(1)
 
                     # Get current video count and playtime
@@ -441,7 +470,7 @@ async def update_youtube_playlist_data(games_data: List[Dict[str, Any]]) -> int:
                             data = await response.json()
                             if data['items']:
                                 current_video_count = data['items'][0]['contentDetails']['itemCount']
-                                
+
                                 # Get video IDs from playlist
                                 playlist_items_url = f"https://www.googleapis.com/youtube/v3/playlistItems"
                                 playlist_params = {
@@ -474,7 +503,8 @@ async def update_youtube_playlist_data(games_data: List[Dict[str, Any]]) -> int:
                                             videos_data = await videos_response.json()
                                             for video in videos_data['items']:
                                                 duration = video["contentDetails"]["duration"]
-                                                duration_minutes = parse_youtube_duration(duration) // 60
+                                                duration_minutes = parse_youtube_duration(
+                                                    duration) // 60
                                                 total_playtime_seconds += duration_minutes * 60
 
                                 total_playtime_minutes = total_playtime_seconds // 60
@@ -483,15 +513,16 @@ async def update_youtube_playlist_data(games_data: List[Dict[str, Any]]) -> int:
                                 canonical_name = game.get('canonical_name')
                                 if canonical_name and total_playtime_minutes > 0:
                                     query = """
-                                        UPDATE played_games 
-                                        SET total_playtime_minutes = $1 
+                                        UPDATE played_games
+                                        SET total_playtime_minutes = $1
                                         WHERE canonical_name = $2
                                     """
                                     await db.execute(query, total_playtime_minutes, canonical_name)
                                     updated_count += 1
 
                 except Exception as e:
-                    print(f"Error updating YouTube data for {game.get('canonical_name', 'unknown')}: {e}")
+                    print(
+                        f"Error updating YouTube data for {game.get('canonical_name', 'unknown')}: {e}")
 
         return updated_count
 

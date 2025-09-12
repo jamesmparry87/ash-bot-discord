@@ -47,7 +47,8 @@ async def fetch_twitch_games(username: str) -> List[str]:
                     token_info = await response.json()
                     access_token = token_info['access_token']
                 else:
-                    raise Exception(f"Failed to get Twitch OAuth token: {response.status}")
+                    raise Exception(
+                        f"Failed to get Twitch OAuth token: {response.status}")
 
             headers = {
                 "Client-ID": twitch_client_id,
@@ -64,7 +65,8 @@ async def fetch_twitch_games(username: str) -> List[str]:
                     else:
                         raise Exception(f"Twitch user '{username}' not found")
                 else:
-                    raise Exception(f"Failed to get Twitch user info: {response.status}")
+                    raise Exception(
+                        f"Failed to get Twitch user info: {response.status}")
 
             # Get recent videos (last 100)
             videos_url = f"https://api.twitch.tv/helix/videos"
@@ -80,7 +82,8 @@ async def fetch_twitch_games(username: str) -> List[str]:
                         if game_name and game_name not in games:
                             games.append(game_name)
                 else:
-                    raise Exception(f"Failed to get Twitch videos: {response.status}")
+                    raise Exception(
+                        f"Failed to get Twitch videos: {response.status}")
 
         except Exception as e:
             raise Exception(f"Failed to fetch Twitch games: {str(e)}")
@@ -88,7 +91,8 @@ async def fetch_twitch_games(username: str) -> List[str]:
     return games
 
 
-async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]]:
+async def fetch_comprehensive_twitch_games(
+        username: str) -> List[Dict[str, Any]]:
     """Fetch comprehensive game data from Twitch channel with full metadata"""
     twitch_client_id = os.getenv('TWITCH_CLIENT_ID')
     twitch_client_secret = os.getenv('TWITCH_CLIENT_SECRET')
@@ -98,7 +102,7 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
             "TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET environment variables are required")
 
     games_data = []
-    
+
     async with aiohttp.ClientSession() as session:
         try:
             # Get OAuth token
@@ -114,7 +118,8 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
                     token_info = await response.json()
                     access_token = token_info['access_token']
                 else:
-                    raise Exception(f"Failed to get Twitch OAuth token: {response.status}")
+                    raise Exception(
+                        f"Failed to get Twitch OAuth token: {response.status}")
 
             headers = {
                 "Client-ID": twitch_client_id,
@@ -131,13 +136,15 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
                     else:
                         raise Exception(f"Twitch user '{username}' not found")
                 else:
-                    raise Exception(f"Failed to get Twitch user info: {response.status}")
+                    raise Exception(
+                        f"Failed to get Twitch user info: {response.status}")
 
             # Get comprehensive video data
             all_videos = []
             cursor = None
-            
-            # Fetch multiple pages of videos (limit to prevent excessive API calls)
+
+            # Fetch multiple pages of videos (limit to prevent excessive API
+            # calls)
             while len(all_videos) < 500:  # Limit to prevent excessive API calls
                 videos_url = f"https://api.twitch.tv/helix/videos"
                 params = {
@@ -153,9 +160,10 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
                         videos_data = await response.json()
                         if not videos_data['data']:
                             break
-                        
+
                         all_videos.extend(videos_data['data'])
-                        cursor = videos_data.get('pagination', {}).get('cursor')
+                        cursor = videos_data.get(
+                            'pagination', {}).get('cursor')
                         if not cursor:
                             break
                     else:
@@ -163,16 +171,16 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
 
             # Process videos into game series
             game_series = {}
-            
+
             for video in all_videos:
                 title = video['title']
                 created_at = video['created_at']
                 url = video['url']
-                
+
                 # Parse duration
                 duration_str = video.get('duration', '0s')
                 duration_seconds = parse_twitch_duration(duration_str)
-                
+
                 # Extract game name
                 game_name = extract_game_name_from_title(title)
                 if game_name:
@@ -185,20 +193,21 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
                             'vod_urls': [],
                             'video_titles': []
                         }
-                    
+
                     series_info = game_series[game_name]
                     series_info['total_episodes'] += 1
                     series_info['total_duration_seconds'] += duration_seconds
                     series_info['vod_urls'].append(url)
                     series_info['video_titles'].append(title)
-                    
+
                     # Update first stream date if earlier
                     if created_at < series_info['first_stream_date']:
                         series_info['first_stream_date'] = created_at
 
             # Convert series data to game data format
             for game_name, series_info in game_series.items():
-                if series_info['total_episodes'] >= 2:  # Only include games with multiple episodes
+                # Only include games with multiple episodes
+                if series_info['total_episodes'] >= 2:
                     game_data = {
                         'canonical_name': game_name,
                         'series_name': game_name,
@@ -213,7 +222,8 @@ async def fetch_comprehensive_twitch_games(username: str) -> List[Dict[str, Any]
                     games_data.append(game_data)
 
         except Exception as e:
-            raise Exception(f"Failed to fetch comprehensive Twitch games: {str(e)}")
+            raise Exception(
+                f"Failed to fetch comprehensive Twitch games: {str(e)}")
 
     return games_data
 
@@ -222,24 +232,24 @@ def parse_twitch_duration(duration: str) -> int:
     """Parse Twitch duration format (1h23m45s) to seconds"""
     if not duration:
         return 0
-    
+
     total_seconds = 0
-    
+
     # Parse hours
     hours_match = re.search(r'(\d+)h', duration.lower())
     if hours_match:
         total_seconds += int(hours_match.group(1)) * 3600
-    
+
     # Parse minutes
     minutes_match = re.search(r'(\d+)m', duration.lower())
     if minutes_match:
         total_seconds += int(minutes_match.group(1)) * 60
-    
+
     # Parse seconds
     seconds_match = re.search(r'(\d+)s', duration.lower())
     if seconds_match:
         total_seconds += int(seconds_match.group(1))
-    
+
     return total_seconds
 
 
@@ -247,7 +257,7 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     """Extract game name from video/stream title using various patterns"""
     # Remove common prefixes/suffixes
     cleaned_title = title.strip()
-    
+
     # Remove episode/part numbers and common patterns
     patterns_to_remove = [
         r'\s*-\s*Episode\s*\d+.*$',
@@ -262,27 +272,46 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         r'\s*-\s*Stream\s*\d+.*$',
         r'\s*-\s*VOD.*$',
     ]
-    
+
     for pattern in patterns_to_remove:
         cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
-    
+
     # Remove common streaming/gaming words
-    streaming_words = ['stream', 'streaming', 'gameplay', 'playthrough', 'let\'s play', 'gaming', 'live', 'vod']
+    streaming_words = [
+        'stream',
+        'streaming',
+        'gameplay',
+        'playthrough',
+        'let\'s play',
+        'gaming',
+        'live',
+        'vod']
     for word in streaming_words:
-        cleaned_title = re.sub(rf'\b{word}\b', '', cleaned_title, flags=re.IGNORECASE)
-    
+        cleaned_title = re.sub(
+            rf'\b{word}\b',
+            '',
+            cleaned_title,
+            flags=re.IGNORECASE)
+
     # Clean up whitespace and punctuation
     cleaned_title = re.sub(r'\s+', ' ', cleaned_title).strip()
     cleaned_title = cleaned_title.strip(' -|:')
-    
+
     # Return None if title is too short or generic
     if len(cleaned_title) < 2:
         return None
-    
-    generic_terms = ['live', 'stream', 'gaming', 'playing', 'game', 'twitch', 'vod']
+
+    generic_terms = [
+        'live',
+        'stream',
+        'gaming',
+        'playing',
+        'game',
+        'twitch',
+        'vod']
     if cleaned_title.lower() in generic_terms:
         return None
-    
+
     return cleaned_title
 
 
@@ -290,15 +319,17 @@ def format_twitch_vod_urls(vod_urls: List[str], max_display: int = 5) -> str:
     """Format Twitch VOD URLs for display"""
     if not vod_urls:
         return "No VODs available"
-    
+
     vod_count = len(vod_urls)
     display_urls = vod_urls[:max_display]
-    
+
     if vod_count <= max_display:
-        return f"🎮 **{vod_count} Twitch VODs**\n" + "\n".join([f"• [VOD {i+1}]({url})" for i, url in enumerate(display_urls)])
+        return f"🎮 **{vod_count} Twitch VODs**\n" + \
+            "\n".join([f"• [VOD {i+1}]({url})" for i, url in enumerate(display_urls)])
     else:
         formatted = f"🎮 **{vod_count} Twitch VODs** (showing first {max_display})\n"
-        formatted += "\n".join([f"• [VOD {i+1}]({url})" for i, url in enumerate(display_urls)])
+        formatted += "\n".join([f"• [VOD {i+1}]({url})" for i,
+                               url in enumerate(display_urls)])
         formatted += f"\n• ... and {vod_count - max_display} more VODs"
         return formatted
 
@@ -320,9 +351,9 @@ async def validate_twitch_username(username: str) -> bool:
     """Validate if a Twitch username exists"""
     if not has_twitch_credentials():
         return False
-        
+
     twitch_client_id, twitch_client_secret = get_twitch_api_credentials()
-    
+
     async with aiohttp.ClientSession() as session:
         try:
             # Get OAuth token
@@ -336,7 +367,7 @@ async def validate_twitch_username(username: str) -> bool:
             async with session.post(token_url, data=token_data) as response:
                 if response.status != 200:
                     return False
-                
+
                 token_info = await response.json()
                 access_token = token_info['access_token']
 
@@ -366,12 +397,12 @@ def extract_twitch_username_from_url(url: str) -> Optional[str]:
         r'twitch\.tv/videos/\d+',       # VOD URL (can't extract username)
         r'twitch\.tv/([a-zA-Z0-9_]+)/video/\d+',  # User VOD URL
     ]
-    
+
     for pattern in patterns:
         match = re.search(pattern, url, re.IGNORECASE)
         if match and not match.group(1) in ['videos', 'clips', 'directory']:
             return match.group(1)
-    
+
     return None
 
 
@@ -379,6 +410,6 @@ def is_valid_twitch_username(username: str) -> bool:
     """Check if a string looks like a valid Twitch username"""
     if not username:
         return False
-    
+
     # Twitch usernames are 4-25 characters, alphanumeric + underscore
     return bool(re.match(r'^[a-zA-Z0-9_]{4,25}$', username))

@@ -59,9 +59,9 @@ MIN_REQUEST_INTERVAL = 2.0  # Reduced from 3.0 for better UX
 # Progressive penalty system - much more user-friendly
 RATE_LIMIT_COOLDOWNS = {
     "first": 30,     # 30 seconds for first offense (was 300)
-    "second": 60,    # 1 minute for second offense  
+    "second": 60,    # 1 minute for second offense
     "third": 120,    # 2 minutes for third offense
-    "persistent": 300 # 5 minutes for persistent violations
+    "persistent": 300  # 5 minutes for persistent violations
 }
 
 # Legacy constant for backward compatibility
@@ -124,5 +124,4 @@ PINEAPPLE_NEGATIVE_PATTERNS = [
     r"pizza\s+(without|minus)\s+pineapple",
     r"no\s+pineapple\s+on\s+(my\s+)?pizza",
     r"pineapple\s+(doesn't|doesnt|does not)\s+belong",
-    r"hate\s+pineapple\s+(on\s+)?pizza"
-]
+    r"hate\s+pineapple\s+(on\s+)?pizza"]

@@ -41,7 +41,7 @@ class StrikesCommands(commands.Cog):
         try:
             database = self._get_db()
             database.set_user_strikes(member.id, 0)
-            
+
             # Never @mention Captain Jonesy, just use her name
             if str(member.id) == str(JONESY_USER_ID):
                 await ctx.send(f"✅ Strikes for Captain Jonesy have been reset.")
@@ -57,11 +57,11 @@ class StrikesCommands(commands.Cog):
         try:
             database = self._get_db()
             strikes_data = database.get_all_strikes()
-            
+
             if not strikes_data:
                 await ctx.send("📋 No strikes recorded.")
                 return
-                
+
             report = "📋 **Strike Report:**\n"
             for user_id, count in strikes_data.items():
                 if count > 0:
@@ -70,10 +70,10 @@ class StrikesCommands(commands.Cog):
                         report += f"• **{user.name}**: {count} strike{'s' if count != 1 else ''}\n"
                     except Exception:
                         report += f"• Unknown User ({user_id}): {count}\n"
-                        
+
             if report.strip() == "📋 **Strike Report:**":
                 report += "No users currently have strikes."
-                
+
             await ctx.send(report[:2000])
         except RuntimeError:
             await ctx.send("❌ Database unavailable")

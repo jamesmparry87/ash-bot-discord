@@ -3,7 +3,7 @@ Utilities module for Ash Bot
 
 This module contains various utility functions and helpers:
 - Permissions and user tier management
-- Text formatting and display utilities  
+- Text formatting and display utilities
 - Data parsing and extraction functions
 - Time handling and timezone utilities
 

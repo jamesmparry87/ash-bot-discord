@@ -20,18 +20,18 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             # Specific times
             (r'\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)\b', 'time_12h'),
             (r'\bat\s+(\d{1,2})(?::(\d{2}))?\b', 'time_24h'),
-            
+
             # Relative times
             (r'\bin\s+(\d+)\s*(?:hour|hr|h)s?\b', 'hours_from_now'),
             (r'\bin\s+(\d+)\s*(?:minute|min|m)s?\b', 'minutes_from_now'),
             (r'\bin\s+(\d+)\s*(?:day|d)s?\b', 'days_from_now'),
-            
+
             # Tomorrow patterns
             (
                 r'\btomorrow\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b',
                 'tomorrow_time'),
             (r'\btomorrow\b', 'tomorrow'),
-            
+
             # Special times
             (r'\bat\s+(?:6\s*pm|18:00|1800)\b', 'six_pm'),
         ]
@@ -60,7 +60,8 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
                     elif am_pm == 'am' and hour == 12:
                         hour = 0
 
-                    # Schedule for today if time hasn't passed, otherwise tomorrow
+                    # Schedule for today if time hasn't passed, otherwise
+                    # tomorrow
                     target_time = uk_now.replace(
                         hour=hour, minute=minute, second=0, microsecond=0)
                     if target_time <= uk_now:
@@ -159,35 +160,36 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
         }
 
 
-def detect_auto_action_type(reminder_request: str) -> tuple[Optional[str], Dict[str, Any]]:
+def detect_auto_action_type(
+        reminder_request: str) -> tuple[Optional[str], Dict[str, Any]]:
     """Detect if reminder request should have auto-actions and return type and data"""
     youtube_urls = extract_youtube_urls(reminder_request)
-    
+
     if youtube_urls or has_youtube_content(reminder_request):
         # YouTube auto-posting detected
         auto_action_type = "youtube_post"
-        
+
         youtube_url = None
         if youtube_urls:
             youtube_url = youtube_urls[0]
-        
+
         auto_action_data = {
             "youtube_url": youtube_url,
             "custom_message": "New video uploaded - check it out!",
         }
-        
+
         return auto_action_type, auto_action_data
-    
+
     return None, {}
 
 
 def format_reminder_time(scheduled_time: datetime) -> str:
     """Format a scheduled time for display"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    
+
     # Calculate time difference
     time_diff = scheduled_time - uk_now
-    
+
     if time_diff.days > 0:
         if time_diff.days == 1:
             return f"tomorrow at {scheduled_time.strftime('%H:%M UK')}"
@@ -196,7 +198,7 @@ def format_reminder_time(scheduled_time: datetime) -> str:
     else:
         hours = int(time_diff.total_seconds() // 3600)
         minutes = int((time_diff.total_seconds() % 3600) // 60)
-        
+
         if hours > 0:
             return f"in {hours}h {minutes}m at {scheduled_time.strftime('%H:%M UK')}"
         elif minutes > 0:
@@ -209,11 +211,11 @@ def validate_reminder_text(text: str) -> bool:
     """Validate that reminder text is meaningful"""
     if not text or not text.strip():
         return False
-    
+
     # Check minimum length
     if len(text.strip()) < 3:
         return False
-    
+
     # Check for common meaningless patterns
     meaningless_patterns = [
         r'^\s*test\s*$',
@@ -221,23 +223,38 @@ def validate_reminder_text(text: str) -> bool:
         r'^\s*\d+\s*$',
         r'^\s*[a-zA-Z]\s*$',
     ]
-    
+
     for pattern in meaningless_patterns:
         if re.match(pattern, text, re.IGNORECASE):
             return False
-    
+
     return True
 
 
 def extract_reminder_keywords(text: str) -> List[str]:
     """Extract important keywords from reminder text for searching"""
     # Remove common words
-    stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
-    
+    stop_words = {
+        'the',
+        'a',
+        'an',
+        'and',
+        'or',
+        'but',
+        'in',
+        'on',
+        'at',
+        'to',
+        'for',
+        'of',
+        'with',
+        'by'}
+
     # Extract words (alphanumeric sequences)
     words = re.findall(r'\b\w+\b', text.lower())
-    
+
     # Filter out stop words and short words
-    keywords = [word for word in words if word not in stop_words and len(word) > 2]
-    
+    keywords = [
+        word for word in words if word not in stop_words and len(word) > 2]
+
     return keywords
