@@ -300,6 +300,15 @@ async def initialize_modular_components():
         except Exception as e:
             print(f"⚠️ Utility commands failed to load: {e}")
 
+        try:
+            from bot.commands.trivia import TriviaCommands
+            await bot.add_cog(TriviaCommands(bot))
+            command_modules_loaded += 1
+        except ImportError:
+            print("⚠️ Trivia commands module not found, skipping")
+        except Exception as e:
+            print(f"⚠️ Trivia commands failed to load: {e}")
+
         status_report["commands"] = True
         print(
             f"✅ Command modules loaded successfully ({command_modules_loaded} modules)")
@@ -313,6 +322,7 @@ async def initialize_modular_components():
         # Import message handler functions
         global message_handler_functions
         from bot.handlers.message_handler import (
+            handle_game_details_query,
             handle_game_status_query,
             handle_genre_query,
             handle_pineapple_pizza_enforcement,
@@ -331,6 +341,7 @@ async def initialize_modular_components():
             'handle_genre_query': handle_genre_query,
             'handle_year_query': handle_year_query,
             'handle_game_status_query': handle_game_status_query,
+            'handle_game_details_query': handle_game_details_query,
             'handle_recommendation_query': handle_recommendation_query}
 
         status_report["message_handlers"] = True
@@ -551,6 +562,9 @@ async def on_message(message):
             elif query_type == "game_status" and match:
                 await message_handler_functions['handle_game_status_query'](message, match)
                 return
+            elif query_type == "game_details" and match:
+                await message_handler_functions['handle_game_details_query'](message, match)
+                return
             elif query_type == "recommendation" and match:
                 await message_handler_functions['handle_recommendation_query'](message, match)
                 return
@@ -763,30 +777,56 @@ async def handle_general_conversation(message):
                 await message.reply(faq_response)
                 return
 
-        # Check for capability questions with location-aware responses
+        # Progressive disclosure for capability questions
         if any(
             trigger in content_lower for trigger in [
                 "what can you do",
-                "what does this bot do",
+                "what does this bot do", 
                 "what are your functions",
                 "what are your capabilities",
                 "help",
                 "commands"]):
+            
             if user_tier == "moderator_in_mod_channel":
-                # Short initial response for mods in mod channels
+                # Moderators in mod channels get comprehensive but structured overview
                 help_text = (
-                    "**Core systems:** Strike management, game database analysis, AI integration, trivia system, reminder protocols, and announcement system.\n\n"
-                    "Would you like me to provide the complete FAQ system overview with available topics and command examples?")
+                    "**Core Analysis Systems:**\n"
+                    "• **Strike Management** - Automated detection & manual commands\n"
+                    "• **Gaming Database** - 15+ metadata fields, natural language queries\n"
+                    "• **AI Integration** - Enhanced conversation with rate limiting\n"
+                    "• **Reminder System** - Natural language + auto-actions\n\n"
+                    "**Quick Access:** **[Full FAQ System]** • **[Command Reference]** • **[Database Queries]** • **[System Status]**"
+                )
             elif user_tier in ["moderator", "creator", "captain"]:
-                # Short initial response for elevated users
+                # Elevated users get focused overview with mod hint
                 help_text = (
-                    "**Primary functions:** Strike management, game recommendations, Captain Jonesy's gaming database queries, conversation, and Trivia Tuesday management.\n\n"
-                    "Would you like detailed information about commands and database query capabilities?")
+                    "**Primary Functions:**\n"
+                    "• **Gaming Queries** - Ask about Captain Jonesy's played games\n"
+                    "• **Strike System** - Automated tracking with manual controls\n" 
+                    "• **Game Recommendations** - Community-driven suggestion system\n"
+                    "• **Conversation** - AI-powered responses with personality\n\n"
+                    "**More Details:** **[Mod Commands]** • **[Database Queries]** • **[System Features]**"
+                )
+            elif user_tier == "member":
+                # Members get enhanced features highlighted
+                help_text = (
+                    "**Available to You:**\n"
+                    "• **Enhanced Conversation** - Unlimited in Senior Officers' Area\n"
+                    "• **Gaming Database** - Ask about any game Captain Jonesy played\n"
+                    "• **Game Recommendations** - Suggest games with `!addgame`\n"
+                    "• **Trivia Tuesday** - Weekly community gaming trivia\n\n"
+                    "**Learn More:** **[Gaming Queries]** • **[Member Benefits]** • **[Commands]**"
+                )
             else:
-                # Short initial response for standard users
+                # Standard users get focused essentials
                 help_text = (
-                    "**Available functions:** Game recommendations, Captain Jonesy's gaming database queries, basic conversation, and Trivia Tuesday participation.\n\n"
-                    "Would you like more details about specific commands or how to interact with the gaming database?")
+                    "**Gaming Database Access:**\n"
+                    "• Ask: *\"Has Jonesy played [game]?\"*\n"  
+                    "• Ask: *\"What horror games has Jonesy played?\"*\n"
+                    "• Ask: *\"What game took longest to complete?\"*\n\n"
+                    "**Also Available:** Game recommendations (`!addgame`), Trivia Tuesday\n\n"
+                    "**Examples:** **[Query Types]** • **[Commands]** • **[Trivia Info]**"
+                )
             await message.reply(help_text)
             return
 
@@ -1007,23 +1047,130 @@ async def get_current_time(ctx):
         await ctx.send(f"Current time: {formatted_time}")
 
 
+@bot.command(name="listreminders")
+@commands.has_permissions(manage_messages=True)
+async def list_reminders(ctx, user: Optional[discord.Member] = None):
+    """List pending reminders (moderators only)"""
+    try:
+        if db is None:
+            await ctx.send("❌ Reminder system offline - database not available.")
+            return
+
+        # Check if advanced reminder methods exist
+        if not hasattr(db, 'get_all_pending_reminders'):
+            await ctx.send("❌ **Advanced reminder management not available.** Database methods need to be implemented.\n\n*Required methods: `get_all_pending_reminders`, `get_pending_reminders_for_user`, `get_reminder_by_id`, `cancel_reminder`*")
+            return
+
+        # Get pending reminders
+        try:
+            if user:
+                # List reminders for specific user
+                reminders = db.get_pending_reminders_for_user(user.id) # type: ignore
+                if not reminders:
+                    await ctx.send(f"📋 **No pending reminders for {user.display_name}.**")
+                    return
+                title = f"📋 **Pending Reminders for {user.display_name}:**"
+            else:
+                # List all pending reminders
+                reminders = db.get_all_pending_reminders() # type: ignore
+                if not reminders:
+                    await ctx.send("📋 **No pending reminders in the system.**")
+                    return
+                title = "📋 **All Pending Reminders:**"
+        except AttributeError as e:
+            await ctx.send("❌ **Database method missing.** Advanced reminder features require additional database implementation.")
+            return
+
+        # Build reminder list
+        reminder_list = []
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        
+        for reminder in reminders[:10]:  # Limit to 10 for readability
+            user_mention = f"<@{reminder['user_id']}>"
+            scheduled_time = reminder['scheduled_time']
+            
+            # Calculate time until reminder
+            time_diff = scheduled_time - uk_now
+            if time_diff.total_seconds() > 0:
+                if time_diff.days > 0:
+                    time_desc = f"in {time_diff.days}d"
+                elif time_diff.total_seconds() >= 3600:
+                    hours = int(time_diff.total_seconds() // 3600)
+                    time_desc = f"in {hours}h"
+                else:
+                    minutes = max(1, int(time_diff.total_seconds() // 60))
+                    time_desc = f"in {minutes}m"
+            else:
+                time_desc = "overdue"
+            
+            reminder_text = reminder['reminder_text'][:50] + ("..." if len(reminder['reminder_text']) > 50 else "")
+            
+            reminder_list.append(
+                f"**#{reminder['id']}** {user_mention} - *{reminder_text}* ({time_desc})"
+            )
+
+        response = title + "\n\n" + "\n".join(reminder_list)
+        
+        if len(reminders) > 10:
+            response += f"\n\n*Showing first 10 of {len(reminders)} total reminders*"
+            
+        response += "\n\n*Use `!cancelreminder <id>` to cancel a reminder*"
+        
+        await ctx.send(response[:2000])
+
+    except Exception as e:
+        print(f"❌ Error in listreminders command: {e}")
+        await ctx.send("❌ System error occurred while retrieving reminders.")
+
+
+@bot.command(name="cancelreminder")
+@commands.has_permissions(manage_messages=True)  
+async def cancel_reminder(ctx, reminder_id: int):
+    """Cancel a pending reminder by ID (moderators only)"""
+    try:
+        if db is None:
+            await ctx.send("❌ Reminder system offline - database not available.")
+            return
+
+        # Get reminder details before canceling
+        reminder = db.get_reminder_by_id(reminder_id) # type: ignore
+        
+        if not reminder:
+            await ctx.send(f"❌ **Reminder #{reminder_id} not found.** Use `!listreminders` to see pending reminders.")
+            return
+
+        # Cancel the reminder
+        success = db.cancel_reminder(reminder_id) # type: ignore
+        
+        if success:
+            target_user = await bot.fetch_user(reminder['user_id'])
+            user_name = target_user.display_name if target_user else f"User {reminder['user_id']}"
+            reminder_text = reminder['reminder_text'][:100] + ("..." if len(reminder['reminder_text']) > 100 else "")
+            
+            await ctx.send(f"✅ **Reminder #{reminder_id} cancelled.**\n*Was for {user_name}: \"{reminder_text}\"*")
+        else:
+            await ctx.send(f"❌ **Failed to cancel reminder #{reminder_id}.** It may have already been delivered or cancelled.")
+
+    except ValueError:
+        await ctx.send("❌ **Invalid reminder ID.** Please provide a valid number from `!listreminders`.")
+    except Exception as e:
+        print(f"❌ Error in cancelreminder command: {e}")
+        await ctx.send("❌ System error occurred while canceling reminder.")
+
+
 @bot.command(name="remind")
 async def set_reminder(ctx, *, content: Optional[str] = None):
-    """Enhanced reminder command with natural language support"""
+    """Enhanced reminder command with traditional Discord format and natural language support"""
     try:
         if not content:
-            # Show improved help message
+            # Progressive disclosure help message instead of wall of text
             help_text = (
-                "**Reminder System Usage:**\n\n"
-                "**Simple Commands:**\n"
-                "• `remind me in 2 minutes <message>` - Set quick reminder\n"
-                "• `remind me in 1 hour to check stream` - Reminder with message\n"
-                "• `set reminder for 7pm` - Set for specific time (asks for message)\n\n"
-                "**Time Formats:**\n"
-                "• Relative: `in 5 minutes`, `in 2 hours`, `in 1 day`\n"
-                "• Absolute: `at 7pm`, `at 19:00`, `for 7:30pm`\n"
-                "• Tomorrow: `tomorrow`, `tomorrow at 9am`\n\n"
-                "*For moderators: Additional auto-action features available*")
+                "**Quick Examples:**\n"
+                "• `!remind @user 2m Stand up` - Traditional Discord format\n"
+                "• `remind me in 5 minutes to check stream` - Natural language\n"
+                "• `set reminder for 7pm` - Specific time (asks for message)\n\n"
+                "Need help with: **[Time Formats]** • **[Auto-Actions]** • **[Advanced Options]**?"
+            )
             await ctx.send(help_text)
             return
 
@@ -1032,27 +1179,89 @@ async def set_reminder(ctx, *, content: Optional[str] = None):
             await ctx.send("❌ Reminder system offline - database not available.")
             return
 
-        # Try to parse the natural language reminder
+        # Parse traditional Discord format: !remind @user 2m Stand up
+        traditional_match = re.match(r'^<@!?(\d+)>\s+(\d+[smhd])\s+(.+)$', content.strip())
+        
+        if traditional_match:
+            # Traditional Discord format detected
+            target_user_id = int(traditional_match.group(1))
+            time_str = traditional_match.group(2)
+            reminder_text = traditional_match.group(3)
+            
+            # Parse shorthand time (2m, 1h, 30s, 1d)
+            time_match = re.match(r'^(\d+)([smhd])$', time_str)
+            if not time_match:
+                await ctx.send("❌ Invalid time format. Use: `2m` (minutes), `1h` (hours), `30s` (seconds), `1d` (days)")
+                return
+                
+            amount = int(time_match.group(1))
+            unit = time_match.group(2)
+            
+            uk_now = datetime.now(ZoneInfo("Europe/London"))
+            
+            # Initialize scheduled_time based on unit
+            if unit == 's':
+                scheduled_time = uk_now + timedelta(seconds=amount)
+            elif unit == 'm':
+                scheduled_time = uk_now + timedelta(minutes=amount)
+            elif unit == 'h':
+                scheduled_time = uk_now + timedelta(hours=amount)
+            elif unit == 'd':
+                scheduled_time = uk_now + timedelta(days=amount)
+            else:
+                # Default to minutes if unknown unit
+                scheduled_time = uk_now + timedelta(minutes=amount)
+            
+            # Check permissions for setting reminders for others
+            if target_user_id != ctx.author.id and not ctx.author.guild_permissions.manage_messages:
+                await ctx.send("❌ Only moderators can set reminders for other users.")
+                return
+            
+            # Add reminder to database
+            reminder_id = db.add_reminder(
+                user_id=target_user_id,
+                reminder_text=reminder_text,
+                scheduled_time=scheduled_time,
+                delivery_channel_id=ctx.channel.id,
+                delivery_type="channel"
+            )
+            
+            if reminder_id:
+                target_user = await bot.fetch_user(target_user_id)
+                time_desc = f"{amount}{unit}"
+                await ctx.send(f"✅ Reminder set for {target_user.display_name if target_user else 'user'} in {time_desc}: *{reminder_text}*")
+            else:
+                await ctx.send("❌ Failed to save reminder. Please try again.")
+            return
+
+        # Try natural language parsing for other formats
         try:
             from bot.tasks.reminders import format_reminder_time, parse_natural_reminder, validate_reminder_text
 
             parsed = parse_natural_reminder(content, ctx.author.id)
 
-            if not parsed["success"] or not validate_reminder_text(
-                    parsed["reminder_text"]):
+            if not parsed["success"]:
+                # Better error message with examples
+                await ctx.send(
+                    "❌ **Unable to parse reminder.** Try:\n"
+                    "• `!remind @user 2m Stand up` (traditional)\n"
+                    "• `remind me in 30 minutes to check stream`\n"
+                    "• `set reminder for 7pm` (asks for message)\n\n"
+                    "**Time formats:** 2m, 1h, 30s, 1d, 'in 5 minutes', 'at 7pm'"
+                )
+                return
+
+            if not validate_reminder_text(parsed["reminder_text"]):
                 # Ask for reminder message if missing
                 if not parsed["reminder_text"].strip():
-                    formatted_time = format_reminder_time(
-                        parsed["scheduled_time"])
-                    await ctx.send(f"Reminder scheduled for {formatted_time}. What should I remind you about?")
-                    # Here you'd typically wait for the next message, but for
-                    # now just ask
+                    formatted_time = format_reminder_time(parsed["scheduled_time"])
+                    await ctx.send(f"⏰ Reminder scheduled for {formatted_time}. What should I remind you about?")
                     return
                 else:
-                    await ctx.send("❌ **Invalid reminder format.** Use formats like: `remind me in 30 minutes to check stream` or `remind me at 7pm <message>`")
+                    await ctx.send("❌ Reminder message is too short or invalid. Please provide a meaningful reminder.")
                     return
 
-            # Add reminder to database
+            # Add reminder to database (natural language format - always for self)
             reminder_id = db.add_reminder(
                 user_id=ctx.author.id,
                 reminder_text=parsed["reminder_text"],
@@ -1067,13 +1276,18 @@ async def set_reminder(ctx, *, content: Optional[str] = None):
             else:
                 await ctx.send("❌ Failed to save reminder. Please try again.")
 
-        except ImportError:
-            # Fallback if reminder parsing not available
-            await ctx.send("❌ Enhanced reminder parsing not available. Use format: `!remind @user <time> <message>`")
+        except ImportError as e:
+            # More helpful error for import failures
+            print(f"⚠️ Reminder parsing import failed: {e}")
+            await ctx.send(
+                "⚠️ **Natural language parsing unavailable.** Use traditional format:\n"
+                "`!remind @user 2m <message>`\n\n"
+                "**Time formats:** 2m (minutes), 1h (hours), 30s (seconds), 1d (days)"
+            )
 
     except Exception as e:
         print(f"❌ Error in remind command: {e}")
-        await ctx.send("❌ System error occurred while processing reminder. Please try again.")
+        await ctx.send("❌ System error occurred. Please try again or contact a moderator.")
 
 
 @bot.command(name="listgames")
@@ -1114,32 +1328,70 @@ async def list_games(ctx):
 
 @bot.command(name="addgame")
 async def add_game(ctx, *, content: Optional[str] = None):
-    """Add a game recommendation"""
+    """Add a game recommendation with progressive disclosure help"""
     try:
         if not content:
-            await ctx.send("❌ **Usage:** `!addgame <game name> - <reason for recommendation>`\n**Example:** `!addgame Hollow Knight - Amazing metroidvania with beautiful art`")
+            # Progressive disclosure: Quick format with examples based on user tier
+            user_tier = await get_user_communication_tier(ctx)
+            
+            if user_tier in ["moderator", "creator", "captain"]:
+                help_text = (
+                    "**Quick Format:** `!addgame <name> - <reason>`\n\n"
+                    "**Examples:**\n"
+                    "• `!addgame Hollow Knight - Amazing metroidvania with beautiful art`\n"
+                    "• `!addgame The Witcher 3 - Epic RPG with incredible side quests`\n\n"
+                    "**Tips:** Be specific about why you recommend it. Check `!listgames` to avoid duplicates."
+                )
+            else:
+                help_text = (
+                    "**Add a Game Recommendation:**\n"
+                    "Format: `!addgame <game name> - <reason>`\n\n"
+                    "**Example:** `!addgame Hollow Knight - Amazing metroidvania`\n\n"
+                    "**Need inspiration?** Think about games with great stories, unique mechanics, or memorable experiences!"
+                )
+            await ctx.send(help_text)
             return
 
         if db is None:
-            await ctx.send("❌ Game database offline - DATABASE_URL not configured.")
+            await ctx.send("❌ **Game system offline** - Database connection unavailable. Please try again later or contact a moderator.")
             return
 
-        # Parse game name and reason
+        # Parse game name and reason with enhanced error messages
         if " - " not in content:
-            await ctx.send("❌ **Invalid format.** Use: `!addgame <game name> - <reason>`\n**Example:** `!addgame Hollow Knight - Amazing metroidvania with beautiful art`")
+            await ctx.send(
+                "❌ **Missing the dash separator!**\n\n"
+                "**Correct format:** `!addgame <game name> - <reason>`\n"
+                "**Your input:** `" + content[:50] + ("..." if len(content) > 50 else "") + "`\n"
+                "**Fixed example:** `!addgame " + content.split()[0] if content.split() else "GameName" + " - Your reason here`"
+            )
             return
 
         parts = content.split(" - ", 1)
         game_name = parts[0].strip()
         reason = parts[1].strip()
 
-        if not game_name or not reason:
-            await ctx.send("❌ **Both game name and reason are required.**\n**Example:** `!addgame Hollow Knight - Amazing metroidvania with beautiful art`")
+        if not game_name:
+            await ctx.send("❌ **Game name is missing!** Please provide the game name before the dash.")
+            return
+            
+        if not reason:
+            await ctx.send(f"❌ **Recommendation reason is missing!** Why should Captain Jonesy play '{game_name}'?")
+            return
+
+        # Check for very short reasons
+        if len(reason) < 10:
+            await ctx.send(
+                f"❌ **Reason too brief!** Please provide more detail about why '{game_name}' is worth playing.\n\n"
+                "**Examples of good reasons:**\n"
+                "• Amazing storytelling and character development\n"
+                "• Unique puzzle mechanics and beautiful art style\n" 
+                "• Epic boss battles and satisfying combat system"
+            )
             return
 
         # Check if game already exists
         if db.game_exists(game_name):
-            await ctx.send(f"❌ **'{game_name}'** is already in the recommendations list.")
+            await ctx.send(f"❌ **'{game_name}' is already recommended!** Check `!listgames` to see all current recommendations.")
             return
 
         # Add the game
@@ -1147,13 +1399,13 @@ async def add_game(ctx, *, content: Optional[str] = None):
             game_name, reason, ctx.author.display_name)
 
         if success:
-            await ctx.send(f"✅ **'{game_name}'** added to recommendations! Thank you {ctx.author.display_name}.")
+            await ctx.send(f"✅ **'{game_name}' added to recommendations!** Thank you {ctx.author.display_name}.\n\n*View all recommendations with `!listgames`*")
         else:
-            await ctx.send("❌ Failed to add game recommendation. Database error occurred.")
+            await ctx.send("❌ **Failed to save recommendation.** Database error occurred. Please try again or contact a moderator.")
 
     except Exception as e:
         print(f"❌ Error in addgame command: {e}")
-        await ctx.send("❌ Error adding game recommendation. Please try again.")
+        await ctx.send("❌ **System error occurred.** Please try again. If the issue persists, contact a moderator.")
 
 
 @bot.command(name="dbstats")
@@ -1219,9 +1471,574 @@ async def database_stats(ctx):
         await ctx.send(f"❌ Database statistics error: {str(e)[:100]}...")
 
 
+@bot.command(name="toggleai")
+@commands.has_permissions(manage_messages=True)
+async def toggle_ai(ctx):
+    """Toggle AI system on/off (moderators only)"""
+    try:
+        # Import AI handler functions
+        from bot.handlers.ai_handler import ai_enabled, get_ai_status
+        
+        if not ai_enabled:
+            await ctx.send("❌ **AI system is not available.** API keys are not configured or AI handler failed to initialize.")
+            return
+        
+        # Get current AI status
+        ai_status = get_ai_status()
+        current_status = ai_status.get('enabled', True)
+        
+        # Toggle the status (this would need to be implemented in ai_handler)
+        try:
+            from bot.handlers.ai_handler import toggle_ai_system # type: ignore
+            new_status = toggle_ai_system()
+            
+            status_text = "**enabled**" if new_status else "**disabled**"
+            await ctx.send(f"✅ **AI system {status_text}.** All AI-powered responses and conversation features are now {'active' if new_status else 'inactive'}.")
+            
+        except ImportError:
+            await ctx.send("❌ **AI toggle function not implemented.** The AI handler needs to be updated with `toggle_ai_system()` function.")
+            
+    except ImportError:
+        await ctx.send("❌ **AI handler not available.** Cannot toggle AI system.")
+    except Exception as e:
+        print(f"❌ Error in toggleai command: {e}")
+        await ctx.send("❌ System error occurred while toggling AI.")
+
+
+@bot.command(name="setpersona") 
+@commands.has_permissions(manage_messages=True)
+async def set_persona(ctx, *, persona_description: Optional[str] = None):
+    """Set or view the AI personality (moderators only)"""
+    try:
+        if not persona_description:
+            # Show current persona and help
+            help_text = (
+                "**Current AI Persona:** Science Officer Ash from Alien (1979)\n\n"
+                "**Usage:** `!setpersona <description>`\n\n"
+                "**Examples:**\n"
+                "• `!setpersona Helpful assistant with a friendly personality`\n"
+                "• `!setpersona Science Officer Ash from Alien - analytical and precise`\n"
+                "• `!setpersona reset` - Return to default Ash persona\n\n"
+                "**Current Traits:** Analytical, precise, scientific approach, slightly detached but helpful"
+            )
+            await ctx.send(help_text)
+            return
+        
+        # Handle reset command
+        if persona_description.lower() == "reset":
+            try:
+                from bot.handlers.ai_handler import reset_persona # type: ignore
+                reset_persona()
+                await ctx.send("✅ **AI persona reset** to default Science Officer Ash personality.")
+            except ImportError:
+                await ctx.send("❌ **Persona reset function not implemented.** The AI handler needs `reset_persona()` function.")
+            return
+        
+        # Set new persona
+        try:
+            from bot.handlers.ai_handler import set_ai_persona # type: ignore
+            success = set_ai_persona(persona_description)
+            
+            if success:
+                await ctx.send(f"✅ **AI persona updated.**\n\n**New personality:** {persona_description[:200]}{'...' if len(persona_description) > 200 else ''}\n\n*Changes will take effect with the next AI response.*")
+            else:
+                await ctx.send("❌ **Failed to update persona.** Please try again or check the persona description length.")
+                
+        except ImportError:
+            await ctx.send("❌ **Persona setting function not implemented.** The AI handler needs `set_ai_persona()` function.\n\n*Note: Persona changes require updating the AI handler module.*")
+            
+    except Exception as e:
+        print(f"❌ Error in setpersona command: {e}")
+        await ctx.send("❌ System error occurred while setting persona.")
+
+
+@bot.command(name="addplayedgame")
+@commands.has_permissions(manage_messages=True)
+async def add_played_game(ctx, *, content: Optional[str] = None):
+    """Add a played game to the database with metadata (moderators only)"""
+    try:
+        if not content:
+            # Progressive disclosure help
+            help_text = (
+                "**Add Played Game Format:**\n"
+                "`!addplayedgame <name> | series:<series> | year:<year> | status:<status> | episodes:<count>`\n\n"
+                "**Examples:**\n"
+                "• `!addplayedgame Hollow Knight | status:completed | episodes:15`\n"
+                "• `!addplayedgame God of War (2018) | series:God of War | year:2018 | status:completed`\n\n"
+                "**Parameters:**\n"
+                "• **series:** Game series name\n"
+                "• **year:** Release year  \n"
+                "• **status:** completed, ongoing, dropped\n"
+                "• **episodes:** Number of episodes/parts\n\n"
+                "Only **name** is required, other fields are optional."
+            )
+            await ctx.send(help_text)
+            return
+
+        if db is None:
+            await ctx.send("❌ **Database offline.** Cannot add played games without database connection.")
+            return
+
+        # Check if method exists
+        if not hasattr(db, 'add_played_game'):
+            await ctx.send("❌ **Played games management not available.** Database methods need implementation.\n\n*Required method: `add_played_game(name, **metadata)`*")
+            return
+
+        # Parse the game name and metadata
+        parts = content.split(' | ')
+        game_name = parts[0].strip()
+        
+        if not game_name:
+            await ctx.send("❌ **Game name is required.** Format: `!addplayedgame <name> | series:<series> | status:<status>`")
+            return
+
+        # Parse metadata parameters
+        metadata = {}
+        for i in range(1, len(parts)):
+            if ':' in parts[i]:
+                key, value = parts[i].split(':', 1)
+                key = key.strip().lower()
+                value = value.strip()
+                
+                if key in ['series', 'series_name']:
+                    metadata['series_name'] = value
+                elif key in ['year', 'release_year']:
+                    try:
+                        metadata['release_year'] = int(value)
+                    except ValueError:
+                        await ctx.send(f"❌ **Invalid year:** '{value}'. Must be a number.")
+                        return
+                elif key in ['status', 'completion_status']:
+                    if value.lower() in ['completed', 'ongoing', 'dropped']:
+                        metadata['completion_status'] = value.lower()
+                    else:
+                        await ctx.send(f"❌ **Invalid status:** '{value}'. Use: completed, ongoing, or dropped")
+                        return
+                elif key in ['episodes', 'total_episodes']:
+                    try:
+                        metadata['total_episodes'] = int(value)
+                    except ValueError:
+                        await ctx.send(f"❌ **Invalid episode count:** '{value}'. Must be a number.")
+                        return
+                elif key in ['genre']:
+                    metadata['genre'] = value
+                elif key in ['platform']:
+                    metadata['platform'] = value
+
+        # Add the played game
+        try:
+            success = db.add_played_game(game_name, **metadata)
+            
+            if success:
+                # Build confirmation message
+                details = []
+                if metadata.get('series_name'):
+                    details.append(f"Series: {metadata['series_name']}")
+                if metadata.get('release_year'):
+                    details.append(f"Year: {metadata['release_year']}")
+                if metadata.get('completion_status'):
+                    details.append(f"Status: {metadata['completion_status']}")
+                if metadata.get('total_episodes'):
+                    details.append(f"Episodes: {metadata['total_episodes']}")
+                
+                details_text = f" ({', '.join(details)})" if details else ""
+                await ctx.send(f"✅ **'{game_name}' added to played games database**{details_text}.\n\n*Use `!gameinfo {game_name}` to view details.*")
+            else:
+                await ctx.send(f"❌ **Failed to add '{game_name}'.** Database error occurred or game may already exist.")
+                
+        except Exception as e:
+            print(f"❌ Error calling add_played_game: {e}")
+            await ctx.send("❌ **Database method error.** The `add_played_game()` function needs proper implementation.")
+
+    except Exception as e:
+        print(f"❌ Error in addplayedgame command: {e}")
+        await ctx.send("❌ System error occurred while adding played game.")
+
+
+@bot.command(name="gameinfo")
+@commands.has_permissions(manage_messages=True)
+async def game_info(ctx, *, game_name: Optional[str] = None):
+    """Show detailed information about a specific game (moderators only)"""
+    try:
+        if not game_name:
+            await ctx.send("❌ **Game name required.** Usage: `!gameinfo <game name>`\n\n**Example:** `!gameinfo Hollow Knight`")
+            return
+
+        if db is None:
+            await ctx.send("❌ **Database offline.** Cannot retrieve game information.")
+            return
+
+        # Check if method exists - use existing get_played_game
+        if not hasattr(db, 'get_played_game'):
+            await ctx.send("❌ **Game info not available.** Database method `get_played_game()` needs implementation.")
+            return
+
+        # Get game information
+        try:
+            game_data = db.get_played_game(game_name)
+            
+            if not game_data:
+                await ctx.send(f"❌ **'{game_name}' not found** in played games database.\n\n*Use `!addplayedgame` to add new games.*")
+                return
+
+            # Build detailed info response
+            info_text = f"🎮 **Game Information: {game_data['canonical_name']}**\n\n"
+            
+            # Basic info
+            if game_data.get('series_name'):
+                info_text += f"**Series:** {game_data['series_name']}\n"
+            if game_data.get('release_year'):
+                info_text += f"**Release Year:** {game_data['release_year']}\n"
+            if game_data.get('genre'):
+                info_text += f"**Genre:** {game_data['genre']}\n"
+            if game_data.get('platform'):
+                info_text += f"**Platform:** {game_data['platform']}\n"
+            
+            # Progress info
+            status = game_data.get('completion_status', 'unknown')
+            info_text += f"**Status:** {status.title()}\n"
+            
+            episodes = game_data.get('total_episodes', 0)
+            if episodes > 0:
+                info_text += f"**Episodes:** {episodes}\n"
+            
+            # Playtime info
+            playtime_minutes = game_data.get('total_playtime_minutes', 0)
+            if playtime_minutes > 0:
+                if playtime_minutes >= 60:
+                    hours = playtime_minutes // 60
+                    minutes = playtime_minutes % 60
+                    if minutes > 0:
+                        playtime_text = f"{hours}h {minutes}m"
+                    else:
+                        playtime_text = f"{hours} hours"
+                else:
+                    playtime_text = f"{playtime_minutes} minutes"
+                
+                info_text += f"**Total Playtime:** {playtime_text}\n"
+                
+                if episodes > 0:
+                    avg_per_episode = round(playtime_minutes / episodes, 1)
+                    info_text += f"**Average per Episode:** {avg_per_episode} minutes\n"
+            
+            # URLs if available
+            if game_data.get('youtube_playlist_url'):
+                info_text += f"\n**YouTube Playlist:** {game_data['youtube_playlist_url']}\n"
+            
+            # Alternative names
+            if game_data.get('alternative_names'):
+                alt_names = ', '.join(game_data['alternative_names'])
+                info_text += f"\n**Also Known As:** {alt_names}\n"
+            
+            await ctx.send(info_text[:2000])  # Discord limit
+            
+        except Exception as e:
+            print(f"❌ Error calling get_played_game: {e}")
+            await ctx.send("❌ **Database method error.** The `get_played_game()` function may need updates.")
+
+    except Exception as e:
+        print(f"❌ Error in gameinfo command: {e}")
+        await ctx.send("❌ System error occurred while retrieving game information.")
+
+
+@bot.command(name="updateplayedgame")
+@commands.has_permissions(manage_messages=True)
+async def update_played_game(ctx, *, content: Optional[str] = None):
+    """Update metadata for an existing played game (moderators only)"""
+    try:
+        if not content:
+            # Progressive disclosure help
+            help_text = (
+                "**Update Played Game Format:**\n"
+                "`!updateplayedgame <name_or_id> status:<new_status> | episodes:<count>`\n\n"
+                "**Examples:**\n"
+                "• `!updateplayedgame Hollow Knight status:completed | episodes:20`\n"
+                "• `!updateplayedgame 42 status:ongoing | episodes:15`\n\n"
+                "**Updatable Fields:**\n"
+                "• **status:** completed, ongoing, dropped\n"
+                "• **episodes:** Number of episodes/parts\n"
+                "• **series:** Series name\n"
+                "• **year:** Release year\n"
+                "• **genre:** Game genre\n\n"
+                "*Use `!gameinfo <name>` to see current values before updating.*"
+            )
+            await ctx.send(help_text)
+            return
+
+        if db is None:
+            await ctx.send("❌ **Database offline.** Cannot update played games.")
+            return
+
+        # Check if method exists
+        if not hasattr(db, 'update_played_game'):
+            await ctx.send("❌ **Game update not available.** Database method `update_played_game()` needs implementation.")
+            return
+
+        # Parse name/id and updates
+        parts = content.split(' | ')
+        if len(parts) < 2:
+            await ctx.send("❌ **Invalid format.** Use: `!updateplayedgame <name> status:<status> | episodes:<count>`")
+            return
+
+        game_identifier = parts[0].strip()
+        
+        # Parse updates
+        updates = {}
+        for i in range(1, len(parts)):
+            if ':' in parts[i]:
+                key, value = parts[i].split(':', 1)
+                key = key.strip().lower()
+                value = value.strip()
+                
+                if key in ['status', 'completion_status']:
+                    if value.lower() in ['completed', 'ongoing', 'dropped']:
+                        updates['completion_status'] = value.lower()
+                    else:
+                        await ctx.send(f"❌ **Invalid status:** '{value}'. Use: completed, ongoing, or dropped")
+                        return
+                elif key in ['episodes', 'total_episodes']:
+                    try:
+                        updates['total_episodes'] = int(value)
+                    except ValueError:
+                        await ctx.send(f"❌ **Invalid episode count:** '{value}'. Must be a number.")
+                        return
+                elif key in ['series', 'series_name']:
+                    updates['series_name'] = value
+                elif key in ['year', 'release_year']:
+                    try:
+                        updates['release_year'] = int(value)
+                    except ValueError:
+                        await ctx.send(f"❌ **Invalid year:** '{value}'. Must be a number.")
+                        return
+                elif key in ['genre']:
+                    updates['genre'] = value
+
+        if not updates:
+            await ctx.send("❌ **No valid updates provided.** Check format: `status:completed | episodes:20`")
+            return
+
+        # Update the game
+        try:
+            success = db.update_played_game(game_identifier, **updates) # type: ignore
+            
+            if success:
+                # Build confirmation message
+                changes = []
+                for key, value in updates.items():
+                    if key == 'completion_status':
+                        changes.append(f"status: {value}")
+                    elif key == 'total_episodes':
+                        changes.append(f"episodes: {value}")
+                    elif key == 'series_name':
+                        changes.append(f"series: {value}")
+                    elif key == 'release_year':
+                        changes.append(f"year: {value}")
+                    elif key == 'genre':
+                        changes.append(f"genre: {value}")
+                
+                changes_text = ', '.join(changes)
+                await ctx.send(f"✅ **Updated '{game_identifier}':** {changes_text}\n\n*Use `!gameinfo {game_identifier}` to view updated details.*")
+            else:
+                await ctx.send(f"❌ **Failed to update '{game_identifier}'.** Game not found or database error.")
+                
+        except Exception as e:
+            print(f"❌ Error calling update_played_game: {e}")
+            await ctx.send("❌ **Database method error.** The `update_played_game()` function needs proper implementation.")
+
+    except Exception as e:
+        print(f"❌ Error in updateplayedgame command: {e}")
+        await ctx.send("❌ System error occurred while updating played game.")
+
+
+@bot.command(name="announce")
+async def make_announcement(ctx, *, announcement_text: Optional[str] = None):
+    """Create server-wide announcement (Captain Jonesy and Sir Decent Jam only)"""
+    # Strict access control - only Captain Jonesy and Sir Decent Jam
+    if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
+        return  # Silent ignore for unauthorized users
+    
+    try:
+        if not announcement_text:
+            help_text = (
+                "**Announcement System Access Confirmed**\n\n"
+                "**Usage:** `!announce <message>`\n\n"
+                "**Features:**\n"
+                "• Cross-posted to announcement channels\n"
+                "• Special embed formatting with authority indicators\n"
+                "• Database logging for audit trail\n\n"
+                "**Also Available:**\n"
+                "• `!scheduleannouncement <time> <message>` - Schedule for later\n"
+                "• `!emergency <message>` - Emergency @everyone alert"
+            )
+            await ctx.send(help_text)
+            return
+
+        # Create announcement embed
+        embed = discord.Embed(
+            title="📢 Server Announcement",
+            description=announcement_text,
+            color=0x00ff00,  # Green for normal announcements
+            timestamp=datetime.now(ZoneInfo("Europe/London"))
+        )
+        
+        # Add authority indicator
+        if ctx.author.id == JONESY_USER_ID:
+            embed.set_footer(text="Announced by Captain Jonesy • Server Owner", 
+                           icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None)
+        elif ctx.author.id == JAM_USER_ID:
+            embed.set_footer(text="Announced by Sir Decent Jam • Bot Creator", 
+                           icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None)
+
+        # Send to announcement channel
+        announcement_channel = bot.get_channel(ANNOUNCEMENTS_CHANNEL_ID)
+        if announcement_channel:
+            await announcement_channel.send(embed=embed) # type: ignore
+            await ctx.send(f"✅ **Announcement posted** to {announcement_channel.mention}.") # type: ignore
+        else:
+            await ctx.send("❌ **Announcement channel not found.** Please check channel configuration.")
+
+        # Log to database if available
+        if db and hasattr(db, 'log_announcement'):
+            try:
+                db.log_announcement(ctx.author.id, announcement_text, "announcement") # type: ignore
+            except:
+                pass  # Non-critical logging failure
+
+    except Exception as e:
+        print(f"❌ Error in announce command: {e}")
+        await ctx.send("❌ **System error occurred** while posting announcement.")
+
+
+@bot.command(name="emergency")
+async def emergency_announcement(ctx, *, message: Optional[str] = None):
+    """Create emergency announcement with @everyone ping (Captain Jonesy and Sir Decent Jam only)"""
+    # Strict access control
+    if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
+        return  # Silent ignore
+    
+    try:
+        if not message:
+            await ctx.send("❌ **Emergency message required.** Usage: `!emergency <critical message>`\n\n⚠️ This will ping @everyone - use responsibly.")
+            return
+
+        # Create emergency embed with red color
+        embed = discord.Embed(
+            title="🚨 EMERGENCY ANNOUNCEMENT",
+            description=message,
+            color=0xff0000,  # Red for emergency
+            timestamp=datetime.now(ZoneInfo("Europe/London"))
+        )
+        
+        # Add authority indicator
+        if ctx.author.id == JONESY_USER_ID:
+            embed.set_footer(text="Emergency Alert by Captain Jonesy • Server Owner", 
+                           icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None)
+        elif ctx.author.id == JAM_USER_ID:
+            embed.set_footer(text="Emergency Alert by Sir Decent Jam • Bot Creator", 
+                           icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None)
+
+        # Send to announcement channel with @everyone ping
+        announcement_channel = bot.get_channel(ANNOUNCEMENTS_CHANNEL_ID)
+        if announcement_channel:
+            await announcement_channel.send("@everyone", embed=embed) # type: ignore
+            await ctx.send(f"🚨 **Emergency announcement posted** with @everyone ping to {announcement_channel.mention}.") # type: ignore
+        else:
+            await ctx.send("❌ **Announcement channel not found.** Please check channel configuration.")
+
+        # Log to database
+        if db and hasattr(db, 'log_announcement'):
+            try:
+                db.log_announcement(ctx.author.id, message, "emergency") # type: ignore
+            except:
+                pass
+
+    except Exception as e:
+        print(f"❌ Error in emergency command: {e}")
+        await ctx.send("❌ **System error occurred** while posting emergency announcement.")
+
+
+@bot.command(name="bulkimportplayedgames")
+@commands.has_permissions(manage_messages=True)
+async def bulk_import_played_games(ctx):
+    """Import games from YouTube playlists and Twitch VODs with real playtime (moderators only)"""
+    try:
+        if db is None:
+            await ctx.send("❌ **Database offline.** Cannot import games without database connection.")
+            return
+
+        # Check if import methods exist
+        if not hasattr(db, 'bulk_import_from_youtube'):
+            await ctx.send("❌ **Import system not available.** Database methods need implementation.\n\n*Required methods: `bulk_import_from_youtube()`, `bulk_import_from_twitch()`, `ai_enhance_game_metadata()`*")
+            return
+
+        # Progressive disclosure help and confirmation
+        help_text = (
+            "**Bulk Import System**\n\n"
+            "**Features:**\n"
+            "• **YouTube:** Playlist-based detection with accurate video duration\n"
+            "• **Twitch:** VOD analysis with duration tracking and series grouping\n"
+            "• **AI Enhancement:** Automatic genre, series, and release year detection\n"
+            "• **Smart Deduplication:** Merges YouTube + Twitch data for same games\n\n"
+            "**Process:**\n"
+            "1. Import from YouTube playlists\n"
+            "2. Import from Twitch VODs (if configured)\n"
+            "3. AI metadata enhancement\n"
+            "4. Deduplication and validation\n\n"
+            "**Type `CONFIRM` to start the import process:**"
+        )
+        await ctx.send(help_text)
+
+        # Wait for confirmation
+        def check(message):
+            return message.author == ctx.author and message.channel == ctx.channel and message.content.upper() == "CONFIRM"
+
+        try:
+            await bot.wait_for('message', check=check, timeout=30.0)
+        except:
+            await ctx.send("❌ **Import cancelled** - confirmation timeout.")
+            return
+
+        # Start import process
+        await ctx.send("🔄 **Starting bulk import process...** This may take several minutes.")
+
+        try:
+            # Import from YouTube
+            youtube_results = db.bulk_import_from_youtube() # type: ignore
+            
+            # Import from Twitch if available
+            twitch_results = None
+            if hasattr(db, 'bulk_import_from_twitch'):
+                twitch_results = db.bulk_import_from_twitch() # type: ignore
+
+            # AI enhancement if available
+            if hasattr(db, 'ai_enhance_game_metadata'):
+                ai_results = db.ai_enhance_game_metadata() # type: ignore
+
+            # Build results message
+            results_text = "✅ **Import completed successfully!**\n\n"
+            
+            if youtube_results:
+                results_text += f"📺 **YouTube:** {youtube_results.get('games_imported', 0)} games imported\n"
+                results_text += f"⏱️ **Playtime:** {youtube_results.get('total_minutes', 0)} minutes processed\n"
+
+            if twitch_results:
+                results_text += f"🎮 **Twitch:** {twitch_results.get('vods_processed', 0)} VODs processed\n"
+
+            results_text += "\n*Use `!dbstats` to see updated database statistics.*"
+            
+            await ctx.send(results_text)
+
+        except Exception as e:
+            print(f"❌ Error during bulk import: {e}")
+            await ctx.send("❌ **Import process failed.** Database methods need proper implementation or API configuration issues.")
+
+    except Exception as e:
+        print(f"❌ Error in bulkimportplayedgames command: {e}")
+        await ctx.send("❌ System error occurred during import.")
+
+
 @bot.command(name="ashstatus")
 async def ash_status(ctx):
-    """Show comprehensive bot status with AI diagnostics - works in DMs for authorized users and in guilds for mods"""
     try:
         # Custom permission checking that works in both DMs and guilds
         is_authorized = False

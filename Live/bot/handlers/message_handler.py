@@ -72,15 +72,15 @@ async def handle_strike_detection(
 
             # Debug logging
             print(f"DEBUG: Adding strike to user {user.id} ({user.name})")
-            old_count = db.get_user_strikes(user.id)
+            old_count = db.get_user_strikes(user.id) # type: ignore
             print(f"DEBUG: User {user.id} had {old_count} strikes before")
 
-            count = db.add_user_strike(user.id)
+            count = db.add_user_strike(user.id) # type: ignore
             print(
                 f"DEBUG: User {user.id} now has {count} strikes after adding")
 
             # Verify the strike was actually added
-            verify_count = db.get_user_strikes(user.id)
+            verify_count = db.get_user_strikes(user.id) # type: ignore
             print(
                 f"DEBUG: Verification query shows {verify_count} strikes for user {user.id}")
 
@@ -199,6 +199,16 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"has\s+jonesyspacecat\s+played\s+(.+?)[\?\.]?$",
             r"did\s+jonesyspacecat\s+play\s+(.+?)[\?\.]?$"
         ],
+        "game_details": [
+            r"how long did jonesy play (.+?)[\?\.]?$",
+            r"how many hours did jonesy play (.+?)[\?\.]?$",
+            r"what's the playtime for (.+?)[\?\.]?$",
+            r"what is the playtime for (.+?)[\?\.]?$",
+            r"how much time did jonesy spend on (.+?)[\?\.]?$",
+            r"how long did (.+?) take jonesy[\?\.]?$",
+            r"how long did (.+?) take to complete[\?\.]?$",
+            r"what's the total time for (.+?)[\?\.]?$"
+        ],
         "recommendation": [
             r"is\s+(.+?)\s+recommended[\?\.]?$",
             r"has\s+(.+?)\s+been\s+recommended[\?\.]?$",
@@ -232,7 +242,7 @@ async def handle_statistical_query(
         if "most minutes" in lower_content or "most playtime" in lower_content:
             if "series" in lower_content:
                 # Handle series playtime query
-                series_stats = db.get_series_by_total_playtime()
+                series_stats = db.get_series_by_total_playtime()  # type: ignore
                 if series_stats:
                     top_series = series_stats[0]
                     total_hours = round(
@@ -256,7 +266,7 @@ async def handle_statistical_query(
                     await message.reply("Database analysis complete. Insufficient playtime data available for series ranking. Mission parameters require more comprehensive temporal logging.")
             else:
                 # Handle individual game playtime query
-                games_by_playtime = db.get_longest_completion_games()
+                games_by_playtime = db.get_longest_completion_games() # type: ignore
                 if games_by_playtime:
                     top_game = games_by_playtime[0]
                     total_hours = round(
@@ -278,7 +288,7 @@ async def handle_statistical_query(
 
         elif "highest average" in lower_content and "per episode" in lower_content:
             # Handle average episode length query
-            avg_stats = db.get_games_by_average_episode_length()
+            avg_stats = db.get_games_by_average_episode_length() # type: ignore
             if avg_stats:
                 top_game = avg_stats[0]
                 avg_minutes = top_game['avg_minutes_per_episode']
@@ -299,7 +309,7 @@ async def handle_statistical_query(
 
         elif "most episodes" in lower_content:
             # Handle episode count query
-            episode_stats = db.get_games_by_episode_count('DESC')
+            episode_stats = db.get_games_by_episode_count('DESC') # type: ignore
             if episode_stats:
                 top_game = episode_stats[0]
                 episodes = top_game['total_episodes']
@@ -320,7 +330,7 @@ async def handle_statistical_query(
 
         elif "longest" in lower_content and "complete" in lower_content:
             # Handle longest completion games
-            completion_stats = db.get_longest_completion_games()
+            completion_stats = db.get_longest_completion_games() # type: ignore
             if completion_stats:
                 top_game = completion_stats[0]
                 if top_game['total_playtime_minutes'] > 0:
@@ -365,7 +375,7 @@ async def handle_genre_query(
     ]
     if any(genre in query_term.lower() for genre in common_genres):
         try:
-            genre_games = db.get_games_by_genre_flexible(query_term)
+            genre_games = db.get_games_by_genre_flexible(query_term) # type: ignore
             if genre_games:
                 game_list = []
                 for game in genre_games[:8]:  # Limit to 8 games
@@ -395,7 +405,7 @@ async def handle_genre_query(
     # Check if it's a series query
     elif query_term:
         try:
-            series_games = db.get_all_played_games(query_term)
+            series_games = db.get_all_played_games(query_term) # type: ignore
             if series_games:
                 game_list = []
                 for game in series_games[:8]:
@@ -437,7 +447,7 @@ async def handle_year_query(
     year = int(match.group(1))
     try:
         # Get games by release year
-        all_games = db.get_all_played_games()
+        all_games = db.get_all_played_games() # type: ignore
         year_games = [
             game for game in all_games if game.get('release_year') == year]
 
@@ -557,7 +567,7 @@ async def handle_game_status_query(
 
     if is_series_query:
         # Get games from PLAYED GAMES database for series disambiguation
-        played_games = db.get_all_played_games()
+        played_games = db.get_all_played_games() # type: ignore
 
         # Find all games in this series from played games database
         series_games = []
@@ -584,7 +594,7 @@ async def handle_game_status_query(
         return
 
     # Search for the game in PLAYED GAMES database
-    played_game = db.get_played_game(game_name)
+    played_game = db.get_played_game(game_name) # type: ignore
 
     if played_game:
         # Game found in played games database - enhanced response with
@@ -606,13 +616,13 @@ async def handle_game_status_query(
         # Add contextual follow-up suggestions based on game properties
         try:
             # Get ranking context for interesting facts
-            ranking_context = db.get_ranking_context(
+            ranking_context = db.get_ranking_context( # type: ignore
                 played_game["canonical_name"], "all")
 
             # Series-based suggestions
             if played_game.get(
                     "series_name") and played_game["series_name"] != played_game["canonical_name"]:
-                series_games = db.get_all_played_games(
+                series_games = db.get_all_played_games( # type: ignore
                     played_game["series_name"])
                 if len(series_games) > 1:
                     response += f"This marks her engagement with the {played_game['series_name']} franchise. I could analyze her complete {played_game['series_name']} chronology or compare this series against her other gaming preferences if you require additional data."
@@ -666,6 +676,67 @@ async def handle_game_status_query(
         await message.reply(f"Database analysis complete. No records of Captain Jonesy engaging '{game_title}' found in gaming archives. Mission parameters indicate this title has not been processed.")
 
 
+async def handle_game_details_query(
+        message: discord.Message,
+        match: Match[str]) -> None:
+    """Handle specific game detail queries (playtime, duration, etc.)."""
+    # Check if database is available
+    if db is None:
+        await message.reply("Database analysis systems offline. Game detail queries unavailable.")
+        return
+
+    game_name = match.group(1).strip()
+    
+    # Search for the game in PLAYED GAMES database
+    played_game = db.get_played_game(game_name) # type: ignore
+    
+    if played_game:
+        playtime_minutes = played_game.get('total_playtime_minutes', 0)
+        episodes = played_game.get('total_episodes', 0)
+        status = played_game.get('completion_status', 'unknown')
+        canonical_name = played_game['canonical_name']
+        
+        if playtime_minutes > 0:
+            if playtime_minutes >= 60:
+                hours = playtime_minutes // 60
+                minutes = playtime_minutes % 60
+                if minutes > 0:
+                    playtime_text = f"{hours}h {minutes}m"
+                else:
+                    playtime_text = f"{hours} hours"
+            else:
+                playtime_text = f"{playtime_minutes} minutes"
+            
+            response = f"Database analysis: Captain Jonesy invested {playtime_text} in '{canonical_name}'"
+            
+            if episodes > 0:
+                avg_per_episode = round(playtime_minutes / episodes, 1)
+                response += f" across {episodes} episodes (average: {avg_per_episode} minutes per episode)"
+            
+            response += f", completion status: {status}. "
+            
+            # Add contextual follow-up
+            if status == 'completed':
+                response += f"This represents a comprehensive gaming commitment. I could compare this against her other {status} titles or analyze completion efficiency patterns if you require additional data."
+            elif status == 'ongoing':
+                response += f"Mission status: ongoing. I can track progress metrics or provide estimated completion timeline analysis if you require mission updates."
+            else:
+                response += f"I can provide comparative analysis against similar games or examine her engagement patterns if additional data is required."
+                
+        else:
+            # No playtime data available
+            if episodes > 0:
+                response = f"Database analysis: '{canonical_name}' engaged for {episodes} episodes, completion status: {status}. However, temporal data is insufficient - playtime metrics require enhancement for comprehensive analysis."
+            else:
+                response = f"Database analysis: '{canonical_name}' found in gaming archives, completion status: {status}. However, both temporal and episode data are insufficient for detailed analysis."
+        
+        await message.reply(response)
+    else:
+        # Game not found in played games database
+        game_title = game_name.title()
+        await message.reply(f"Database scan complete. No records of Captain Jonesy engaging '{game_title}' found in gaming archives. Temporal analysis unavailable for unprocessed titles.")
+
+
 async def handle_recommendation_query(
         message: discord.Message,
         match: Match[str]) -> None:
@@ -678,7 +749,7 @@ async def handle_recommendation_query(
     game_name = match.group(1).strip()
 
     # Search in recommendations database
-    games = db.get_all_games()
+    games = db.get_all_games() # type: ignore
     found_game = None
     for game in games:
         if game_name.lower() in game["name"].lower(
