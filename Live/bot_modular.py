@@ -64,6 +64,34 @@ bot = commands.Bot(
     case_insensitive=True
 )
 
+# Global message handler functions - CRITICAL: This must be declared at module level
+message_handler_functions = None
+
+# Import conversation handlers for DM functionality
+try:
+    from bot.handlers.conversation_handler import (
+        announcement_conversations,
+        mod_trivia_conversations,
+        handle_announcement_conversation,
+        handle_mod_trivia_conversation,
+        cleanup_announcement_conversations,
+        cleanup_mod_trivia_conversations,
+        start_announcement_conversation,
+        start_trivia_conversation
+    )
+    print("✅ Conversation handlers imported successfully")
+except ImportError as e:
+    print(f"⚠️ Conversation handlers not available: {e}")
+    # Set fallback empty dictionaries
+    announcement_conversations = {}
+    mod_trivia_conversations = {}
+    handle_announcement_conversation = None
+    handle_mod_trivia_conversation = None
+    cleanup_announcement_conversations = lambda: None
+    cleanup_mod_trivia_conversations = lambda: None
+    start_announcement_conversation = None
+    start_trivia_conversation = None
+
 
 async def initialize_modular_components():
     """Initialize all modular components and return status report"""
@@ -269,15 +297,41 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    # Check if this is a DM
+    is_dm = isinstance(message.channel, discord.DMChannel)
+    
+    # Handle DM conversation flows first
+    if is_dm:
+        try:
+            # Clean up expired conversations
+            cleanup_announcement_conversations()
+            cleanup_mod_trivia_conversations()
+            
+            # Handle announcement conversation flow in DMs
+            if message.author.id in announcement_conversations and handle_announcement_conversation is not None:
+                print(f"🔄 Processing announcement conversation for user {message.author.id}")
+                await handle_announcement_conversation(message)
+                return
+            
+            # Handle mod trivia conversation flow in DMs  
+            if message.author.id in mod_trivia_conversations and handle_mod_trivia_conversation is not None:
+                print(f"🔄 Processing mod trivia conversation for user {message.author.id}")
+                await handle_mod_trivia_conversation(message)
+                return
+                
+        except Exception as e:
+            print(f"❌ Error in DM conversation handler: {e}")
+
     # Check if message handlers are loaded
     if 'message_handler_functions' not in globals() or message_handler_functions is None:
+        print(f"⚠️ Message handlers not loaded, processing commands only")
         # Process commands only
         await bot.process_commands(message)
         return
 
     try:
-        # Handle strikes in violation channel
-        if await message_handler_functions['handle_strike_detection'](message, bot):
+        # Handle strikes in violation channel (guild messages only)
+        if not is_dm and await message_handler_functions['handle_strike_detection'](message, bot):
             return
 
         # Handle pineapple pizza enforcement
@@ -288,6 +342,7 @@ async def on_message(message):
         content = message.content.lower()
         if bot.user and (
                 f'<@{bot.user.id}>' in message.content or f'<@!{bot.user.id}>' in message.content or content.startswith('ash')):
+            print(f"🔍 Processing query from user {message.author.id}: {content[:50]}...")
             # Route and handle queries
             query_type, match = message_handler_functions['route_query'](
                 content)
@@ -305,6 +360,8 @@ async def on_message(message):
 
     except Exception as e:
         print(f"❌ Error in message handler: {e}")
+        import traceback
+        traceback.print_exc()
 
     # Process commands normally
     await bot.process_commands(message)
@@ -350,6 +407,25 @@ async def on_resumed():
 async def on_error(event, *args, **kwargs):
     """Handle bot errors"""
     print(f"❌ Bot error in {event}: {args}")
+
+
+# Add conversation starter commands
+@bot.command(name="announceupdate")
+async def announce_update_command(ctx):
+    """Start interactive DM conversation for announcement creation"""
+    if start_announcement_conversation is not None:
+        await start_announcement_conversation(ctx)
+    else:
+        await ctx.send("❌ Announcement system not available - conversation handler not loaded.")
+
+
+@bot.command(name="addtriviaquestion")
+async def add_trivia_question_command(ctx):
+    """Start interactive DM conversation for trivia question submission"""
+    if start_trivia_conversation is not None:
+        await start_trivia_conversation(ctx)
+    else:
+        await ctx.send("❌ Trivia submission system not available - conversation handler not loaded.")
 
 
 def main():

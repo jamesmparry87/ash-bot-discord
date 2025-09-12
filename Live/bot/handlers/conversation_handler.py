@@ -6,6 +6,7 @@ Manages conversation state and user flows for complex multi-step interactions.
 """
 
 import asyncio
+import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
@@ -211,10 +212,24 @@ async def post_announcement(data: dict, user_id: int) -> bool:
         else:
             channel_id = ANNOUNCEMENTS_CHANNEL_ID
 
-        # Need bot instance - this will need to be passed in when called
-        # For now, we'll import it (this should be refactored in main.py
-        # integration)
-        from ..main import bot
+        # Need bot instance - get it from the global scope where it's available
+        # This works because the conversation handler is called from the main bot module
+        import discord
+        from discord.ext import commands
+        
+        # Get bot instance from the calling context - we'll search for it in globals
+        bot_instance = None
+        import sys
+        for name, obj in sys.modules.items():
+            if hasattr(obj, 'bot') and isinstance(getattr(obj, 'bot'), commands.Bot):
+                bot_instance = getattr(obj, 'bot')
+                break
+        
+        if bot_instance is None:
+            print(f"❌ Could not find bot instance for announcement posting")
+            return False
+        
+        bot = bot_instance
 
         channel = bot.get_channel(channel_id)
 
@@ -646,14 +661,13 @@ async def handle_mod_trivia_conversation(message):
 
                 # Submit the question to database
                 question_text = data['question_text']
-                import re
                 question_type = (
                     'multiple_choice' if data.get('question_type') == 'manual_answer' and re.search(
                         r'\b[A-D]\)', question_text) else 'single_answer')
 
                 if data.get('question_type') == 'database_calculated':
                     # Database-calculated question
-                    question_id = db.add_trivia_question(
+                    question_id = db.add_trivia_question( # type: ignore
                         question_text=question_text,
                         question_type=question_type,
                         correct_answer=None,  # Will be calculated dynamically
@@ -673,7 +687,7 @@ async def handle_mod_trivia_conversation(message):
                             multiple_choice_options = [
                                 opt.strip() for opt in options_match]
 
-                    question_id = db.add_trivia_question(
+                    question_id = db.add_trivia_question( # type: ignore
                         question_text=question_text,
                         question_type=question_type,
                         correct_answer=data['correct_answer'],

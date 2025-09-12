@@ -129,7 +129,7 @@ async def check_due_reminders():
             return
 
         # type: ignore
-        print(f"✅ Database URL configured: {db.database_url[:20]}...")
+        print(f"✅ Database URL configured: {db.database_url[:20]}...") # type: ignore
 
         # Test database connection with detailed logging
         try:
@@ -209,7 +209,7 @@ async def check_due_reminders():
                 traceback.print_exc()
                 # Mark as failed
                 try:
-                    db.update_reminder_status(
+                    db.update_reminder_status( # type: ignore
                         reminder.get('id'), "failed")  # type: ignore
                     print(f"⚠️ Reminder {reminder.get('id')} marked as failed")
                 except Exception as mark_e:
@@ -230,7 +230,7 @@ async def check_auto_actions():
     """Check for reminders that need auto-actions triggered"""
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
-        auto_action_reminders = db.get_reminders_awaiting_auto_action(
+        auto_action_reminders = db.get_reminders_awaiting_auto_action( # type: ignore
             uk_now)  # type: ignore
 
         if not auto_action_reminders:
