@@ -22,21 +22,21 @@ try:
     JAM_USER_ID = 337833732901961729
     MOD_ALERT_CHANNEL_ID = 869530924302344233
     MEMBERS_CHANNEL_ID = 888820289776013444
-    
+
     # Rate limiting configuration (from deployment fixes)
     PRIORITY_INTERVALS = {
         "high": 1.0,     # Trivia answers, direct questions, critical interactions
         "medium": 2.0,   # General chat responses, routine interactions
         "low": 3.0       # Auto-actions, background tasks, non-critical operations
     }
-    
+
     RATE_LIMIT_COOLDOWNS = {
         "first": 30,     # 30 seconds for first offense (was 300)
-        "second": 60,    # 1 minute for second offense  
+        "second": 60,    # 1 minute for second offense
         "third": 120,    # 2 minutes for third offense
-        "persistent": 300 # 5 minutes for persistent violations
+        "persistent": 300  # 5 minutes for persistent violations
     }
-    
+
     print("✅ Configuration loaded successfully (including deployment fixes)")
 except Exception as e:
     print(f"❌ Failed to load configuration: {e}")
@@ -64,21 +64,22 @@ bot = commands.Bot(
     case_insensitive=True
 )
 
+
 async def initialize_modular_components():
     """Initialize all modular components and return status report"""
     status_report = {
         "ai_handler": False,
-        "database": False, 
+        "database": False,
         "commands": False,
         "scheduled_tasks": False,
         "message_handlers": False,
         "fallback_mode": False,
         "errors": []
     }
-    
+
     # Note: Due to incomplete modular architecture, we'll attempt to load what's available
     # and fall back to fallback mode if needed
-    
+
     # 1. Initialize AI Handler (create missing config temporarily)
     try:
         # Create a temporary config module for AI handler
@@ -95,22 +96,22 @@ async def initialize_modular_components():
         setattr(config_module, 'PRIORITY_INTERVALS', PRIORITY_INTERVALS)
         setattr(config_module, 'RATE_LIMIT_COOLDOWN', 30)
         setattr(config_module, 'RATE_LIMIT_COOLDOWNS', RATE_LIMIT_COOLDOWNS)
-        
+
         # Temporarily add config to sys.modules
         sys.modules['bot.config'] = config_module
-        
+
         # Also create database reference for AI handler
         database_module = types.ModuleType('database')
         setattr(database_module, 'db', db)
         sys.modules['bot.database'] = database_module
-        
+
         # Try to initialize AI handler
         from bot.handlers.ai_handler import get_ai_status, initialize_ai
         initialize_ai()
         ai_status = get_ai_status()
         status_report["ai_handler"] = True
         print(f"✅ AI Handler initialized: {ai_status['status_message']}")
-        
+
     except Exception as e:
         status_report["errors"].append(f"AI Handler: {e}")
         print(f"❌ AI Handler initialization failed: {e}")
@@ -122,9 +123,10 @@ async def initialize_modular_components():
         print("✅ Database system available")
     else:
         print("⚠️ Database not available (acceptable if DATABASE_URL not configured)")
-        status_report["database"] = True  # Still considered success for deployment
+        # Still considered success for deployment
+        status_report["database"] = True
 
-    # 3. Commands Status  
+    # 3. Commands Status
     try:
         # Check if command files exist but don't try to load them yet
         # since they may depend on missing modules
@@ -133,13 +135,13 @@ async def initialize_modular_components():
             os.path.exists("bot/commands/games.py") and
             os.path.exists("bot/commands/utility.py")
         )
-        
+
         if commands_exist:
             print("✅ Command modules found (not loaded due to incomplete architecture)")
             status_report["commands"] = True
         else:
             print("⚠️ Some command modules missing")
-            
+
     except Exception as e:
         status_report["errors"].append(f"Commands: {e}")
         print(f"❌ Command check failed: {e}")
@@ -151,7 +153,7 @@ async def initialize_modular_components():
             status_report["message_handlers"] = True
         else:
             print("⚠️ Message handler missing")
-            
+
     except Exception as e:
         status_report["errors"].append(f"Message Handlers: {e}")
         print(f"❌ Message handler check failed: {e}")
@@ -163,7 +165,7 @@ async def initialize_modular_components():
             status_report["scheduled_tasks"] = True
         else:
             print("⚠️ Scheduled tasks missing")
-            
+
     except Exception as e:
         status_report["errors"].append(f"Scheduled Tasks: {e}")
         print(f"❌ Scheduled tasks check failed: {e}")
@@ -181,70 +183,75 @@ async def send_deployment_success_dm(status_report):
     try:
         user = await bot.fetch_user(JAM_USER_ID)
         if not user:
-            print(f"❌ Could not fetch user {JAM_USER_ID} for deployment notification")
+            print(
+                f"❌ Could not fetch user {JAM_USER_ID} for deployment notification")
             return
 
         # Count successful components
-        successful_components = sum(1 for key, value in status_report.items() 
-                                  if key != "errors" and value)
-        total_components = len([k for k in status_report.keys() if k != "errors"])
-        
+        successful_components = sum(1 for key, value in status_report.items()
+                                    if key != "errors" and value)
+        total_components = len(
+            [k for k in status_report.keys() if k != "errors"])
+
         # Create status message
         error_count = len(status_report["errors"])
-        component_count = sum(1 for key, value in status_report.items() 
-                              if key not in ["errors", "fallback_mode"] and value)
-        
+        component_count = sum(
+            1 for key, value in status_report.items() if key not in [
+                "errors", "fallback_mode"] and value)
+
         if error_count <= 2 and component_count >= 2:
             embed = discord.Embed(
                 title="🎉 Modular Architecture Entry Point Deployed!",
                 description="Entry point successfully created with deployment blocker fixes loaded.",
                 color=0x00ff00,
-                timestamp=datetime.now(ZoneInfo("Europe/London"))
-            )
-            
+                timestamp=datetime.now(
+                    ZoneInfo("Europe/London")))
+
             if status_report["ai_handler"]:
                 embed.add_field(
-                    name="✅ AI Handler Components", 
-                    value="Tiered rate limiting fixes loaded\n• High priority: 1s intervals\n• Medium priority: 2s intervals\n• Low priority: 3s intervals", 
-                    inline=False
-                )
-            
+                    name="✅ AI Handler Components",
+                    value="Tiered rate limiting fixes loaded\n• High priority: 1s intervals\n• Medium priority: 2s intervals\n• Low priority: 3s intervals",
+                    inline=False)
+
             if status_report["database"]:
                 embed.add_field(
-                    name="✅ Database System", 
-                    value="Database connection available", 
+                    name="✅ Database System",
+                    value="Database connection available",
                     inline=False
                 )
-            
+
             embed.add_field(
-                name="📋 Architecture Status", 
-                value="Entry point ready - modular components detected but not fully loaded\n(This is expected for incremental deployment)", 
-                inline=False
-            )
-            
+                name="📋 Architecture Status",
+                value="Entry point ready - modular components detected but not fully loaded\n(This is expected for incremental deployment)",
+                inline=False)
+
             embed.add_field(
-                name="🔧 Deployment Fixes Active", 
-                value="• Progressive penalty system (30s → 60s → 120s → 300s)\n• Enhanced database import strategies\n• Reduced alias cooldowns for testing", 
-                inline=False
-            )
-            
-            embed.set_footer(text="Entry point operational - Ready for Railway configuration update!")
-            
+                name="🔧 Deployment Fixes Active",
+                value="• Progressive penalty system (30s → 60s → 120s → 300s)\n• Enhanced database import strategies\n• Reduced alias cooldowns for testing",
+                inline=False)
+
+            embed.set_footer(
+                text="Entry point operational - Ready for Railway configuration update!")
+
         else:
             embed = discord.Embed(
                 title="⚠️ Modular Architecture Deployment - Partial Success",
                 description=f"Deployed with {successful_components}/{total_components} components successful",
                 color=0xffaa00,
-                timestamp=datetime.now(ZoneInfo("Europe/London"))
-            )
-            
+                timestamp=datetime.now(
+                    ZoneInfo("Europe/London")))
+
             if status_report["errors"]:
-                error_text = "\n".join([f"• {error}" for error in status_report["errors"][:5]])
-                embed.add_field(name="❌ Errors", value=error_text, inline=False)
+                error_text = "\n".join(
+                    [f"• {error}" for error in status_report["errors"][:5]])
+                embed.add_field(
+                    name="❌ Errors",
+                    value=error_text,
+                    inline=False)
 
         await user.send(embed=embed)
         print(f"✅ Deployment notification sent to {user.display_name}")
-        
+
     except Exception as e:
         print(f"❌ Failed to send deployment notification: {e}")
 
@@ -255,14 +262,15 @@ async def on_ready():
     print(f"\n🚀 {bot.user} connected to Discord!")
     print(f"📊 Connected to {len(bot.guilds)} guild(s)")
     print(f"🔧 Initializing modular architecture with deployment fixes...")
-    print(f"⏰ Startup time: {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d %H:%M:%S UK')}")
-    
+    print(
+        f"⏰ Startup time: {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d %H:%M:%S UK')}")
+
     # Initialize all modular components
     status_report = await initialize_modular_components()
-    
+
     # Send deployment success notification
     await send_deployment_success_dm(status_report)
-    
+
     print(f"\n🎉 Ash Bot modular architecture fully operational!")
     print(f"🔗 Deployment fixes active:")
     print(f"   • Tiered rate limiting (High: 1s, Medium: 2s, Low: 3s)")
@@ -278,7 +286,7 @@ async def on_disconnect():
     print("⚠️ Bot disconnected from Discord")
 
 
-@bot.event  
+@bot.event
 async def on_resumed():
     """Handle bot reconnection"""
     print("✅ Bot reconnected to Discord")
@@ -296,14 +304,14 @@ def main():
         print("❌ DISCORD_TOKEN not found in environment variables")
         print("❌ Please set DISCORD_TOKEN and restart the bot")
         sys.exit(1)
-    
+
     print("🤖 Starting Ash Bot with Modular Architecture...")
     print("🔧 Loading deployment blocker fixes...")
     print("⚡ Tiered rate limiting system")
     print("📋 Enhanced reminder delivery system")
     print("🛡️ Robust database import system")
     print()
-    
+
     try:
         bot.run(TOKEN)
     except discord.LoginFailure:
