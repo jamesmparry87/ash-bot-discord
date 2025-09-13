@@ -1,9 +1,10 @@
 """
 Database wrapper to handle import path issues
 """
-from database import DatabaseManager, get_database
 import os
 import sys
+
+from database import DatabaseManager, get_database
 
 # Add the Live directory to Python path for database import
 live_dir = os.path.join(os.path.dirname(__file__), '..')

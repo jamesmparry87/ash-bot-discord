@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Import the modules we need to test
 try:
+    from bot.handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting
     from bot.handlers.conversation_handler import (
         announcement_conversations,
         cleanup_announcement_conversations,
@@ -35,7 +36,6 @@ try:
         start_announcement_conversation,
         update_announcement_activity,
     )
-    from bot.handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting
     print("✅ Successfully imported announcement system modules")
 except ImportError as e:
     print(f"❌ Failed to import announcement modules: {e}")
