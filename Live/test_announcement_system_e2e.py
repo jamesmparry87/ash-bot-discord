@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Import the modules we need to test
 try:
-    from bot.handlers.ai_handler import get_ai_status, call_ai_with_rate_limiting
+    from bot.handlers.ai_handler import call_ai_with_rate_limiting, get_ai_status
     from bot.handlers.conversation_handler import (
         announcement_conversations,
         cleanup_announcement_conversations,

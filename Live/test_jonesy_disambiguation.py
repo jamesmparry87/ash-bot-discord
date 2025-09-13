@@ -4,12 +4,14 @@ Test script for Jonesy disambiguation system
 Tests the context detection patterns and FAQ responses
 """
 
-import sys
 import os
+import sys
+
 sys.path.append(os.path.join(os.path.dirname(__file__)))
 
-from bot.handlers.context_manager import detect_jonesy_context
 from bot.config import FAQ_RESPONSES
+from bot.handlers.context_manager import detect_jonesy_context
+
 
 def test_jonesy_context_detection():
     """Test the context detection function"""
