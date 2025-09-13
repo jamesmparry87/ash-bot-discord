@@ -5,8 +5,8 @@ This test verifies that the new singleton factory pattern is working
 and that all database methods are properly accessible.
 """
 
-import sys
 import os
+import sys
 
 # Add the Live directory to Python path
 sys.path.insert(0, os.path.dirname(__file__))

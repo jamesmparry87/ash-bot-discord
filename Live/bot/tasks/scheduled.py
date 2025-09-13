@@ -12,7 +12,7 @@ Handles all background scheduled tasks including:
 import asyncio
 import json
 from datetime import datetime, time, timedelta
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, cast
 from zoneinfo import ZoneInfo
 
 import discord
@@ -22,7 +22,6 @@ from ..config import GUILD_ID
 
 # Database and config imports
 from ..database import get_database
-from typing import cast
 
 # Import integrations
 from ..integrations.youtube import execute_youtube_auto_post
