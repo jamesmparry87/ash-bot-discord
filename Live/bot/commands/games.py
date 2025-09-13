@@ -9,7 +9,10 @@ import discord
 from discord.ext import commands
 
 from ..config import JAM_USER_ID
-from ..database import DatabaseManager, db
+from ..database_module import get_database
+
+# Get database instance
+db = get_database()
 
 
 class GamesCommands(commands.Cog):

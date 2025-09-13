@@ -21,7 +21,10 @@ from ..config import (
     RATE_LIMIT_COOLDOWN,
     RATE_LIMIT_COOLDOWNS,
 )
-from ..database import db
+from ..database import get_database
+
+# Get database instance
+db = get_database() # type: ignore
 
 # Try to import AI modules
 try:

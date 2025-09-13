@@ -9,7 +9,10 @@ import discord
 from discord.ext import commands
 
 from ..config import JONESY_USER_ID
-from ..database import DatabaseManager, db
+from ..database import get_database
+
+# Get database instance
+db = get_database()
 
 
 class StrikesCommands(commands.Cog):

@@ -30,7 +30,7 @@ from ..config import (
     MOD_ALERT_CHANNEL_ID,
     VIOLATION_CHANNEL_ID,
 )
-from ..database import db
+from ..database import get_database
 from ..utils.permissions import (
     cleanup_expired_aliases,
     get_member_conversation_count,
@@ -45,6 +45,9 @@ from ..utils.permissions import (
     user_is_mod_by_id,
 )
 from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+
+# Get database instance
+db = get_database()
 
 
 async def handle_strike_detection(
@@ -309,8 +312,8 @@ async def handle_statistical_query(
 
         elif "most episodes" in lower_content:
             # Handle episode count query
-            episode_stats = db.get_games_by_episode_count(
-                'DESC')  # type: ignore
+            episode_stats = db.get_games_by_episode_count( # type: ignore
+                'DESC')  
             if episode_stats:
                 top_game = episode_stats[0]
                 episodes = top_game['total_episodes']
@@ -376,8 +379,8 @@ async def handle_genre_query(
     ]
     if any(genre in query_term.lower() for genre in common_genres):
         try:
-            genre_games = db.get_games_by_genre_flexible(
-                query_term)  # type: ignore
+            genre_games = db.get_games_by_genre_flexible( # type: ignore
+                query_term)  
             if genre_games:
                 game_list = []
                 for game in genre_games[:8]:  # Limit to 8 games

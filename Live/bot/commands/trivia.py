@@ -16,7 +16,10 @@ import discord
 from discord.ext import commands
 
 from ..config import JAM_USER_ID, JONESY_USER_ID
-from ..database import db
+from ..database import get_database
+
+# Get database instance
+db = get_database() # type: ignore
 
 
 class TriviaCommands(commands.Cog):
@@ -102,11 +105,11 @@ class TriviaCommands(commands.Cog):
             # Add to database
             try:
                 question_id = db.add_trivia_question(  # type: ignore
-                    question=question_text,
-                    answer=answer,
+                    question_text=question_text,
+                    correct_answer=answer,
                     question_type=question_type,
-                    choices=choices if choices else None,
-                    created_by=ctx.author.id
+                    multiple_choice_options=choices if choices else None,
+                    submitted_by_user_id=ctx.author.id
                 )
 
                 if question_id:
@@ -152,8 +155,8 @@ class TriviaCommands(commands.Cog):
 
             if question_id:
                 try:
-                    question_data = db.get_trivia_question(
-                        question_id)  # type: ignore
+                    question_data = db.get_trivia_question( # type: ignore
+                        question_id)  
                     if not question_data:
                         await ctx.send(f"❌ **Question #{question_id} not found.** Use `!listpendingquestions` to see available questions.")
                         return
@@ -265,8 +268,8 @@ class TriviaCommands(commands.Cog):
 
             # End the session and get results
             try:
-                session_results = db.end_trivia_session(
-                    active_session['id'], ended_by=ctx.author.id)  # type: ignore
+                session_results = db.end_trivia_session( # type: ignore
+                    active_session['id'], ended_by=ctx.author.id)  
 
                 if session_results:
                     # Create results embed
@@ -350,8 +353,8 @@ class TriviaCommands(commands.Cog):
                 return
 
             try:
-                leaderboard_data = db.get_trivia_leaderboard(
-                    timeframe.lower())  # type: ignore
+                leaderboard_data = db.get_trivia_leaderboard( # type: ignore
+                    timeframe.lower())  
 
                 if not leaderboard_data or not leaderboard_data.get(
                         'participants'):

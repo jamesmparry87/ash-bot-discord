@@ -21,18 +21,17 @@ from discord.ext import tasks
 from ..config import GUILD_ID
 
 # Database and config imports
-from ..database import DatabaseManager, db
-
-if TYPE_CHECKING:
-    # Type hint for Pylance to understand db is a DatabaseManager instance
-    # when not None
-    assert db is not None
+from ..database import get_database
+from typing import cast
 
 # Import integrations
 from ..integrations.youtube import execute_youtube_auto_post
 
 # Global state for trivia
 active_trivia_sessions = {}
+
+# Get database instance
+db = get_database()
 
 
 @tasks.loop(time=time(12, 0))  # Run at 12:00 PM (midday) every day
@@ -123,22 +122,36 @@ async def check_due_reminders():
 
         print(f"✅ Database instance available: {type(db).__name__}")
 
-        if not hasattr(
-                db, 'database_url') or not db.database_url:  # type: ignore
-            print("❌ No database URL configured - reminder system disabled")
+        if not db:
+            print("❌ Database instance not available - reminder system disabled")
             return
-
-        # type: ignore
-        # type: ignore
-        print(f"✅ Database URL configured: {db.database_url[:20]}...")
+            
+        # Check if database is configured
+        try:
+            if hasattr(db, 'get_connection') and callable(getattr(db, 'get_connection')):
+                conn = db.get_connection()
+                if not conn:
+                    print("❌ No database connection available - reminder system disabled")
+                    return
+                print("✅ Database connection available")
+            else:
+                print("❌ Database get_connection method not available")
+                return
+        except Exception as db_check_e:
+            print(f"❌ Database check failed - reminder system disabled: {db_check_e}")
+            return
 
         # Test database connection with detailed logging
         try:
-            conn = db.get_connection()  # type: ignore
-            if not conn:
-                print("❌ Database connection failed in reminder check")
+            if hasattr(db, 'get_connection') and callable(getattr(db, 'get_connection')):
+                conn = db.get_connection()  # type: ignore
+                if not conn:
+                    print("❌ Database connection failed in reminder check")
+                    return
+                print("✅ Database connection successful")
+            else:
+                print("❌ Database get_connection method not available")
                 return
-            print("✅ Database connection successful")
         except Exception as conn_e:
             print(f"❌ Database connection error: {conn_e}")
             return
@@ -480,14 +493,93 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
 async def execute_auto_action(reminder: Dict[str, Any]) -> None:
     """Execute the auto-action for a reminder"""
     try:
+        from ..main import bot
+
         auto_action_type = reminder.get("auto_action_type")
         auto_action_data = reminder.get("auto_action_data", {})
         user_id = reminder["user_id"]
+        delivery_channel_id = reminder.get("delivery_channel_id")
 
         if auto_action_type == "youtube_post":
             await execute_youtube_auto_post(reminder, auto_action_data)
-        else:
+            return
+
+        # Handle moderation auto-actions (mute, kick, ban)
+        if auto_action_type not in ["mute", "kick", "ban"]:
             print(f"❌ Unknown auto-action type: {auto_action_type}")
+            return
+
+        # Check if moderator has intervened by looking for mod messages in channel after reminder delivery
+        if delivery_channel_id:
+            try:
+                channel = bot.get_channel(delivery_channel_id)
+                if channel and isinstance(channel, discord.TextChannel):
+                    # Check messages since reminder delivery for mod intervention
+                    delivered_at = reminder.get("delivered_at")
+                    if delivered_at:
+                        messages_after = []
+                        async for message in channel.history(limit=50, after=delivered_at):
+                            # Check if author is a Member (has guild_permissions) and has manage_messages permission
+                            if isinstance(message.author, discord.Member) and message.author.guild_permissions.manage_messages and not message.author.bot:
+                                print(f"✅ Moderator intervention detected - auto-action cancelled for reminder {reminder['id']}")
+                                return
+            except Exception as check_e:
+                print(f"⚠️ Could not check for moderator intervention: {check_e}")
+
+        # Get the guild and member
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print(f"❌ Could not find guild for auto-action")
+            return
+
+        try:
+            member = await guild.fetch_member(user_id)
+        except Exception as e:
+            print(f"❌ Could not fetch member {user_id} for auto-action: {e}")
+            return
+
+        # Execute the auto-action
+        reason = auto_action_data.get("reason", f"Auto-action triggered by reminder system")
+        action_result = "processed"  # Default value
+        
+        if auto_action_type == "mute":
+            try:
+                # Use Discord's timeout feature (30 minute timeout)
+                timeout_duration = timedelta(minutes=30)
+                await member.timeout(timeout_duration, reason=reason)
+                action_result = f"timed out for 30 minutes"
+            except Exception as e:
+                print(f"❌ Failed to timeout member: {e}")
+                return
+                
+        elif auto_action_type == "kick":
+            try:
+                await member.kick(reason=reason)
+                action_result = "kicked from server"
+            except Exception as e:
+                print(f"❌ Failed to kick member: {e}")
+                return
+                
+        elif auto_action_type == "ban":
+            try:
+                await member.ban(reason=reason, delete_message_days=0)
+                action_result = "banned from server"
+            except Exception as e:
+                print(f"❌ Failed to ban member: {e}")
+                return
+
+        # Log the auto-action in the channel where the reminder was set
+        if delivery_channel_id:
+            try:
+                channel = bot.get_channel(delivery_channel_id)
+                if channel and isinstance(channel, discord.TextChannel):
+                    log_message = f"⚡ **Auto-action executed:** {member.mention} has been {action_result}.\n**Reason:** {reason}\n**Reminder ID:** {reminder['id']}"
+                    await channel.send(log_message)
+                    print(f"✅ Auto-action logged in channel {delivery_channel_id}")
+            except Exception as e:
+                print(f"❌ Failed to log auto-action: {e}")
+
+        print(f"✅ Auto-action {auto_action_type} executed for user {user_id}")
 
     except Exception as e:
         print(f"❌ Error executing auto-action: {e}")

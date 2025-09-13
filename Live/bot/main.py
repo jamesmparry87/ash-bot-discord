@@ -28,7 +28,7 @@ from .config import (
     TOKEN,
     VIOLATION_CHANNEL_ID,
 )
-from .database import db
+from .database import get_database
 from .utils.permissions import (
     get_user_communication_tier,
     increment_member_conversation_count,
@@ -36,6 +36,9 @@ from .utils.permissions import (
     user_is_member,
     user_is_mod,
 )
+
+# Get database instance
+db = get_database()
 
 # Import existing moderator FAQ handler from Live directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -64,7 +67,7 @@ def acquire_lock() -> Optional[Any]:
         try:
             import fcntl
             lock_file = open(LOCK_FILE, 'w')
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX |
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | # type: ignore
                         fcntl.LOCK_NB)  # type: ignore
             lock_file.write(str(os.getpid()))
             lock_file.flush()

@@ -1070,8 +1070,8 @@ async def list_reminders(ctx, user: Optional[discord.Member] = None):
         try:
             if user:
                 # List reminders for specific user
-                reminders = db.get_pending_reminders_for_user(
-                    user.id)  # type: ignore
+                reminders = db.get_pending_reminders_for_user( # type: ignore
+                    user.id)  
                 if not reminders:
                     await ctx.send(f"📋 **No pending reminders for {user.display_name}.**")
                     return
@@ -1168,16 +1168,18 @@ async def cancel_reminder(ctx, reminder_id: int):
 
 @bot.command(name="remind")
 async def set_reminder(ctx, *, content: Optional[str] = None):
-    """Enhanced reminder command with traditional Discord format and natural language support"""
+    """Enhanced reminder command with traditional Discord format, auto-actions, and natural language support"""
     try:
         if not content:
-            # Progressive disclosure help message instead of wall of text
+            # Progressive disclosure help message
             help_text = (
                 "**Quick Examples:**\n"
                 "• `!remind @user 2m Stand up` - Traditional Discord format\n"
+                "• `!remind @user 1h Check on issue | auto:mute` - With auto-action\n"
                 "• `remind me in 5 minutes to check stream` - Natural language\n"
                 "• `set reminder for 7pm` - Specific time (asks for message)\n\n"
-                "Need help with: **[Time Formats]** • **[Auto-Actions]** • **[Advanced Options]**?")
+                "**Auto-Actions:** `auto:mute`, `auto:kick`, `auto:ban` (executed if no mod responds within 5 minutes)\n"
+                "**Time Formats:** `2m`, `1h30m`, `2h`, `1d`, `2024-12-25 15:30`, mixed units supported")
             await ctx.send(help_text)
             return
 
@@ -1186,59 +1188,90 @@ async def set_reminder(ctx, *, content: Optional[str] = None):
             await ctx.send("❌ Reminder system offline - database not available.")
             return
 
-        # Parse traditional Discord format: !remind @user 2m Stand up
+        # Parse traditional Discord format with auto-actions: !remind @user 2m Stand up | auto:mute
         traditional_match = re.match(
-            r'^<@!?(\d+)>\s+(\d+[smhd])\s+(.+)$',
+            r'^<@!?(\d+)>\s+(\d+(?:[smhd]|\d+[smhd])*)\s+(.+)$',
             content.strip())
 
         if traditional_match:
             # Traditional Discord format detected
             target_user_id = int(traditional_match.group(1))
             time_str = traditional_match.group(2)
-            reminder_text = traditional_match.group(3)
-
-            # Parse shorthand time (2m, 1h, 30s, 1d)
-            time_match = re.match(r'^(\d+)([smhd])$', time_str)
-            if not time_match:
-                await ctx.send("❌ Invalid time format. Use: `2m` (minutes), `1h` (hours), `30s` (seconds), `1d` (days)")
-                return
-
-            amount = int(time_match.group(1))
-            unit = time_match.group(2)
-
-            uk_now = datetime.now(ZoneInfo("Europe/London"))
-
-            # Initialize scheduled_time based on unit
-            if unit == 's':
-                scheduled_time = uk_now + timedelta(seconds=amount)
-            elif unit == 'm':
-                scheduled_time = uk_now + timedelta(minutes=amount)
-            elif unit == 'h':
-                scheduled_time = uk_now + timedelta(hours=amount)
-            elif unit == 'd':
-                scheduled_time = uk_now + timedelta(days=amount)
+            remainder = traditional_match.group(3)
+            
+            # Check for auto-action syntax
+            auto_action_enabled = False
+            auto_action_type = None
+            auto_action_data = {}
+            
+            if " | auto:" in remainder:
+                parts = remainder.split(" | auto:", 1)
+                reminder_text = parts[0].strip()
+                auto_action_part = parts[1].strip()
+                
+                # Parse auto-action type
+                if auto_action_part.lower() in ['mute', 'kick', 'ban']:
+                    auto_action_enabled = True
+                    auto_action_type = auto_action_part.lower()
+                    auto_action_data = {"reason": f"Auto-action triggered by reminder: {reminder_text[:50]}"}
+                else:
+                    await ctx.send("❌ Invalid auto-action type. Supported: `auto:mute`, `auto:kick`, `auto:ban`")
+                    return
             else:
-                # Default to minutes if unknown unit
-                scheduled_time = uk_now + timedelta(minutes=amount)
+                reminder_text = remainder
+
+            # Parse enhanced time format supporting mixed units like 1h30m
+            uk_now = datetime.now(ZoneInfo("Europe/London"))
+            scheduled_time = uk_now
+            
+            # Parse mixed time units (e.g., 1h30m, 2d5h, etc.)
+            time_pattern = r'(\d+)([smhd])'
+            time_matches = re.findall(time_pattern, time_str)
+            
+            if not time_matches:
+                await ctx.send("❌ Invalid time format. Examples: `2m`, `1h30m`, `2d`, `1h`, mixed units supported")
+                return
+            
+            total_seconds = 0
+            for amount_str, unit in time_matches:
+                amount = int(amount_str)
+                if unit == 's':
+                    total_seconds += amount
+                elif unit == 'm':
+                    total_seconds += amount * 60
+                elif unit == 'h':
+                    total_seconds += amount * 3600
+                elif unit == 'd':
+                    total_seconds += amount * 86400
+                    
+            scheduled_time = uk_now + timedelta(seconds=total_seconds)
 
             # Check permissions for setting reminders for others
             if target_user_id != ctx.author.id and not ctx.author.guild_permissions.manage_messages:
                 await ctx.send("❌ Only moderators can set reminders for other users.")
                 return
 
-            # Add reminder to database
+            # Add reminder to database with auto-action support
             reminder_id = db.add_reminder(
                 user_id=target_user_id,
                 reminder_text=reminder_text,
                 scheduled_time=scheduled_time,
                 delivery_channel_id=ctx.channel.id,
-                delivery_type="channel"
+                delivery_type="channel",
+                auto_action_enabled=auto_action_enabled,
+                auto_action_type=auto_action_type,
+                auto_action_data=auto_action_data
             )
 
             if reminder_id:
                 target_user = await bot.fetch_user(target_user_id)
-                time_desc = f"{amount}{unit}"
-                await ctx.send(f"✅ Reminder set for {target_user.display_name if target_user else 'user'} in {time_desc}: *{reminder_text}*")
+                time_desc = time_str
+                response = f"✅ Reminder set for {target_user.display_name if target_user else 'user'} in {time_desc}: *{reminder_text}*"
+                
+                if auto_action_enabled:
+                    response += f"\n⚡ **Auto-action enabled:** {auto_action_type} (executed if no mod responds within 5 minutes)"
+                
+                await ctx.send(response)
             else:
                 await ctx.send("❌ Failed to save reminder. Please try again.")
             return
@@ -1903,17 +1936,17 @@ async def make_announcement(ctx, *, announcement_text: Optional[str] = None):
         if announcement_channel:
             await announcement_channel.send(embed=embed)  # type: ignore
             # type: ignore
-            await ctx.send(f"✅ **Announcement posted** to {announcement_channel.mention}.")
+            await ctx.send(f"✅ **Announcement posted** to {announcement_channel.mention}.") # type: ignore
         else:
             await ctx.send("❌ **Announcement channel not found.** Please check channel configuration.")
 
         # Log to database if available
         if db and hasattr(db, 'log_announcement'):
             try:
-                db.log_announcement(
+                db.log_announcement( # type: ignore
                     ctx.author.id,
                     announcement_text,
-                    "announcement")  # type: ignore
+                    "announcement") 
             except BaseException:
                 pass  # Non-critical logging failure
 
@@ -1955,18 +1988,18 @@ async def emergency_announcement(ctx, *, message: Optional[str] = None):
         # Send to announcement channel with @everyone ping
         announcement_channel = bot.get_channel(ANNOUNCEMENTS_CHANNEL_ID)
         if announcement_channel:
-            # type: ignore
-            await announcement_channel.send("@everyone", embed=embed)
-            # type: ignore
-            await ctx.send(f"🚨 **Emergency announcement posted** with @everyone ping to {announcement_channel.mention}.")
+
+            await announcement_channel.send("@everyone", embed=embed) # type: ignore
+
+            await ctx.send(f"🚨 **Emergency announcement posted** with @everyone ping to {announcement_channel.mention}.") # type: ignore
         else:
             await ctx.send("❌ **Announcement channel not found.** Please check channel configuration.")
 
         # Log to database
         if db and hasattr(db, 'log_announcement'):
             try:
-                db.log_announcement(
-                    ctx.author.id, message, "emergency")  # type: ignore
+                db.log_announcement( # type: ignore
+                    ctx.author.id, message, "emergency")
             except BaseException:
                 pass
 

@@ -12,7 +12,10 @@ import discord
 from discord.ext import commands
 
 from ..config import JAM_USER_ID, JONESY_USER_ID, MAX_DAILY_REQUESTS, MAX_HOURLY_REQUESTS, MOD_ALERT_CHANNEL_ID
-from ..database import DatabaseManager, db
+from ..database import get_database
+
+# Get database instance
+db = get_database() # type: ignore
 
 
 class UtilityCommands(commands.Cog):
