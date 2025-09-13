@@ -35,8 +35,9 @@ class ConversationContext:
 
         # Jonesy disambiguation context
         self.current_jonesy_context: str = "user"  # 'user', 'cat', or 'ambiguous'
-        self.jonesy_context_confidence: float = 1.0  # How confident we are in the context
-        
+        # How confident we are in the context
+        self.jonesy_context_confidence: float = 1.0
+
         # Statistical context
         self.last_stats_context: Optional[Dict[str, Any]] = None
         self.last_series_mentioned: Optional[str] = None
@@ -78,23 +79,25 @@ class ConversationContext:
     def update_jonesy_context(self, content: str):
         """Update Jonesy context based on conversation content"""
         detected_context = detect_jonesy_context(content)
-        
+
         if detected_context != 'ambiguous':
             # Strong indicators found - update with high confidence
             self.current_jonesy_context = detected_context
             self.jonesy_context_confidence = 1.0
         elif 'jonesy' in content.lower():
-            # Ambiguous Jonesy reference - lower confidence but maintain current context
-            self.jonesy_context_confidence = max(0.5, self.jonesy_context_confidence * 0.8)
+            # Ambiguous Jonesy reference - lower confidence but maintain
+            # current context
+            self.jonesy_context_confidence = max(
+                0.5, self.jonesy_context_confidence * 0.8)
 
     def get_jonesy_context_info(self) -> Dict[str, Any]:
         """Get current Jonesy disambiguation information"""
         return {
             'context_type': self.current_jonesy_context,
             'confidence': self.jonesy_context_confidence,
-            'description': 'Captain Jonesy (user)' if self.current_jonesy_context == 'user' 
-                          else 'Jonesy the cat (Alien movie)' if self.current_jonesy_context == 'cat'
-                          else 'Ambiguous reference'
+            'description': 'Captain Jonesy (user)' if self.current_jonesy_context == 'user'
+            else 'Jonesy the cat (Alien movie)' if self.current_jonesy_context == 'cat'
+            else 'Ambiguous reference'
         }
 
     def is_expired(self, minutes: int = 30) -> bool:
@@ -378,7 +381,8 @@ def detect_jonesy_context(content: str) -> str:
             return 'user'
 
     # Default assumption: references to "Jonesy" are about Captain Jonesy (the user)
-    # This is the safer default since gaming queries are more common in this server
+    # This is the safer default since gaming queries are more common in this
+    # server
     if re.search(r'\bjonesy\b', content_lower):
         return 'user'
 
