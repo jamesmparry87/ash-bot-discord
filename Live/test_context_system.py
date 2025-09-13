@@ -6,9 +6,9 @@ This script demonstrates how the new context-aware query system solves
 the "Test Game 1" follow-up question problem.
 """
 
-import sys
-import os
 import asyncio
+import os
+import sys
 from unittest.mock import Mock
 
 # Add the Live directory to the path
@@ -20,9 +20,9 @@ def test_context_resolution():
         # Import the context manager
         from bot.handlers.context_manager import (
             ConversationContext,
-            resolve_context_references,
             detect_follow_up_intent,
-            should_use_context
+            resolve_context_references,
+            should_use_context,
         )
         
         print("✅ Context manager imported successfully")
@@ -80,7 +80,7 @@ def test_query_routing():
     """Test that queries are routed correctly"""
     try:
         from bot.handlers.message_handler import route_query
-        
+
         # Test resolved queries
         test_queries = [
             ("has jonesy played Test Game 1", "game_status"),

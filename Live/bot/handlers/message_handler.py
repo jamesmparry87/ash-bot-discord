@@ -50,7 +50,7 @@ from .context_manager import (
     detect_follow_up_intent,
     get_or_create_context,
     resolve_context_references,
-    should_use_context
+    should_use_context,
 )
 
 # Get database instance

@@ -159,16 +159,16 @@ async def on_message(message):
 
     try:
         # Import handlers
-        from .handlers.message_handler import (
-            handle_strike_detection,
-            handle_pineapple_pizza_enforcement,
-            process_gaming_query_with_context
-        )
         from .handlers.conversation_handler import (
+            announcement_conversations,
             handle_announcement_conversation,
             handle_mod_trivia_conversation,
-            announcement_conversations,
-            mod_trivia_conversations
+            mod_trivia_conversations,
+        )
+        from .handlers.message_handler import (
+            handle_pineapple_pizza_enforcement,
+            handle_strike_detection,
+            process_gaming_query_with_context,
         )
 
         # Handle strike detection in violation channel
