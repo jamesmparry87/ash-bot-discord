@@ -19,13 +19,15 @@ except ImportError as e:
     db = None
     DatabaseManager = None
     # Create a stub function to avoid callable errors
+
     def get_database():
         raise RuntimeError("Database not available - import failed")
 except Exception as e:
     print(f"❌ Database initialization error: {e}")
     db = None
     DatabaseManager = None
-    # Create a stub function to avoid callable errors  
+    # Create a stub function to avoid callable errors
+
     def get_database():
         raise RuntimeError("Database not available - initialization failed")
 

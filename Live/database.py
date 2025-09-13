@@ -1626,8 +1626,8 @@ class DatabaseManager:
                 cur.execute(
                     "SELECT completion_status, COUNT(*) as count FROM played_games GROUP BY completion_status")
                 status_results = cur.fetchall()
-                status_counts = {str(cast(RealDictRow, row)['completion_status']): int(
-                    cast(RealDictRow, row)['count']) for row in status_results} if status_results else {}
+                status_counts = {str(cast(RealDictRow, row)['completion_status']): int(cast(
+                    RealDictRow, row)['count']) for row in status_results} if status_results else {}
 
                 # Total episodes and playtime
                 cur.execute(
@@ -1642,15 +1642,15 @@ class DatabaseManager:
                 cur.execute(
                     "SELECT genre, COUNT(*) as count FROM played_games WHERE genre IS NOT NULL GROUP BY genre ORDER BY COUNT(*) DESC LIMIT 5")
                 genre_results = cur.fetchall()
-                top_genres = {str(cast(RealDictRow, row)['genre']): int(
-                    cast(RealDictRow, row)['count']) for row in genre_results} if genre_results else {}
+                top_genres = {str(cast(RealDictRow, row)['genre']): int(cast(RealDictRow, row)[
+                    'count']) for row in genre_results} if genre_results else {}
 
                 # Series distribution (replacing franchise)
                 cur.execute(
                     "SELECT series_name, COUNT(*) as count FROM played_games WHERE series_name IS NOT NULL GROUP BY series_name ORDER BY COUNT(*) DESC LIMIT 5")
                 series_results = cur.fetchall()
-                top_series = {str(cast(RealDictRow, row)['series_name']): int(
-                    cast(RealDictRow, row)['count']) for row in series_results} if series_results else {}
+                top_series = {str(cast(RealDictRow, row)['series_name']): int(cast(
+                    RealDictRow, row)['count']) for row in series_results} if series_results else {}
 
                 return {
                     "total_games": total_games,
@@ -2222,7 +2222,7 @@ class DatabaseManager:
             return False
 
     def cancel_user_reminder(self, reminder_id: int,
-                        user_id: int) -> Optional[Dict[str, Any]]:
+                             user_id: int) -> Optional[Dict[str, Any]]:
         """Cancel a reminder (only if it belongs to the user)"""
         conn = self.get_connection()
         if not conn:
@@ -2305,7 +2305,8 @@ class DatabaseManager:
             logger.error(f"Error getting all pending reminders: {e}")
             return []
 
-    def get_pending_reminders_for_user(self, user_id: int) -> List[Dict[str, Any]]:
+    def get_pending_reminders_for_user(
+            self, user_id: int) -> List[Dict[str, Any]]:
         """Get pending reminders for a specific user"""
         conn = self.get_connection()
         if not conn:
@@ -2324,7 +2325,8 @@ class DatabaseManager:
                 results = cur.fetchall()
                 return [dict(row) for row in results]
         except Exception as e:
-            logger.error(f"Error getting pending reminders for user {user_id}: {e}")
+            logger.error(
+                f"Error getting pending reminders for user {user_id}: {e}")
             return []
 
     def get_reminder_by_id(self, reminder_id: int) -> Optional[Dict[str, Any]]:
@@ -2525,7 +2527,8 @@ class DatabaseManager:
                     (question_id,
                      ))
                 question_result = cur.fetchone()
-                question_submitter_id = cast(RealDictRow, question_result)["submitted_by_user_id"] if question_result else None
+                question_submitter_id = cast(RealDictRow, question_result)[
+                    "submitted_by_user_id"] if question_result else None
 
                 from datetime import datetime, timezone
 
@@ -2619,7 +2622,8 @@ class DatabaseManager:
                 session_result = cur.fetchone()
 
                 conflict_detected = False
-                if session_result and cast(RealDictRow, session_result)["question_submitter_id"] == user_id:
+                if session_result and cast(RealDictRow, session_result)[
+                        "question_submitter_id"] == user_id:
                     conflict_detected = True
 
                 cur.execute(
@@ -3031,7 +3035,8 @@ class DatabaseManager:
 
     # --- Missing Trivia Methods for Command Compatibility ---
 
-    def get_trivia_question(self, question_id: int) -> Optional[Dict[str, Any]]:
+    def get_trivia_question(
+            self, question_id: int) -> Optional[Dict[str, Any]]:
         """Get trivia question by ID (alias for get_trivia_question_by_id)"""
         return self.get_trivia_question_by_id(question_id)
 
@@ -3046,7 +3051,7 @@ class DatabaseManager:
                 cur.execute("""
                     SELECT * FROM trivia_questions
                     WHERE is_active = TRUE AND status = 'available'
-                    ORDER BY 
+                    ORDER BY
                         CASE WHEN submitted_by_user_id IS NOT NULL THEN 1 ELSE 2 END,
                         created_at DESC,
                         usage_count ASC
@@ -3057,11 +3062,15 @@ class DatabaseManager:
             logger.error(f"Error getting available trivia questions: {e}")
             return []
 
-    def start_trivia_session(self, question_id: int, started_by: int) -> Optional[int]:
+    def start_trivia_session(
+            self,
+            question_id: int,
+            started_by: int) -> Optional[int]:
         """Start trivia session (alias for create_trivia_session)"""
         return self.create_trivia_session(question_id, "weekly")
 
-    def end_trivia_session(self, session_id: int, ended_by: int) -> Optional[Dict[str, Any]]:
+    def end_trivia_session(self, session_id: int,
+                           ended_by: int) -> Optional[Dict[str, Any]]:
         """End trivia session and return results"""
         conn = self.get_connection()
         if not conn:
@@ -3077,26 +3086,32 @@ class DatabaseManager:
                     WHERE ts.id = %s
                 """, (session_id,))
                 session = cur.fetchone()
-                
+
                 if not session:
                     return None
-                
+
                 session_dict = dict(session)
-                
+
                 # Get all answers for this session
                 answers = self.get_trivia_session_answers(session_id)
-                
+
                 # Calculate results
-                total_participants = len([a for a in answers if not a.get('conflict_detected', False)])
-                correct_answers = len([a for a in answers if a.get('is_correct', False) and not a.get('conflict_detected', False)])
-                first_correct_user = next((a for a in answers if a.get('is_first_correct', False)), None)
-                
+                total_participants = len(
+                    [a for a in answers if not a.get('conflict_detected', False)])
+                correct_answers = len([a for a in answers if a.get(
+                    'is_correct', False) and not a.get('conflict_detected', False)])
+                first_correct_user = next(
+                    (a for a in answers if a.get(
+                        'is_first_correct', False)), None)
+
                 # Complete the session
                 first_correct_user_id = first_correct_user['user_id'] if first_correct_user else None
-                success = self.complete_trivia_session(session_id, first_correct_user_id, total_participants, correct_answers)
-                
+                success = self.complete_trivia_session(
+                    session_id, first_correct_user_id, total_participants, correct_answers)
+
                 if success:
-                    correct_answer = session_dict.get('calculated_answer') or session_dict.get('correct_answer')
+                    correct_answer = session_dict.get(
+                        'calculated_answer') or session_dict.get('correct_answer')
                     return {
                         'session_id': session_id,
                         'question_id': session_dict.get('question_id'),
@@ -3106,7 +3121,7 @@ class DatabaseManager:
                         'correct_answers': correct_answers,
                         'first_correct': first_correct_user
                     }
-                
+
                 return None
         except Exception as e:
             logger.error(f"Error ending trivia session {session_id}: {e}")
@@ -3126,10 +3141,10 @@ class DatabaseManager:
                     date_filter = "AND ts.started_at >= CURRENT_DATE - INTERVAL '7 days'"
                 elif timeframe == "month":
                     date_filter = "AND ts.started_at >= CURRENT_DATE - INTERVAL '30 days'"
-                
+
                 # Get participant statistics
                 cur.execute(f"""
-                    SELECT 
+                    SELECT
                         ta.user_id,
                         COUNT(*) as total_answers,
                         COUNT(CASE WHEN ta.is_correct = TRUE THEN 1 END) as correct_answers,
@@ -3142,10 +3157,10 @@ class DatabaseManager:
                     LIMIT 20
                 """)
                 participants = cur.fetchall()
-                
+
                 # Get overall statistics
                 cur.execute(f"""
-                    SELECT 
+                    SELECT
                         COUNT(DISTINCT ts.id) as total_sessions,
                         COUNT(DISTINCT ts.question_id) as total_questions,
                         AVG(ts.total_participants) as avg_participation
@@ -3153,13 +3168,22 @@ class DatabaseManager:
                     WHERE ts.status = 'completed' {date_filter}
                 """)
                 stats = cur.fetchone()
-                
+
                 return {
-                    'participants': [dict(row) for row in participants],
-                    'total_sessions': int(cast(RealDictRow, stats)['total_sessions']) if stats else 0,
-                    'total_questions': int(cast(RealDictRow, stats)['total_questions']) if stats else 0,
-                    'avg_participation_per_session': float(cast(RealDictRow, stats)['avg_participation']) if stats else 0.0
-                }
+                    'participants': [
+                        dict(row) for row in participants],
+                    'total_sessions': int(
+                        cast(
+                            RealDictRow,
+                            stats)['total_sessions']) if stats else 0,
+                    'total_questions': int(
+                        cast(
+                            RealDictRow,
+                            stats)['total_questions']) if stats else 0,
+                    'avg_participation_per_session': float(
+                        cast(
+                            RealDictRow,
+                            stats)['avg_participation']) if stats else 0.0}
         except Exception as e:
             logger.error(f"Error getting trivia leaderboard: {e}")
             return {}
@@ -3170,10 +3194,16 @@ class DatabaseManager:
 
     # --- Missing Announcement System ---
 
-    def log_announcement(self, user_id: int, message: str, announcement_type: str = "general") -> bool:
+    def log_announcement(
+            self,
+            user_id: int,
+            message: str,
+            announcement_type: str = "general") -> bool:
         """Log announcement to database"""
         try:
-            self.set_config_value(f"last_announcement_{announcement_type}", f"{user_id}|{message}|{datetime.now().isoformat()}")
+            self.set_config_value(
+                f"last_announcement_{announcement_type}",
+                f"{user_id}|{message}|{datetime.now().isoformat()}")
             return True
         except Exception as e:
             logger.error(f"Error logging announcement: {e}")
@@ -3184,21 +3214,25 @@ class DatabaseManager:
     def bulk_import_from_youtube(self) -> Dict[str, Any]:
         """Placeholder for YouTube import functionality"""
         logger.warning("bulk_import_from_youtube not implemented yet")
-        return {"status": "not_implemented", "message": "YouTube import functionality not available"}
+        return {"status": "not_implemented",
+                "message": "YouTube import functionality not available"}
 
     def bulk_import_from_twitch(self) -> Dict[str, Any]:
         """Placeholder for Twitch import functionality"""
         logger.warning("bulk_import_from_twitch not implemented yet")
-        return {"status": "not_implemented", "message": "Twitch import functionality not available"}
+        return {"status": "not_implemented",
+                "message": "Twitch import functionality not available"}
 
     def ai_enhance_game_metadata(self) -> Dict[str, Any]:
         """Placeholder for AI metadata enhancement"""
         logger.warning("ai_enhance_game_metadata not implemented yet")
-        return {"status": "not_implemented", "message": "AI enhancement functionality not available"}
+        return {"status": "not_implemented",
+                "message": "AI enhancement functionality not available"}
 
 
 # Singleton database manager instance
 _db_instance: Optional[DatabaseManager] = None
+
 
 def get_database() -> DatabaseManager:
     """Get the singleton database manager instance with proper typing"""
@@ -3206,6 +3240,7 @@ def get_database() -> DatabaseManager:
     if _db_instance is None:
         _db_instance = DatabaseManager()
     return _db_instance
+
 
 # Backward compatibility alias - can be removed after full migration
 db = get_database()

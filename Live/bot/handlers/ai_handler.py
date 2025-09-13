@@ -24,7 +24,7 @@ from ..config import (
 from ..database import get_database
 
 # Get database instance
-db = get_database() # type: ignore
+db = get_database()  # type: ignore
 
 # Try to import AI modules
 try:

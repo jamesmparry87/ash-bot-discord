@@ -312,8 +312,8 @@ async def handle_statistical_query(
 
         elif "most episodes" in lower_content:
             # Handle episode count query
-            episode_stats = db.get_games_by_episode_count( # type: ignore
-                'DESC')  
+            episode_stats = db.get_games_by_episode_count(  # type: ignore
+                'DESC')
             if episode_stats:
                 top_game = episode_stats[0]
                 episodes = top_game['total_episodes']
@@ -379,8 +379,8 @@ async def handle_genre_query(
     ]
     if any(genre in query_term.lower() for genre in common_genres):
         try:
-            genre_games = db.get_games_by_genre_flexible( # type: ignore
-                query_term)  
+            genre_games = db.get_games_by_genre_flexible(  # type: ignore
+                query_term)
             if genre_games:
                 game_list = []
                 for game in genre_games[:8]:  # Limit to 8 games

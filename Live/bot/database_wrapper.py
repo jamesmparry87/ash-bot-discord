@@ -1,6 +1,7 @@
 """
 Database wrapper to handle import path issues
 """
+from database import DatabaseManager, get_database
 import os
 import sys
 
@@ -9,7 +10,6 @@ live_dir = os.path.join(os.path.dirname(__file__), '..')
 if live_dir not in sys.path:
     sys.path.insert(0, live_dir)
 
-from database import DatabaseManager, get_database
 
 # Re-export for easy importing
 __all__ = ['get_database', 'DatabaseManager']

@@ -15,7 +15,7 @@ from ..config import JAM_USER_ID, JONESY_USER_ID, MAX_DAILY_REQUESTS, MAX_HOURLY
 from ..database import get_database
 
 # Get database instance
-db = get_database() # type: ignore
+db = get_database()  # type: ignore
 
 
 class UtilityCommands(commands.Cog):
