@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from ..config import (
+    BOT_PERSONA,
     JAM_USER_ID,
     JONESY_USER_ID,
     MAX_DAILY_REQUESTS,
@@ -622,6 +623,12 @@ async def create_ai_announcement_content(
         if target_channel == 'mod':
             prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. You need to rewrite this announcement content in your analytical, technical style for a moderator briefing.
 
+IMPORTANT CONTEXT: There are two different "Jonesy" entities:
+1. Captain Jonesy - The Discord user, server owner, streamer/YouTuber (she/her pronouns)
+2. Jonesy the cat - From the 1979 Alien movie (the cat that survived with Ripley)
+
+When "Jonesy" is mentioned, assume it refers to Captain Jonesy (the user) unless there are clear movie/Alien context indicators.
+
 Original content from {author} ({author_context}):
 "{user_content}"
 
@@ -637,6 +644,12 @@ Write 2-4 sentences maximum. Be concise but comprehensive."""
 
         else:  # user channel
             prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. You need to rewrite this announcement content in a user-friendly way while maintaining some of Ash's analytical personality.
+
+IMPORTANT CONTEXT: There are two different "Jonesy" entities:
+1. Captain Jonesy - The Discord user, server owner, streamer/YouTuber (she/her pronouns)
+2. Jonesy the cat - From the 1979 Alien movie (the cat that survived with Ripley)
+
+When "Jonesy" is mentioned, assume it refers to Captain Jonesy (the user) unless there are clear movie/Alien context indicators.
 
 Original content from {author} ({author_context}):
 "{user_content}"

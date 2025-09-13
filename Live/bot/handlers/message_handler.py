@@ -48,6 +48,7 @@ from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_respon
 from .context_manager import (
     cleanup_expired_contexts,
     detect_follow_up_intent,
+    detect_jonesy_context,
     get_or_create_context,
     resolve_context_references,
     should_use_context,

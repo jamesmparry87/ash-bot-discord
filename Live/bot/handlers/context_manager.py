@@ -33,6 +33,10 @@ class ConversationContext:
         # Recent message context
         self.message_history: List[Dict[str, Any]] = []
 
+        # Jonesy disambiguation context
+        self.current_jonesy_context: str = "user"  # 'user', 'cat', or 'ambiguous'
+        self.jonesy_context_confidence: float = 1.0  # How confident we are in the context
+        
         # Statistical context
         self.last_stats_context: Optional[Dict[str, Any]] = None
         self.last_series_mentioned: Optional[str] = None
@@ -70,6 +74,28 @@ class ConversationContext:
     def update_series_context(self, series_name: str):
         """Update series context"""
         self.last_series_mentioned = series_name
+
+    def update_jonesy_context(self, content: str):
+        """Update Jonesy context based on conversation content"""
+        detected_context = detect_jonesy_context(content)
+        
+        if detected_context != 'ambiguous':
+            # Strong indicators found - update with high confidence
+            self.current_jonesy_context = detected_context
+            self.jonesy_context_confidence = 1.0
+        elif 'jonesy' in content.lower():
+            # Ambiguous Jonesy reference - lower confidence but maintain current context
+            self.jonesy_context_confidence = max(0.5, self.jonesy_context_confidence * 0.8)
+
+    def get_jonesy_context_info(self) -> Dict[str, Any]:
+        """Get current Jonesy disambiguation information"""
+        return {
+            'context_type': self.current_jonesy_context,
+            'confidence': self.jonesy_context_confidence,
+            'description': 'Captain Jonesy (user)' if self.current_jonesy_context == 'user' 
+                          else 'Jonesy the cat (Alien movie)' if self.current_jonesy_context == 'cat'
+                          else 'Ambiguous reference'
+        }
 
     def is_expired(self, minutes: int = 30) -> bool:
         """Check if context has expired due to inactivity"""
@@ -306,6 +332,57 @@ def generate_contextual_response_hints(context: ConversationContext) -> str:
         hints.append(f"Recent games: {recent}")
 
     return " | ".join(hints) if hints else ""
+
+
+def detect_jonesy_context(content: str) -> str:
+    """
+    Detect whether 'Jonesy' references refer to Captain Jonesy (user) or Jonesy the cat (Alien movie).
+    Returns 'user', 'cat', or 'ambiguous'
+    """
+    content_lower = content.lower()
+
+    # Strong indicators for Jonesy the cat (Alien movie)
+    cat_indicators = [
+        r'\bcat\b', r'\bkitten\b', r'\bfeline\b',
+        r'\balien\s*(movie|film)?\b', r'\bnostromo\b', r'\bship\b',
+        r'\b(nineteen\s*seventy[\-\s]*nine|1979)\b',
+        r'\bmovie\b', r'\bfilm\b', r'\bcinema\b',
+        r'\bridley\s+scott\b', r'\bsigourney\s+weaver\b', r'\bripley\b',
+        r'\bxenomorph\b', r'\balien\s+creature\b',
+        r'\bsurviv(ed|or|al)\b.*\balien\b',
+        r'\bonly\s+(survivor|one\s+who\s+made\s+it)\b',
+        r'\bspace\s+cat\b', r'\bship\'?s\s+cat\b'
+    ]
+
+    # Strong indicators for Captain Jonesy (user)
+    user_indicators = [
+        r'\bgam(e|es|ing|ed|er)\b', r'\bplay(ed|s|ing)?\b',
+        r'\bstream(ed|s|ing|er)?\b', r'\byoutube\b', r'\btwitch\b',
+        r'\bchannel\b', r'\bvideo\b', r'\bepisode\b',
+        r'\bhas\s+jonesy\s+played\b', r'\bdid\s+jonesy\s+play\b',
+        r'\bcaptain\s+jonesy\b', r'\bcommand(er|ing\s+officer)\b',
+        r'\bserver\s+owner\b', r'\bwhat\s+games?\b',
+        r'\bplaytime\b', r'\bcompleted?\b', r'\bfinished?\b',
+        r'\bgaming\s+(history|database|archive)\b',
+        r'\bhow\s+long.*played\b', r'\bwhen\s+did.*play\b'
+    ]
+
+    # Check for strong cat context
+    for pattern in cat_indicators:
+        if re.search(pattern, content_lower):
+            return 'cat'
+
+    # Check for strong user context
+    for pattern in user_indicators:
+        if re.search(pattern, content_lower):
+            return 'user'
+
+    # Default assumption: references to "Jonesy" are about Captain Jonesy (the user)
+    # This is the safer default since gaming queries are more common in this server
+    if re.search(r'\bjonesy\b', content_lower):
+        return 'user'
+
+    return 'ambiguous'
 
 
 def should_use_context(content: str) -> bool:

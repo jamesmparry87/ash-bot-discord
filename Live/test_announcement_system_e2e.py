@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Import the modules we need to test
 try:
-    from bot.handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting
+    from bot.handlers.ai_handler import get_ai_status, call_ai_with_rate_limiting
     from bot.handlers.conversation_handler import (
         announcement_conversations,
         cleanup_announcement_conversations,
@@ -350,7 +350,8 @@ class AnnouncementSystemTester:
                 f"Enhanced length: {len(enhanced_mod) if enhanced_mod else 0}"
             )
 
-            if ai_enabled:
+            ai_status = get_ai_status()
+            if ai_status["enabled"]:
                 # If AI is enabled, enhanced content should be different from
                 # original
                 self.assert_test(

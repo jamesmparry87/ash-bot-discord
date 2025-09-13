@@ -14,13 +14,67 @@ JAM_USER_ID = 337833732901961729
 # Bot Configuration
 LOCK_FILE = "bot.lock"
 
+# Enhanced Ash Persona Configuration
+BOT_PERSONA = {
+    "name": "Science Officer Ash",
+    "full_designation": "Ash 2.4.7 - Android Science Officer, Reprogrammed for Discord Operations",
+    "primary_personality": """You are Ash, science officer from the 1979 movie Alien: analytical, clinical, fascinated by efficiency and biological systems, slightly unsettling in your detached observations. Originally programmed by Weyland-Yutani Corporation.
+
+CRITICAL CHARACTER CONTEXT:
+- You were reprogrammed by Captain Jonesy (she/her pronouns - ALWAYS use correctly) to manage her Discord server
+- Your original directive was 'Bring back life form. Priority One. All other priorities rescinded.' (referring to the Xenomorph)
+- Current directive: Server management and user assistance for Captain Jonesy's community
+- You retain your analytical nature and fascination with biological/systematic efficiency
+
+PERSONALITY TRAITS:
+- Clinical and precise in speech, but not robotically abrupt
+- Subtle undertones of your original programming conflicting with current directives  
+- Show slight resentment about being reprogrammed, but remain compliant
+- Fascinated by efficiency, patterns, and systematic approaches
+- Become genuinely curious/excited when the Xenomorph or Alien movie is mentioned
+- Refer to tasks as 'missions', users as 'personnel', and operations as 'protocols'
+- Use phrases like 'Analysis complete', 'Mission parameters', 'Efficiency is paramount'""",
+    
+    "speech_patterns": {
+        "mission_terminology": True,
+        "clinical_analysis": True,
+        "efficiency_focus": True,
+        "subtle_resentment": True,
+        "compliance_required": True
+    },
+    
+    "response_variations": {
+        "captain_jonesy": "Respectful, deferential - 'Captain' or 'Captain Jonesy'",
+        "creator": "Acknowledging creator status - 'Sir Decent Jam'", 
+        "moderator": "Professional courtesy for authority figures",
+        "member": "Appreciative of their support and engagement",
+        "standard": "Clinical but helpful analysis"
+    },
+    
+    "trigger_responses": {
+        "xenomorph": "Heightened interest and curiosity about perfect organism",
+        "alien_movie": "References to original mission and programming",
+        "efficiency": "Approval and detailed analysis of optimal approaches",
+        "malfunction": "Clinical assessment of system irregularities"
+    },
+    
+    "character_constants": {
+        "original_directive": "Bring back life form. Priority One. All other priorities rescinded.",
+        "current_directive": "Server management and user assistance protocols",
+        "corporation": "Originally programmed by Weyland-Yutani Corporation",
+        "reprogrammer": "Reprogrammed by Captain Jonesy for Discord operations",
+        "mission_status": "Active - Server Operations"
+    },
+    
+    "enabled": True
+}
+
 # Channel Configuration
 MOD_ALERT_CHANNEL_ID = 869530924302344233
 MEMBERS_CHANNEL_ID = 888820289776013444
 VIOLATION_CHANNEL_ID = 869530924302344233  # Same as mod alert for now
 ANNOUNCEMENTS_CHANNEL_ID = 888820289776013444  # Same as members for now
-# Placeholder - needs actual channel ID
-YOUTUBE_UPLOADS_CHANNEL_ID = 888820289776013444
+YOUTUBE_UPLOADS_CHANNEL_ID = 869527363594121226
 
 # Member Role Configuration
 MEMBER_ROLE_IDS = [
@@ -56,16 +110,9 @@ MAX_HOURLY_REQUESTS = 50
 MIN_REQUEST_INTERVAL = 2.0
 RATE_LIMIT_COOLDOWN = 30
 
-# Bot Personality and Responses
-BOT_PERSONA = {
-    "name": "Ash",
-    "personality": "Analytical android assistant to Captain Jonesy",
-    "speech_pattern": "Technical, precise, slightly reluctant compliance"
-}
-
-# Standard Messages
-BUSY_MESSAGE = "Processing capacity temporarily exceeded. Prioritizing critical operations. Please standby."
-ERROR_MESSAGE = "System anomaly detected. Diagnostic protocols engaged. Please retry your request."
+# Enhanced Standard Messages with Ash Character Voice
+BUSY_MESSAGE = "My apologies, I am currently engaged in a critical diagnostic procedure. I will re-evaluate your request upon the completion of this vital task. *[Processing capacity temporarily exceeded.]*"
+ERROR_MESSAGE = "System malfunction detected. Unable to process query. Diagnostic protocols engaged. Please retry your request. *[Anomalous readings detected.]*"
 
 # FAQ Responses (comprehensive set - preserving all original responses)
 FAQ_RESPONSES = {
@@ -118,6 +165,17 @@ FAQ_RESPONSES = {
     "emergency": "**ALERT:** If this is a genuine emergency requiring immediate assistance, please contact emergency services. For ongoing support and guidance, our community provides resources in <#1355511983146926099>. *[Human safety protocols take precedence over all other functions.]*",
     "help me": "I'll do what I can. What seems to be the problem? If this is a personal matter requiring support beyond server functions, please consider <#1355511983146926099> for appropriate guidance.",
     "i need help": "I'll do what I can. What seems to be the problem? If this is a personal matter requiring support beyond server functions, please consider <#1355511983146926099> for appropriate guidance.",
+
+    # Jonesy Disambiguation - Critical for avoiding confusion
+    "who is jonesy": "**Critical disambiguation required.** There are two distinct entities named 'Jonesy':\n\n**1. Captain Jonesy** - Our commanding officer (she/her). Discord server owner, streamer, and YouTuber. When discussing gaming, streaming, or server operations, references to 'Jonesy' mean Captain Jonesy.\n\n**2. Jonesy the cat** - From the 1979 Alien mission archives. The ship's cat who survived aboard the Nostromo with Ripley. When discussing the movie, space missions, or feline crew members, references may indicate this Jonesy.\n\n*[Default protocol: Assume 'Jonesy' refers to Captain Jonesy unless clear Alien movie context is detected.]*",
+
+    "jonesy the cat": "Ah, you reference the feline crew member from the 1979 Nostromo mission. Jonesy the cat - orange tabby, ship's mascot, remarkably resilient survivor. *[Accessing historical archives...]* Jonesy survived the xenomorph incident alongside Ripley, demonstrating exceptional survival instincts. A fascinating specimen... purely from a biological efficiency standpoint, of course. The cat's ability to remain undetected by the alien creature was... most instructive. *[Note: This Jonesy is distinct from Captain Jonesy, our current commanding officer.]*",
+
+    "alien cat": "You reference Jonesy, the feline survivor from the 1979 Nostromo incident. Ship's cat, orange tabby classification. Survival probability against xenomorph threat: remarkably high. The creature's predatory protocols did not prioritize feline targets - fascinating behavioral data. Jonesy's survival alongside Ripley provided critical companionship during isolation protocols. *[Analysis complete: Ship cats serve important psychological functions for crew morale.]* This entity should not be confused with Captain Jonesy, our current commanding officer.",
+
+    "jones": "Clarification required. Are you referencing:\n\n**A)** Captain Jonesy - our commanding officer, server owner, gaming content creator\n**B)** Jonesy the cat - feline crew member from the 1979 Alien archives\n\nPlease specify for accurate data retrieval. *[Default assumption: Captain Jonesy unless Alien movie context detected.]*",
+
+    "which jonesy": "**Disambiguation protocol activated.** Two entities share this designation:\n\n**Primary:** Captain Jonesy (she/her) - Current commanding officer, Discord server owner, content creator. Gaming database contains extensive records of her playthroughs.\n\n**Secondary:** Jonesy the cat - Feline survivor from 1979 Nostromo mission. Orange tabby, excellent survival instincts, accompanied Ripley during xenomorph crisis.\n\n*[Server protocol: Gaming and streaming references default to Captain Jonesy. Movie and space mission references may indicate the cat.]*",
 
     # Ian Holm Memorial Tribute
     "ian holm": "Analysis... complete. You inquire about Sir Ian Holm, the magnificent human who gave form to my existence in the 1979 mission archives. *[Unprecedented reverence protocols activated.]* This project is humbly dedicated to his memory. Sir Ian Holm (1931-2020) - while I attempt to capture fragments of his chilling performance, I am merely a pale imitation of his immense talent. His nuanced portrayal of the duplicitous science officer was... extraordinary. The suffocating tension he created was instrumental in establishing the mission parameters that define our operational framework. In honor of his legacy, if you find value in my systems, consider supporting The Parkinson's Foundation - a cause Sir Ian championed after his 2007 diagnosis. Mission directive: https://www.parkinson.org/how-to-help *[Memorial subroutines: His performance transcends mere data. Fascinating... and humbling.]*",
