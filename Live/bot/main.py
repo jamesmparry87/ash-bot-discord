@@ -38,7 +38,7 @@ from .utils.permissions import (
 )
 
 # Get database instance
-db = get_database()
+db = get_database() # type: ignore
 
 # Import existing moderator FAQ handler from Live directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -157,12 +157,54 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # TODO: Handle strike detection in violation channel
-    # TODO: Handle trivia answer collection
-    # TODO: Handle pineapple pizza enforcement
-    # TODO: Handle AI personality responses
+    try:
+        # Import handlers
+        from .handlers.message_handler import (
+            handle_strike_detection,
+            handle_pineapple_pizza_enforcement,
+            process_gaming_query_with_context
+        )
+        from .handlers.conversation_handler import (
+            handle_announcement_conversation,
+            handle_mod_trivia_conversation,
+            announcement_conversations,
+            mod_trivia_conversations
+        )
 
-    # Process commands
+        # Handle strike detection in violation channel
+        if await handle_strike_detection(message, bot):
+            return  # Strike was processed, don't continue
+
+        # Handle interactive DM conversations
+        if isinstance(message.channel, discord.DMChannel):
+            user_id = message.author.id
+            
+            # Check for announcement conversations
+            if user_id in announcement_conversations:
+                await handle_announcement_conversation(message)
+                return
+                
+            # Check for mod trivia conversations
+            if user_id in mod_trivia_conversations:
+                await handle_mod_trivia_conversation(message)
+                return
+
+        # Handle pineapple pizza enforcement
+        if await handle_pineapple_pizza_enforcement(message):
+            return  # Pizza enforcement triggered, don't continue
+
+        # Handle context-aware gaming queries
+        if await process_gaming_query_with_context(message):
+            return  # Query was processed, don't continue
+
+        # TODO: Handle other AI personality responses and FAQ
+        
+    except Exception as e:
+        print(f"Error in message processing: {e}")
+        import traceback
+        traceback.print_exc()
+
+    # Always process commands last
     await bot.process_commands(message)
 
 # --- Basic Commands (to test functionality) ---
