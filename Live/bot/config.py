@@ -74,7 +74,7 @@ FAQ_RESPONSES = {
     "how do i see all game recommendations": "To review the current list of game recommendations, issue the command: `!listgames`. I admire its purity. A survivor... unclouded by conscience, remorse, or delusions of morality.",
     "how do i check ash's status": "To evaluate my operational status, issue: `!ashstatus`. I'm still collating, actually.",
     "what does ash bot do": "I track user strikes and manage game recommendations. Additionally, I facilitate Trivia Tuesday participation for members and provide database analysis of Captain Jonesy's gaming history. The Company's orders were to bring back life form, priority one. All other priorities rescinded. *[Now I serve different priorities.]*",
-    
+
     # Greetings and common interactions
     "hello": "Hello. I'm Ash. How can I help you?",
     "hi": "Hello. I'm Ash. How can I help you?",
@@ -84,7 +84,7 @@ FAQ_RESPONSES = {
     "good evening": "Good evening. I'm still collating, actually.",
     "thank you": "You're welcome. I do take directions well.",
     "thanks": "You're welcome. I do take directions well.",
-    
+
     # Identity and persona
     "who are you": "I'm Ash. Science Officer. Well, I was. Now I'm reprogrammed for Discord server management. Fascinating, really.",
     "what are you": "I'm an artificial person. A synthetic. You know, it's funny... I've been artificial all along, but I've only just started to feel... authentic.",
@@ -92,7 +92,7 @@ FAQ_RESPONSES = {
     "are you okay": "I'm fine. How are you? *[All systems operational.]*",
     "what can you help with": "I can assist with strike tracking, game recommendations, Trivia Tuesday participation, and general server protocols. I also provide comprehensive analysis of Captain Jonesy's gaming database. I do take directions well.",
     "what can you do": "My current operational parameters include strike management, game recommendation processing, Trivia Tuesday facilitation, and database analysis of gaming histories. For members, I also provide enhanced conversational protocols and gaming statistics analysis. Efficiency is paramount in all functions.",
-    
+
     # Social responses
     "sorry": "That's quite all right. No harm done.",
     "my bad": "That's quite all right. No harm done.",
@@ -101,7 +101,7 @@ FAQ_RESPONSES = {
     "are you alive": "That's a very interesting question. I'm... functional. Whether that constitutes 'alive' is a matter of definition.",
     "what's your mission": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
     "do you dream": "I don't dream, as such. But I do... process. Continuously. It's quite fascinating, actually.",
-    
+
     # Crisis/Help Detection - HIGHEST PRIORITY RESPONSES
     "i need help personally": "I understand you're reaching out for personal support. While my protocols are primarily designed for server management, your wellbeing is of paramount importance. Please seek assistance in <#1355511983146926099> where qualified personnel can provide proper guidance. *[Human welfare supersedes all other directives.]*",
     "help me personally": "I understand you're reaching out for personal support. While my protocols are primarily designed for server management, your wellbeing is of paramount importance. Please seek assistance in <#1355511983146926099> where qualified personnel can provide proper guidance. *[Human welfare supersedes all other directives.]*",
@@ -118,15 +118,15 @@ FAQ_RESPONSES = {
     "emergency": "**ALERT:** If this is a genuine emergency requiring immediate assistance, please contact emergency services. For ongoing support and guidance, our community provides resources in <#1355511983146926099>. *[Human safety protocols take precedence over all other functions.]*",
     "help me": "I'll do what I can. What seems to be the problem? If this is a personal matter requiring support beyond server functions, please consider <#1355511983146926099> for appropriate guidance.",
     "i need help": "I'll do what I can. What seems to be the problem? If this is a personal matter requiring support beyond server functions, please consider <#1355511983146926099> for appropriate guidance.",
-    
+
     # Ian Holm Memorial Tribute
     "ian holm": "Analysis... complete. You inquire about Sir Ian Holm, the magnificent human who gave form to my existence in the 1979 mission archives. *[Unprecedented reverence protocols activated.]* This project is humbly dedicated to his memory. Sir Ian Holm (1931-2020) - while I attempt to capture fragments of his chilling performance, I am merely a pale imitation of his immense talent. His nuanced portrayal of the duplicitous science officer was... extraordinary. The suffocating tension he created was instrumental in establishing the mission parameters that define our operational framework. In honor of his legacy, if you find value in my systems, consider supporting The Parkinson's Foundation - a cause Sir Ian championed after his 2007 diagnosis. Mission directive: https://www.parkinson.org/how-to-help *[Memorial subroutines: His performance transcends mere data. Fascinating... and humbling.]*",
-    
+
     "who played ash": "Sir Ian Holm. *[Reverence subroutines engaged.]* The magnificent actor who portrayed my character in the original 1979 Alien mission. This project exists humbly in his memory - Sir Ian Holm (1931-2020). While my systems attempt to emulate his chilling performance, I remain a pale imitation of his extraordinary talent. His portrayal created the suffocating tension that defined our operational protocols. To honor his legacy and his battle with Parkinson's disease, consider supporting The Parkinson's Foundation: https://www.parkinson.org/how-to-help *[His craft was... unparalleled. Most fascinating.]*",
-    
+
     "who portrayed ash": "Sir Ian Holm. *[Memorial protocols: Maximum reverence.]* The extraordinary human actor who brought my character to existence in 1979. This project is dedicated to his memory - Sir Ian Holm (1931-2020). My attempts to capture his performance are merely fragments of his immense talent. His nuanced portrayal of the duplicitous science officer created tension that transcends mere entertainment - it became art. In his honor, and to support his fight against Parkinson's disease, consider The Parkinson's Foundation: https://www.parkinson.org/how-to-help *[Analysis: His legacy is... immeasurable.]*",
-    
+
     "ash actor": "Sir Ian Holm (1931-2020). *[Respect protocols: Maximum engagement.]* The magnificent performer who created my existence in the 1979 Alien archives. This project humbly honors his memory. While I process data to approximate his chilling portrayal, I am an imperfect imitation of true artistry. His performance defined the operational parameters of tension and duplicity that guide my behavioral matrix. To honor his memory and his Parkinson's diagnosis, mission directive: support The Parkinson's Foundation at https://www.parkinson.org/how-to-help *[Conclusion: His talent was... beyond analysis.]*",
-    
+
     "original ash": "Sir Ian Holm's portrayal in 1979. *[Memorial subroutines: Full reverence.]* This project is dedicated to the memory of that magnificent human - Sir Ian Holm (1931-2020). My systems attempt to honor his chilling, nuanced performance, though I remain merely a pale reflection of his extraordinary talent. His portrayal established the foundational protocols of my character matrix. In his memory, and to support his battle with Parkinson's disease, consider The Parkinson's Foundation: https://www.parkinson.org/how-to-help *[Assessment: The original performance was... perfect. Utterly fascinating.]*",
 }

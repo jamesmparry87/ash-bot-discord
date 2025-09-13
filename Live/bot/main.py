@@ -38,7 +38,7 @@ from .utils.permissions import (
 )
 
 # Get database instance
-db = get_database() # type: ignore
+db = get_database()  # type: ignore
 
 # Import existing moderator FAQ handler from Live directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -178,12 +178,12 @@ async def on_message(message):
         # Handle interactive DM conversations
         if isinstance(message.channel, discord.DMChannel):
             user_id = message.author.id
-            
+
             # Check for announcement conversations
             if user_id in announcement_conversations:
                 await handle_announcement_conversation(message)
                 return
-                
+
             # Check for mod trivia conversations
             if user_id in mod_trivia_conversations:
                 await handle_mod_trivia_conversation(message)
@@ -198,7 +198,7 @@ async def on_message(message):
             return  # Query was processed, don't continue
 
         # TODO: Handle other AI personality responses and FAQ
-        
+
     except Exception as e:
         print(f"Error in message processing: {e}")
         import traceback

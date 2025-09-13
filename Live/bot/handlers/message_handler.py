@@ -54,7 +54,7 @@ from .context_manager import (
 )
 
 # Get database instance
-db = get_database() # type: ignore
+db = get_database()  # type: ignore
 
 
 async def handle_strike_detection(
@@ -787,66 +787,73 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
     try:
         # Clean up expired contexts periodically
         cleanup_expired_contexts()
-        
+
         # Get or create conversation context for this user/channel
         context = get_or_create_context(message.author.id, message.channel.id)
-        
+
         # Check if this query needs context resolution
         if not should_use_context(message.content):
             # Still update context with any games mentioned in regular queries
             # This will be handled by the normal query processors
             return False
-            
+
         # Detect if this is a follow-up question
         follow_up_intent = detect_follow_up_intent(message.content, context)
-        
+
         if follow_up_intent:
-            print(f"Context: Detected follow-up intent: {follow_up_intent['intent']}")
-            
+            print(
+                f"Context: Detected follow-up intent: {follow_up_intent['intent']}")
+
             # Handle duration follow-ups
             if follow_up_intent['intent'] == 'duration_followup':
                 if context.last_mentioned_game:
                     # Create a new query with resolved context
                     resolved_query = f"how long did jonesy play {context.last_mentioned_game}"
-                    print(f"Context: Resolved duration query: {resolved_query}")
-                    
+                    print(
+                        f"Context: Resolved duration query: {resolved_query}")
+
                     # Use existing game details handler
-                    match = re.search(r"how long did jonesy play (.+?)$", resolved_query)
+                    match = re.search(
+                        r"how long did jonesy play (.+?)$", resolved_query)
                     if match:
                         await handle_game_details_query(message, match)
                         context.add_message(message.content, "user")
-                        context.add_message("duration_followup_processed", "bot")
+                        context.add_message(
+                            "duration_followup_processed", "bot")
                         return True
-                        
+
             # Handle status follow-ups
             elif follow_up_intent['intent'] == 'status_followup':
                 if context.last_mentioned_game:
                     # Create a resolved status query
                     resolved_query = f"has jonesy played {context.last_mentioned_game}"
                     print(f"Context: Resolved status query: {resolved_query}")
-                    
+
                     # Use existing game status handler
-                    match = re.search(r"has jonesy played (.+?)$", resolved_query)
+                    match = re.search(
+                        r"has jonesy played (.+?)$", resolved_query)
                     if match:
                         await handle_game_status_query(message, match)
                         context.add_message(message.content, "user")
                         context.add_message("status_followup_processed", "bot")
                         return True
-                        
+
             # Handle episode follow-ups
             elif follow_up_intent['intent'] == 'episode_followup':
                 if context.last_mentioned_game:
                     # Query for episode information
-                    game_data = db.get_played_game(context.last_mentioned_game)  # type: ignore
+                    game_data = db.get_played_game(
+                        context.last_mentioned_game)  # type: ignore
                     if game_data:
                         episodes = game_data.get('total_episodes', 0)
                         canonical_name = game_data['canonical_name']
-                        
+
                         if episodes > 0:
                             response = f"Database analysis: '{canonical_name}' comprises {episodes} episodes. "
-                            
+
                             # Add contextual follow-up
-                            status = game_data.get('completion_status', 'unknown')
+                            status = game_data.get(
+                                'completion_status', 'unknown')
                             if status == 'completed':
                                 response += f"This represents a complete viewing commitment. I could analyze her episode pacing patterns or compare this against other completed series if you require additional data."
                             elif status == 'ongoing':
@@ -855,30 +862,33 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
                                 response += f"I can examine her engagement patterns or compare episode counts across similar titles if additional analysis is required."
                         else:
                             response = f"Database analysis: '{canonical_name}' episode data insufficient. Mission parameters require enhanced logging for accurate episode metrics."
-                            
+
                         await message.reply(response)
                         context.add_message(message.content, "user")
-                        context.add_message("episode_followup_processed", "bot")
+                        context.add_message(
+                            "episode_followup_processed", "bot")
                         return True
                     else:
                         await message.reply(f"Database analysis: Unable to locate episode data for previously referenced game. Context resolution requires enhancement.")
                         return True
-                        
+
         # Try general context resolution
-        resolved_content, context_info = resolve_context_references(message.content, context)
-        
+        resolved_content, context_info = resolve_context_references(
+            message.content, context)
+
         # If we resolved something, try processing with the resolved content
         if context_info and resolved_content != message.content:
-            print(f"Context: Resolved '{message.content}' -> '{resolved_content}'")
+            print(
+                f"Context: Resolved '{message.content}' -> '{resolved_content}'")
             print(f"Context info: {context_info}")
-            
+
             # Route the resolved query through normal processing
             query_type, match = route_query(resolved_content)
-            
+
             if query_type != "unknown" and match:
                 # Process the resolved query
                 context.add_message(message.content, "user")
-                
+
                 if query_type == "game_status":
                     await handle_game_status_query(message, match)
                     # Update context with the game mentioned
@@ -900,33 +910,34 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
                     await handle_statistical_query(message, resolved_content)
                 elif query_type == "recommendation":
                     await handle_recommendation_query(message, match)
-                
+
                 context.add_message("context_resolved_response", "bot")
                 return True
             else:
-                # Context resolution didn't lead to a valid query, provide helpful feedback
+                # Context resolution didn't lead to a valid query, provide
+                # helpful feedback
                 if context_info.get('game_resolved'):
                     await message.reply(f"Sir Decent Jam, I resolved your reference to '{context_info['game_resolved']}', however insufficient information provided for specific analysis. Please clarify your query parameters for accurate data retrieval.")
                 elif context_info.get('subject_resolved'):
                     await message.reply(f"Sir Decent Jam, accessing player data. I understand you're referencing Captain Jonesy, however insufficient information provided. Please specify the game title or analysis type for accurate data retrieval.")
                 else:
                     await message.reply(f"Sir Decent Jam, context parameters detected but query resolution incomplete. Please provide additional specificity for accurate mission data analysis.")
-                
+
                 context.add_message(message.content, "user")
                 context.add_message("context_resolution_failed", "bot")
                 return True
-        
+
         # If we detected ambiguous content but couldn't resolve it
         if should_use_context(message.content):
             # Provide helpful error message indicating missing context
             await message.reply(f"Sir Decent Jam, accessing player data. insufficient information provided. Please specify the \"she\" and the game title for accurate playtime retrieval.")
-            
+
             context.add_message(message.content, "user")
             context.add_message("insufficient_context", "bot")
             return True
-            
+
         return False
-        
+
     except Exception as e:
         print(f"Error in context-aware query processing: {e}")
         import traceback
@@ -943,15 +954,16 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
         # First, try context-aware processing
         if await handle_context_aware_query(message):
             return True
-            
+
         # Fall back to normal query processing
         query_type, match = route_query(message.content)
-        
+
         if query_type != "unknown" and match:
             # Get context to update with new information
-            context = get_or_create_context(message.author.id, message.channel.id)
+            context = get_or_create_context(
+                message.author.id, message.channel.id)
             context.add_message(message.content, "user")
-            
+
             # Process the query normally and update context
             if query_type == "statistical":
                 await handle_statistical_query(message, message.content)
@@ -973,12 +985,12 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
                 await handle_recommendation_query(message, match)
                 game_name = match.group(1).strip()
                 context.update_game_context(game_name, "recommendation")
-                
+
             context.add_message("query_processed", "bot")
             return True
-            
+
         return False
-        
+
     except Exception as e:
         print(f"Error in gaming query processing: {e}")
         import traceback
