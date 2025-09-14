@@ -125,16 +125,31 @@ class RemindersCommands(commands.Cog):
                 )
 
                 if reminder_id:
+                    # Use the improved time formatting
+                    try:
+                        from bot.tasks.reminders import format_reminder_time
+                        formatted_time = format_reminder_time(scheduled_time)
+                    except ImportError:
+                        # Fallback if import fails
+                        formatted_time = f"in {time_str}"
+                    
                     target_user = await self.bot.fetch_user(target_user_id)
-                    time_desc = time_str
-                    response = f"✅ Reminder set for {target_user.display_name if target_user else 'user'} in {time_desc}: *{reminder_text}*"
+                    user_name = target_user.display_name if target_user else 'user'
+                    
+                    # Enhanced confirmation for moderators
+                    response = f"✅ **Reminder #{reminder_id} set successfully**\n"
+                    response += f"**Target:** {user_name} (<@{target_user_id}>)\n"
+                    response += f"**Time:** {formatted_time}\n"
+                    response += f"**Message:** *{reminder_text}*"
 
                     if auto_action_enabled:
                         response += f"\n⚡ **Auto-action enabled:** {auto_action_type} (executed if no mod responds within 5 minutes)"
+                    
+                    response += f"\n**Delivery:** This channel ({ctx.channel.mention})"
 
                     await ctx.send(response)
                 else:
-                    await ctx.send("❌ Failed to save reminder. Please try again.")
+                    await ctx.send("❌ **Failed to save reminder.** Database error occurred. Please try again or contact system administrator.")
                 return
 
             # Try natural language parsing for other formats
@@ -144,31 +159,40 @@ class RemindersCommands(commands.Cog):
                 parsed = parse_natural_reminder(content, ctx.author.id)
 
                 if not parsed["success"]:
-                    # Better error message with examples
+                    # Better error message with examples for moderators
                     await ctx.send(
-                        "❌ **Unable to parse reminder.** Try:\n"
-                        "• `!remind @user 2m Stand up` (traditional)\n"
-                        "• `remind me in 30 minutes to check stream`\n"
-                        "• `set reminder for 7pm` (asks for message)\n\n"
-                        "**Time formats:** 2m, 1h, 30s, 1d, 'in 5 minutes', 'at 7pm'"
+                        "❌ **Unable to parse reminder.** As a moderator, try:\n"
+                        "• `!remind @user 2m Stand up` (traditional format)\n"
+                        "• `!remind @user 1h30m Check on issue | auto:mute` (with auto-action)\n"
+                        "• `remind me in 30 minutes to check stream` (natural language)\n"
+                        "• `set reminder for 7pm to review reports` (specific time)\n\n"
+                        "**Time formats:** 2m, 1h30m, 10.47am, 'in 5 minutes', 'at 7pm', 'tomorrow at 9am'"
                     )
                     return
 
+                # Enhanced validation with moderator-specific feedback
                 if not validate_reminder_text(parsed["reminder_text"]):
-                    # Ask for reminder message if missing
                     if not parsed["reminder_text"].strip():
-                        formatted_time = format_reminder_time(
-                            parsed["scheduled_time"])
-                        await ctx.send(f"⏰ Reminder scheduled for {formatted_time}. What should I remind you about?")
+                        # Ask for reminder message if missing
+                        formatted_time = format_reminder_time(parsed["scheduled_time"])
+                        await ctx.send(
+                            f"⏰ **Reminder time confirmed:** {formatted_time}\n\n"
+                            f"**What should I remind you about?** Please specify the reminder message."
+                        )
                         return
                     else:
-                        await ctx.send("❌ Reminder message is too short or invalid. Please provide a meaningful reminder.")
+                        await ctx.send(
+                            "❌ **Reminder message too short.** Please provide a meaningful reminder message "
+                            "(at least 3 characters). For example: 'Check server logs' or 'Review pending strikes'"
+                        )
                         return
 
-                # Add reminder to database (natural language format - always for
-                # self)
+                # Check if moderator is setting reminder for themselves
+                target_user_id = ctx.author.id
+                
+                # Add reminder to database (natural language format)
                 reminder_id = database.add_reminder(
-                    user_id=ctx.author.id,
+                    user_id=target_user_id,
                     reminder_text=parsed["reminder_text"],
                     scheduled_time=parsed["scheduled_time"],
                     delivery_channel_id=ctx.channel.id,
@@ -176,11 +200,17 @@ class RemindersCommands(commands.Cog):
                 )
 
                 if reminder_id:
-                    formatted_time = format_reminder_time(
-                        parsed["scheduled_time"])
-                    await ctx.send(f"✅ Reminder set for {formatted_time}: *{parsed['reminder_text']}*")
+                    formatted_time = format_reminder_time(parsed["scheduled_time"])
+                    
+                    # Enhanced confirmation message for moderators
+                    confirmation = f"✅ **Reminder #{reminder_id} set successfully**\n"
+                    confirmation += f"**Time:** {formatted_time}\n"
+                    confirmation += f"**Message:** *{parsed['reminder_text']}*\n"
+                    confirmation += f"**Delivery:** This channel ({ctx.channel.mention})"
+                    
+                    await ctx.send(confirmation)
                 else:
-                    await ctx.send("❌ Failed to save reminder. Please try again.")
+                    await ctx.send("❌ **Failed to save reminder.** Database error occurred. Please try again or contact system administrator.")
 
             except ImportError as e:
                 # More helpful error for import failures

@@ -26,8 +26,7 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             # Specific times with flexible format
             (r'\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)\b', 'time_12h'),
             (r'\bat\s+(\d{1,2})(?::(\d{2}))?\b', 'time_24h'),
-            (r'\bat\s+(\d{1,2})\.(\d{2})\s*(am|pm|AM|PM)?\b',
-             'time_dot_format'),
+            (r'\bat\s+(\d{1,2})\.(\d{2})\s*(am|pm|AM|PM)?\b', 'time_dot_format'),
 
             # Flexible PM times
             (r'\bfor\s+(\d{1,2})(?::(\d{2}))?\s*pm\b', 'for_pm_time'),
@@ -54,11 +53,9 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
         for pattern, time_type in time_patterns:
             match = re.search(pattern, content, re.IGNORECASE)
             if match:
-                # Remove time specification from reminder text
-                reminder_text = re.sub(
-                    pattern, '', content, flags=re.IGNORECASE).strip()
-                reminder_text = re.sub(
-                    r'\s+', ' ', reminder_text)  # Normalize whitespace
+                # Remove time specification from reminder text - use the exact match
+                reminder_text = content.replace(match.group(0), '').strip()
+                reminder_text = re.sub(r'\s+', ' ', reminder_text)  # Normalize whitespace
 
                 if time_type == 'time_12h':
                     hour = int(match.group(1))
@@ -133,13 +130,27 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
 
                 elif time_type == 'time_dot_format':
                     hour = int(match.group(1))
-                    minute = int(match.group(2)) if match.group(2) else 0
+                    minute = int(match.group(2))  # group(2) should always exist for dot format
                     am_pm = match.group(3).lower() if match.group(3) else None
 
-                    if am_pm == 'pm' and hour != 12:
-                        hour += 12
-                    elif am_pm == 'am' and hour == 12:
-                        hour = 0
+                    # If no AM/PM specified, assume 24-hour format for times > 12
+                    if not am_pm:
+                        # For times like 10.47, assume it's AM if hour <= 12, otherwise it's 24-hour
+                        if hour > 12:
+                            # 24-hour format, use as-is
+                            pass
+                        else:
+                            # Ambiguous - assume current part of day or next occurrence
+                            current_hour = uk_now.hour
+                            if hour < current_hour or (hour == current_hour and minute <= uk_now.minute):
+                                # Time has passed today, schedule for tomorrow
+                                pass  # Will be handled by the general logic below
+                    else:
+                        # Handle AM/PM
+                        if am_pm == 'pm' and hour != 12:
+                            hour += 12
+                        elif am_pm == 'am' and hour == 12:
+                            hour = 0
 
                     target_time = uk_now.replace(
                         hour=hour, minute=minute, second=0, microsecond=0)
@@ -184,18 +195,27 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
 
                 break
 
-        # Clean up reminder text
+        # Clean up reminder text - remove command prefixes first
         reminder_text = re.sub(r'\s+', ' ', reminder_text).strip()
+        
+        # Remove command prefixes
         reminder_text = re.sub(
-            r'^(remind\s+me\s+(?:to\s+|of\s+)?)',
-            '',
-            reminder_text,
-            flags=re.IGNORECASE).strip()
-        reminder_text = re.sub(
-            r'^(ash\s+)?remind\s+me\s+(?:to\s+|of\s+)?',
-            '',
-            reminder_text,
-            flags=re.IGNORECASE).strip()
+            r'^(?:remind\s+me\s+(?:to\s+|of\s+|at\s+|in\s+)?|'
+            r'set\s+(?:a\s+)?remind(?:er)?\s+(?:for\s+|to\s+|of\s+)?|'
+            r'create\s+(?:a\s+)?remind(?:er)?\s+(?:for\s+|to\s+|of\s+)?|'
+            r'schedule\s+(?:a\s+)?remind(?:er)?\s+(?:for\s+|to\s+|of\s+)?|'
+            r'(?:ash\s+)?remind\s+me\s+(?:to\s+|of\s+|at\s+|in\s+)?)',
+            '', reminder_text, flags=re.IGNORECASE).strip()
+        
+        # Clean up any remaining artifacts and connectors more aggressively
+        reminder_text = re.sub(r'^(?:to\s+|of\s+|about\s+|that\s+)', '', reminder_text, flags=re.IGNORECASE).strip()
+        
+        # Remove any leftover time fragments that weren't caught by the initial replacement
+        reminder_text = re.sub(r'^\d+\.\d+\s*', '', reminder_text).strip()
+        reminder_text = re.sub(r'^\.?\d+\s+', '', reminder_text).strip()
+        
+        # Final cleanup - remove any remaining connectors that might be left
+        reminder_text = re.sub(r'^(?:to\s+|of\s+|about\s+|that\s+)', '', reminder_text, flags=re.IGNORECASE).strip()
 
         # Default to 1 hour from now if no time found
         if not scheduled_time:
@@ -242,27 +262,47 @@ def detect_auto_action_type(
 
 
 def format_reminder_time(scheduled_time: datetime) -> str:
-    """Format a scheduled time for display"""
+    """Format a scheduled time for display with 12-hour format and proper timezone"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
+
+    # Determine timezone display (GMT/BST)
+    is_dst = scheduled_time.dst() != timedelta(0)
+    tz_name = "BST" if is_dst else "GMT"
+    
+    # Format time in 12-hour format
+    time_12h = scheduled_time.strftime(f'%I:%M %p {tz_name}')
 
     # Calculate time difference
     time_diff = scheduled_time - uk_now
-
+    
     if time_diff.days > 0:
         if time_diff.days == 1:
-            return f"tomorrow at {scheduled_time.strftime('%H:%M UK')}"
+            return f"tomorrow at {time_12h}"
         else:
-            return f"in {time_diff.days} days at {scheduled_time.strftime('%H:%M UK on %B %d')}"
+            date_str = scheduled_time.strftime('%B %d')
+            return f"in {time_diff.days} days at {time_12h} on {date_str}"
     else:
         hours = int(time_diff.total_seconds() // 3600)
         minutes = int((time_diff.total_seconds() % 3600) // 60)
-
+        
+        # Fix the "1 minutes" vs "1 minute" issue and handle edge cases
         if hours > 0:
-            return f"in {hours}h {minutes}m at {scheduled_time.strftime('%H:%M UK')}"
+            hour_str = f"{hours} hour{'s' if hours != 1 else ''}"
+            if minutes > 0:
+                min_str = f" {minutes} minute{'s' if minutes != 1 else ''}"
+                return f"in {hour_str}{min_str} at {time_12h}"
+            else:
+                return f"in {hour_str} at {time_12h}"
         elif minutes > 0:
-            return f"in {minutes} minutes at {scheduled_time.strftime('%H:%M UK')}"
+            min_str = f"{minutes} minute{'s' if minutes != 1 else ''}"
+            return f"in {min_str} at {time_12h}"
         else:
-            return f"in less than a minute at {scheduled_time.strftime('%H:%M UK')}"
+            # For times less than a minute, check if it's close to 1 minute
+            total_seconds = time_diff.total_seconds()
+            if total_seconds >= 30:  # Round up to 1 minute if >= 30 seconds
+                return f"in 1 minute at {time_12h}"
+            else:
+                return f"in less than a minute at {time_12h}"
 
 
 def validate_reminder_text(text: str) -> bool:
