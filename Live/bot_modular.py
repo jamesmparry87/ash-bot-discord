@@ -905,7 +905,48 @@ async def handle_general_conversation(message):
                 await message.reply(response)
                 return
 
-        # Check for moderator FAQ queries first (if FAQ handler is available)
+        # Check for announcement creation intents BEFORE FAQ processing
+        announcement_creation_patterns = [
+            "i want to write an announcement",
+            "i want to create an announcement", 
+            "i want to make an announcement",
+            "write an announcement",
+            "create an announcement",
+            "make an announcement",
+            "start announcement creation",
+            "begin announcement creation"
+        ]
+        
+        # Only Captain Jonesy and Sir Decent Jam can create announcements
+        if user_tier in ["captain", "creator"] and any(pattern in content_lower for pattern in announcement_creation_patterns):
+            # Check if this is a DM - announcement creation must be in DM
+            if isinstance(message.channel, discord.DMChannel):
+                # Import and start announcement conversation if available
+                if start_announcement_conversation is not None:
+                    print(f"🎯 Announcement creation intent detected from {user_tier} user in DM")
+                    # Create a fake context object for the conversation handler
+                    class FakeCtx:
+                        def __init__(self, message):
+                            self.author = message.author
+                            self.guild = message.guild
+                            self.send = message.reply
+                    
+                    fake_ctx = FakeCtx(message)
+                    await start_announcement_conversation(fake_ctx)
+                    return
+                else:
+                    await message.reply("❌ Announcement creation system not available - conversation handler not loaded.")
+                    return
+            else:
+                # Not in DM - redirect to DM
+                await message.reply(
+                    f"⚠️ **Security protocol engaged.** Announcement creation must be initiated via direct message. "
+                    f"Please DM me with your announcement request to begin the secure briefing process.\n\n"
+                    f"*Confidential mission parameters require private channel authorization.*"
+                )
+                return
+
+        # Check for moderator FAQ queries (if FAQ handler is available)
         if moderator_faq_handler and user_tier in [
                 "moderator", "moderator_in_mod_channel", "creator", "captain"]:
             faq_response = moderator_faq_handler.handle_faq_query(
