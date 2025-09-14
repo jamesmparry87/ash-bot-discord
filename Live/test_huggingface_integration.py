@@ -4,10 +4,11 @@ Test script for Hugging Face integration in AI handler.
 This script tests the basic functionality of the updated AI system.
 """
 
-from bot.handlers.ai_handler import JONESY_USER_ID, call_ai_with_rate_limiting, get_ai_status, initialize_ai
 import asyncio
 import os
 import sys
+
+from bot.handlers.ai_handler import JONESY_USER_ID, call_ai_with_rate_limiting, get_ai_status, initialize_ai
 
 # Add the current directory to Python path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
