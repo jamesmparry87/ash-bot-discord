@@ -9,12 +9,13 @@ Verifies that:
 """
 
 import sys
+
 sys.path.insert(0, '/workspaces/discord/Live')
 
 # Test the ModeratorFAQHandler directly
 try:
-    from moderator_faq_handler import ModeratorFAQHandler
     from moderator_faq_data import FAQ_DATA
+    from moderator_faq_handler import ModeratorFAQHandler
     
     def test_moderator_faq_system():
         """Test the ModeratorFAQHandler for reminder-related queries"""

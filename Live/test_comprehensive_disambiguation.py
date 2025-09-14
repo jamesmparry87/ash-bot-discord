@@ -14,7 +14,7 @@ def test_context_detection():
     """Test the context detection system"""
     try:
         from bot.handlers.context_manager import detect_jonesy_context
-        
+
         # Test user context detection
         user_cases = [
             "Has Jonesy played God of War?",

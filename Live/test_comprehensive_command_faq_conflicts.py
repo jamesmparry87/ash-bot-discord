@@ -279,9 +279,9 @@ async def test_faq_system_still_works():
     print("=" * 40)
     
     try:
-        from moderator_faq_handler import ModeratorFAQHandler
         from moderator_faq_data import FAQ_DATA
-        
+        from moderator_faq_handler import ModeratorFAQHandler
+
         # Initialize FAQ handler
         faq_handler = ModeratorFAQHandler(
             violation_channel_id=1393987338329260202,

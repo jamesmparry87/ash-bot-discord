@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 from zoneinfo import ZoneInfo
 
 import discord
-import pytest # type: ignore
+import pytest  # type: ignore
 from discord.ext import commands
 
 # Add the Live directory to sys.path
@@ -25,23 +25,23 @@ os.environ['TEST_MODE'] = 'true'
 
 # Import the modular bot system
 try:
-    import bot_modular # type: ignore
-    from bot.commands.strikes import StrikesCommands # type: ignore
-    from bot.commands.games import GamesCommands # type: ignore
-    from bot.commands.utility import UtilityCommands # type: ignore
-    from bot.handlers.message_handler import ( # type: ignore
-        handle_strike_detection,
-        handle_pineapple_pizza_enforcement,
-        route_query,
-        handle_statistical_query,
-        handle_genre_query,
-        handle_year_query,
-        handle_game_status_query,
+    import bot_modular  # type: ignore
+    from bot.commands.games import GamesCommands  # type: ignore
+    from bot.commands.strikes import StrikesCommands  # type: ignore
+    from bot.commands.utility import UtilityCommands  # type: ignore
+    from bot.handlers.ai_handler import get_ai_status  # type: ignore
+    from bot.handlers.message_handler import (  # type: ignore
         handle_game_details_query,
+        handle_game_status_query,
+        handle_genre_query,
+        handle_pineapple_pizza_enforcement,
         handle_recommendation_query,
+        handle_statistical_query,
+        handle_strike_detection,
+        handle_year_query,
+        route_query,
     )
-    from bot.handlers.ai_handler import get_ai_status # type: ignore
-    
+
     # Create compatibility wrapper module
     class CompatibilityWrapper:
         def __init__(self):
