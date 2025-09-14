@@ -296,8 +296,8 @@ async def scheduled_ai_refresh():
     print(f"🤖 AI module refresh initiated at {uk_now.strftime(f'%Y-%m-%d %H:%M:%S {timezone_name}')} (post-quota reset)")
 
     try:
-        from ..handlers.ai_handler import initialize_ai, get_ai_status, reset_daily_usage
-        
+        from ..handlers.ai_handler import get_ai_status, initialize_ai, reset_daily_usage
+
         # Force reset daily usage counters
         reset_daily_usage()
         print("✅ AI usage counters reset")
@@ -317,8 +317,8 @@ async def scheduled_ai_refresh():
         if previous_errors > 0:
             # Try to notify JAM that AI is back online after quota issues
             try:
-                from ..main import bot
                 from ..config import JAM_USER_ID
+                from ..main import bot
                 
                 user = await bot.fetch_user(JAM_USER_ID)
                 if user:
@@ -339,8 +339,8 @@ async def scheduled_ai_refresh():
         print(f"❌ Error in scheduled_ai_refresh: {e}")
         # Try to notify JAM of refresh failure
         try:
-            from ..main import bot
             from ..config import JAM_USER_ID
+            from ..main import bot
             
             user = await bot.fetch_user(JAM_USER_ID)
             if user:
