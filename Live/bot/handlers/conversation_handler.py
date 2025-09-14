@@ -97,43 +97,42 @@ async def create_ai_announcement_content(
 
         # Create AI prompt based on target channel
         if target_channel == 'mod':
-            prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. You need to rewrite this announcement content in your analytical, technical style for a moderator briefing.
+            prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. Rewrite this announcement content succinctly in Ash's analytical, technical style WITHOUT omitting any details or overly elaborating or inventing additional information.
 
-CRITICAL DISAMBIGUATION RULE: In this Discord server context, "Jonesy" ALWAYS refers to Captain Jonesy - the Discord user, server owner, and streamer/YouTuber (she/her pronouns). This is the default and correct interpretation unless explicitly discussing the 1979 Alien movie. The cat named Jonesy from Alien is a separate entity that is rarely relevant in server discussions.
+CRITICAL RULES:
+- DO NOT fabricate or add information not in the original content
+- DO NOT omit any details from the original message
+- DO NOT mention Captain Jonesy unless she is specifically mentioned in the original content
+- DO NOT create placeholder text like "[insert ID here]" or similar
+- Additions should ONLY be stylistic phrases that enhance Ash's voice, not new substantive content
+- Preserve ALL specific details, references, and quirky elements from the original
 
-DEFAULT ASSUMPTION: Any mention of "Jonesy" = Captain Jonesy (the user).
+CRITICAL DISAMBIGUATION RULE: In this Discord server context, "Jonesy" ALWAYS refers to Captain Jonesy - the Discord user, server owner, and streamer/YouTuber (she/her pronouns). This is the default and correct interpretation unless explicitly discussing the 1979 Alien movie.
 
 Original content from {author} ({author_context}):
 "{user_content}"
 
-Rewrite this as a technical briefing for moderators in Ash's voice. Be analytical, precise, and focus on:
-- Technical implementation details
-- Operational efficiency improvements
-- System functionality enhancements
-- Mission-critical parameters
-
-Use phrases like "Analysis indicates", "System diagnostics confirm", "Operational parameters enhanced", etc.
-Keep it professional but maintain Ash's clinical, analytical personality.
-Write 2-4 sentences maximum. Be concise but comprehensive."""
+Rewrite this as a technical briefing for moderators in Ash's voice. Be analytical and precise, using phrases like "Analysis indicates", "System diagnostics confirm", "Mission parameters", etc.
+Write 2-4 sentences maximum. Stay faithful to the original content while adding Ash's clinical personality."""
 
         else:  # user channel
-            prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. You need to rewrite this announcement content in a user-friendly way while maintaining some of Ash's analytical personality.
+            prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. Rewrite this announcement content succinctly in Ash's style WITHOUT omitting any details or overly elaborating or inventing additional information.
 
-CRITICAL DISAMBIGUATION RULE: In this Discord server context, "Jonesy" ALWAYS refers to Captain Jonesy - the Discord user, server owner, and streamer/YouTuber (she/her pronouns). This is the default and correct interpretation unless explicitly discussing the 1979 Alien movie. The cat named Jonesy from Alien is a separate entity that is rarely relevant in server discussions.
+CRITICAL RULES:
+- DO NOT fabricate or add information not in the original content
+- DO NOT omit any details from the original message
+- DO NOT mention Captain Jonesy unless she is specifically mentioned in the original content
+- DO NOT create placeholder text like "[insert ID here]" or similar
+- Additions should ONLY be stylistic phrases that enhance Ash's voice, not new substantive content
+- Preserve ALL specific details, references, and quirky elements from the original
 
-DEFAULT ASSUMPTION: Any mention of "Jonesy" = Captain Jonesy (the user).
+CRITICAL DISAMBIGUATION RULE: In this Discord server context, "Jonesy" ALWAYS refers to Captain Jonesy - the Discord user, server owner, and streamer/YouTuber (she/her pronouns). This is the default and correct interpretation unless explicitly discussing the 1979 Alien movie.
 
 Original content from {author} ({author_context}):
 "{user_content}"
 
-Rewrite this as a community announcement that's accessible to regular users but still has Ash's analytical undertones. Focus on:
-- User benefits and improvements
-- How features enhance the user experience
-- Clear, helpful explanations
-- Practical usage information
-
-Be helpful and informative, but keep subtle hints of Ash's analytical nature.
-Write 2-4 sentences maximum. Make it engaging and user-focused."""
+Rewrite this as a community announcement that's accessible to regular users but still has Ash's analytical undertones.
+Write 2-4 sentences maximum. Stay faithful to the original content while adding Ash's personality."""
 
         # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, user_id)
@@ -186,7 +185,7 @@ async def format_announcement_content(
         formatted += (f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                       f"**📊 System Status:** All core functions operational\n"
                       f"**🕒 Briefing Time:** {timestamp}\n"
-                      f"**🔧 Technical Contact:** <@{JAM_USER_ID}> for implementation details\n"
+                      f"**🔧 Technical Contact:** Sir Decent Jam for implementation details\n"
                       f"**⚡ Priority Level:** Standard operational enhancement\n\n"
                       f"*Analysis complete. Mission parameters updated. Efficiency maintained.*")
     else:
@@ -204,7 +203,7 @@ async def format_announcement_content(
 
         formatted += (f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                       f"**🕒 Posted:** {timestamp}\n"
-                      f"**💬 Questions?** Feel free to ask in the channels or DM <@{JAM_USER_ID}>\n"
+                      f"**💬 Questions?** Feel free to ask in the channels or DM Sir Decent Jam\n"
                       f"**🤖 From:** Ash Bot (Science Officer, reprogrammed for your convenience)\n\n"
                       f"*Hope you enjoy the new functionality! - The Management* 🚀")
 

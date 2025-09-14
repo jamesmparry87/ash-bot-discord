@@ -170,33 +170,28 @@ class RemindersCommands(commands.Cog):
                 parsed = parse_natural_reminder(content, ctx.author.id)
 
                 if not parsed["success"]:
-                    # Better error message with examples for moderators
-                    await ctx.send(
-                        "❌ **Unable to parse reminder.** As a moderator, try:\n"
-                        "• `!remind @user 2m Stand up` (traditional format)\n"
-                        "• `!remind @user 1h30m Check on issue | auto:mute` (with auto-action)\n"
-                        "• `remind me in 30 minutes to check stream` (natural language)\n"
-                        "• `set reminder for 7pm to review reports` (specific time)\n\n"
-                        "**Time formats:** 2m, 1h30m, 10.47am, 'in 5 minutes', 'at 7pm', 'tomorrow at 9am'"
-                    )
+                    # Use the enhanced error handling from the validation system
+                    error_type = parsed.get("error_type", "unknown")
+                    error_message = parsed.get("error_message", "Unable to parse reminder.")
+                    suggestion = parsed.get("suggestion", "")
+                    
+                    response = f"❌ **{error_message}**"
+                    if suggestion:
+                        response += f"\n\n💡 **Suggestion:** {suggestion}"
+                    
+                    # Add general help for moderators if it's not a specific parsing error
+                    if error_type in ["parsing_ambiguous", "unknown"]:
+                        response += ("\n\n**As a moderator, you can also try:**\n"
+                                   "• `!remind @user 2m Stand up` (traditional format)\n"
+                                   "• `!remind @user 1h30m Check on issue | auto:mute` (with auto-action)\n"
+                                   "• `remind me in 30 minutes to check stream` (natural language)\n"
+                                   "• `set reminder for 7pm to review reports` (specific time)")
+                    
+                    await ctx.send(response)
                     return
 
-                # Enhanced validation with moderator-specific feedback
-                if not validate_reminder_text(parsed["reminder_text"]):
-                    if not parsed["reminder_text"].strip():
-                        # Ask for reminder message if missing
-                        formatted_time = format_reminder_time(parsed["scheduled_time"])
-                        await ctx.send(
-                            f"⏰ **Reminder time confirmed:** {formatted_time}\n\n"
-                            f"**What should I remind you about?** Please specify the reminder message."
-                        )
-                        return
-                    else:
-                        await ctx.send(
-                            "❌ **Reminder message too short.** Please provide a meaningful reminder message "
-                            "(at least 3 characters). For example: 'Check server logs' or 'Review pending strikes'"
-                        )
-                        return
+                # The validation is now handled within parse_natural_reminder, so we can trust the result
+                # No need for additional validate_reminder_text check since it's built into the parser now
 
                 # Check if moderator is setting reminder for themselves
                 target_user_id = ctx.author.id

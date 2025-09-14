@@ -15,46 +15,60 @@ from ..integrations.youtube import extract_youtube_urls, has_youtube_content
 def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
     """Parse natural language reminder requests"""
     try:
-        # Enhanced time patterns with more flexible matching
+        # Comprehensive time patterns ordered from most specific to most general
         time_patterns = [
-            # Simple relative times (most common)
-            (r'\bin\s+(\d+)\s*(?:minute|min|m)s?\b', 'minutes_from_now'),
-            (r'\bin\s+(\d+)\s*(?:hour|hr|h)s?\b', 'hours_from_now'),
-            (r'\bin\s+(\d+)\s*(?:second|sec|s)\b', 'seconds_from_now'),
-            (r'\bin\s+(\d+)\s*(?:day|d)s?\b', 'days_from_now'),
+            # Duration patterns (highest priority)
+            (r'\b(?:in\s+)?(\d+)\s*(?:minute|min)(?:\'?s)?\s*(?:time)?\b', 'minutes_from_now'),
+            (r'\b(?:in\s+)?(\d+)\s*(?:m)\b', 'minutes_from_now_short'),
+            (r'\b(?:in\s+)?(\d+)\s*(?:hour|hr)(?:s)?\s*(?:time)?\b', 'hours_from_now'),
+            (r'\b(?:in\s+)?(\d+)\s*(?:h)\b', 'hours_from_now_short'),
+            (r'\b(?:in\s+)?(\d+)\s*(?:day|d)(?:s)?\s*(?:time)?\b', 'days_from_now'),
+            (r'\b(?:in\s+)?(\d+)\s*(?:week|wk)(?:s)?\b', 'weeks_from_now'),
+            (r'\b(?:in\s+)?(\d+)\s*(?:second|sec)(?:s)?\s*(?:time)?\b', 'seconds_from_now'),
+            (r'\b(?:in\s+)?(\d+)\s*(?:s)\b', 'seconds_from_now_short'),
 
-            # Specific times with flexible format
-            (r'\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)\b', 'time_12h'),
+            # Weekday patterns with times
+            (r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b', 'weekday_time'),
+            (r'\bnext\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b', 'next_weekday_time'),
+
+            # Simple time patterns with clearer matching
+            (r'\b(?:at|for|on)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', 'time_12h'),
+            (r'\b(?:at|for|on)\s+(\d{1,2})\.(\d{2})\s*(am|pm)\b', 'time_dot_12h'),
+            (r'\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', 'time_12h_simple'),
+            
+            # 24-hour format times
             (r'\bat\s+(\d{1,2})(?::(\d{2}))?\b', 'time_24h'),
-            (r'\bat\s+(\d{1,2})\.(\d{2})\s*(am|pm|AM|PM)?\b', 'time_dot_format'),
-
-            # Flexible PM times
-            (r'\bfor\s+(\d{1,2})(?::(\d{2}))?\s*pm\b', 'for_pm_time'),
-            (r'\bfor\s+(\d{1,2})\.(\d{2})\s*pm\b', 'for_pm_dot_time'),
-            (
-                r'\bset\s+reminder\s+for\s+(\d{1,2})(?::(\d{2}))?\s*pm\b',
-                'set_reminder_pm'),
+            (r'\bat\s+(\d{1,2})\.(\d{2})\b', 'time_dot_24h'),
 
             # Tomorrow patterns
-            (
-                r'\btomorrow\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b',
-                'tomorrow_time'),
+            (r'\btomorrow\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b', 'tomorrow_time'),
             (r'\btomorrow\b', 'tomorrow'),
 
+            # Day-only patterns
+            (r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', 'weekday'),
+            (r'\bnext\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', 'next_weekday'),
+
             # Special times
-            (r'\bat\s+(?:6\s*pm|18:00|1800)\b', 'six_pm'),
+            (r'\b(?:at\s+)?(?:noon|midday|12pm)\b', 'noon'),
+            (r'\b(?:at\s+)?(?:midnight|12am)\b', 'midnight'),
+            (r'\b(?:at\s+)?(?:6\s*pm|18:00|1800)\b', 'six_pm'),
         ]
 
         # Extract reminder text and time
+        original_content = content
         reminder_text = content
         scheduled_time = None
+        matched_pattern = None
         uk_now = datetime.now(ZoneInfo("Europe/London"))
 
         for pattern, time_type in time_patterns:
             match = re.search(pattern, content, re.IGNORECASE)
             if match:
-                # Remove time specification from reminder text - use the exact match
-                reminder_text = content.replace(match.group(0), '').strip()
+                # Store the matched pattern for better text extraction
+                matched_pattern = match.group(0)
+                
+                # Remove the EXACT matched text from the reminder
+                reminder_text = content.replace(matched_pattern, '').strip()
                 reminder_text = re.sub(r'\s+', ' ', reminder_text)  # Normalize whitespace
 
                 if time_type == 'time_12h':
@@ -88,17 +102,112 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
                         target_time += timedelta(days=1)
                     scheduled_time = target_time
 
-                elif time_type == 'hours_from_now':
+                elif time_type in ['hours_from_now', 'hours_from_now_short']:
                     hours = int(match.group(1))
                     scheduled_time = uk_now + timedelta(hours=hours)
 
-                elif time_type == 'minutes_from_now':
+                elif time_type in ['minutes_from_now', 'minutes_from_now_short']:
                     minutes = int(match.group(1))
                     scheduled_time = uk_now + timedelta(minutes=minutes)
 
                 elif time_type == 'days_from_now':
                     days = int(match.group(1))
                     scheduled_time = uk_now + timedelta(days=days)
+
+                elif time_type in ['seconds_from_now', 'seconds_from_now_short']:
+                    seconds = int(match.group(1))
+                    scheduled_time = uk_now + timedelta(seconds=seconds)
+
+                elif time_type == 'weeks_from_now':
+                    weeks = int(match.group(1))
+                    scheduled_time = uk_now + timedelta(weeks=weeks)
+
+                elif time_type in ['weekday_time', 'next_weekday_time']:
+                    weekday_name = match.group(1).lower()
+                    hour = int(match.group(2))
+                    minute = int(match.group(3)) if len(match.groups()) > 2 and match.group(3) else 0
+                    am_pm = match.group(4).lower() if len(match.groups()) > 3 and match.group(4) else None
+
+                    if am_pm == 'pm' and hour != 12:
+                        hour += 12
+                    elif am_pm == 'am' and hour == 12:
+                        hour = 0
+
+                    weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+                    target_weekday = weekdays.index(weekday_name)
+                    current_weekday = uk_now.weekday()
+                    
+                    days_ahead = target_weekday - current_weekday
+                    if time_type == 'next_weekday_time':
+                        days_ahead += 7 if days_ahead <= 0 else 7  # Always next week
+                    elif days_ahead <= 0:  # This week or past
+                        days_ahead += 7  # Next occurrence
+                    
+                    target_date = uk_now + timedelta(days=days_ahead)
+                    scheduled_time = target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+                elif time_type in ['weekday', 'next_weekday']:
+                    weekday_name = match.group(1).lower()
+                    weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+                    target_weekday = weekdays.index(weekday_name)
+                    current_weekday = uk_now.weekday()
+                    
+                    days_ahead = target_weekday - current_weekday
+                    if time_type == 'next_weekday':
+                        days_ahead += 7 if days_ahead <= 0 else 7  # Always next week
+                    elif days_ahead <= 0:
+                        days_ahead += 7
+                    
+                    target_date = uk_now + timedelta(days=days_ahead)
+                    scheduled_time = target_date.replace(hour=9, minute=0, second=0, microsecond=0)
+
+                elif time_type == 'time_12h_simple':
+                    hour = int(match.group(1))
+                    minute = int(match.group(2)) if match.group(2) else 0
+                    am_pm = match.group(3).lower()
+
+                    if am_pm == 'pm' and hour != 12:
+                        hour += 12
+                    elif am_pm == 'am' and hour == 12:
+                        hour = 0
+
+                    target_time = uk_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    if target_time <= uk_now:
+                        target_time += timedelta(days=1)
+                    scheduled_time = target_time
+
+                elif time_type == 'noon':
+                    target_time = uk_now.replace(hour=12, minute=0, second=0, microsecond=0)
+                    if target_time <= uk_now:
+                        target_time += timedelta(days=1)
+                    scheduled_time = target_time
+
+                elif time_type == 'midnight':
+                    target_time = uk_now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    target_time += timedelta(days=1)  # Always next midnight
+                    scheduled_time = target_time
+
+                elif time_type in ['time_dot_12h', 'time_dot_24h']:
+                    hour = int(match.group(1))
+                    minute = int(match.group(2))
+                    am_pm = match.group(3).lower() if len(match.groups()) > 2 and match.group(3) else None
+
+                    # Handle AM/PM for 12h format
+                    if time_type == 'time_dot_12h' and am_pm:
+                        if am_pm == 'pm' and hour != 12:
+                            hour += 12
+                        elif am_pm == 'am' and hour == 12:
+                            hour = 0
+
+                    # Validate hour for 24h format
+                    if time_type == 'time_dot_24h' and hour > 23:
+                        continue
+
+                    target_time = uk_now.replace(
+                        hour=hour, minute=minute, second=0, microsecond=0)
+                    if target_time <= uk_now:
+                        target_time += timedelta(days=1)
+                    scheduled_time = target_time
 
                 elif time_type == 'tomorrow':
                     scheduled_time = (
@@ -124,68 +233,6 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
                         hour=hour, minute=minute, second=0, microsecond=0
                     )
 
-                elif time_type == 'seconds_from_now':
-                    seconds = int(match.group(1))
-                    scheduled_time = uk_now + timedelta(seconds=seconds)
-
-                elif time_type == 'time_dot_format':
-                    hour = int(match.group(1))
-                    minute = int(match.group(2))  # group(2) should always exist for dot format
-                    am_pm = match.group(3).lower() if match.group(3) else None
-
-                    # If no AM/PM specified, assume 24-hour format for times > 12
-                    if not am_pm:
-                        # For times like 10.47, assume it's AM if hour <= 12, otherwise it's 24-hour
-                        if hour > 12:
-                            # 24-hour format, use as-is
-                            pass
-                        else:
-                            # Ambiguous - assume current part of day or next occurrence
-                            current_hour = uk_now.hour
-                            if hour < current_hour or (hour == current_hour and minute <= uk_now.minute):
-                                # Time has passed today, schedule for tomorrow
-                                pass  # Will be handled by the general logic below
-                    else:
-                        # Handle AM/PM
-                        if am_pm == 'pm' and hour != 12:
-                            hour += 12
-                        elif am_pm == 'am' and hour == 12:
-                            hour = 0
-
-                    target_time = uk_now.replace(
-                        hour=hour, minute=minute, second=0, microsecond=0)
-                    if target_time <= uk_now:
-                        target_time += timedelta(days=1)
-                    scheduled_time = target_time
-
-                elif time_type in ['for_pm_time', 'set_reminder_pm']:
-                    hour = int(match.group(1))
-                    minute = int(match.group(2)) if match.group(2) else 0
-
-                    # Always PM for these patterns
-                    if hour != 12:
-                        hour += 12
-
-                    target_time = uk_now.replace(
-                        hour=hour, minute=minute, second=0, microsecond=0)
-                    if target_time <= uk_now:
-                        target_time += timedelta(days=1)
-                    scheduled_time = target_time
-
-                elif time_type == 'for_pm_dot_time':
-                    hour = int(match.group(1))
-                    minute = int(match.group(2))
-
-                    # Always PM for this pattern
-                    if hour != 12:
-                        hour += 12
-
-                    target_time = uk_now.replace(
-                        hour=hour, minute=minute, second=0, microsecond=0)
-                    if target_time <= uk_now:
-                        target_time += timedelta(days=1)
-                    scheduled_time = target_time
-
                 elif time_type == 'six_pm':
                     target_time = uk_now.replace(
                         hour=18, minute=0, second=0, microsecond=0)
@@ -195,28 +242,43 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
 
                 break
 
-        # Clean up reminder text - remove command prefixes first
+        # Clean up reminder text - normalize whitespace first
         reminder_text = re.sub(r'\s+', ' ', reminder_text).strip()
 
-        # Remove command prefixes
+        # Remove command prefixes more comprehensively
         reminder_text = re.sub(
-            r'^(?:remind\s+me\s+(?:to\s+|of\s+|at\s+|in\s+)?|'
-            r'set\s+(?:a\s+)?remind(?:er)?\s+(?:for\s+|to\s+|of\s+)?|'
-            r'create\s+(?:a\s+)?remind(?:er)?\s+(?:for\s+|to\s+|of\s+)?|'
-            r'schedule\s+(?:a\s+)?remind(?:er)?\s+(?:for\s+|to\s+|of\s+)?|'
-            r'(?:ash\s+)?remind\s+me\s+(?:to\s+|of\s+|at\s+|in\s+)?)',
+            r'^(?:remind\s+me\s*(?:to\s+|of\s+|at\s+|in\s+)?|'
+            r'set\s+(?:a\s+)?remind(?:er)?\s*(?:for\s+|to\s+|of\s+)?|'
+            r'create\s+(?:a\s+)?remind(?:er)?\s*(?:for\s+|to\s+|of\s+)?|'
+            r'schedule\s+(?:a\s+)?remind(?:er)?\s*(?:for\s+|to\s+|of\s+)?|'
+            r'(?:ash\s+)?remind\s+me\s*(?:to\s+|of\s+|at\s+|in\s+)?)',
             '', reminder_text, flags=re.IGNORECASE).strip()
 
-        # Clean up any remaining artifacts and connectors more aggressively
-        reminder_text = re.sub(r'^(?:to\s+|of\s+|about\s+|that\s+)', '', reminder_text, flags=re.IGNORECASE).strip()
+        # Remove standalone prepositions and connectors
+        reminder_text = re.sub(r'^(?:to\s+|of\s+|about\s+|that\s+|for\s+|at\s+)', '', reminder_text, flags=re.IGNORECASE).strip()
+
+        # Remove leftover command fragments
+        reminder_text = re.sub(r'^(?:remind(?:er)?\s*|set\s*|create\s*|schedule\s*)', '', reminder_text, flags=re.IGNORECASE).strip()
 
         # Remove any leftover time fragments that weren't caught by the initial replacement
         reminder_text = re.sub(r'^\d+\.\d+\s*', '', reminder_text).strip()
         reminder_text = re.sub(r'^\.?\d+\s+', '', reminder_text).strip()
 
-        # Final cleanup - remove any remaining connectors that might be left
-        reminder_text = re.sub(r'^(?:to\s+|of\s+|about\s+|that\s+)', '', reminder_text, flags=re.IGNORECASE).strip()
+        # Final cleanup pass - remove any remaining artifacts
+        reminder_text = re.sub(r'^(?:to\s+|of\s+|about\s+|that\s+|for\s+|at\s+)', '', reminder_text, flags=re.IGNORECASE).strip()
+        
+        # Remove common leftover words that aren't meaningful
+        reminder_text = re.sub(r'^(?:me\s+|a\s+)', '', reminder_text, flags=re.IGNORECASE).strip()
 
+        # Validate the parsed result
+        validation_result = _validate_parsed_reminder(
+            original_content, reminder_text, scheduled_time, matched_pattern
+        )
+        
+        if not validation_result["success"]:
+            # Return the validation error for better user feedback
+            return validation_result
+        
         # Default to 1 hour from now if no time found
         if not scheduled_time:
             scheduled_time = uk_now + timedelta(hours=1)
@@ -225,6 +287,7 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             "reminder_text": reminder_text,
             "scheduled_time": scheduled_time,
             "success": bool(reminder_text.strip()),
+            "confidence": "high" if matched_pattern else "low",
         }
     except Exception as e:
         print(f"❌ Error parsing natural reminder: {e}")
@@ -236,6 +299,72 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
                 hours=1),
             "success": False,
         }
+
+
+def _validate_parsed_reminder(original_content: str, reminder_text: str, scheduled_time: Optional[datetime], matched_pattern: Optional[str]) -> Dict[str, Any]:
+    """Validate that the parsed reminder makes logical sense"""
+    
+    # Check if we have a meaningful reminder message
+    if not reminder_text or not reminder_text.strip():
+        return {
+            "success": False,
+            "error_type": "missing_message",
+            "error_message": "No reminder message found. Please specify what you want to be reminded about.",
+            "suggestion": "Try: 'remind me in 5 minutes to check the server' or 'set reminder for 7pm to review reports'"
+        }
+    
+    # Check if the reminder text is too short or meaningless
+    if len(reminder_text.strip()) < 3:
+        return {
+            "success": False,
+            "error_type": "message_too_short", 
+            "error_message": "Reminder message is too short. Please provide a meaningful reminder.",
+            "suggestion": "Example: 'remind me in 10 minutes to check on the stream'"
+        }
+    
+    # Check for meaningless reminder text patterns
+    meaningless_patterns = [
+        r'^\s*[.!?]+\s*$',  # Just punctuation
+        r'^\s*\d+\s*$',     # Just numbers
+        r'^\s*[a-zA-Z]\s*$', # Just single letter
+        r'^\s*time\s*$',    # Just "time" leftover
+        r'^\s*for\s*$',     # Just "for" leftover
+        r'^\s*to\s*$',      # Just "to" leftover
+        r'^\s*at\s*$',      # Just "at" leftover
+        r'^\s*of\s*$',      # Just "of" leftover
+        r'^\s*about\s*$',   # Just "about" leftover
+        r'^\s*that\s*$',    # Just "that" leftover
+        r'^\s*\'s\s*time\s*$', # "'s time" leftover
+        r'^\s*tomorrow\s*$',   # Just "tomorrow" leftover from command
+    ]
+    
+    for pattern in meaningless_patterns:
+        if re.match(pattern, reminder_text, re.IGNORECASE):
+            return {
+                "success": False,
+                "error_type": "missing_message", 
+                "error_message": f"I understood the timing, but what should I remind you about?",
+                "suggestion": f"For example: 'remind me {matched_pattern} to check the server' or specify what you need to remember"
+            }
+    
+    # Check if the parsing seems to have failed badly (e.g., time pattern matched but left weird text)
+    suspicious_patterns = [
+        r'^\s*\'s\s+time\s*$',  # "minute's time" became "'s time"
+        r'^\s*s\s+time\s*$',    # "minutes time" became "s time"  
+        r'^\d+\s*$',            # Just leftover number
+    ]
+    
+    for pattern in suspicious_patterns:
+        if re.match(pattern, reminder_text, re.IGNORECASE):
+            # This suggests the parsing went wrong - ask for clarification
+            return {
+                "success": False,
+                "error_type": "parsing_ambiguous",
+                "error_message": "I'm not sure I understood that correctly. Could you rephrase your reminder request?",
+                "suggestion": "Try something like: 'remind me in 1 minute to check the server' or 'set reminder for 7pm'"
+            }
+    
+    return {"success": True}
 
 
 def detect_auto_action_type(

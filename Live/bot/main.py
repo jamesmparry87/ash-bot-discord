@@ -169,8 +169,21 @@ async def on_ready():
     # Load command modules
     await load_command_modules()
 
-    # TODO: Start scheduled tasks
-    # TODO: Initialize AI handlers
+    # Start scheduled tasks
+    try:
+        from .tasks.scheduled import start_all_scheduled_tasks
+        start_all_scheduled_tasks()
+        print("✅ All scheduled tasks started (reminders, trivia, etc.)")
+    except Exception as e:
+        print(f"❌ Error starting scheduled tasks: {e}")
+
+    # Initialize AI handlers (if available)
+    try:
+        from .handlers.ai_handler import initialize_ai
+        initialize_ai()
+        print("✅ AI handler initialized")
+    except Exception as e:
+        print(f"⚠️ AI handler initialization skipped: {e}")
 
 
 @bot.event

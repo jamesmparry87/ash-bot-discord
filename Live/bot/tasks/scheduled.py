@@ -541,14 +541,14 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
         auto_action_enabled = reminder.get("auto_action_enabled", False)
         reminder_id = reminder.get("id", "unknown")
 
-        # Create Ash-style reminder message
-        ash_message = f"📋 **Temporal alert activated.** {reminder_text}"
+        # Simple reminder message - just the content and reminder indicator
+        ash_message = f"📋 **Reminder:** {reminder_text}"
 
         # Add auto-action notice if enabled
         if auto_action_enabled and reminder.get("auto_action_type"):
             auto_action_type = reminder["auto_action_type"]
             if auto_action_type == "youtube_post":
-                ash_message += f"\n\n⚡ **Auto-action protocol engaged.** If you do not respond within 5 minutes, I will automatically execute the YouTube posting sequence. *Efficiency is paramount.*"
+                ash_message += f"\n\n⚡ **Auto-action will execute in 5 minutes if no response.**"
 
         delivery_successful = False
 
