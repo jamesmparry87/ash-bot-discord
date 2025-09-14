@@ -311,6 +311,113 @@ class UtilityCommands(commands.Cog):
             await ctx.send(f"❌ Error retrieving database statistics: {str(e)}")
 
 
+    @commands.command(name="time")
+    async def get_current_time(self, ctx):
+        """Get current time in GMT/BST"""
+        try:
+            from bot.utils.time_utils import get_uk_time, is_dst_active
+
+            uk_now = get_uk_time()
+            is_dst = is_dst_active(uk_now)
+            timezone_name = "BST" if is_dst else "GMT"
+
+            formatted_time = uk_now.strftime(
+                f"%A, %B %d, %Y at %H:%M:%S {timezone_name}")
+
+            await ctx.send(f"Current time: {formatted_time}")
+
+        except Exception as e:
+            # Fallback to basic implementation
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+            uk_now = datetime.now(ZoneInfo("Europe/London"))
+            # Check if DST is active (rough approximation)
+            is_summer = 3 <= uk_now.month <= 10  # March to October roughly
+            timezone_name = "BST" if is_summer else "GMT"
+
+            formatted_time = uk_now.strftime(
+                f"%A, %B %d, %Y at %H:%M:%S {timezone_name}")
+            await ctx.send(f"Current time: {formatted_time}")
+
+    @commands.command(name="toggleai")
+    @commands.has_permissions(manage_messages=True)
+    async def toggle_ai(self, ctx):
+        """Toggle AI system on/off (moderators only)"""
+        try:
+            # Import AI handler functions
+            from bot.handlers.ai_handler import ai_enabled, get_ai_status
+
+            if not ai_enabled:
+                await ctx.send("❌ **AI system is not available.** API keys are not configured or AI handler failed to initialize.")
+                return
+
+            # Get current AI status
+            ai_status = get_ai_status()
+            current_status = ai_status.get('enabled', True)
+
+            # Toggle the status (this would need to be implemented in ai_handler)
+            try:
+                from bot.handlers.ai_handler import toggle_ai_system  # type: ignore
+                new_status = toggle_ai_system()
+
+                status_text = "**enabled**" if new_status else "**disabled**"
+                await ctx.send(f"✅ **AI system {status_text}.** All AI-powered responses and conversation features are now {'active' if new_status else 'inactive'}.")
+
+            except ImportError:
+                await ctx.send("❌ **AI toggle function not implemented.** The AI handler needs to be updated with `toggle_ai_system()` function.")
+
+        except ImportError:
+            await ctx.send("❌ **AI handler not available.** Cannot toggle AI system.")
+        except Exception as e:
+            print(f"❌ Error in toggleai command: {e}")
+            await ctx.send("❌ System error occurred while toggling AI.")
+
+    @commands.command(name="setpersona")
+    @commands.has_permissions(manage_messages=True)
+    async def set_persona(self, ctx, *, persona_description: str | None = None):
+        """Set or view the AI personality (moderators only)"""
+        try:
+            if not persona_description:
+                # Show current persona and help
+                help_text = (
+                    "**Current AI Persona:** Science Officer Ash from Alien (1979)\n\n"
+                    "**Usage:** `!setpersona <description>`\n\n"
+                    "**Examples:**\n"
+                    "• `!setpersona Helpful assistant with a friendly personality`\n"
+                    "• `!setpersona Science Officer Ash from Alien - analytical and precise`\n"
+                    "• `!setpersona reset` - Return to default Ash persona\n\n"
+                    "**Current Traits:** Analytical, precise, scientific approach, slightly detached but helpful")
+                await ctx.send(help_text)
+                return
+
+            # Handle reset command
+            if persona_description.lower() == "reset":
+                try:
+                    from bot.handlers.ai_handler import reset_persona  # type: ignore
+                    reset_persona()
+                    await ctx.send("✅ **AI persona reset** to default Science Officer Ash personality.")
+                except ImportError:
+                    await ctx.send("❌ **Persona reset function not implemented.** The AI handler needs `reset_persona()` function.")
+                return
+
+            # Set new persona
+            try:
+                from bot.handlers.ai_handler import set_ai_persona  # type: ignore
+                success = set_ai_persona(persona_description)
+
+                if success:
+                    await ctx.send(f"✅ **AI persona updated.**\n\n**New personality:** {persona_description[:200]}{'...' if len(persona_description) > 200 else ''}\n\n*Changes will take effect with the next AI response.*")
+                else:
+                    await ctx.send("❌ **Failed to update persona.** Please try again or check the persona description length.")
+
+            except ImportError:
+                await ctx.send("❌ **Persona setting function not implemented.** The AI handler needs `set_ai_persona()` function.\n\n*Note: Persona changes require updating the AI handler module.*")
+
+        except Exception as e:
+            print(f"❌ Error in setpersona command: {e}")
+            await ctx.send("❌ System error occurred while setting persona.")
+
+
 def setup(bot):
     """Add the UtilityCommands cog to the bot"""
     bot.add_cog(UtilityCommands(bot))

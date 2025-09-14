@@ -533,6 +533,16 @@ class TriviaCommands(commands.Cog):
             await ctx.send("❌ System error occurred while resetting trivia.")
 
 
+    @commands.command(name="addtriviaquestion")
+    async def add_trivia_question_conversation(self, ctx):
+        """Start interactive DM conversation for trivia question submission"""
+        try:
+            from bot.handlers.conversation_handler import start_trivia_conversation
+            await start_trivia_conversation(ctx)
+        except ImportError:
+            await ctx.send("❌ Trivia submission system not available - conversation handler not loaded.")
+
+
 async def setup(bot):
     """Load the trivia cog"""
     await bot.add_cog(TriviaCommands(bot))
