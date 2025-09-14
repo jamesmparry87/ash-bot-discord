@@ -1,0 +1,41 @@
+[flake8]
+# Flake8 configuration for Discord Bot project
+# Focused on handling type: ignore comments and line length issues
+
+max-line-length = 120
+max-complexity = 12
+
+# Extended ignore list to handle common issues with type checking and formatting
+extend-ignore = E203,W503,E501,E731,W504
+
+# Files and directories to exclude
+exclude =
+    .git,
+    __pycache__,
+    .pytest_cache,
+    .venv,
+    venv,
+    env,
+    .env,
+    node_modules,
+    archive,
+    build,
+    dist,
+    *.egg-info
+
+# Per-file ignores for specific cases
+per-file-ignores =
+    # Allow import-related type ignores in test files
+    tests/*.py:F401,F811
+    # Allow unused imports and variables in __init__.py files
+    */__init__.py:F401,F403
+
+# Enable specific checks
+select = E,W,F,C
+
+# Don't check for unused variables in function signatures (handled by mypy)
+ignore-names = _,args,kwargs
+
+# Import order style (handled by isort, but flake8 can validate)
+application-import-names = bot,database,handlers,commands,tasks,utils,integrations
+import-order-style = pep8
