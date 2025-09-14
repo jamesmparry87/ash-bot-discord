@@ -657,11 +657,11 @@ async def on_message(message):
             # PRIORITY 2: Check for natural language commands
             if detect_natural_language_command(content):
                 print(f"🔧 Natural language command detected: {content[:50]}... - processing as command")
-                
+
                 # For natural language commands, we need to construct a proper command
                 # The reminder command supports natural language parsing
                 content_lower = content.lower().strip()
-                
+
                 # Handle reminder patterns
                 if any(re.search(pattern, content_lower) for pattern in [
                     r"set\s+(?:a\s+)?remind(?:er)?\s+for",
@@ -679,7 +679,7 @@ async def on_message(message):
                     await bot.process_commands(message)
                     message.content = original_content  # Restore original content
                     return
-                
+
                 # Handle other natural language commands here as needed
                 # For now, fall through to normal processing for other patterns
 
@@ -1094,12 +1094,12 @@ def detect_natural_language_command(content: str) -> bool:
         r"set\s+(?:a\s+)?timer\s+for",
         r"remind\s+(?:me\s+)?in\s+\d+",
         r"reminder\s+(?:in|for)\s+\d+",
-        
+
         # Game recommendation commands (natural language alternatives)
         r"(?:add|suggest|recommend)\s+(?:the\s+)?game",
         r"i\s+want\s+to\s+(?:add|suggest|recommend)",
         r"(?:add|suggest)\s+.+\s+(?:game|to\s+(?:the\s+)?(?:list|database))",
-        
+
         # Other potential natural language commands
         r"show\s+(?:me\s+)?(?:my\s+)?reminders?",
         r"list\s+(?:my\s+)?reminders?",

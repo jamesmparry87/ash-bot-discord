@@ -13,6 +13,7 @@ import sys
 # Add the parent directory to the path so we can import from bot_modular
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+
 def detect_natural_language_command(content: str) -> bool:
     """Detect if a message is likely a natural language command that should be processed as a command"""
     content_lower = content.lower().strip()
@@ -27,12 +28,12 @@ def detect_natural_language_command(content: str) -> bool:
         r"set\s+(?:a\s+)?timer\s+for",
         r"remind\s+(?:me\s+)?in\s+\d+",
         r"reminder\s+(?:in|for)\s+\d+",
-        
+
         # Game recommendation commands (natural language alternatives)
         r"(?:add|suggest|recommend)\s+(?:the\s+)?game",
         r"i\s+want\s+to\s+(?:add|suggest|recommend)",
         r"(?:add|suggest)\s+.+\s+(?:game|to\s+(?:the\s+)?(?:list|database))",
-        
+
         # Other potential natural language commands
         r"show\s+(?:me\s+)?(?:my\s+)?reminders?",
         r"list\s+(?:my\s+)?reminders?",
@@ -45,14 +46,14 @@ def detect_natural_language_command(content: str) -> bool:
 
 def test_natural_language_commands():
     """Test that natural language commands are properly detected"""
-    
+
     # Test cases that SHOULD be detected as commands
     command_cases = [
         "set a reminder for 1 minute from now",
         "remind me in 5 minutes to check stream",
         "create a reminder for tomorrow at 9am",
         "schedule a reminder for 2 hours",
-        "set a timer for 30 minutes", 
+        "set a timer for 30 minutes",
         "remind me in 10 minutes",
         "reminder for 1 hour",
         "add the game Dark Souls",
@@ -63,11 +64,11 @@ def test_natural_language_commands():
         "cancel my reminder",
         "delete my reminder",
     ]
-    
+
     # Test cases that should NOT be detected as commands (should go to FAQ/conversation)
     non_command_cases = [
         "hello",
-        "what can you do", 
+        "what can you do",
         "has jonesy played gears of war",
         "what games has jonesy played",
         "how are you",
@@ -77,10 +78,10 @@ def test_natural_language_commands():
         "random conversation text",
         "just chatting here",
     ]
-    
+
     print("🔍 Testing Natural Language Command Detection")
     print("=" * 50)
-    
+
     # Test positive cases
     print("\n✅ Commands that SHOULD be detected:")
     all_commands_detected = True
@@ -90,8 +91,8 @@ def test_natural_language_commands():
         print(f"  {status}: '{test_case}'")
         if not is_detected:
             all_commands_detected = False
-    
-    # Test negative cases  
+
+    # Test negative cases
     print("\n❌ Text that should NOT be detected as commands:")
     all_non_commands_ignored = True
     for test_case in non_command_cases:
@@ -100,21 +101,21 @@ def test_natural_language_commands():
         print(f"  {status}: '{test_case}'")
         if is_detected:
             all_non_commands_ignored = False
-    
+
     # Summary
     print("\n" + "=" * 50)
     print("📊 SUMMARY:")
-    
+
     if all_commands_detected:
         print("✅ All command patterns correctly detected")
     else:
         print("❌ Some command patterns were missed")
-        
+
     if all_non_commands_ignored:
-        print("✅ All non-command text correctly ignored")  
+        print("✅ All non-command text correctly ignored")
     else:
         print("❌ Some non-command text was falsely detected as commands")
-        
+
     if all_commands_detected and all_non_commands_ignored:
         print("\n🎉 ALL TESTS PASSED - Natural language command detection working correctly!")
         return True
@@ -125,13 +126,13 @@ def test_natural_language_commands():
 
 def test_reminder_pattern_matching():
     """Test specific reminder patterns that were problematic"""
-    
+
     print("\n🔍 Testing Specific Reminder Patterns")
     print("=" * 40)
-    
+
     reminder_test_cases = [
         ("set a reminder for 1 minute from now", True),
-        ("set reminder for 2 hours", True), 
+        ("set reminder for 2 hours", True),
         ("remind me in 30 minutes to check stream", True),
         ("remind me to take a break", False),  # No time specified
         ("create a reminder for tonight", True),
@@ -141,10 +142,10 @@ def test_reminder_pattern_matching():
         ("what are reminders", False),  # FAQ question
         ("how do reminders work", False),  # FAQ question
     ]
-    
+
     for test_input, should_detect in reminder_test_cases:
         is_detected = detect_natural_language_command(test_input)
-        
+
         if should_detect and is_detected:
             status = "✅ CORRECT - Detected as command"
         elif not should_detect and not is_detected:
@@ -153,7 +154,7 @@ def test_reminder_pattern_matching():
             status = "❌ FAILED - Should be detected as command"
         else:
             status = "❌ FAILED - Should not be detected as command"
-            
+
         print(f"  {status}: '{test_input}'")
 
 
@@ -161,13 +162,13 @@ def main():
     """Run all tests"""
     print("🚀 Testing Natural Language Command Priority Fix")
     print("=" * 60)
-    
+
     # Test basic command detection
     detection_passed = test_natural_language_commands()
-    
+
     # Test specific reminder patterns
     test_reminder_pattern_matching()
-    
+
     print("\n" + "=" * 60)
     if detection_passed:
         print("🎉 OVERALL: Command priority fix appears to be working correctly!")
@@ -177,7 +178,7 @@ def main():
         print("✅ Still handle regular conversation and gaming queries normally")
     else:
         print("⚠️ OVERALL: Some issues detected - may need pattern adjustments")
-    
+
     return detection_passed
 
 
