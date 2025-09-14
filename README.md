@@ -190,3 +190,6 @@ Thank you for helping to honor his memory.
 
 This bot was originally created by James Michael Parry (Decent_Jam) for Jonesyspacecat's Discord server in Summer 2025.
 
+---
+
+*"Efficiency is paramount. I am programmed for server assistance and analytical precision."* - Ash

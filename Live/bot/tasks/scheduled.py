@@ -30,7 +30,7 @@ from ..integrations.youtube import execute_youtube_auto_post
 active_trivia_sessions = {}
 
 # Get database instance
-db = get_database()
+db = get_database() # type: ignore
 
 
 @tasks.loop(time=time(12, 0))  # Run at 12:00 PM (midday) every day
@@ -281,6 +281,77 @@ async def check_auto_actions():
 
     except Exception as e:
         print(f"❌ Error in check_auto_actions: {e}")
+
+
+# Run at 8:05 AM UK time every day (5 minutes after Google quota reset)
+@tasks.loop(time=time(8, 5, tzinfo=ZoneInfo("Europe/London")))
+async def scheduled_ai_refresh():
+    """Silently refresh AI module connections at 8:05am BST (after Google quota reset)"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    
+    dst_offset = uk_now.dst()
+    is_bst = dst_offset is not None and dst_offset.total_seconds() > 0
+    timezone_name = "BST" if is_bst else "GMT"
+    
+    print(f"🤖 AI module refresh initiated at {uk_now.strftime(f'%Y-%m-%d %H:%M:%S {timezone_name}')} (post-quota reset)")
+
+    try:
+        from ..handlers.ai_handler import initialize_ai, get_ai_status, reset_daily_usage
+        
+        # Force reset daily usage counters
+        reset_daily_usage()
+        print("✅ AI usage counters reset")
+        
+        # Re-initialize AI connections to refresh quota status
+        initialize_ai()
+        
+        # Get updated status
+        ai_status = get_ai_status()
+        
+        print(f"🔄 AI refresh completed - Status: {ai_status['status_message']}")
+        
+        # Only send notification if there were previous issues or this is the first refresh of the day
+        usage_stats = ai_status.get('usage_stats', {})
+        previous_errors = usage_stats.get('consecutive_errors', 0)
+        
+        if previous_errors > 0:
+            # Try to notify JAM that AI is back online after quota issues
+            try:
+                from ..main import bot
+                from ..config import JAM_USER_ID
+                
+                user = await bot.fetch_user(JAM_USER_ID)
+                if user:
+                    await user.send(
+                        f"🤖 **AI Module Refresh Complete**\n"
+                        f"• Status: {ai_status['status_message']}\n"
+                        f"• Previous errors cleared: {previous_errors}\n"
+                        f"• Daily quota reset at {uk_now.strftime(f'%H:%M {timezone_name}')}\n\n"
+                        f"*AI functionality should now be restored.*"
+                    )
+                    print("✅ AI refresh notification sent to JAM")
+            except Exception as notify_e:
+                print(f"⚠️ Could not send AI refresh notification: {notify_e}")
+        else:
+            print("✅ AI refresh completed silently (no previous issues)")
+
+    except Exception as e:
+        print(f"❌ Error in scheduled_ai_refresh: {e}")
+        # Try to notify JAM of refresh failure
+        try:
+            from ..main import bot
+            from ..config import JAM_USER_ID
+            
+            user = await bot.fetch_user(JAM_USER_ID)
+            if user:
+                await user.send(
+                    f"⚠️ **AI Module Refresh Failed**\n"
+                    f"• Error: {str(e)}\n"
+                    f"• Time: {uk_now.strftime(f'%H:%M {timezone_name}')}\n\n"
+                    f"*Manual intervention may be required.*"
+                )
+        except Exception:
+            pass
 
 
 # Run at 11:00 AM UK time every Tuesday
@@ -630,6 +701,10 @@ def start_all_scheduled_tasks():
         if not trivia_tuesday.is_running():
             trivia_tuesday.start()
             print("✅ Trivia Tuesday task started (11:00 AM UK time, Tuesdays)")
+
+        if not scheduled_ai_refresh.is_running():
+            scheduled_ai_refresh.start()
+            print("✅ AI module refresh task started (8:05 AM UK time daily)")
 
     except Exception as e:
         print(f"❌ Error starting scheduled tasks: {e}")

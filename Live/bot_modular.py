@@ -242,7 +242,7 @@ except ImportError as e:
 
 
 async def initialize_modular_components():
-    """Initialize all modular components and return status report"""
+    """Initialize all modular components and return detailed status report"""
     status_report = {
         "ai_handler": False,
         "database": False,
@@ -250,7 +250,10 @@ async def initialize_modular_components():
         "scheduled_tasks": False,
         "message_handlers": False,
         "fallback_mode": False,
-        "errors": []
+        "errors": [],
+        "command_failures": [],
+        "loaded_commands": [],
+        "failed_commands": []
     }
 
     # 1. Database Status
@@ -273,49 +276,58 @@ async def initialize_modular_components():
         status_report["errors"].append(f"AI Handler: {e}")
         print(f"❌ AI Handler initialization failed: {e}")
 
-    # 3. Load Command Cogs
-    try:
-        # Load strikes commands
-        from bot.commands.strikes import StrikesCommands
-        await bot.add_cog(StrikesCommands(bot))
+    # 3. Load Command Cogs with detailed failure tracking
+    command_modules = [
+        {"name": "strikes", "module": "bot.commands.strikes", "class": "StrikesCommands", "critical": True},
+        {"name": "games", "module": "bot.commands.games", "class": "GamesCommands", "critical": True},
+        {"name": "utility", "module": "bot.commands.utility", "class": "UtilityCommands", "critical": True},
+        {"name": "trivia", "module": "bot.commands.trivia", "class": "TriviaCommands", "critical": False}
+    ]
 
-        # Load other command modules if they exist
-        command_modules_loaded = 1  # We loaded strikes at minimum
+    command_modules_loaded = 0
+    critical_failures = 0
 
+    for cmd_info in command_modules:
         try:
-            from bot.commands.games import GamesCommands
-            await bot.add_cog(GamesCommands(bot))
+            # Dynamic import and loading
+            module = __import__(cmd_info["module"], fromlist=[cmd_info["class"]])
+            command_class = getattr(module, cmd_info["class"])
+            await bot.add_cog(command_class(bot))
+            
             command_modules_loaded += 1
-        except ImportError:
-            print("⚠️ Games commands module not found, skipping")
-        except Exception as e:
-            print(f"⚠️ Games commands failed to load: {e}")
+            status_report["loaded_commands"].append(cmd_info["name"])
+            print(f"✅ {cmd_info['name'].title()} commands loaded successfully")
 
-        try:
-            from bot.commands.utility import UtilityCommands
-            await bot.add_cog(UtilityCommands(bot))
-            command_modules_loaded += 1
-        except ImportError:
-            print("⚠️ Utility commands module not found, skipping")
-        except Exception as e:
-            print(f"⚠️ Utility commands failed to load: {e}")
+        except ImportError as e:
+            error_msg = f"{cmd_info['name']} module not found: {e}"
+            print(f"⚠️ {error_msg}")
+            status_report["command_failures"].append(error_msg)
+            status_report["failed_commands"].append(cmd_info["name"])
+            
+            if cmd_info["critical"]:
+                critical_failures += 1
+                status_report["errors"].append(f"Critical command module failed: {cmd_info['name']}")
 
-        try:
-            from bot.commands.trivia import TriviaCommands
-            await bot.add_cog(TriviaCommands(bot))
-            command_modules_loaded += 1
-        except ImportError:
-            print("⚠️ Trivia commands module not found, skipping")
         except Exception as e:
-            print(f"⚠️ Trivia commands failed to load: {e}")
+            error_msg = f"{cmd_info['name']} failed to load: {str(e)}"
+            print(f"❌ {error_msg}")
+            status_report["command_failures"].append(error_msg)
+            status_report["failed_commands"].append(cmd_info["name"])
+            
+            if cmd_info["critical"]:
+                critical_failures += 1
+                status_report["errors"].append(f"Critical command failure: {cmd_info['name']} - {e}")
 
+    # Determine command system health
+    if critical_failures == 0 and command_modules_loaded >= 2:
         status_report["commands"] = True
-        print(
-            f"✅ Command modules loaded successfully ({command_modules_loaded} modules)")
-
-    except Exception as e:
-        status_report["errors"].append(f"Commands: {e}")
-        print(f"❌ Command loading failed: {e}")
+        print(f"✅ Command system operational ({command_modules_loaded}/{len(command_modules)} modules loaded)")
+    elif critical_failures > 0:
+        status_report["commands"] = False
+        print(f"❌ Command system degraded - {critical_failures} critical failures")
+    else:
+        status_report["commands"] = False
+        print(f"❌ Command system failed - insufficient modules loaded ({command_modules_loaded}/{len(command_modules)})")
 
     # 4. Set up Message Handlers
     try:
@@ -376,100 +388,153 @@ deployment_notification_sent = False
 
 
 async def send_deployment_success_dm(status_report):
-    """Send deployment success notification to JAM_USER_ID (once per deployment cycle)"""
+    """Send comprehensive health report to authorized users (once per deployment cycle)"""
     global deployment_notification_sent
 
-    # Check if we've already sent a notification in the last 5 minutes
-    # This prevents duplicate messages during deployment restarts
+    # Only send meaningful health reports - not just "fully operational" when things fail
     if deployment_notification_sent:
-        print("✅ Deployment notification already sent, skipping duplicate")
+        print("✅ Health notification already sent, skipping duplicate")
         return
 
-    try:
-        user = await bot.fetch_user(JAM_USER_ID)
-        if not user:
-            print(
-                f"❌ Could not fetch user {JAM_USER_ID} for deployment notification")
-            return
+    # Check if there are actually issues worth reporting
+    error_count = len(status_report["errors"])
+    command_failures = len(status_report.get("command_failures", []))
+    failed_commands = status_report.get("failed_commands", [])
+    
+    # Don't spam "fully operational" when there are issues
+    has_issues = error_count > 0 or command_failures > 0 or len(failed_commands) > 0
 
-        # Count successful components
-        successful_components = sum(1 for key, value in status_report.items()
-                                    if key != "errors" and value)
-        total_components = len(
-            [k for k in status_report.keys() if k != "errors"])
+    # Send health reports only to JAM
+    authorized_users = [JAM_USER_ID]
+    
+    for user_id in authorized_users:
+        try:
+            user = await bot.fetch_user(user_id)
+            if not user:
+                print(f"❌ Could not fetch user {user_id} for health notification")
+                continue
 
-        # Create status message
-        error_count = len(status_report["errors"])
-        component_count = sum(
-            1 for key, value in status_report.items() if key not in [
-                "errors", "fallback_mode"] and value)
+            # Create detailed health report
+            if has_issues:
+                # Send detailed error report
+                embed = discord.Embed(
+                    title="⚠️ Ash Bot Health Report - Issues Detected",
+                    description="Bot startup completed with issues requiring attention.",
+                    color=0xff6600,  # Orange for issues
+                    timestamp=datetime.now(ZoneInfo("Europe/London"))
+                )
 
-        if error_count <= 2 and component_count >= 3:  # Require at least 3 components working
-            embed = discord.Embed(
-                title="🎉 Ash Bot Fully Operational!",
-                description="All modular components loaded and initialized successfully. The bot is now fully responsive!",
-                color=0x00ff00,
-                timestamp=datetime.now(
-                    ZoneInfo("Europe/London")))
+                # Command loading status
+                if command_failures > 0:
+                    loaded_commands = status_report.get("loaded_commands", [])
+                    
+                    command_status = f"**Loaded:** {', '.join(loaded_commands) if loaded_commands else 'None'}\n"
+                    command_status += f"**Failed:** {', '.join(failed_commands) if failed_commands else 'None'}\n"
+                    command_status += f"**Status:** {len(loaded_commands)}/{len(loaded_commands) + len(failed_commands)} modules operational"
+                    
+                    embed.add_field(
+                        name="🔧 Command System",
+                        value=command_status,
+                        inline=False
+                    )
 
-            # Build component status
-            component_status = []
-            if status_report["commands"]:
-                component_status.append("• Commands (strikes, games, utility)")
-            if status_report["message_handlers"]:
-                component_status.append(
-                    "• Message handlers (strike detection, query routing)")
-            if status_report["scheduled_tasks"]:
-                component_status.append(
-                    "• Scheduled tasks (reminders, trivia)")
-            if status_report["ai_handler"]:
-                component_status.append("• AI handler (rate limiting)")
-            if status_report["database"]:
-                component_status.append("• Database system")
+                    # Show specific failure details
+                    if status_report.get("command_failures"):
+                        failure_details = "\n".join([f"• {failure}" for failure in status_report["command_failures"][:3]])
+                        if len(status_report["command_failures"]) > 3:
+                            failure_details += f"\n• ...and {len(status_report['command_failures']) - 3} more"
+                        
+                        embed.add_field(
+                            name="❌ Command Failures",
+                            value=failure_details,
+                            inline=False
+                        )
 
-            embed.add_field(name="✅ Loaded Components", value="\n".join(
-                component_status) if component_status else "Core systems operational", inline=False)
+                # System component status
+                component_status = []
+                if status_report["ai_handler"]:
+                    component_status.append("✅ AI Handler")
+                else:
+                    component_status.append("❌ AI Handler")
+                
+                if status_report["database"]:
+                    component_status.append("✅ Database")
+                else:
+                    component_status.append("❌ Database")
+                
+                if status_report["message_handlers"]:
+                    component_status.append("✅ Message Handlers")
+                else:
+                    component_status.append("❌ Message Handlers")
 
-            embed.add_field(
-                name="🔧 Deployment Fixes Active",
-                value="• Progressive penalty system (30s → 60s → 120s → 300s)\n• Enhanced database import strategies\n• Reduced alias cooldowns for testing\n• Complete alias debugging system\n• Enhanced !ashstatus with AI diagnostics",
-                inline=False)
+                if status_report["scheduled_tasks"]:
+                    component_status.append("✅ Scheduled Tasks")
+                else:
+                    component_status.append("❌ Scheduled Tasks")
 
-            embed.set_footer(
-                text="Bot is now responsive to commands and messages!")
-
-        else:
-            embed = discord.Embed(
-                title="⚠️ Modular Architecture Deployment - Partial Success",
-                description=f"Deployed with {successful_components}/{total_components} components successful",
-                color=0xffaa00,
-                timestamp=datetime.now(
-                    ZoneInfo("Europe/London")))
-
-            if status_report["errors"]:
-                error_text = "\n".join(
-                    [f"• {error}" for error in status_report["errors"][:5]])
                 embed.add_field(
-                    name="❌ Errors",
-                    value=error_text,
-                    inline=False)
+                    name="🔍 System Components",
+                    value="\n".join(component_status),
+                    inline=False
+                )
 
-        await user.send(embed=embed)
-        deployment_notification_sent = True  # Mark as sent
-        print(f"✅ Deployment notification sent to {user.display_name}")
+                # Include specific errors if any
+                if status_report["errors"]:
+                    error_text = "\n".join([f"• {error}" for error in status_report["errors"][:3]])
+                    if len(status_report["errors"]) > 3:
+                        error_text += f"\n• ...and {len(status_report['errors']) - 3} more"
+                    
+                    embed.add_field(
+                        name="🚨 System Errors",
+                        value=error_text,
+                        inline=False
+                    )
 
-        # Reset the flag after 5 minutes to allow for genuine redeployments
-        async def reset_notification_flag():
-            await asyncio.sleep(300)  # 5 minutes
-            global deployment_notification_sent
-            deployment_notification_sent = False
-            print("🔄 Deployment notification flag reset")
+                embed.set_footer(text="Use !ashstatus for real-time diagnostics")
 
-        asyncio.create_task(reset_notification_flag())
+            else:
+                # Only send "fully operational" if there are truly no issues
+                embed = discord.Embed(
+                    title="✅ Ash Bot Fully Operational",
+                    description="All systems loaded and initialized successfully. Bot is fully responsive.",
+                    color=0x00ff00,
+                    timestamp=datetime.now(ZoneInfo("Europe/London"))
+                )
 
-    except Exception as e:
-        print(f"❌ Failed to send deployment notification: {e}")
+                # Show successful components
+                loaded_commands = status_report.get("loaded_commands", [])
+                if loaded_commands:
+                    embed.add_field(
+                        name="🔧 Commands Loaded",
+                        value=f"**Modules:** {', '.join(loaded_commands)}\n**Status:** All critical commands operational",
+                        inline=False
+                    )
 
+                embed.add_field(
+                    name="🔄 System Status",
+                    value="• Database: Connected\n• AI Handler: Online\n• Message Handlers: Active\n• Scheduled Tasks: Running",
+                    inline=False
+                )
+
+                embed.set_footer(text="All systems nominal - bot ready for operation")
+
+            await user.send(embed=embed)
+            print(f"✅ Health report sent to {user.display_name}")
+
+        except Exception as e:
+            print(f"❌ Failed to send health report to user {user_id}: {e}")
+
+    # Mark as sent and set reset timer
+    deployment_notification_sent = True
+    
+    # Reset the flag after 5 minutes to allow for genuine redeployments
+    async def reset_notification_flag():
+        await asyncio.sleep(300)  # 5 minutes
+        global deployment_notification_sent
+        deployment_notification_sent = False
+        print("🔄 Health notification flag reset")
+
+    asyncio.create_task(reset_notification_flag())
 
 @bot.event
 async def on_message(message):
@@ -1371,88 +1436,6 @@ async def list_games(ctx):
         print(f"❌ Error in listgames command: {e}")
         await ctx.send("❌ Error retrieving game recommendations. Database may be experiencing issues.")
 
-
-@bot.command(name="addgame")
-async def add_game(ctx, *, content: Optional[str] = None):
-    """Add a game recommendation with progressive disclosure help"""
-    try:
-        if not content:
-            # Progressive disclosure: Quick format with examples based on user
-            # tier
-            user_tier = await get_user_communication_tier(ctx)
-
-            if user_tier in ["moderator", "creator", "captain"]:
-                help_text = (
-                    "**Quick Format:** `!addgame <name> - <reason>`\n\n"
-                    "**Examples:**\n"
-                    "• `!addgame Hollow Knight - Amazing metroidvania with beautiful art`\n"
-                    "• `!addgame The Witcher 3 - Epic RPG with incredible side quests`\n\n"
-                    "**Tips:** Be specific about why you recommend it. Check `!listgames` to avoid duplicates.")
-            else:
-                help_text = (
-                    "**Add a Game Recommendation:**\n"
-                    "Format: `!addgame <game name> - <reason>`\n\n"
-                    "**Example:** `!addgame Hollow Knight - Amazing metroidvania`\n\n"
-                    "**Need inspiration?** Think about games with great stories, unique mechanics, or memorable experiences!")
-            await ctx.send(help_text)
-            return
-
-        if db is None:
-            await ctx.send("❌ **Game system offline** - Database connection unavailable. Please try again later or contact a moderator.")
-            return
-
-        # Parse game name and reason with enhanced error messages
-        if " - " not in content:
-            await ctx.send(
-                "❌ **Missing the dash separator!**\n\n"
-                "**Correct format:** `!addgame <game name> - <reason>`\n"
-                "**Your input:** `" + content[:50] + ("..." if len(content) > 50 else "") + "`\n"
-                "**Fixed example:** `!addgame " + content.split()[0] if content.split() else "GameName" + " - Your reason here`"
-            )
-            return
-
-        parts = content.split(" - ", 1)
-        game_name = parts[0].strip()
-        reason = parts[1].strip()
-
-        if not game_name:
-            await ctx.send("❌ **Game name is missing!** Please provide the game name before the dash.")
-            return
-
-        if not reason:
-            await ctx.send(f"❌ **Recommendation reason is missing!** Why should Captain Jonesy play '{game_name}'?")
-            return
-
-        # Check for very short reasons
-        if len(reason) < 10:
-            await ctx.send(
-                f"❌ **Reason too brief!** Please provide more detail about why '{game_name}' is worth playing.\n\n"
-                "**Examples of good reasons:**\n"
-                "• Amazing storytelling and character development\n"
-                "• Unique puzzle mechanics and beautiful art style\n"
-                "• Epic boss battles and satisfying combat system"
-            )
-            return
-
-        # Check if game already exists
-        if db.game_exists(game_name):
-            await ctx.send(f"❌ **'{game_name}' is already recommended!** Check `!listgames` to see all current recommendations.")
-            return
-
-        # Add the game
-        success = db.add_game_recommendation(
-            game_name, reason, ctx.author.display_name)
-
-        if success:
-            await ctx.send(f"✅ **'{game_name}' added to recommendations!** Thank you {ctx.author.display_name}.\n\n*View all recommendations with `!listgames`*")
-        else:
-            await ctx.send("❌ **Failed to save recommendation.** Database error occurred. Please try again or contact a moderator.")
-
-    except Exception as e:
-        print(f"❌ Error in addgame command: {e}")
-        await ctx.send("❌ **System error occurred.** Please try again. If the issue persists, contact a moderator.")
-
-
 @bot.command(name="dbstats")
 @commands.has_permissions(manage_messages=True)
 async def database_stats(ctx):
@@ -1937,9 +1920,7 @@ async def make_announcement(ctx, *, announcement_text: Optional[str] = None):
         announcement_channel = bot.get_channel(ANNOUNCEMENTS_CHANNEL_ID)
         if announcement_channel:
             await announcement_channel.send(embed=embed)  # type: ignore
-            # type: ignore
-            # type: ignore
-            await ctx.send(f"✅ **Announcement posted** to {announcement_channel.mention}.")
+            await ctx.send(f"✅ **Announcement posted** to {announcement_channel.mention}.") # type: ignore
         else:
             await ctx.send("❌ **Announcement channel not found.** Please check channel configuration.")
 
@@ -1992,11 +1973,9 @@ async def emergency_announcement(ctx, *, message: Optional[str] = None):
         announcement_channel = bot.get_channel(ANNOUNCEMENTS_CHANNEL_ID)
         if announcement_channel:
 
-            # type: ignore
-            await announcement_channel.send("@everyone", embed=embed)
+            await announcement_channel.send("@everyone", embed=embed) # type: ignore
 
-            # type: ignore
-            await ctx.send(f"🚨 **Emergency announcement posted** with @everyone ping to {announcement_channel.mention}.")
+            await ctx.send(f"🚨 **Emergency announcement posted** with @everyone ping to {announcement_channel.mention}.") # type: ignore
         else:
             await ctx.send("❌ **Announcement channel not found.** Please check channel configuration.")
 
@@ -2090,156 +2069,6 @@ async def bulk_import_played_games(ctx):
     except Exception as e:
         print(f"❌ Error in bulkimportplayedgames command: {e}")
         await ctx.send("❌ System error occurred during import.")
-
-
-@bot.command(name="ashstatus")
-async def ash_status(ctx):
-    try:
-        # Custom permission checking that works in both DMs and guilds
-        is_authorized = False
-
-        if ctx.guild is None:  # DM
-            # Allow JAM, JONESY, and moderators in DMs
-            if ctx.author.id in [JAM_USER_ID, JONESY_USER_ID]:
-                is_authorized = True
-            else:
-                # Check if user is a mod
-                guild = bot.get_guild(GUILD_ID)
-                if guild:
-                    try:
-                        member = await guild.fetch_member(ctx.author.id)
-                        is_authorized = member.guild_permissions.manage_messages
-                    except (discord.NotFound, discord.Forbidden):
-                        is_authorized = False
-        else:  # Guild
-            # Check standard mod permissions
-            is_authorized = ctx.author.guild_permissions.manage_messages
-
-        # Show different responses for unauthorized users
-        if not is_authorized:
-            if ctx.guild is None:  # DM - be more specific about authorization
-                await ctx.send("⚠️ **Access denied.** System status diagnostics require elevated clearance. Authorization protocols restrict access to Captain Jonesy, Sir Decent Jam, and server moderators only.")
-            else:  # Guild - use the generic response
-                await ctx.send("Systems nominal, Sir Decent Jam. Awaiting Captain Jonesy's commands.")
-            return
-
-        # Get comprehensive status information
-        status_msg = "🤖 **Ash Bot Comprehensive System Status**\n\n"
-
-        # Component Status
-        try:
-            if db is not None:
-                # Test database with actual query
-                strikes_data = db.get_all_strikes() if hasattr(db, 'get_all_strikes') else {}
-                total_strikes = sum(
-                    strikes_data.values()) if strikes_data else 0
-                status_msg += f"📊 **Database:** Online ({total_strikes} total strikes)\n"
-            else:
-                status_msg += f"📊 **Database:** Offline (DATABASE_URL not configured)\n"
-        except Exception as e:
-            status_msg += f"📊 **Database:** Error - {str(e)[:50]}...\n"
-
-        # AI System Status with detailed diagnostics
-        try:
-            from bot.handlers.ai_handler import (
-                ai_enabled,
-                get_ai_status,
-            )
-
-            ai_status = get_ai_status()
-            # Get basic AI stats from the status
-            ai_stats = ai_status.get('usage_stats', {})
-
-            status_msg += f"🧠 **AI System:** {ai_status['status_message']}\n"
-
-            if ai_enabled:
-                # Get current Pacific Time for display
-                pt_now = datetime.now(ZoneInfo("US/Pacific"))
-
-                # AI Budget tracking status
-                status_msg += f"\n📊 **AI Budget Tracking (Pacific Time):**\n"
-                status_msg += f"• **Daily Requests:** {ai_stats.get('daily_requests', 0)}/{ai_stats.get('max_daily_requests', 1400)} ({(ai_stats.get('daily_requests', 0)/ai_stats.get('max_daily_requests', 1400)*100):.1f}%)\n"
-                status_msg += f"• **Hourly Requests:** {ai_stats.get('hourly_requests', 0)}/{ai_stats.get('max_hourly_requests', 120)} ({(ai_stats.get('hourly_requests', 0)/ai_stats.get('max_hourly_requests', 120)*100):.1f}%)\n"
-                status_msg += f"• **Consecutive Errors:** {ai_stats.get('consecutive_errors', 0)}\n"
-                status_msg += f"• **Current PT Time:** {pt_now.strftime('%Y-%m-%d %H:%M:%S PT')}\n"
-
-                # Rate limit status
-                if ai_stats.get(
-                        "rate_limited_until") and pt_now < ai_stats["rate_limited_until"]:
-                    remaining = (
-                        ai_stats["rate_limited_until"] -
-                        pt_now).total_seconds()
-                    status_msg += f"• **Rate Limit:** 🚫 Active ({int(remaining)}s remaining)\n"
-                else:
-                    status_msg += f"• **Rate Limit:** ✅ Clear\n"
-            else:
-                status_msg += f"• **AI System:** Offline (API key not configured)\n"
-
-        except Exception as e:
-            status_msg += f"🧠 **AI System:** Error - {str(e)[:50]}...\n"
-
-        # Component Status Summary
-        try:
-            status_report = {
-                "message_handlers": message_handler_functions is not None,
-                "database": db is not None,
-                "alias_system": True,  # Always available
-                "commands": True  # Basic commands always available
-            }
-
-            active_components = sum(status_report.values())
-            status_msg += f"\n🔧 **System Components:** {active_components}/4 Active\n"
-
-            if status_report["message_handlers"]:
-                status_msg += "• ✅ Message Handlers (AI conversation, query routing)\n"
-            else:
-                status_msg += "• ❌ Message Handlers (limited functionality)\n"
-
-            if status_report["database"]:
-                status_msg += "• ✅ Database System (strikes, game tracking)\n"
-            else:
-                status_msg += "• ⚠️ Database System (DATABASE_URL not configured)\n"
-
-            status_msg += "• ✅ Alias Debug System (user tier testing)\n"
-            status_msg += "• ✅ Core Commands (strikes, utility)\n"
-
-        except Exception as e:
-            status_msg += f"\n❌ Component Status Error: {str(e)[:100]}...\n"
-
-        # Current alias status if applicable
-        cleanup_expired_aliases()
-        if ctx.author.id in user_alias_state:
-            alias_data = user_alias_state[ctx.author.id]
-            time_active = datetime.now(
-                ZoneInfo("Europe/London")) - alias_data["set_time"]
-            hours = int(time_active.total_seconds() // 3600)
-            minutes = int((time_active.total_seconds() % 3600) // 60)
-            time_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
-            status_msg += f"\n🎭 **Your Active Alias:** {alias_data['alias_type'].title()} (active for {time_str})\n"
-
-        # Send response (split if too long)
-        if len(status_msg) > 2000:
-            # Split at logical points
-            parts = status_msg.split('\n\n')
-            current_part = ""
-
-            for part in parts:
-                if len(current_part + part) < 1900:
-                    current_part += part + '\n\n'
-                else:
-                    if current_part:
-                        await ctx.send(current_part.strip())
-                    current_part = part + '\n\n'
-
-            if current_part:
-                await ctx.send(current_part.strip())
-        else:
-            await ctx.send(status_msg)
-
-    except Exception as e:
-        await ctx.send(f"❌ **System diagnostic error:** {str(e)[:100]}... Please contact Sir Decent Jam for technical assistance.")
-        print(f"❌ Error in ashstatus command: {e}")
-
 
 def main():
     """Main entry point for the modular bot architecture"""

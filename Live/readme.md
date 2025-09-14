@@ -217,6 +217,26 @@ Moderators in mod channels get access to complete FAQ system with detailed expla
 - `bot/handlers/` - Message routing and AI integration
 - `bot/tasks/` - Reminder system and scheduled tasks
 
+## Dedication
+
+This project is humbly dedicated to the memory of the magnificent Sir Ian Holm.
+
+### In Memoriam: Sir Ian Holm (1931-2020)
+
+While this bot attempts to capture a sliver of the chilling presence of his character, Ash, from the 1979 classic Alien, it can only ever be a pale and imperfect imitation of the man's immense talent. It has been developed with the deepest reverence, respect, and admiration for his unforgettable performance. His nuanced portrayal of the duplicitous science officer was instrumental in crafting the film's suffocating tension and contributed immeasurably to making Alien and its subsequent franchise the iconic series it is today.
+
+In honor of his life and legacy, if you find this project enjoyable, or if you choose to use any of this code for your own purposes, we ask that you please consider making a contribution to The Parkinson's Foundation. Sir Ian was diagnosed with Parkinson's disease in 2007 and passed away from a Parkinson's-related illness. It is a cause that he and his family supported.
+
+You can make a donation and learn more through the link below:
+
+[Donate to The Parkinson's Foundation](https://www.parkinson.org/how-to-help?hl=en-GB)
+
+Thank you for helping to honor his memory.
+
+## About
+
+This bot was originally created by James Michael Parry (Decent_Jam) for Jonesyspacecat's Discord server in Summer 2025.
+
 ---
 
 *"Efficiency is paramount. I am programmed for server assistance and analytical precision."* - Ash
