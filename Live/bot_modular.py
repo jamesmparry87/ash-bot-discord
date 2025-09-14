@@ -277,12 +277,22 @@ async def initialize_modular_components():
         print(f"❌ AI Handler initialization failed: {e}")
 
     # 3. Load Command Cogs with detailed failure tracking
-    command_modules = [
-        {"name": "strikes", "module": "bot.commands.strikes", "class": "StrikesCommands", "critical": True},
-        {"name": "games", "module": "bot.commands.games", "class": "GamesCommands", "critical": True},
-        {"name": "utility", "module": "bot.commands.utility", "class": "UtilityCommands", "critical": True},
-        {"name": "trivia", "module": "bot.commands.trivia", "class": "TriviaCommands", "critical": False}
-    ]
+    command_modules = [{"name": "strikes",
+                        "module": "bot.commands.strikes",
+                        "class": "StrikesCommands",
+                        "critical": True},
+                       {"name": "games",
+                        "module": "bot.commands.games",
+                        "class": "GamesCommands",
+                        "critical": True},
+                       {"name": "utility",
+                        "module": "bot.commands.utility",
+                        "class": "UtilityCommands",
+                        "critical": True},
+                       {"name": "trivia",
+                        "module": "bot.commands.trivia",
+                        "class": "TriviaCommands",
+                        "critical": False}]
 
     command_modules_loaded = 0
     critical_failures = 0
@@ -290,10 +300,12 @@ async def initialize_modular_components():
     for cmd_info in command_modules:
         try:
             # Dynamic import and loading
-            module = __import__(cmd_info["module"], fromlist=[cmd_info["class"]])
+            module = __import__(
+                cmd_info["module"], fromlist=[
+                    cmd_info["class"]])
             command_class = getattr(module, cmd_info["class"])
             await bot.add_cog(command_class(bot))
-            
+
             command_modules_loaded += 1
             status_report["loaded_commands"].append(cmd_info["name"])
             print(f"✅ {cmd_info['name'].title()} commands loaded successfully")
@@ -303,31 +315,36 @@ async def initialize_modular_components():
             print(f"⚠️ {error_msg}")
             status_report["command_failures"].append(error_msg)
             status_report["failed_commands"].append(cmd_info["name"])
-            
+
             if cmd_info["critical"]:
                 critical_failures += 1
-                status_report["errors"].append(f"Critical command module failed: {cmd_info['name']}")
+                status_report["errors"].append(
+                    f"Critical command module failed: {cmd_info['name']}")
 
         except Exception as e:
             error_msg = f"{cmd_info['name']} failed to load: {str(e)}"
             print(f"❌ {error_msg}")
             status_report["command_failures"].append(error_msg)
             status_report["failed_commands"].append(cmd_info["name"])
-            
+
             if cmd_info["critical"]:
                 critical_failures += 1
-                status_report["errors"].append(f"Critical command failure: {cmd_info['name']} - {e}")
+                status_report["errors"].append(
+                    f"Critical command failure: {cmd_info['name']} - {e}")
 
     # Determine command system health
     if critical_failures == 0 and command_modules_loaded >= 2:
         status_report["commands"] = True
-        print(f"✅ Command system operational ({command_modules_loaded}/{len(command_modules)} modules loaded)")
+        print(
+            f"✅ Command system operational ({command_modules_loaded}/{len(command_modules)} modules loaded)")
     elif critical_failures > 0:
         status_report["commands"] = False
-        print(f"❌ Command system degraded - {critical_failures} critical failures")
+        print(
+            f"❌ Command system degraded - {critical_failures} critical failures")
     else:
         status_report["commands"] = False
-        print(f"❌ Command system failed - insufficient modules loaded ({command_modules_loaded}/{len(command_modules)})")
+        print(
+            f"❌ Command system failed - insufficient modules loaded ({command_modules_loaded}/{len(command_modules)})")
 
     # 4. Set up Message Handlers
     try:
@@ -391,7 +408,8 @@ async def send_deployment_success_dm(status_report):
     """Send comprehensive health report to authorized users (once per deployment cycle)"""
     global deployment_notification_sent
 
-    # Only send meaningful health reports - not just "fully operational" when things fail
+    # Only send meaningful health reports - not just "fully operational" when
+    # things fail
     if deployment_notification_sent:
         print("✅ Health notification already sent, skipping duplicate")
         return
@@ -400,18 +418,20 @@ async def send_deployment_success_dm(status_report):
     error_count = len(status_report["errors"])
     command_failures = len(status_report.get("command_failures", []))
     failed_commands = status_report.get("failed_commands", [])
-    
+
     # Don't spam "fully operational" when there are issues
-    has_issues = error_count > 0 or command_failures > 0 or len(failed_commands) > 0
+    has_issues = error_count > 0 or command_failures > 0 or len(
+        failed_commands) > 0
 
     # Send health reports only to JAM
     authorized_users = [JAM_USER_ID]
-    
+
     for user_id in authorized_users:
         try:
             user = await bot.fetch_user(user_id)
             if not user:
-                print(f"❌ Could not fetch user {user_id} for health notification")
+                print(
+                    f"❌ Could not fetch user {user_id} for health notification")
                 continue
 
             # Create detailed health report
@@ -427,11 +447,11 @@ async def send_deployment_success_dm(status_report):
                 # Command loading status
                 if command_failures > 0:
                     loaded_commands = status_report.get("loaded_commands", [])
-                    
+
                     command_status = f"**Loaded:** {', '.join(loaded_commands) if loaded_commands else 'None'}\n"
                     command_status += f"**Failed:** {', '.join(failed_commands) if failed_commands else 'None'}\n"
                     command_status += f"**Status:** {len(loaded_commands)}/{len(loaded_commands) + len(failed_commands)} modules operational"
-                    
+
                     embed.add_field(
                         name="🔧 Command System",
                         value=command_status,
@@ -440,10 +460,11 @@ async def send_deployment_success_dm(status_report):
 
                     # Show specific failure details
                     if status_report.get("command_failures"):
-                        failure_details = "\n".join([f"• {failure}" for failure in status_report["command_failures"][:3]])
+                        failure_details = "\n".join(
+                            [f"• {failure}" for failure in status_report["command_failures"][:3]])
                         if len(status_report["command_failures"]) > 3:
                             failure_details += f"\n• ...and {len(status_report['command_failures']) - 3} more"
-                        
+
                         embed.add_field(
                             name="❌ Command Failures",
                             value=failure_details,
@@ -456,12 +477,12 @@ async def send_deployment_success_dm(status_report):
                     component_status.append("✅ AI Handler")
                 else:
                     component_status.append("❌ AI Handler")
-                
+
                 if status_report["database"]:
                     component_status.append("✅ Database")
                 else:
                     component_status.append("❌ Database")
-                
+
                 if status_report["message_handlers"]:
                     component_status.append("✅ Message Handlers")
                 else:
@@ -480,17 +501,19 @@ async def send_deployment_success_dm(status_report):
 
                 # Include specific errors if any
                 if status_report["errors"]:
-                    error_text = "\n".join([f"• {error}" for error in status_report["errors"][:3]])
+                    error_text = "\n".join(
+                        [f"• {error}" for error in status_report["errors"][:3]])
                     if len(status_report["errors"]) > 3:
                         error_text += f"\n• ...and {len(status_report['errors']) - 3} more"
-                    
+
                     embed.add_field(
                         name="🚨 System Errors",
                         value=error_text,
                         inline=False
                     )
 
-                embed.set_footer(text="Use !ashstatus for real-time diagnostics")
+                embed.set_footer(
+                    text="Use !ashstatus for real-time diagnostics")
 
             else:
                 # Only send "fully operational" if there are truly no issues
@@ -498,8 +521,8 @@ async def send_deployment_success_dm(status_report):
                     title="✅ Ash Bot Fully Operational",
                     description="All systems loaded and initialized successfully. Bot is fully responsive.",
                     color=0x00ff00,
-                    timestamp=datetime.now(ZoneInfo("Europe/London"))
-                )
+                    timestamp=datetime.now(
+                        ZoneInfo("Europe/London")))
 
                 # Show successful components
                 loaded_commands = status_report.get("loaded_commands", [])
@@ -507,16 +530,15 @@ async def send_deployment_success_dm(status_report):
                     embed.add_field(
                         name="🔧 Commands Loaded",
                         value=f"**Modules:** {', '.join(loaded_commands)}\n**Status:** All critical commands operational",
-                        inline=False
-                    )
+                        inline=False)
 
                 embed.add_field(
                     name="🔄 System Status",
                     value="• Database: Connected\n• AI Handler: Online\n• Message Handlers: Active\n• Scheduled Tasks: Running",
-                    inline=False
-                )
+                    inline=False)
 
-                embed.set_footer(text="All systems nominal - bot ready for operation")
+                embed.set_footer(
+                    text="All systems nominal - bot ready for operation")
 
             await user.send(embed=embed)
             print(f"✅ Health report sent to {user.display_name}")
@@ -526,7 +548,7 @@ async def send_deployment_success_dm(status_report):
 
     # Mark as sent and set reset timer
     deployment_notification_sent = True
-    
+
     # Reset the flag after 5 minutes to allow for genuine redeployments
     async def reset_notification_flag():
         await asyncio.sleep(300)  # 5 minutes
@@ -535,6 +557,7 @@ async def send_deployment_success_dm(status_report):
         print("🔄 Health notification flag reset")
 
     asyncio.create_task(reset_notification_flag())
+
 
 @bot.event
 async def on_message(message):
@@ -1436,6 +1459,7 @@ async def list_games(ctx):
         print(f"❌ Error in listgames command: {e}")
         await ctx.send("❌ Error retrieving game recommendations. Database may be experiencing issues.")
 
+
 @bot.command(name="dbstats")
 @commands.has_permissions(manage_messages=True)
 async def database_stats(ctx):
@@ -1920,7 +1944,8 @@ async def make_announcement(ctx, *, announcement_text: Optional[str] = None):
         announcement_channel = bot.get_channel(ANNOUNCEMENTS_CHANNEL_ID)
         if announcement_channel:
             await announcement_channel.send(embed=embed)  # type: ignore
-            await ctx.send(f"✅ **Announcement posted** to {announcement_channel.mention}.") # type: ignore
+            # type: ignore
+            await ctx.send(f"✅ **Announcement posted** to {announcement_channel.mention}.")
         else:
             await ctx.send("❌ **Announcement channel not found.** Please check channel configuration.")
 
@@ -1973,9 +1998,11 @@ async def emergency_announcement(ctx, *, message: Optional[str] = None):
         announcement_channel = bot.get_channel(ANNOUNCEMENTS_CHANNEL_ID)
         if announcement_channel:
 
-            await announcement_channel.send("@everyone", embed=embed) # type: ignore
+            # type: ignore
+            await announcement_channel.send("@everyone", embed=embed)
 
-            await ctx.send(f"🚨 **Emergency announcement posted** with @everyone ping to {announcement_channel.mention}.") # type: ignore
+            # type: ignore
+            await ctx.send(f"🚨 **Emergency announcement posted** with @everyone ping to {announcement_channel.mention}.")
         else:
             await ctx.send("❌ **Announcement channel not found.** Please check channel configuration.")
 
@@ -2069,6 +2096,7 @@ async def bulk_import_played_games(ctx):
     except Exception as e:
         print(f"❌ Error in bulkimportplayedgames command: {e}")
         await ctx.send("❌ System error occurred during import.")
+
 
 def main():
     """Main entry point for the modular bot architecture"""

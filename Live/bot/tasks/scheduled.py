@@ -30,7 +30,7 @@ from ..integrations.youtube import execute_youtube_auto_post
 active_trivia_sessions = {}
 
 # Get database instance
-db = get_database() # type: ignore
+db = get_database()  # type: ignore
 
 
 @tasks.loop(time=time(12, 0))  # Run at 12:00 PM (midday) every day
@@ -288,12 +288,13 @@ async def check_auto_actions():
 async def scheduled_ai_refresh():
     """Silently refresh AI module connections at 8:05am BST (after Google quota reset)"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    
+
     dst_offset = uk_now.dst()
     is_bst = dst_offset is not None and dst_offset.total_seconds() > 0
     timezone_name = "BST" if is_bst else "GMT"
-    
-    print(f"🤖 AI module refresh initiated at {uk_now.strftime(f'%Y-%m-%d %H:%M:%S {timezone_name}')} (post-quota reset)")
+
+    print(
+        f"🤖 AI module refresh initiated at {uk_now.strftime(f'%Y-%m-%d %H:%M:%S {timezone_name}')} (post-quota reset)")
 
     try:
         from ..handlers.ai_handler import get_ai_status, initialize_ai, reset_daily_usage
@@ -301,25 +302,27 @@ async def scheduled_ai_refresh():
         # Force reset daily usage counters
         reset_daily_usage()
         print("✅ AI usage counters reset")
-        
+
         # Re-initialize AI connections to refresh quota status
         initialize_ai()
-        
+
         # Get updated status
         ai_status = get_ai_status()
-        
-        print(f"🔄 AI refresh completed - Status: {ai_status['status_message']}")
-        
-        # Only send notification if there were previous issues or this is the first refresh of the day
+
+        print(
+            f"🔄 AI refresh completed - Status: {ai_status['status_message']}")
+
+        # Only send notification if there were previous issues or this is the
+        # first refresh of the day
         usage_stats = ai_status.get('usage_stats', {})
         previous_errors = usage_stats.get('consecutive_errors', 0)
-        
+
         if previous_errors > 0:
             # Try to notify JAM that AI is back online after quota issues
             try:
                 from ..config import JAM_USER_ID
                 from ..main import bot
-                
+
                 user = await bot.fetch_user(JAM_USER_ID)
                 if user:
                     await user.send(
@@ -341,7 +344,7 @@ async def scheduled_ai_refresh():
         try:
             from ..config import JAM_USER_ID
             from ..main import bot
-            
+
             user = await bot.fetch_user(JAM_USER_ID)
             if user:
                 await user.send(

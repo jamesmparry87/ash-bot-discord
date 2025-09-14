@@ -82,13 +82,14 @@ ai_usage_stats = {
 def reset_daily_usage():
     """Reset daily usage counter at 8am BST (Google's actual reset time)"""
     global ai_usage_stats
-    
+
     # Use UK time since Google resets at 8am BST (7am GMT)
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    
+
     # Check if it's past 8am UK time on a new day
-    reset_time_today = uk_now.replace(hour=8, minute=0, second=0, microsecond=0)
-    
+    reset_time_today = uk_now.replace(
+        hour=8, minute=0, second=0, microsecond=0)
+
     # If it's a new day and past 8am, or if we haven't reset today yet
     should_reset = False
     if uk_now.date() > ai_usage_stats["last_day_reset"]:
@@ -97,19 +98,21 @@ def reset_daily_usage():
     elif uk_now.date() == ai_usage_stats["last_day_reset"]:
         # Same day, check if we crossed 8am threshold
         last_reset = ai_usage_stats.get("last_reset_time", None)
-        if not last_reset or (uk_now >= reset_time_today and last_reset < reset_time_today):
+        if not last_reset or (
+                uk_now >= reset_time_today and last_reset < reset_time_today):
             should_reset = True
-    
+
     if should_reset:
         ai_usage_stats["daily_requests"] = 0
         ai_usage_stats["last_day_reset"] = uk_now.date()
         ai_usage_stats["last_reset_time"] = uk_now
-        
+
         dst_offset = uk_now.dst()
         is_bst = dst_offset is not None and dst_offset.total_seconds() > 0
         timezone_name = "BST" if is_bst else "GMT"
-        
-        print(f"🔄 Daily AI usage reset at {uk_now.strftime(f'%Y-%m-%d %H:%M:%S {timezone_name}')} (Google quota reset)")
+
+        print(
+            f"🔄 Daily AI usage reset at {uk_now.strftime(f'%Y-%m-%d %H:%M:%S {timezone_name}')} (Google quota reset)")
 
 
 def reset_hourly_usage():
