@@ -49,13 +49,13 @@ try:
             self.strikes_commands = None
             self.games_commands = None
             self.utility_commands = None
-            
+
             # Copy constants from bot_modular
             self.VIOLATION_CHANNEL_ID = bot_modular.VIOLATION_CHANNEL_ID
             self.JAM_USER_ID = bot_modular.JAM_USER_ID
             self.bot = None  # Will be set during tests
             self.db = bot_modular.db
-            
+
             # AI-related attributes
             try:
                 ai_status = get_ai_status()
@@ -75,12 +75,12 @@ try:
             if self.strikes_commands is None:
                 self.strikes_commands = StrikesCommands(None)  # Mock bot
             return self.strikes_commands
-            
+
         def _get_games_instance(self):
             if self.games_commands is None:
                 self.games_commands = GamesCommands(None)  # Mock bot
             return self.games_commands
-            
+
         def _get_utility_instance(self):
             if self.utility_commands is None:
                 self.utility_commands = UtilityCommands(None)  # Mock bot
@@ -90,104 +90,104 @@ try:
         async def get_strikes(self, ctx, user):
             instance = self._get_strikes_instance()
             return await instance.get_strikes(ctx, user)
-            
+
         async def reset_strikes(self, ctx, user):
             instance = self._get_strikes_instance()
             return await instance.reset_strikes(ctx, user)
-            
+
         async def all_strikes(self, ctx):
             instance = self._get_strikes_instance()
             return await instance.all_strikes(ctx)
-            
+
         async def _add_game(self, ctx, game_info):
             instance = self._get_games_instance()
             return await instance._add_game(ctx, game_info)
-            
+
         async def list_games(self, ctx):
             instance = self._get_games_instance()
             return await instance.list_games(ctx)
-            
+
         async def remove_game(self, ctx, arg):
             instance = self._get_games_instance()
             return await instance.remove_game(ctx, arg)
-            
+
         async def add_played_game_cmd(self, ctx, game_info):
             instance = self._get_games_instance()
             # The actual method is add_played_game, and it expects content parameter
             return await instance.add_played_game(ctx, content=game_info)
-            
+
         async def game_info_cmd(self, ctx, identifier):
             instance = self._get_games_instance()
             # The actual method is game_info, and it expects game_name parameter
             return await instance.game_info(ctx, game_name=identifier)
-            
+
         async def search_played_games_cmd(self, ctx, query):
             # This method doesn't exist in the modular structure
             # Mock a basic response for testing
             await ctx.send(embed=discord.Embed(title="Search Results", description=f"Mock search for: {query}"))
-            
+
         async def ash_status(self, ctx):
             instance = self._get_utility_instance()
             return await instance.ash_status(ctx)
-            
+
         async def error_check(self, ctx):
             instance = self._get_utility_instance()
             return await instance.error_check(ctx)
-            
+
         async def busy_check(self, ctx):
             instance = self._get_utility_instance()
             return await instance.busy_check(ctx)
-            
+
         # Message handling functions
         async def on_message(self, message):
             return await bot_modular.on_message(message)
-            
+
         def route_query(self, query):
             return route_query(query)
-            
+
         def get_game_by_id_or_name(self, identifier):
             # This function needs to be implemented in the games module
             instance = self._get_games_instance()
             if hasattr(instance, 'get_game_by_id_or_name'):
                 return instance.get_game_by_id_or_name(identifier)
             return None
-            
+
         async def post_or_update_recommend_list(self):
             instance = self._get_games_instance()
             if hasattr(instance, 'post_or_update_recommend_list'):
                 return await instance.post_or_update_recommend_list()
-            
+
         def user_is_mod(self, user_id):
             # Simple mock implementation for testing
             return user_id == self.JAM_USER_ID
-            
+
         # Copy utility functions from bot_modular
         def get_today_date_str(self):
             return bot_modular.get_today_date_str()
-        
+
         def cleanup_expired_aliases(self):
             return bot_modular.cleanup_expired_aliases()
-        
+
         def update_alias_activity(self, user_id):
             return bot_modular.update_alias_activity(user_id)
-            
+
         # Add missing properties that tests expect
         @property
         def user_alias_state(self):
             return bot_modular.user_alias_state
-            
+
         @property
         def scheduled_games_update(self):
             # Return a mock scheduled task for timezone tests
             return MagicMock()
-            
+
         # Add check rate limiting functions for AI tests
         def check_rate_limits(self, user_id):
             return (True, "OK")
-            
+
         def record_ai_request(self, user_id, request_type="general"):
             pass
-            
+
         # Discord import for tests
         @property
         def discord(self):
@@ -196,9 +196,9 @@ try:
 
     # Create global instance for tests to use
     bot_fallback_compat = CompatibilityWrapper()
-    
+
     print("✅ Modular bot components loaded for testing")
-    
+
 except ImportError as e:
     print(f"❌ Failed to import modular bot components: {e}")
     # Create a mock module for type checking
@@ -268,17 +268,17 @@ except ImportError as e:
         @staticmethod
         async def post_or_update_recommend_list() -> None:
             pass
-            
+
         @staticmethod
         def get_today_date_str() -> str:
             from datetime import datetime
             from zoneinfo import ZoneInfo
             return datetime.now(ZoneInfo("Europe/London")).strftime("%Y-%m-%d")
-            
+
         @staticmethod
         def cleanup_expired_aliases() -> None:
             pass
-            
+
         @staticmethod
         def update_alias_activity(user_id: Any) -> None:
             pass
@@ -662,7 +662,7 @@ class TestMessageHandling:
         mock_mod_channel = MagicMock()
         mock_mod_channel.send = AsyncMock()
         # Make isinstance check pass for discord.TextChannel
-        with patch.object(ash_bot_fallback, 'discord', ash_bot_fallback.discord): # type: ignore
+        with patch.object(ash_bot_fallback, 'discord', ash_bot_fallback.discord):  # type: ignore
 
             with patch.object(ash_bot_fallback, 'db', mock_db):
                 with patch.object(ash_bot_fallback, 'bot') as mock_bot:

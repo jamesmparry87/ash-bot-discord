@@ -28,7 +28,7 @@ class AnnouncementsCommands(commands.Cog):
         return db
 
     @commands.command(name="announce")
-    async def make_announcement(self, ctx, *                                , announcement_text: str | None = None):
+    async def make_announcement(self, ctx, *, announcement_text: str | None = None):
         """Create server-wide announcement (Captain Jonesy and Sir Decent Jam only)"""
         # Strict access control - only Captain Jonesy and Sir Decent Jam
         if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:

@@ -1373,8 +1373,8 @@ class DatabaseManager:
                         # Use earliest first_played_date
                         if duplicate_game.get("first_played_date"):
                             if (
-                                not merged_data["first_played_date"]
-                                or duplicate_game["first_played_date"] < merged_data["first_played_date"]
+                                not merged_data["first_played_date"] or
+                                duplicate_game["first_played_date"] < merged_data["first_played_date"]
                             ):
                                 merged_data["first_played_date"] = duplicate_game["first_played_date"]
 
@@ -1988,8 +1988,8 @@ class DatabaseManager:
             },
             "comparison": {
                 "episode_difference": game1.get("total_episodes", 0) - game2.get("total_episodes", 0),
-                "playtime_difference_minutes": game1.get("total_playtime_minutes", 0)
-                - game2.get("total_playtime_minutes", 0),
+                "playtime_difference_minutes": game1.get("total_playtime_minutes", 0) -
+                game2.get("total_playtime_minutes", 0),
                 "longer_game": (
                     game1["canonical_name"]
                     if game1.get("total_playtime_minutes", 0) > game2.get("total_playtime_minutes", 0)

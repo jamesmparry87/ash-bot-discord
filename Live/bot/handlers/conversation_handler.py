@@ -26,7 +26,7 @@ from ..utils.permissions import get_user_communication_tier, user_is_mod_by_id
 from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
 
 # Get database instance
-db = get_database() # type: ignore
+db = get_database()  # type: ignore
 
 # Global conversation state management
 # user_id: {'step': str, 'data': dict, 'last_activity': datetime}
