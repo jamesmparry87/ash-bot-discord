@@ -132,10 +132,10 @@ class RemindersCommands(commands.Cog):
                     except ImportError:
                         # Fallback if import fails
                         formatted_time = f"in {time_str}"
-                    
+
                     target_user = await self.bot.fetch_user(target_user_id)
                     user_name = target_user.display_name if target_user else 'user'
-                    
+
                     # Enhanced confirmation for moderators
                     response = f"✅ **Reminder #{reminder_id} set successfully**\n"
                     response += f"**Target:** {user_name} (<@{target_user_id}>)\n"
@@ -144,7 +144,7 @@ class RemindersCommands(commands.Cog):
 
                     if auto_action_enabled:
                         response += f"\n⚡ **Auto-action enabled:** {auto_action_type} (executed if no mod responds within 5 minutes)"
-                    
+
                     response += f"\n**Delivery:** This channel ({ctx.channel.mention})"
 
                     await ctx.send(response)
@@ -189,7 +189,7 @@ class RemindersCommands(commands.Cog):
 
                 # Check if moderator is setting reminder for themselves
                 target_user_id = ctx.author.id
-                
+
                 # Add reminder to database (natural language format)
                 reminder_id = database.add_reminder(
                     user_id=target_user_id,
@@ -201,13 +201,13 @@ class RemindersCommands(commands.Cog):
 
                 if reminder_id:
                     formatted_time = format_reminder_time(parsed["scheduled_time"])
-                    
+
                     # Enhanced confirmation message for moderators
                     confirmation = f"✅ **Reminder #{reminder_id} set successfully**\n"
                     confirmation += f"**Time:** {formatted_time}\n"
                     confirmation += f"**Message:** *{parsed['reminder_text']}*\n"
                     confirmation += f"**Delivery:** This channel ({ctx.channel.mention})"
-                    
+
                     await ctx.send(confirmation)
                 else:
                     await ctx.send("❌ **Failed to save reminder.** Database error occurred. Please try again or contact system administrator.")

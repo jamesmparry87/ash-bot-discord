@@ -197,7 +197,7 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
 
         # Clean up reminder text - remove command prefixes first
         reminder_text = re.sub(r'\s+', ' ', reminder_text).strip()
-        
+
         # Remove command prefixes
         reminder_text = re.sub(
             r'^(?:remind\s+me\s+(?:to\s+|of\s+|at\s+|in\s+)?|'
@@ -206,14 +206,14 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             r'schedule\s+(?:a\s+)?remind(?:er)?\s+(?:for\s+|to\s+|of\s+)?|'
             r'(?:ash\s+)?remind\s+me\s+(?:to\s+|of\s+|at\s+|in\s+)?)',
             '', reminder_text, flags=re.IGNORECASE).strip()
-        
+
         # Clean up any remaining artifacts and connectors more aggressively
         reminder_text = re.sub(r'^(?:to\s+|of\s+|about\s+|that\s+)', '', reminder_text, flags=re.IGNORECASE).strip()
-        
+
         # Remove any leftover time fragments that weren't caught by the initial replacement
         reminder_text = re.sub(r'^\d+\.\d+\s*', '', reminder_text).strip()
         reminder_text = re.sub(r'^\.?\d+\s+', '', reminder_text).strip()
-        
+
         # Final cleanup - remove any remaining connectors that might be left
         reminder_text = re.sub(r'^(?:to\s+|of\s+|about\s+|that\s+)', '', reminder_text, flags=re.IGNORECASE).strip()
 
@@ -268,13 +268,13 @@ def format_reminder_time(scheduled_time: datetime) -> str:
     # Determine timezone display (GMT/BST)
     is_dst = scheduled_time.dst() != timedelta(0)
     tz_name = "BST" if is_dst else "GMT"
-    
+
     # Format time in 12-hour format
     time_12h = scheduled_time.strftime(f'%I:%M %p {tz_name}')
 
     # Calculate time difference
     time_diff = scheduled_time - uk_now
-    
+
     if time_diff.days > 0:
         if time_diff.days == 1:
             return f"tomorrow at {time_12h}"
@@ -284,7 +284,7 @@ def format_reminder_time(scheduled_time: datetime) -> str:
     else:
         hours = int(time_diff.total_seconds() // 3600)
         minutes = int((time_diff.total_seconds() % 3600) // 60)
-        
+
         # Fix the "1 minutes" vs "1 minute" issue and handle edge cases
         if hours > 0:
             hour_str = f"{hours} hour{'s' if hours != 1 else ''}"
