@@ -174,19 +174,19 @@ class RemindersCommands(commands.Cog):
                     error_type = parsed.get("error_type", "unknown")
                     error_message = parsed.get("error_message", "Unable to parse reminder.")
                     suggestion = parsed.get("suggestion", "")
-                    
+
                     response = f"❌ **{error_message}**"
                     if suggestion:
                         response += f"\n\n💡 **Suggestion:** {suggestion}"
-                    
+
                     # Add general help for moderators if it's not a specific parsing error
                     if error_type in ["parsing_ambiguous", "unknown"]:
                         response += ("\n\n**As a moderator, you can also try:**\n"
-                                   "• `!remind @user 2m Stand up` (traditional format)\n"
-                                   "• `!remind @user 1h30m Check on issue | auto:mute` (with auto-action)\n"
-                                   "• `remind me in 30 minutes to check stream` (natural language)\n"
-                                   "• `set reminder for 7pm to review reports` (specific time)")
-                    
+                                     "• `!remind @user 2m Stand up` (traditional format)\n"
+                                     "• `!remind @user 1h30m Check on issue | auto:mute` (with auto-action)\n"
+                                     "• `remind me in 30 minutes to check stream` (natural language)\n"
+                                     "• `set reminder for 7pm to review reports` (specific time)")
+
                     await ctx.send(response)
                     return
 

@@ -28,14 +28,18 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             (r'\b(?:in\s+)?(\d+)\s*(?:s)\b', 'seconds_from_now_short'),
 
             # Weekday patterns with times
-            (r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b', 'weekday_time'),
-            (r'\bnext\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b', 'next_weekday_time'),
+            (
+                r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b',
+                'weekday_time'),
+            (
+                r'\bnext\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b',
+                'next_weekday_time'),
 
             # Simple time patterns with clearer matching
             (r'\b(?:at|for|on)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', 'time_12h'),
             (r'\b(?:at|for|on)\s+(\d{1,2})\.(\d{2})\s*(am|pm)\b', 'time_dot_12h'),
             (r'\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', 'time_12h_simple'),
-            
+
             # 24-hour format times
             (r'\bat\s+(\d{1,2})(?::(\d{2}))?\b', 'time_24h'),
             (r'\bat\s+(\d{1,2})\.(\d{2})\b', 'time_dot_24h'),
@@ -66,7 +70,7 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             if match:
                 # Store the matched pattern for better text extraction
                 matched_pattern = match.group(0)
-                
+
                 # Remove the EXACT matched text from the reminder
                 reminder_text = content.replace(matched_pattern, '').strip()
                 reminder_text = re.sub(r'\s+', ' ', reminder_text)  # Normalize whitespace
@@ -136,13 +140,13 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
                     weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
                     target_weekday = weekdays.index(weekday_name)
                     current_weekday = uk_now.weekday()
-                    
+
                     days_ahead = target_weekday - current_weekday
                     if time_type == 'next_weekday_time':
                         days_ahead += 7 if days_ahead <= 0 else 7  # Always next week
                     elif days_ahead <= 0:  # This week or past
                         days_ahead += 7  # Next occurrence
-                    
+
                     target_date = uk_now + timedelta(days=days_ahead)
                     scheduled_time = target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
@@ -151,13 +155,13 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
                     weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
                     target_weekday = weekdays.index(weekday_name)
                     current_weekday = uk_now.weekday()
-                    
+
                     days_ahead = target_weekday - current_weekday
                     if time_type == 'next_weekday':
                         days_ahead += 7 if days_ahead <= 0 else 7  # Always next week
                     elif days_ahead <= 0:
                         days_ahead += 7
-                    
+
                     target_date = uk_now + timedelta(days=days_ahead)
                     scheduled_time = target_date.replace(hour=9, minute=0, second=0, microsecond=0)
 
@@ -255,18 +259,21 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             '', reminder_text, flags=re.IGNORECASE).strip()
 
         # Remove standalone prepositions and connectors
-        reminder_text = re.sub(r'^(?:to\s+|of\s+|about\s+|that\s+|for\s+|at\s+)', '', reminder_text, flags=re.IGNORECASE).strip()
+        reminder_text = re.sub(r'^(?:to\s+|of\s+|about\s+|that\s+|for\s+|at\s+)',
+                               '', reminder_text, flags=re.IGNORECASE).strip()
 
         # Remove leftover command fragments
-        reminder_text = re.sub(r'^(?:remind(?:er)?\s*|set\s*|create\s*|schedule\s*)', '', reminder_text, flags=re.IGNORECASE).strip()
+        reminder_text = re.sub(r'^(?:remind(?:er)?\s*|set\s*|create\s*|schedule\s*)',
+                               '', reminder_text, flags=re.IGNORECASE).strip()
 
         # Remove any leftover time fragments that weren't caught by the initial replacement
         reminder_text = re.sub(r'^\d+\.\d+\s*', '', reminder_text).strip()
         reminder_text = re.sub(r'^\.?\d+\s+', '', reminder_text).strip()
 
         # Final cleanup pass - remove any remaining artifacts
-        reminder_text = re.sub(r'^(?:to\s+|of\s+|about\s+|that\s+|for\s+|at\s+)', '', reminder_text, flags=re.IGNORECASE).strip()
-        
+        reminder_text = re.sub(r'^(?:to\s+|of\s+|about\s+|that\s+|for\s+|at\s+)',
+                               '', reminder_text, flags=re.IGNORECASE).strip()
+
         # Remove common leftover words that aren't meaningful
         reminder_text = re.sub(r'^(?:me\s+|a\s+)', '', reminder_text, flags=re.IGNORECASE).strip()
 
@@ -274,11 +281,11 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
         validation_result = _validate_parsed_reminder(
             original_content, reminder_text, scheduled_time, matched_pattern
         )
-        
+
         if not validation_result["success"]:
             # Return the validation error for better user feedback
             return validation_result
-        
+
         # Default to 1 hour from now if no time found
         if not scheduled_time:
             scheduled_time = uk_now + timedelta(hours=1)
@@ -301,32 +308,32 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
         }
 
 
-def _validate_parsed_reminder(original_content: str, reminder_text: str, scheduled_time: Optional[datetime], matched_pattern: Optional[str]) -> Dict[str, Any]:
+def _validate_parsed_reminder(original_content: str, reminder_text: str,
+                              scheduled_time: Optional[datetime], matched_pattern: Optional[str]) -> Dict[str, Any]:
     """Validate that the parsed reminder makes logical sense"""
-    
+
     # Check if we have a meaningful reminder message
     if not reminder_text or not reminder_text.strip():
         return {
             "success": False,
             "error_type": "missing_message",
             "error_message": "No reminder message found. Please specify what you want to be reminded about.",
-            "suggestion": "Try: 'remind me in 5 minutes to check the server' or 'set reminder for 7pm to review reports'"
-        }
-    
+            "suggestion": "Try: 'remind me in 5 minutes to check the server' or 'set reminder for 7pm to review reports'"}
+
     # Check if the reminder text is too short or meaningless
     if len(reminder_text.strip()) < 3:
         return {
             "success": False,
-            "error_type": "message_too_short", 
+            "error_type": "message_too_short",
             "error_message": "Reminder message is too short. Please provide a meaningful reminder.",
             "suggestion": "Example: 'remind me in 10 minutes to check on the stream'"
         }
-    
+
     # Check for meaningless reminder text patterns
     meaningless_patterns = [
         r'^\s*[.!?]+\s*$',  # Just punctuation
         r'^\s*\d+\s*$',     # Just numbers
-        r'^\s*[a-zA-Z]\s*$', # Just single letter
+        r'^\s*[a-zA-Z]\s*$',  # Just single letter
         r'^\s*time\s*$',    # Just "time" leftover
         r'^\s*for\s*$',     # Just "for" leftover
         r'^\s*to\s*$',      # Just "to" leftover
@@ -334,26 +341,25 @@ def _validate_parsed_reminder(original_content: str, reminder_text: str, schedul
         r'^\s*of\s*$',      # Just "of" leftover
         r'^\s*about\s*$',   # Just "about" leftover
         r'^\s*that\s*$',    # Just "that" leftover
-        r'^\s*\'s\s*time\s*$', # "'s time" leftover
+        r'^\s*\'s\s*time\s*$',  # "'s time" leftover
         r'^\s*tomorrow\s*$',   # Just "tomorrow" leftover from command
     ]
-    
+
     for pattern in meaningless_patterns:
         if re.match(pattern, reminder_text, re.IGNORECASE):
             return {
                 "success": False,
-                "error_type": "missing_message", 
+                "error_type": "missing_message",
                 "error_message": f"I understood the timing, but what should I remind you about?",
-                "suggestion": f"For example: 'remind me {matched_pattern} to check the server' or specify what you need to remember"
-            }
-    
+                "suggestion": f"For example: 'remind me {matched_pattern} to check the server' or specify what you need to remember"}
+
     # Check if the parsing seems to have failed badly (e.g., time pattern matched but left weird text)
     suspicious_patterns = [
         r'^\s*\'s\s+time\s*$',  # "minute's time" became "'s time"
-        r'^\s*s\s+time\s*$',    # "minutes time" became "s time"  
+        r'^\s*s\s+time\s*$',    # "minutes time" became "s time"
         r'^\d+\s*$',            # Just leftover number
     ]
-    
+
     for pattern in suspicious_patterns:
         if re.match(pattern, reminder_text, re.IGNORECASE):
             # This suggests the parsing went wrong - ask for clarification
@@ -361,9 +367,8 @@ def _validate_parsed_reminder(original_content: str, reminder_text: str, schedul
                 "success": False,
                 "error_type": "parsing_ambiguous",
                 "error_message": "I'm not sure I understood that correctly. Could you rephrase your reminder request?",
-                "suggestion": "Try something like: 'remind me in 1 minute to check the server' or 'set reminder for 7pm'"
-            }
-    
+                "suggestion": "Try something like: 'remind me in 1 minute to check the server' or 'set reminder for 7pm'"}
+
     return {"success": True}
 
 

@@ -12,7 +12,7 @@ from ..config import JONESY_USER_ID
 from ..database import get_database
 
 # Get database instance
-db = get_database() # type: ignore
+db = get_database()  # type: ignore
 
 
 class StrikesCommands(commands.Cog):
