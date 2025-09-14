@@ -4,8 +4,9 @@ Announcement System Verification
 Simple verification that all functionality is properly accessible
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
 def test_module_loading():
@@ -14,7 +15,7 @@ def test_module_loading():
     
     try:
         # Test config loading
-        from bot.config import JAM_USER_ID, JONESY_USER_ID, ANNOUNCEMENTS_CHANNEL_ID
+        from bot.config import ANNOUNCEMENTS_CHANNEL_ID, JAM_USER_ID, JONESY_USER_ID
         print(f"  ✅ Config loaded - JAM: {JAM_USER_ID}, Jonesy: {JONESY_USER_ID}")
         
         # Test announcements command module
@@ -23,10 +24,10 @@ def test_module_loading():
         
         # Test conversation handler
         from bot.handlers.conversation_handler import (
-            start_announcement_conversation,
-            handle_announcement_conversation,
             create_ai_announcement_content,
-            format_announcement_content
+            format_announcement_content,
+            handle_announcement_conversation,
+            start_announcement_conversation,
         )
         print("  ✅ Conversation handler loaded")
         
@@ -48,7 +49,7 @@ def test_access_control():
     print("🔐 Testing Access Control...")
     
     from bot.config import JAM_USER_ID, JONESY_USER_ID
-    
+
     # Test authorized users
     authorized_users = [JAM_USER_ID, JONESY_USER_ID]
     for user_id in authorized_users:
@@ -122,12 +123,12 @@ def test_conversation_system():
     try:
         # Test function availability
         from bot.handlers.conversation_handler import (
-            handle_announcement_conversation,
             create_ai_announcement_content,
             format_announcement_content,
-            start_announcement_conversation
+            handle_announcement_conversation,
+            start_announcement_conversation,
         )
-        
+
         # Check functions are callable
         functions = [
             ("handle_announcement_conversation", handle_announcement_conversation),
@@ -154,9 +155,10 @@ def test_command_registration():
     print("⚡ Testing Command Registration...")
     
     try:
-        from bot.commands.announcements import AnnouncementsCommands
         from unittest.mock import MagicMock
-        
+
+        from bot.commands.announcements import AnnouncementsCommands
+
         # Create mock bot
         mock_bot = MagicMock()
         cog = AnnouncementsCommands(mock_bot)

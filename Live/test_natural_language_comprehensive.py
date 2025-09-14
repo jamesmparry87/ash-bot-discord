@@ -5,14 +5,16 @@ Tests all natural language entry points with proper access control
 """
 
 import asyncio
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
 from unittest.mock import AsyncMock, MagicMock
 
 # Import bot modules
 from bot.config import JAM_USER_ID, JONESY_USER_ID
+
 
 class MockBot:
     """Mock bot for testing"""

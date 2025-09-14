@@ -17,11 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 sys.path.insert(0, '.')
 
 import discord
-from bot_modular import (
-    handle_general_conversation,
-    get_user_communication_tier,
-    moderator_faq_handler
-)
+from bot_modular import get_user_communication_tier, handle_general_conversation, moderator_faq_handler
 from moderator_faq_handler import ModeratorFAQHandler
 
 

@@ -5,14 +5,16 @@ Tests all entry points and functionality for both Jam and Jonesy
 """
 
 import asyncio
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import bot modules
 from bot.config import JAM_USER_ID, JONESY_USER_ID
+
 
 class MockBot:
     """Mock bot for testing"""
@@ -241,7 +243,7 @@ class TestConversationSystem:
         """Test that announcement conversations can be initialized"""
         print("Testing conversation system initialization...")
         
-        from bot.handlers.conversation_handler import start_announcement_conversation, announcement_conversations
+        from bot.handlers.conversation_handler import announcement_conversations, start_announcement_conversation
         
         ctx = MockContext(JAM_USER_ID, is_dm=True)
         
@@ -260,7 +262,7 @@ class TestConversationSystem:
         
         # Test that the AI enhancement functions exist and are callable
         from bot.handlers.conversation_handler import create_ai_announcement_content, format_announcement_content
-        
+
         # Check functions exist
         assert callable(create_ai_announcement_content)
         assert callable(format_announcement_content)
@@ -271,7 +273,7 @@ class TestConversationSystem:
         print("Testing numbered steps system...")
         
         from bot.handlers.conversation_handler import handle_announcement_conversation
-        
+
         # Function should exist and be callable
         assert callable(handle_announcement_conversation)
         print("✅ Numbered steps conversation handler available")
