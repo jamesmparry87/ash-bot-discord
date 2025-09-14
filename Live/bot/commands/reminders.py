@@ -156,7 +156,7 @@ class RemindersCommands(commands.Cog):
                     if delivery_type == "dm":
                         response += f"\n**Delivery:** Direct message"
                     else:
-                        response += f"\n**Delivery:** This channel ({ctx.channel.mention})" # type: ignore
+                        response += f"\n**Delivery:** This channel ({ctx.channel.mention})"  # type: ignore
 
                     await ctx.send(response)
                 else:
@@ -228,7 +228,7 @@ class RemindersCommands(commands.Cog):
                     if delivery_type == "dm":
                         confirmation += f"\n**Delivery:** Direct message"
                     elif hasattr(ctx.channel, 'mention'):
-                        confirmation += f"\n**Delivery:** This channel ({ctx.channel.mention})" # type: ignore
+                        confirmation += f"\n**Delivery:** This channel ({ctx.channel.mention})"  # type: ignore
                     else:
                         confirmation += f"\n**Delivery:** This channel"
 

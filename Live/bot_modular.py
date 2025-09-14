@@ -1154,6 +1154,7 @@ def detect_natural_language_command(content: str) -> bool:
 
 # --- Alias System Commands (Debugging Only) ---
 
+
 @bot.command(name="setalias")
 async def set_alias(ctx, tier: str):
     """Set user alias for testing different tiers (James only)"""
