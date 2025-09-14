@@ -648,6 +648,15 @@ async def on_message(message):
             print(
                 f"🔍 Processing {'DM' if is_dm else 'guild'} {'implicit query' if is_implicit_game_query and not is_mentioned else 'message'} from user {message.author.id}: {content[:50]}...")
 
+            # CRITICAL FIX: Process commands FIRST before queries and FAQ
+            # This ensures reminder commands execute instead of showing FAQ responses
+            if not is_dm:  # Guild messages might be commands
+                # Check if this looks like a command that should be processed
+                if message.content.strip().startswith('!'):
+                    print(f"🔧 Command detected: {message.content.strip()[:20]}... - processing commands first")
+                    await bot.process_commands(message)
+                    return
+
             # Route and handle queries
             query_type, match = message_handler_functions['route_query'](
                 content)
