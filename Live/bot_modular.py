@@ -574,6 +574,13 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    # PRIORITY 1: Process ALL traditional commands first, regardless of context
+    # This ensures commands like "!remind @DecentJam 2m Smile" always work
+    if message.content.strip().startswith('!'):
+        print(f"🔧 Traditional command detected (priority): {message.content.strip()[:30]}...")
+        await bot.process_commands(message)
+        return
+
     # Check if this is a DM
     is_dm = isinstance(message.channel, discord.DMChannel)
 
@@ -614,8 +621,7 @@ async def on_message(message):
         if is_dm:
             await handle_general_conversation(message)
             return
-        # Process commands only for guild messages
-        await bot.process_commands(message)
+        # For guild messages, commands were already handled above, so nothing more to do
         return
 
     try:
@@ -627,7 +633,7 @@ async def on_message(message):
         if await message_handler_functions['handle_pineapple_pizza_enforcement'](message):
             return
 
-        # Determine if we should process this message for queries
+        # Determine if we should process this message for queries/conversation
         should_process_query = (
             is_dm or  # All DMs get processed
             is_mentioned or  # Explicit mentions
@@ -648,16 +654,36 @@ async def on_message(message):
             print(
                 f"🔍 Processing {'DM' if is_dm else 'guild'} {'implicit query' if is_implicit_game_query and not is_mentioned else 'message'} from user {message.author.id}: {content[:50]}...")
 
-            # CRITICAL FIX: Process commands FIRST before queries and FAQ
-            # This ensures reminder commands execute instead of showing FAQ responses
-            if not is_dm:  # Guild messages might be commands
-                # Check if this looks like a command that should be processed
-                if message.content.strip().startswith('!'):
-                    print(f"🔧 Command detected: {message.content.strip()[:20]}... - processing commands first")
+            # PRIORITY 2: Check for natural language commands
+            if detect_natural_language_command(content):
+                print(f"🔧 Natural language command detected: {content[:50]}... - processing as command")
+                
+                # For natural language commands, we need to construct a proper command
+                # The reminder command supports natural language parsing
+                content_lower = content.lower().strip()
+                
+                # Handle reminder patterns
+                if any(re.search(pattern, content_lower) for pattern in [
+                    r"set\s+(?:a\s+)?remind(?:er)?\s+for",
+                    r"remind\s+me\s+(?:in|at|to)",
+                    r"create\s+(?:a\s+)?remind(?:er)?\s+for",
+                    r"schedule\s+(?:a\s+)?remind(?:er)?\s+for",
+                    r"set\s+(?:a\s+)?timer\s+for",
+                    r"remind\s+(?:me\s+)?in\s+\d+",
+                    r"reminder\s+(?:in|for)\s+\d+"
+                ]):
+                    # Create a fake message with !remind command for processing
+                    fake_content = f"!remind {content}"
+                    original_content = message.content
+                    message.content = fake_content
                     await bot.process_commands(message)
+                    message.content = original_content  # Restore original content
                     return
+                
+                # Handle other natural language commands here as needed
+                # For now, fall through to normal processing for other patterns
 
-            # Route and handle queries
+            # PRIORITY 3: Route and handle database queries
             query_type, match = message_handler_functions['route_query'](
                 content)
 
@@ -680,7 +706,7 @@ async def on_message(message):
                 await message_handler_functions['handle_recommendation_query'](message, match)
                 return
             else:
-                # Handle with general conversation system
+                # PRIORITY 4: Handle with general conversation/FAQ system
                 await handle_general_conversation(message)
                 return
 
@@ -689,14 +715,13 @@ async def on_message(message):
         import traceback
         traceback.print_exc()
 
-    # Handle general conversation for DMs or mentions that didn't match
-    # specific patterns
+    # Handle general conversation for DMs or mentions that didn't match specific patterns
     if is_dm or is_mentioned:
         await handle_general_conversation(message)
         return
 
-    # Process commands normally (guild messages that don't need conversation)
-    await bot.process_commands(message)
+    # For guild messages that don't match any patterns, do nothing
+    # (Commands were already processed at the top)
 
 
 @bot.event
@@ -1053,6 +1078,36 @@ def detect_implicit_game_query(content: str) -> bool:
 
     return any(re.search(pattern, content_lower)
                for pattern in game_query_patterns)
+
+
+def detect_natural_language_command(content: str) -> bool:
+    """Detect if a message is likely a natural language command that should be processed as a command"""
+    content_lower = content.lower().strip()
+
+    # Natural language command patterns - these should be processed as commands, not FAQ
+    command_patterns = [
+        # Reminder commands
+        r"set\s+(?:a\s+)?remind(?:er)?\s+for",
+        r"remind\s+me\s+(?:in|at|to)",
+        r"create\s+(?:a\s+)?remind(?:er)?\s+for",
+        r"schedule\s+(?:a\s+)?remind(?:er)?\s+for",
+        r"set\s+(?:a\s+)?timer\s+for",
+        r"remind\s+(?:me\s+)?in\s+\d+",
+        r"reminder\s+(?:in|for)\s+\d+",
+        
+        # Game recommendation commands (natural language alternatives)
+        r"(?:add|suggest|recommend)\s+(?:the\s+)?game",
+        r"i\s+want\s+to\s+(?:add|suggest|recommend)",
+        r"(?:add|suggest)\s+.+\s+(?:game|to\s+(?:the\s+)?(?:list|database))",
+        
+        # Other potential natural language commands
+        r"show\s+(?:me\s+)?(?:my\s+)?reminders?",
+        r"list\s+(?:my\s+)?reminders?",
+        r"cancel\s+(?:my\s+)?reminder",
+        r"delete\s+(?:my\s+)?reminder",
+    ]
+
+    return any(re.search(pattern, content_lower) for pattern in command_patterns)
 
 # Add conversation starter commands
 
