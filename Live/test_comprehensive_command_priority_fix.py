@@ -7,9 +7,9 @@ in both DM and channel conversations, ensuring the specific issue with
 "!remind @DecentJam 2m Smile" showing FAQ responses is resolved.
 """
 
+import os
 import re
 import sys
-import os
 
 # Add the parent directory to the path so we can import from bot_modular
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -22,7 +22,7 @@ def simulate_comprehensive_message_flow(message_content: str, is_dm: bool = Fals
     
     # Import the functions from bot_modular
     try:
-        from bot_modular import detect_natural_language_command, detect_implicit_game_query
+        from bot_modular import detect_implicit_game_query, detect_natural_language_command
     except ImportError:
         # Fallback - define the functions locally
         def detect_natural_language_command(content: str) -> bool:

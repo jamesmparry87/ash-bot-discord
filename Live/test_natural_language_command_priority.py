@@ -6,9 +6,9 @@ Tests that natural language commands like "set a reminder for 1 minute from now"
 are properly detected and processed as commands instead of FAQ responses.
 """
 
+import os
 import re
 import sys
-import os
 
 # Add the parent directory to the path so we can import from bot_modular
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
