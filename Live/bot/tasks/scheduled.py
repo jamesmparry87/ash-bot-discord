@@ -539,6 +539,7 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
         delivery_type = reminder["delivery_type"]
         delivery_channel_id = reminder.get("delivery_channel_id")
         auto_action_enabled = reminder.get("auto_action_enabled", False)
+        reminder_id = reminder.get("id", "unknown")
 
         # Create Ash-style reminder message
         ash_message = f"📋 **Temporal alert activated.** {reminder_text}"
@@ -549,26 +550,44 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
             if auto_action_type == "youtube_post":
                 ash_message += f"\n\n⚡ **Auto-action protocol engaged.** If you do not respond within 5 minutes, I will automatically execute the YouTube posting sequence. *Efficiency is paramount.*"
 
+        delivery_successful = False
+
         if delivery_type == "dm":
             user = bot.get_user(user_id)
             if user:
-                await user.send(ash_message)
-                print(f"✅ Delivered DM reminder to user {user_id}")
+                try:
+                    await user.send(ash_message)
+                    print(f"✅ Delivered DM reminder to user {user_id}")
+                    delivery_successful = True
+                except Exception as dm_error:
+                    print(f"❌ Failed to send DM to user {user_id}: {dm_error}")
+                    raise RuntimeError(f"Failed to deliver DM reminder to user {user_id}: {dm_error}")
             else:
                 print(f"❌ Could not fetch user {user_id} for DM reminder")
+                raise RuntimeError(f"Could not fetch user {user_id} for DM delivery")
 
         elif delivery_type == "channel" and delivery_channel_id:
             channel = bot.get_channel(delivery_channel_id)
             if channel and isinstance(channel, discord.TextChannel):
-                await channel.send(f"<@{user_id}> {ash_message}")
-                print(
-                    f"✅ Delivered channel reminder to channel {delivery_channel_id}")
+                try:
+                    await channel.send(f"<@{user_id}> {ash_message}")
+                    print(f"✅ Delivered channel reminder to channel {delivery_channel_id}")
+                    delivery_successful = True
+                except Exception as channel_error:
+                    print(f"❌ Failed to send message to channel {delivery_channel_id}: {channel_error}")
+                    raise RuntimeError(f"Failed to deliver reminder to channel {delivery_channel_id}: {channel_error}")
             else:
-                print(
-                    f"❌ Could not access channel {delivery_channel_id} for reminder")
+                print(f"❌ Could not access channel {delivery_channel_id} for reminder {reminder_id}")
+                raise RuntimeError(f"Could not access channel {delivery_channel_id} for reminder delivery")
         else:
-            print(
-                f"❌ Invalid delivery type or missing channel for reminder {reminder['id']}")
+            error_msg = f"Invalid delivery configuration for reminder {reminder_id}: type={delivery_type}, channel_id={delivery_channel_id}"
+            print(f"❌ {error_msg}")
+            raise RuntimeError(error_msg)
+
+        if not delivery_successful:
+            raise RuntimeError(f"Reminder delivery failed for unknown reason: {reminder_id}")
+
+        print(f"📋 Reminder {reminder_id} successfully delivered via {delivery_type}")
 
     except Exception as e:
         print(f"❌ Error delivering reminder: {e}")

@@ -112,13 +112,21 @@ class RemindersCommands(commands.Cog):
                     await ctx.send("❌ Only moderators can set reminders for other users.")
                     return
 
+                # Determine delivery method based on context
+                if isinstance(ctx.channel, discord.DMChannel):
+                    delivery_type = "dm"
+                    delivery_channel_id = None
+                else:
+                    delivery_type = "channel"
+                    delivery_channel_id = ctx.channel.id
+
                 # Add reminder to database with auto-action support
                 reminder_id = database.add_reminder(
                     user_id=target_user_id,
                     reminder_text=reminder_text,
                     scheduled_time=scheduled_time,
-                    delivery_channel_id=ctx.channel.id,
-                    delivery_type="channel",
+                    delivery_channel_id=delivery_channel_id,
+                    delivery_type=delivery_type,
                     auto_action_enabled=auto_action_enabled,
                     auto_action_type=auto_action_type,
                     auto_action_data=auto_action_data
@@ -145,7 +153,10 @@ class RemindersCommands(commands.Cog):
                     if auto_action_enabled:
                         response += f"\n⚡ **Auto-action enabled:** {auto_action_type} (executed if no mod responds within 5 minutes)"
 
-                    response += f"\n**Delivery:** This channel ({ctx.channel.mention})"
+                    if delivery_type == "dm":
+                        response += f"\n**Delivery:** Direct message"
+                    else:
+                        response += f"\n**Delivery:** This channel ({ctx.channel.mention})" # type: ignore
 
                     await ctx.send(response)
                 else:
@@ -190,13 +201,21 @@ class RemindersCommands(commands.Cog):
                 # Check if moderator is setting reminder for themselves
                 target_user_id = ctx.author.id
 
+                # Determine delivery method based on context
+                if isinstance(ctx.channel, discord.DMChannel):
+                    delivery_type = "dm"
+                    delivery_channel_id = None
+                else:
+                    delivery_type = "channel"
+                    delivery_channel_id = ctx.channel.id
+
                 # Add reminder to database (natural language format)
                 reminder_id = database.add_reminder(
                     user_id=target_user_id,
                     reminder_text=parsed["reminder_text"],
                     scheduled_time=parsed["scheduled_time"],
-                    delivery_channel_id=ctx.channel.id,
-                    delivery_type="channel"
+                    delivery_channel_id=delivery_channel_id,
+                    delivery_type=delivery_type
                 )
 
                 if reminder_id:
@@ -206,7 +225,12 @@ class RemindersCommands(commands.Cog):
                     confirmation = f"✅ **Reminder #{reminder_id} set successfully**\n"
                     confirmation += f"**Time:** {formatted_time}\n"
                     confirmation += f"**Message:** *{parsed['reminder_text']}*\n"
-                    confirmation += f"**Delivery:** This channel ({ctx.channel.mention})"
+                    if delivery_type == "dm":
+                        confirmation += f"\n**Delivery:** Direct message"
+                    elif hasattr(ctx.channel, 'mention'):
+                        confirmation += f"\n**Delivery:** This channel ({ctx.channel.mention})" # type: ignore
+                    else:
+                        confirmation += f"\n**Delivery:** This channel"
 
                     await ctx.send(confirmation)
                 else:

@@ -137,7 +137,7 @@ async def load_command_modules():
     """Load all command modules (cogs)"""
     try:
         # Load command modules
-        from .commands import announcements, games, strikes, utility
+        from .commands import announcements, games, reminders, strikes, utility
 
         strikes.setup(bot)
         print("✅ Loaded strikes commands module")
@@ -150,6 +150,9 @@ async def load_command_modules():
 
         announcements.setup(bot)
         print("✅ Loaded announcements commands module")
+
+        reminders.setup(bot)
+        print("✅ Loaded reminders commands module")
 
         print(f"✅ All command modules loaded successfully")
 
