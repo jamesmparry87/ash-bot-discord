@@ -11,12 +11,8 @@ import sys
 # Add the current directory to Python path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from bot.handlers.ai_handler import (
-    initialize_ai,
-    get_ai_status,
-    call_ai_with_rate_limiting,
-    JONESY_USER_ID
-)
+from bot.handlers.ai_handler import JONESY_USER_ID, call_ai_with_rate_limiting, get_ai_status, initialize_ai
+
 
 async def test_ai_integration():
     """Test the AI integration with Hugging Face"""
