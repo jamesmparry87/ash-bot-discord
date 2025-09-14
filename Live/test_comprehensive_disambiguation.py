@@ -69,7 +69,7 @@ def test_faq_responses():
             "who is jonesy",
             "jonesy the cat", 
             "alien cat",
-            "jones",
+            "jonesy",
             "which jonesy"
         ]
         
@@ -77,12 +77,12 @@ def test_faq_responses():
         for faq in required_faqs:
             if faq in FAQ_RESPONSES:
                 response = FAQ_RESPONSES[faq]
-                # Check that the "who is jonesy" response mentions both entities
+                # Check that the "who is jonesy" response defaults to Captain Jonesy
                 if faq == "who is jonesy":
-                    if "Captain Jonesy" in response and "server owner" in response:
-                        print(f"  ✅ '{faq}' correctly disambiguates")
+                    if "Captain Jonesy" in response and any(phrase in response for phrase in ["server", "commanding officer", "Discord"]):
+                        print(f"  ✅ '{faq}' correctly defaults to Captain Jonesy")
                     else:
-                        print(f"  ❌ '{faq}' doesn't properly disambiguate")
+                        print(f"  ❌ '{faq}' doesn't properly default to Captain Jonesy")
                         all_present = False
                 else:
                     print(f"  ✅ '{faq}' present")
