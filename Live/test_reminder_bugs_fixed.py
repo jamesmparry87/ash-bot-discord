@@ -83,7 +83,7 @@ def test_dot_time_parsing():
     
     try:
         from bot.tasks.reminders import parse_natural_reminder
-        
+
         # Test Case 1: Original bug case - "remind me at 10.47 to stand up"
         print("\n📝 Test 1: Original Bug Case")
         
@@ -199,9 +199,10 @@ def test_moderator_permissions():
     
     try:
         # This test validates that the decorator is present
-        from bot.commands.reminders import RemindersCommands
         import inspect
-        
+
+        from bot.commands.reminders import RemindersCommands
+
         # Check that listreminders has the correct decorator
         list_reminders_method = getattr(RemindersCommands, 'list_reminders')
         
