@@ -363,7 +363,6 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         except Exception as e:
             await ctx.send(f"❌ Error removing game: {str(e)}")
 
-
     @commands.command(name="addplayedgame")
     @commands.has_permissions(manage_messages=True)
     async def add_played_game(self, ctx, *, content: str | None = None):
@@ -418,7 +417,8 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                             await ctx.send(f"❌ **Invalid year:** '{value}'. Must be a number.")
                             return
                     elif key in ['status', 'completion_status']:
-                        if value.lower() in ['completed', 'ongoing', 'dropped']:
+                        if value.lower() in [
+                                'completed', 'ongoing', 'dropped']:
                             metadata['completion_status'] = value.lower()
                         else:
                             await ctx.send(f"❌ **Invalid status:** '{value}'. Use: completed, ongoing, or dropped")
@@ -446,9 +446,11 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                     if metadata.get('release_year'):
                         details.append(f"Year: {metadata['release_year']}")
                     if metadata.get('completion_status'):
-                        details.append(f"Status: {metadata['completion_status']}")
+                        details.append(
+                            f"Status: {metadata['completion_status']}")
                     if metadata.get('total_episodes'):
-                        details.append(f"Episodes: {metadata['total_episodes']}")
+                        details.append(
+                            f"Episodes: {metadata['total_episodes']}")
 
                     details_text = f" ({', '.join(details)})" if details else ""
                     await ctx.send(f"✅ **'{game_name}' added to played games database**{details_text}.\n\n*Use `!gameinfo {game_name}` to view details.*")
@@ -597,7 +599,8 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                     value = value.strip()
 
                     if key in ['status', 'completion_status']:
-                        if value.lower() in ['completed', 'ongoing', 'dropped']:
+                        if value.lower() in [
+                                'completed', 'ongoing', 'dropped']:
                             updates['completion_status'] = value.lower()
                         else:
                             await ctx.send(f"❌ **Invalid status:** '{value}'. Use: completed, ongoing, or dropped")
@@ -635,18 +638,19 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                     if not hasattr(database, 'get_played_game'):
                         await ctx.send("❌ **Game lookup not available.** Database method `get_played_game()` needs implementation.")
                         return
-                    
+
                     game_data = database.get_played_game(game_identifier)
                     if not game_data:
                         await ctx.send(f"❌ **'{game_identifier}' not found** in played games database.\n\n*Use `!gameinfo {game_identifier}` to verify the game exists.*")
                         return
-                    
+
                     game_id = game_data.get('id')
                     if game_id is None:
                         await ctx.send("❌ **Database error:** Game ID not available in game data.")
                         return
-                    
-                    game_display_name = game_data.get('canonical_name', game_identifier)
+
+                    game_display_name = game_data.get(
+                        'canonical_name', game_identifier)
 
                 # Now call the database method with the correct integer ID
                 success = database.update_played_game(game_id, **updates)
@@ -715,7 +719,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
 
             try:
                 await self.bot.wait_for('message', check=check, timeout=30.0)
-            except:
+            except BaseException:
                 await ctx.send("❌ **Import cancelled** - confirmation timeout.")
                 return
 

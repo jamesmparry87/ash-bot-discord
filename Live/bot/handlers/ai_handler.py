@@ -366,10 +366,10 @@ async def call_ai_with_rate_limiting(
                     try:
                         print(
                             f"Trying Hugging Face backup (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
-                        
+
                         # Format prompt for Mixtral instruction format
                         formatted_prompt = f"<s>[INST] {prompt} [/INST]"
-                        
+
                         payload = {
                             "inputs": formatted_prompt,
                             "parameters": {
@@ -378,24 +378,27 @@ async def call_ai_with_rate_limiting(
                                 "return_full_text": False
                             }
                         }
-                        
-                        response = requests.post( # type: ignore
+
+                        response = requests.post(  # type: ignore
                             "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
                             headers=huggingface_headers,
                             json=payload,
                             timeout=30
                         )
-                        
+
                         if response.status_code == 200:
                             response_data = response.json()
                             if response_data and len(response_data) > 0:
-                                hf_text = response_data[0].get("generated_text", "").strip()
+                                hf_text = response_data[0].get(
+                                    "generated_text", "").strip()
                                 if hf_text:
                                     response_text = hf_text
                                     record_ai_request()
-                                    print(f"✅ Hugging Face backup request successful")
+                                    print(
+                                        f"✅ Hugging Face backup request successful")
                         else:
-                            print(f"❌ Hugging Face backup error: {response.status_code}")
+                            print(
+                                f"❌ Hugging Face backup error: {response.status_code}")
                             record_ai_error()
                     except Exception as hf_e:
                         print(f"❌ Hugging Face backup AI error: {hf_e}")
@@ -502,13 +505,13 @@ def setup_ai_provider(
                 "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
                 headers=huggingface_headers,
                 json=test_payload,
-                timeout=10
-            )
+                timeout=10)
             if test_response.status_code == 200:
                 print(f"✅ Hugging Face AI test successful")
                 return True
             else:
-                print(f"⚠️ Hugging Face API test failed: {test_response.status_code}")
+                print(
+                    f"⚠️ Hugging Face API test failed: {test_response.status_code}")
                 return False
 
         print(f"⚠️ {name.title()} AI setup complete but test response failed")

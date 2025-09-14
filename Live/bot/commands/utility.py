@@ -310,7 +310,6 @@ class UtilityCommands(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Error retrieving database statistics: {str(e)}")
 
-
     @commands.command(name="time")
     async def get_current_time(self, ctx):
         """Get current time in GMT/BST"""
@@ -355,7 +354,8 @@ class UtilityCommands(commands.Cog):
             ai_status = get_ai_status()
             current_status = ai_status.get('enabled', True)
 
-            # Toggle the status (this would need to be implemented in ai_handler)
+            # Toggle the status (this would need to be implemented in
+            # ai_handler)
             try:
                 from bot.handlers.ai_handler import toggle_ai_system  # type: ignore
                 new_status = toggle_ai_system()
@@ -374,7 +374,11 @@ class UtilityCommands(commands.Cog):
 
     @commands.command(name="setpersona")
     @commands.has_permissions(manage_messages=True)
-    async def set_persona(self, ctx, *, persona_description: str | None = None):
+    async def set_persona(
+            self,
+            ctx,
+            *,
+            persona_description: str | None = None):
         """Set or view the AI personality (moderators only)"""
         try:
             if not persona_description:

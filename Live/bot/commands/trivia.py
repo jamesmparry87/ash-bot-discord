@@ -532,7 +532,6 @@ class TriviaCommands(commands.Cog):
             print(f"❌ Error in resettrivia command: {e}")
             await ctx.send("❌ System error occurred while resetting trivia.")
 
-
     @commands.command(name="addtriviaquestion")
     async def add_trivia_question_conversation(self, ctx):
         """Start interactive DM conversation for trivia question submission"""

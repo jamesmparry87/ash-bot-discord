@@ -176,7 +176,8 @@ class RemindersCommands(commands.Cog):
                 )
 
                 if reminder_id:
-                    formatted_time = format_reminder_time(parsed["scheduled_time"])
+                    formatted_time = format_reminder_time(
+                        parsed["scheduled_time"])
                     await ctx.send(f"✅ Reminder set for {formatted_time}: *{parsed['reminder_text']}*")
                 else:
                     await ctx.send("❌ Failed to save reminder. Please try again.")
@@ -212,7 +213,8 @@ class RemindersCommands(commands.Cog):
             try:
                 if user:
                     # List reminders for specific user
-                    reminders = database.get_pending_reminders_for_user(user.id)
+                    reminders = database.get_pending_reminders_for_user(
+                        user.id)
                     if not reminders:
                         await ctx.send(f"📋 **No pending reminders for {user.display_name}.**")
                         return
