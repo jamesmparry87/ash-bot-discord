@@ -2,13 +2,16 @@
 Test the enhanced reminder parsing system with comprehensive date/time formats
 """
 
-import sys
 import os
+import sys
+
 sys.path.append(os.path.join(os.path.dirname(__file__), 'bot'))
 
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from bot.tasks.reminders import parse_natural_reminder, format_reminder_time
+
+from bot.tasks.reminders import format_reminder_time, parse_natural_reminder
+
 
 def test_comprehensive_formats():
     """Test comprehensive date/time formats"""
