@@ -1944,8 +1944,8 @@ async def make_announcement(ctx, *, announcement_text: Optional[str] = None):
         announcement_channel = bot.get_channel(ANNOUNCEMENTS_CHANNEL_ID)
         if announcement_channel:
             await announcement_channel.send(embed=embed)  # type: ignore
-            # type: ignore
-            await ctx.send(f"✅ **Announcement posted** to {announcement_channel.mention}.")
+            await ctx.send(f"✅ **Announcement posted** to {announcement_channel.mention}.")  # type: ignore
+
         else:
             await ctx.send("❌ **Announcement channel not found.** Please check channel configuration.")
 
@@ -1998,11 +1998,10 @@ async def emergency_announcement(ctx, *, message: Optional[str] = None):
         announcement_channel = bot.get_channel(ANNOUNCEMENTS_CHANNEL_ID)
         if announcement_channel:
 
-            # type: ignore
-            await announcement_channel.send("@everyone", embed=embed)
+            await announcement_channel.send("@everyone", embed=embed)             # type: ignore
 
-            # type: ignore
-            await ctx.send(f"🚨 **Emergency announcement posted** with @everyone ping to {announcement_channel.mention}.")
+            await ctx.send(f"🚨 **Emergency announcement posted** with @everyone ping to {announcement_channel.mention}.")             # type: ignore
+
         else:
             await ctx.send("❌ **Announcement channel not found.** Please check channel configuration.")
 

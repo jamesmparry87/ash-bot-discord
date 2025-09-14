@@ -2,7 +2,7 @@
 AI Handler Module
 
 Handles AI integration, rate limiting, and response processing for the Discord bot.
-Supports both Gemini and Claude APIs with automatic fallback functionality.
+Supports both Gemini and Hugging Face APIs with automatic fallback functionality.
 """
 
 import json
@@ -36,19 +36,19 @@ except ImportError:
     GENAI_AVAILABLE = False
 
 try:
-    import anthropic
-    ANTHROPIC_AVAILABLE = True
+    import requests
+    HUGGINGFACE_AVAILABLE = True
 except ImportError:
-    anthropic = None
-    ANTHROPIC_AVAILABLE = False
+    requests = None
+    HUGGINGFACE_AVAILABLE = False
 
 # AI Configuration
 GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
-ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+HUGGINGFACE_API_KEY = os.getenv('HUGGINGFACE_API_KEY')
 
 # AI instances
 gemini_model = None
-claude_client = None
+huggingface_headers = None
 ai_enabled = False
 ai_status_message = "Offline"
 primary_ai = None
@@ -361,63 +361,44 @@ async def call_ai_with_rate_limiting(
                 print(f"❌ Gemini AI error: {e}")
                 record_ai_error()
 
-                # Try Claude backup if available
-                if backup_ai == "claude" and claude_client is not None:
+                # Try Hugging Face backup if available
+                if backup_ai == "huggingface" and huggingface_headers is not None:
                     try:
                         print(
-                            f"Trying Claude backup (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
-                        response = claude_client.messages.create(
-                            model="claude-3-haiku-20240307",
-                            max_tokens=300,
-                            messages=[{"role": "user", "content": prompt}],
+                            f"Trying Hugging Face backup (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
+                        
+                        # Format prompt for Mixtral instruction format
+                        formatted_prompt = f"<s>[INST] {prompt} [/INST]"
+                        
+                        payload = {
+                            "inputs": formatted_prompt,
+                            "parameters": {
+                                "max_new_tokens": 300,
+                                "temperature": 0.7,
+                                "return_full_text": False
+                            }
+                        }
+                        
+                        response = requests.post( # type: ignore
+                            "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
+                            headers=huggingface_headers,
+                            json=payload,
+                            timeout=30
                         )
-                        if response and hasattr(
-                                response, "content") and response.content:
-                            claude_text = response.content[0].text if response.content else ""
-                            if claude_text:
-                                response_text = claude_text
-                                record_ai_request()
-                                print(f"✅ Claude backup request successful")
-                    except Exception as claude_e:
-                        print(f"❌ Claude backup AI error: {claude_e}")
-                        record_ai_error()
-
-        elif primary_ai == "claude" and claude_client is not None:
-            try:
-                print(
-                    f"Making Claude request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
-                response = claude_client.messages.create(
-                    model="claude-3-haiku-20240307",
-                    max_tokens=300,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                if response and hasattr(
-                        response, "content") and response.content:
-                    claude_text = response.content[0].text if response.content else ""
-                    if claude_text:
-                        response_text = claude_text
-                        record_ai_request()
-                        print(f"✅ Claude request successful")
-            except Exception as e:
-                print(f"❌ Claude AI error: {e}")
-                record_ai_error()
-
-                # Try Gemini backup if available
-                if backup_ai == "gemini" and gemini_model is not None:
-                    try:
-                        print(
-                            f"Trying Gemini backup (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
-                        generation_config = {
-                            "max_output_tokens": 300, "temperature": 0.7}
-                        response = gemini_model.generate_content(
-                            prompt, generation_config=generation_config)
-                        if response and hasattr(
-                                response, "text") and response.text:
-                            response_text = response.text
-                            record_ai_request()
-                            print(f"✅ Gemini backup request successful")
-                    except Exception as gemini_e:
-                        print(f"❌ Gemini backup AI error: {gemini_e}")
+                        
+                        if response.status_code == 200:
+                            response_data = response.json()
+                            if response_data and len(response_data) > 0:
+                                hf_text = response_data[0].get("generated_text", "").strip()
+                                if hf_text:
+                                    response_text = hf_text
+                                    record_ai_request()
+                                    print(f"✅ Hugging Face backup request successful")
+                        else:
+                            print(f"❌ Hugging Face backup error: {response.status_code}")
+                            record_ai_error()
+                    except Exception as hf_e:
+                        print(f"❌ Hugging Face backup AI error: {hf_e}")
                         record_ai_error()
 
         return response_text, "success"
@@ -490,7 +471,7 @@ def setup_ai_provider(
         api_key: Optional[str],
         module: Optional[Any],
         is_available: bool) -> bool:
-    """Initialize and test an AI provider (Gemini or Claude)."""
+    """Initialize and test an AI provider (Gemini or Hugging Face)."""
     if not api_key:
         print(
             f"⚠️ {name.upper()}_API_KEY not found - {name.title()} features disabled")
@@ -509,19 +490,26 @@ def setup_ai_provider(
                     test_response, 'text') and test_response.text:
                 print(f"✅ Gemini AI test successful")
                 return True
-        elif name == "claude":
-            global claude_client
-            claude_client = module.Anthropic(api_key=api_key)
-            test_response = claude_client.messages.create(
-                model="claude-3-haiku-20240307",
-                max_tokens=10,
-                messages=[{"role": "user", "content": "Test"}]
+        elif name == "huggingface":
+            global huggingface_headers
+            huggingface_headers = {"Authorization": f"Bearer {api_key}"}
+            # Test Hugging Face API
+            test_payload = {
+                "inputs": "Test",
+                "parameters": {"max_new_tokens": 10, "temperature": 0.7}
+            }
+            test_response = module.post(
+                "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
+                headers=huggingface_headers,
+                json=test_payload,
+                timeout=10
             )
-            if test_response and hasattr(
-                    test_response,
-                    "content") and test_response.content:
-                print(f"✅ Claude AI test successful")
+            if test_response.status_code == 200:
+                print(f"✅ Hugging Face AI test successful")
                 return True
+            else:
+                print(f"⚠️ Hugging Face API test failed: {test_response.status_code}")
+                return False
 
         print(f"⚠️ {name.title()} AI setup complete but test response failed")
         return False
@@ -711,21 +699,18 @@ def initialize_ai():
     # Setup AI providers
     gemini_ok = setup_ai_provider(
         "gemini", GEMINI_API_KEY, genai, GENAI_AVAILABLE)
-    claude_ok = setup_ai_provider(
-        "claude",
-        ANTHROPIC_API_KEY,
-        anthropic,
-        ANTHROPIC_AVAILABLE)
+    huggingface_ok = setup_ai_provider(
+        "huggingface", HUGGINGFACE_API_KEY, requests, HUGGINGFACE_AVAILABLE)
 
     if gemini_ok:
         primary_ai = "gemini"
         print("✅ Gemini AI configured successfully - set as primary AI")
-        if claude_ok:
-            backup_ai = "claude"
-            print("✅ Claude AI configured successfully - set as backup AI")
-    elif claude_ok:
-        primary_ai = "claude"
-        print("✅ Claude AI configured successfully - set as primary AI")
+        if huggingface_ok:
+            backup_ai = "huggingface"
+            print("✅ Hugging Face AI configured successfully - set as backup AI")
+    elif huggingface_ok:
+        primary_ai = "huggingface"
+        print("✅ Hugging Face AI configured successfully - set as primary AI")
 
     # Set AI status
     if primary_ai:

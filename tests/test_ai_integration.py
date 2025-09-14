@@ -6,7 +6,7 @@ import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
+import pytest # type: ignore
 
 # Add the Live directory to sys.path
 live_path = os.path.join(os.path.dirname(__file__), '..', 'Live')
@@ -34,9 +34,9 @@ except ImportError:
         # Add other mock attributes as needed
         ai_enabled = False
         primary_ai = 'gemini'
-        backup_ai = 'claude'
+        backup_ai = 'huggingface'
         gemini_model = None
-        claude_client = None
+        huggingface_headers = None
         BOT_PERSONA = {'enabled': True}
         JONESY_USER_ID = 123456
         JAM_USER_ID = 789012
@@ -98,7 +98,7 @@ class TestAIIntegration:
             with patch("ash_bot_fallback.ai_enabled", True):
                 with patch("ash_bot_fallback.BOT_PERSONA", {"enabled": True, "personality": "Test persona"}):
                     with patch("ash_bot_fallback.primary_ai", "gemini"):
-                        with patch("ash_bot_fallback.backup_ai", "claude"):
+                        with patch("ash_bot_fallback.backup_ai", "huggingface"):
                             with patch("ash_bot_fallback.gemini_model") as mock_gemini:
                                 mock_gemini.generate_content.return_value = mock_response
 

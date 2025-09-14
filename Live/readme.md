@@ -206,9 +206,9 @@ Moderators in mod channels get access to complete FAQ system with detailed expla
 ## 🔧 Technical Notes (Minimal)
 
 **Environment**: Railway.app deployment with PostgreSQL database  
-**APIs**: Google Gemini AI with Claude backup, YouTube Data API integration  
+**APIs**: Google Gemini AI with Hugging Face backup, YouTube Data API integration  
 **Timezones**: GMT/BST (auto-switching), Pacific Time for resets  
-**Database**: Live PostgreSQL with comprehensive gaming history and strike tracking  
+**Database**: Live PostgreSQL with comprehensive gaming history and strike tracking
 
 ### Key Files
 
