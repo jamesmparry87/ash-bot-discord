@@ -1152,18 +1152,6 @@ def detect_natural_language_command(content: str) -> bool:
 
     return any(re.search(pattern, content_lower) for pattern in command_patterns)
 
-# Add conversation starter commands
-
-
-@bot.command(name="announceupdate")
-async def announce_update_command(ctx):
-    """Start interactive DM conversation for announcement creation"""
-    if start_announcement_conversation is not None:
-        await start_announcement_conversation(ctx)
-    else:
-        await ctx.send("❌ Announcement system not available - conversation handler not loaded.")
-
-
 # --- Alias System Commands (Debugging Only) ---
 
 @bot.command(name="setalias")
