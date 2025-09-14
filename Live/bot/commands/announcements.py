@@ -144,7 +144,6 @@ class AnnouncementsCommands(commands.Cog):
             print(f"❌ Error in emergency command: {e}")
             await ctx.send("❌ **System error occurred** while posting emergency announcement.")
 
-
     @commands.command(name="announceupdate")
     async def start_announcement_update(self, ctx):
         """Start interactive announcement creation process (Captain Jonesy and Sir Decent Jam only)"""

@@ -85,7 +85,7 @@ class UtilityCommands(commands.Cog):
                 # General chat channel ID from user requirements
                 if ctx.channel.id == 869528946725748766:
                     is_public_channel = True
-                
+
                 # Check standard mod permissions
                 is_authorized = await self._user_is_mod(ctx)
 
@@ -105,12 +105,12 @@ class UtilityCommands(commands.Cog):
             # Detailed status for authorized users
             try:
                 database = self._get_db()
-                
+
                 # Get database statistics
                 strikes_data = database.get_all_strikes()
                 total_strikes = sum(strikes_data.values())
                 users_with_strikes = len([s for s in strikes_data.values() if s > 0])
-                
+
                 # Get game statistics if available
                 try:
                     games = database.get_all_games()
@@ -139,11 +139,12 @@ class UtilityCommands(commands.Cog):
             # Build detailed status message
             status_lines = []
             status_lines.append("🤖 **Ash Bot - System Diagnostics**")
-            
+
             # Database status with details
             if db:
                 if total_games != "N/A" and users_with_strikes != "N/A":
-                    status_lines.append(f"• **Database**: ✅ Connected ({total_games} games, {users_with_strikes} users tracked)")
+                    status_lines.append(
+                        f"• **Database**: ✅ Connected ({total_games} games, {users_with_strikes} users tracked)")
                 else:
                     status_lines.append("• **Database**: ✅ Connected")
             else:
@@ -162,7 +163,8 @@ class UtilityCommands(commands.Cog):
             # Strike management
             if total_strikes != "Database unavailable":
                 if users_with_strikes != "N/A":
-                    status_lines.append(f"• **Strike Management**: {total_strikes} total strikes across {users_with_strikes} personnel")
+                    status_lines.append(
+                        f"• **Strike Management**: {total_strikes} total strikes across {users_with_strikes} personnel")
                 else:
                     status_lines.append(f"• **Strike Management**: {total_strikes} total strikes")
             else:

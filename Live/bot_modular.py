@@ -908,7 +908,7 @@ async def handle_general_conversation(message):
         # Check for announcement creation intents BEFORE FAQ processing
         announcement_creation_patterns = [
             "i want to write an announcement",
-            "i want to create an announcement", 
+            "i want to create an announcement",
             "i want to make an announcement",
             "write an announcement",
             "create an announcement",
@@ -916,21 +916,23 @@ async def handle_general_conversation(message):
             "start announcement creation",
             "begin announcement creation"
         ]
-        
+
         # Only Captain Jonesy and Sir Decent Jam can create announcements
-        if user_tier in ["captain", "creator"] and any(pattern in content_lower for pattern in announcement_creation_patterns):
+        if user_tier in ["captain", "creator"] and any(
+                pattern in content_lower for pattern in announcement_creation_patterns):
             # Check if this is a DM - announcement creation must be in DM
             if isinstance(message.channel, discord.DMChannel):
                 # Import and start announcement conversation if available
                 if start_announcement_conversation is not None:
                     print(f"🎯 Announcement creation intent detected from {user_tier} user in DM")
                     # Create a fake context object for the conversation handler
+
                     class FakeCtx:
                         def __init__(self, message):
                             self.author = message.author
                             self.guild = message.guild
                             self.send = message.reply
-                    
+
                     fake_ctx = FakeCtx(message)
                     await start_announcement_conversation(fake_ctx)
                     return

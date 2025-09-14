@@ -115,15 +115,18 @@ if ModeratorFAQHandler:
     )
 
 # --- Mock Context Class ---
+
+
 class MockContext:
     """Mock context for natural language triggers"""
+
     def __init__(self, message, bot):
         self.message = message
         self.author = message.author
         self.channel = message.channel
         self.guild = message.guild
         self.bot = bot
-    
+
     async def send(self, content, **kwargs):
         return await self.channel.send(content, **kwargs)
 
@@ -212,7 +215,7 @@ async def on_message(message):
             if user_id in [JAM_USER_ID, JONESY_USER_ID]:
                 announcement_triggers = [
                     "make an announcement",
-                    "create an announcement", 
+                    "create an announcement",
                     "post an announcement",
                     "need to announce",
                     "want to announce",
@@ -229,11 +232,11 @@ async def on_message(message):
                     "new features",
                     "feature update"
                 ]
-                
+
                 if any(trigger in content_lower for trigger in announcement_triggers):
                     # Import and start announcement conversation
                     from .handlers.conversation_handler import start_announcement_conversation
-                    
+
                     mock_ctx = MockContext(message, bot)
                     await start_announcement_conversation(mock_ctx)
                     return
@@ -241,7 +244,7 @@ async def on_message(message):
             # Games module triggers (PUBLIC ACCESS - anyone can use in DMs)
             games_triggers = [
                 "recommend a game",
-                "suggest a game", 
+                "suggest a game",
                 "add game recommendation",
                 "what games are recommended",
                 "list games",
@@ -249,10 +252,15 @@ async def on_message(message):
                 "game suggestions",
                 "recommended games"
             ]
-            
+
             if any(trigger in content_lower for trigger in games_triggers):
                 try:
-                    if any(phrase in content_lower for phrase in ["what games", "list games", "show game", "recommended games"]):
+                    if any(
+                        phrase in content_lower for phrase in [
+                            "what games",
+                            "list games",
+                            "show game",
+                            "recommended games"]):
                         # Direct help response since we can't easily call cog methods
                         await message.reply("🎮 **Current Game Recommendations**\n\nTo see the full list of game recommendations, use the `!listgames` command in the server.\n\n**To add recommendations:**\n• `!recommend <game name> - <reason>`\n\n**Example:**\n• `!recommend Hollow Knight - Great platformer with amazing atmosphere`\n\nAll community members can suggest games for Jonesy to consider!")
                         return
@@ -269,11 +277,11 @@ async def on_message(message):
         if message.guild:
             # Check user permissions for mod-only triggers
             is_mod = await user_is_mod(message)
-            
+
             # Strikes module triggers (MODERATOR ONLY)
             strikes_triggers = [
                 "check strikes for",
-                "show strikes for", 
+                "show strikes for",
                 "get strikes for",
                 "how many strikes",
                 "user strikes",
@@ -281,7 +289,7 @@ async def on_message(message):
                 "show all strikes",
                 "strike report"
             ]
-            
+
             if is_mod and any(trigger in content_lower for trigger in strikes_triggers):
                 try:
                     if any(phrase in content_lower for phrase in ["all strikes", "strike report"]):
@@ -296,7 +304,7 @@ async def on_message(message):
                     print(f"Error in strikes natural language trigger: {e}")
                     await message.reply("❌ Strike management system temporarily unavailable.")
                     return
-            
+
             # Trivia module triggers (MODERATOR ONLY)
             trivia_triggers = [
                 "start trivia",
@@ -308,7 +316,7 @@ async def on_message(message):
                 "show trivia stats",
                 "trivia questions"
             ]
-            
+
             if is_mod and any(trigger in content_lower for trigger in trivia_triggers):
                 try:
                     if any(phrase in content_lower for phrase in ["start trivia", "begin trivia", "run trivia"]):
@@ -334,7 +342,7 @@ async def on_message(message):
             "ash status",
             "time check"
         ]
-        
+
         if any(trigger in content_lower for trigger in utility_triggers):
             try:
                 if any(phrase in content_lower for phrase in ["what time", "current time", "time check"]):
@@ -418,7 +426,7 @@ async def ash_status(ctx):
             # Check if it's a public channel (general chat)
             if ctx.channel.id == 869528946725748766:
                 is_public_channel = True
-            
+
             is_authorized = await user_is_mod(ctx)
 
         # Handle public channel - simple response for everyone
@@ -437,7 +445,7 @@ async def ash_status(ctx):
         # Detailed status for authorized users (simplified backup version)
         db_status = "✅ Connected" if db else "❌ Not available"
         ai_status_msg = ai_status.get('status_message', 'Unknown')
-        
+
         # Add usage stats if available
         if ai_status.get('enabled') and 'usage_stats' in ai_status:
             usage = ai_status['usage_stats']
