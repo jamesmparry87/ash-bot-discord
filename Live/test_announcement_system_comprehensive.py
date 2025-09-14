@@ -4,11 +4,12 @@ Comprehensive Test Suite for Announcement System
 Tests all entry points and functionality for both Jam and Jonesy
 """
 
-from bot.config import JAM_USER_ID, JONESY_USER_ID
-from unittest.mock import AsyncMock, MagicMock, patch
 import asyncio
 import os
 import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from bot.config import JAM_USER_ID, JONESY_USER_ID
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 

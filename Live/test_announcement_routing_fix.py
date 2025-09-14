@@ -9,12 +9,13 @@ Tests that:
 4. Unauthorized users are properly rejected
 """
 
-from moderator_faq_handler import ModeratorFAQHandler
-from bot_modular import get_user_communication_tier, handle_general_conversation, moderator_faq_handler
-import discord
 import asyncio
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import discord
+from bot_modular import get_user_communication_tier, handle_general_conversation, moderator_faq_handler
+from moderator_faq_handler import ModeratorFAQHandler
 
 # Add the current directory to Python path for imports
 sys.path.insert(0, '.')

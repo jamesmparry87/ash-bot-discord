@@ -4,11 +4,12 @@ Comprehensive Test Suite for Natural Language Triggers
 Tests all natural language entry points with proper access control
 """
 
-from bot.config import JAM_USER_ID, JONESY_USER_ID
-from unittest.mock import AsyncMock, MagicMock
 import asyncio
 import os
 import sys
+from unittest.mock import AsyncMock, MagicMock
+
+from bot.config import JAM_USER_ID, JONESY_USER_ID
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 

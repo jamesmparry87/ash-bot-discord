@@ -4,10 +4,10 @@ Tests the complete reminder functionality from command to delivery
 """
 
 import asyncio
-import sys
 import os
+import sys
 from datetime import datetime, timedelta
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from zoneinfo import ZoneInfo
 
 # Add the Live directory to the path
@@ -18,9 +18,9 @@ def test_reminder_command_delivery_type_detection():
     print("🧪 Testing delivery type detection...")
     
     # Test DM channel detection
-    from bot.commands.reminders import RemindersCommands
     import discord
-    
+    from bot.commands.reminders import RemindersCommands
+
     # Mock DM channel
     dm_channel = Mock(spec=discord.DMChannel)
     dm_channel.id = 12345
@@ -48,8 +48,8 @@ def test_reminder_parsing_functions():
     print("🧪 Testing reminder parsing functions...")
     
     try:
-        from bot.tasks.reminders import parse_natural_reminder, validate_reminder_text, format_reminder_time
-        
+        from bot.tasks.reminders import format_reminder_time, parse_natural_reminder, validate_reminder_text
+
         # Test natural language parsing
         test_cases = [
             ("remind me in 5 minutes to check stream", True),
@@ -155,7 +155,7 @@ def test_delivery_function_error_handling():
     
     try:
         from bot.tasks.scheduled import deliver_reminder
-        
+
         # Test invalid reminder data
         invalid_reminders = [
             # Missing delivery type
@@ -211,7 +211,7 @@ def test_reminder_command_structure():
     
     try:
         from bot.commands.reminders import RemindersCommands
-        
+
         # Test that command class exists
         assert RemindersCommands, "RemindersCommands class should exist"
         
@@ -242,7 +242,7 @@ def test_integration_with_scheduled_tasks():
     
     try:
         from bot.tasks.scheduled import check_due_reminders, start_all_scheduled_tasks
-        
+
         # Test that reminder checking function exists
         assert asyncio.iscoroutinefunction(check_due_reminders), "check_due_reminders should be async"
         print("   ✅ check_due_reminders is properly async")
