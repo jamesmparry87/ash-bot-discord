@@ -114,6 +114,19 @@ if ModeratorFAQHandler:
         ai_status_message="Online (Refactored)",
     )
 
+# --- Mock Context Class ---
+class MockContext:
+    """Mock context for natural language triggers"""
+    def __init__(self, message, bot):
+        self.message = message
+        self.author = message.author
+        self.channel = message.channel
+        self.guild = message.guild
+        self.bot = bot
+    
+    async def send(self, content, **kwargs):
+        return await self.channel.send(content, **kwargs)
+
 # --- Core Event Handlers ---
 
 
@@ -121,7 +134,7 @@ async def load_command_modules():
     """Load all command modules (cogs)"""
     try:
         # Load command modules
-        from .commands import games, strikes, utility
+        from .commands import announcements, games, strikes, utility
 
         strikes.setup(bot)
         print("✅ Loaded strikes commands module")
@@ -131,6 +144,9 @@ async def load_command_modules():
 
         utility.setup(bot)
         print("✅ Loaded utility commands module")
+
+        announcements.setup(bot)
+        print("✅ Loaded announcements commands module")
 
         print(f"✅ All command modules loaded successfully")
 
@@ -175,6 +191,9 @@ async def on_message(message):
         if await handle_strike_detection(message, bot):
             return  # Strike was processed, don't continue
 
+        # Get message content for natural language processing
+        content_lower = message.content.lower()
+
         # Handle interactive DM conversations
         if isinstance(message.channel, discord.DMChannel):
             user_id = message.author.id
@@ -187,6 +206,154 @@ async def on_message(message):
             # Check for mod trivia conversations
             if user_id in mod_trivia_conversations:
                 await handle_mod_trivia_conversation(message)
+                return
+
+            # Check for natural language announcement triggers (DM only, authorized users only)
+            if user_id in [JAM_USER_ID, JONESY_USER_ID]:
+                announcement_triggers = [
+                    "make an announcement",
+                    "create an announcement", 
+                    "post an announcement",
+                    "need to announce",
+                    "want to announce",
+                    "announce something",
+                    "make announcement",
+                    "create announcement",
+                    "post announcement",
+                    "send an announcement",
+                    "update announcement",
+                    "announcement update",
+                    "bot update",
+                    "server update",
+                    "community update",
+                    "new features",
+                    "feature update"
+                ]
+                
+                if any(trigger in content_lower for trigger in announcement_triggers):
+                    # Import and start announcement conversation
+                    from .handlers.conversation_handler import start_announcement_conversation
+                    
+                    mock_ctx = MockContext(message, bot)
+                    await start_announcement_conversation(mock_ctx)
+                    return
+
+            # Games module triggers (PUBLIC ACCESS - anyone can use in DMs)
+            games_triggers = [
+                "recommend a game",
+                "suggest a game", 
+                "add game recommendation",
+                "what games are recommended",
+                "list games",
+                "show game recommendations",
+                "game suggestions",
+                "recommended games"
+            ]
+            
+            if any(trigger in content_lower for trigger in games_triggers):
+                try:
+                    if any(phrase in content_lower for phrase in ["what games", "list games", "show game", "recommended games"]):
+                        # Direct help response since we can't easily call cog methods
+                        await message.reply("🎮 **Current Game Recommendations**\n\nTo see the full list of game recommendations, use the `!listgames` command in the server.\n\n**To add recommendations:**\n• `!recommend <game name> - <reason>`\n\n**Example:**\n• `!recommend Hollow Knight - Great platformer with amazing atmosphere`\n\nAll community members can suggest games for Jonesy to consider!")
+                        return
+                    else:
+                        # Help with game recommendations
+                        await message.reply("🎮 **Game Recommendations**\n\nTo add a game recommendation, use:\n`!recommend <game name> - <reason>`\n\n**Examples:**\n• `!recommend Hollow Knight - Great platformer with amazing atmosphere`\n• `!listgames` to see all recommendations\n\nAll community members can suggest games for Jonesy to consider!")
+                        return
+                except Exception as e:
+                    print(f"Error in games natural language trigger: {e}")
+                    await message.reply("❌ Game recommendation system temporarily unavailable.")
+                    return
+
+        # Handle guild-based natural language triggers with permission checks
+        if message.guild:
+            # Check user permissions for mod-only triggers
+            is_mod = await user_is_mod(message)
+            
+            # Strikes module triggers (MODERATOR ONLY)
+            strikes_triggers = [
+                "check strikes for",
+                "show strikes for", 
+                "get strikes for",
+                "how many strikes",
+                "user strikes",
+                "list all strikes",
+                "show all strikes",
+                "strike report"
+            ]
+            
+            if is_mod and any(trigger in content_lower for trigger in strikes_triggers):
+                try:
+                    if any(phrase in content_lower for phrase in ["all strikes", "strike report"]):
+                        # Direct help response for comprehensive strike management
+                        await message.reply("⚠️ **Strike Management - All Users**\n\nTo see all users with strikes, use: `!allstrikes`\n\n**Other strike commands:**\n• `!strikes @user` - Check strikes for specific user\n• `!resetstrikes @user` - Reset strikes for a user\n\n*These commands are restricted to moderators only.*")
+                        return
+                    else:
+                        # Help with strike commands
+                        await message.reply("⚠️ **Strike Management**\n\nAvailable commands:\n• `!strikes @user` - Check strikes for a user\n• `!allstrikes` - List all users with strikes\n• `!resetstrikes @user` - Reset strikes for a user\n\n*These commands are restricted to moderators only.*")
+                        return
+                except Exception as e:
+                    print(f"Error in strikes natural language trigger: {e}")
+                    await message.reply("❌ Strike management system temporarily unavailable.")
+                    return
+            
+            # Trivia module triggers (MODERATOR ONLY)
+            trivia_triggers = [
+                "start trivia",
+                "begin trivia",
+                "run trivia session",
+                "end trivia",
+                "finish trivia",
+                "trivia leaderboard",
+                "show trivia stats",
+                "trivia questions"
+            ]
+            
+            if is_mod and any(trigger in content_lower for trigger in trivia_triggers):
+                try:
+                    if any(phrase in content_lower for phrase in ["start trivia", "begin trivia", "run trivia"]):
+                        await message.reply("🧠 **Trivia Tuesday Management**\n\nTo start a trivia session:\n• `!starttrivia` - Auto-select next question\n• `!starttrivia <id>` - Use specific question\n\n**Other commands:**\n• `!listpendingquestions` - View available questions\n• `!addtrivia` - Add new questions\n• `!endtrivia` - End current session\n\n*Use these commands to manage Trivia Tuesday sessions.*")
+                        return
+                    elif any(phrase in content_lower for phrase in ["end trivia", "finish trivia"]):
+                        await message.reply("🧠 **End Trivia Session**\n\nTo end the current trivia session and show results:\n• `!endtrivia`\n\n*This will reveal the correct answer and display participation statistics.*")
+                        return
+                    elif any(phrase in content_lower for phrase in ["leaderboard", "trivia stats"]):
+                        await message.reply("🏆 **Trivia Statistics**\n\nTo view trivia leaderboard and statistics:\n• `!trivialeaderboard` - All-time stats\n• `!trivialeaderboard month` - Monthly stats\n• `!trivialeaderboard week` - Weekly stats\n\n*Shows top participants and overall session statistics.*")
+                        return
+                except Exception as e:
+                    print(f"Error in trivia natural language trigger: {e}")
+                    await message.reply("❌ Trivia management system temporarily unavailable.")
+                    return
+
+        # Utility module triggers (MIXED ACCESS - public and mod functions)
+        utility_triggers = [
+            "what time is it",
+            "current time",
+            "bot status",
+            "system status",
+            "ash status",
+            "time check"
+        ]
+        
+        if any(trigger in content_lower for trigger in utility_triggers):
+            try:
+                if any(phrase in content_lower for phrase in ["what time", "current time", "time check"]):
+                    # Direct time response
+                    from datetime import datetime
+                    from zoneinfo import ZoneInfo
+                    uk_now = datetime.now(ZoneInfo("Europe/London"))
+                    is_summer = 3 <= uk_now.month <= 10  # Rough BST approximation
+                    timezone_name = "BST" if is_summer else "GMT"
+                    formatted_time = uk_now.strftime(f"%A, %B %d, %Y at %H:%M:%S {timezone_name}")
+                    await message.reply(f"⏰ Current time: {formatted_time}")
+                    return
+                elif any(phrase in content_lower for phrase in ["bot status", "system status", "ash status"]):
+                    # Simple status response - use existing ashstatus command logic
+                    await message.reply("🤖 **Bot Status Check**\n\nFor detailed system diagnostics, use: `!ashstatus`\n\n*Access level varies based on authorization (public channel vs moderator access)*")
+                    return
+            except Exception as e:
+                print(f"Error in utility natural language trigger: {e}")
+                await message.reply("❌ Utility system temporarily unavailable.")
                 return
 
         # Handle pineapple pizza enforcement
@@ -231,29 +398,63 @@ async def test_command(ctx):
 
 @bot.command(name="ashstatus")
 async def ash_status(ctx):
-    """Basic status command"""
+    """Basic status command - backup implementation"""
     try:
-        # Check user permissions
+        # Import AI handler for status information
+        try:
+            from .handlers.ai_handler import get_ai_status
+            ai_status = get_ai_status()
+        except ImportError:
+            ai_status = {"enabled": False, "status_message": "AI handler unavailable"}
+
+        # Determine authorization level and channel context
         is_authorized = False
+        is_public_channel = False
 
         if ctx.guild is None:  # DM
             if ctx.author.id in [JAM_USER_ID, JONESY_USER_ID]:
                 is_authorized = True
         else:  # Guild
+            # Check if it's a public channel (general chat)
+            if ctx.channel.id == 869528946725748766:
+                is_public_channel = True
+            
             is_authorized = await user_is_mod(ctx)
 
-        if not is_authorized:
-            await ctx.send("Systems nominal, Sir Decent Jam. Awaiting Captain Jonesy's commands.")
+        # Handle public channel - simple response for everyone
+        if is_public_channel:
+            await ctx.send("🤖 Systems nominal. Awaiting mission parameters. *[All protocols operational.]*")
             return
 
-        # Basic status info for authorized users
-        await ctx.send(
-            f"🤖 Ash Bot (Refactored) Status:\n"
-            f"Database: {'Connected' if db else 'Not available'}\n"
-            f"Modules: Core systems loaded\n"
-            f"Status: Operational (refactored architecture)\n\n"
+        # Handle unauthorized users
+        if not is_authorized:
+            if ctx.guild is None:  # DM - be specific about authorization
+                await ctx.send("⚠️ **Access denied.** System status diagnostics require elevated clearance. Authorization protocols restrict access to Captain Jonesy, Sir Decent Jam, and server moderators only.")
+            else:  # Guild - generic response
+                await ctx.send("🤖 Systems nominal. Awaiting mission parameters. *[All protocols operational.]*")
+            return
+
+        # Detailed status for authorized users (simplified backup version)
+        db_status = "✅ Connected" if db else "❌ Not available"
+        ai_status_msg = ai_status.get('status_message', 'Unknown')
+        
+        # Add usage stats if available
+        if ai_status.get('enabled') and 'usage_stats' in ai_status:
+            usage = ai_status['usage_stats']
+            daily = usage.get('daily_requests', 0)
+            hourly = usage.get('hourly_requests', 0)
+            ai_status_msg += f" ({daily}/250 daily, {hourly}/50 hourly)"
+
+        status_message = (
+            f"🤖 **Ash Bot - System Diagnostics** (Backup)\n"
+            f"• **Database**: {db_status}\n"
+            f"• **AI System**: {ai_status_msg}\n"
+            f"• **Modules**: Core systems loaded\n"
+            f"• **Status**: Operational (refactored architecture)\n\n"
             f"*Analysis complete. Mission parameters updated.*"
         )
+
+        await ctx.send(status_message)
 
     except Exception as e:
         await ctx.send(f"❌ **System diagnostic error:** {str(e)}")

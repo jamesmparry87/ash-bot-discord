@@ -145,6 +145,21 @@ class AnnouncementsCommands(commands.Cog):
             await ctx.send("❌ **System error occurred** while posting emergency announcement.")
 
 
+    @commands.command(name="announceupdate")
+    async def start_announcement_update(self, ctx):
+        """Start interactive announcement creation process (Captain Jonesy and Sir Decent Jam only)"""
+        # Import conversation handler
+        from ..handlers.conversation_handler import start_announcement_conversation
+        await start_announcement_conversation(ctx)
+
+    @commands.command(name="createannouncement")
+    async def create_announcement(self, ctx):
+        """Alternative command to start announcement creation (Captain Jonesy and Sir Decent Jam only)"""
+        # Import conversation handler
+        from ..handlers.conversation_handler import start_announcement_conversation
+        await start_announcement_conversation(ctx)
+
+
 def setup(bot):
     """Add the AnnouncementsCommands cog to the bot"""
     bot.add_cog(AnnouncementsCommands(bot))

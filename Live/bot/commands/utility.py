@@ -60,10 +60,18 @@ class UtilityCommands(commands.Cog):
 
     @commands.command(name="ashstatus")
     async def ash_status(self, ctx):
-        """Show bot status - works in DMs for authorized users and in guilds for mods"""
+        """Show bot status - different levels based on authorization and channel"""
         try:
-            # Custom permission checking that works in both DMs and guilds
+            # Import AI handler for status information
+            try:
+                from ..handlers.ai_handler import get_ai_status
+                ai_status = get_ai_status()
+            except ImportError:
+                ai_status = {"enabled": False, "status_message": "AI handler unavailable"}
+
+            # Determine authorization level and channel context
             is_authorized = False
+            is_public_channel = False
 
             if ctx.guild is None:  # DM
                 # Allow JAM, JONESY, and moderators in DMs
@@ -73,33 +81,46 @@ class UtilityCommands(commands.Cog):
                     # Check if user is a mod
                     is_authorized = await self._user_is_mod_by_id(ctx.author.id)
             else:  # Guild
+                # Check if it's a public channel (general chat or similar)
+                # General chat channel ID from user requirements
+                if ctx.channel.id == 869528946725748766:
+                    is_public_channel = True
+                
                 # Check standard mod permissions
                 is_authorized = await self._user_is_mod(ctx)
 
-            # The generic response should only be shown to unauthorized users in guilds
-            # In DMs, unauthorized users should get a clearer message
-            if not is_authorized:
-                if ctx.guild is None:  # DM - be more specific about authorization
-                    await ctx.send("⚠️ **Access denied.** System status diagnostics require elevated clearance. Authorization protocols restrict access to Captain Jonesy, Sir Decent Jam, and server moderators only.")
-                else:  # Guild - use the generic response
-                    await ctx.send("Systems nominal, Sir Decent Jam. Awaiting Captain Jonesy's commands.")
+            # Handle public channel - simple response for everyone
+            if is_public_channel:
+                await ctx.send("🤖 Systems nominal. Awaiting mission parameters. *[All protocols operational.]*")
                 return
 
+            # Handle unauthorized users
+            if not is_authorized:
+                if ctx.guild is None:  # DM - be specific about authorization
+                    await ctx.send("⚠️ **Access denied.** System status diagnostics require elevated clearance. Authorization protocols restrict access to Captain Jonesy, Sir Decent Jam, and server moderators only.")
+                else:  # Guild - generic response
+                    await ctx.send("🤖 Systems nominal. Awaiting mission parameters. *[All protocols operational.]*")
+                return
+
+            # Detailed status for authorized users
             try:
                 database = self._get_db()
-                # Use individual queries as fallback if bulk query fails
+                
+                # Get database statistics
                 strikes_data = database.get_all_strikes()
                 total_strikes = sum(strikes_data.values())
+                users_with_strikes = len([s for s in strikes_data.values() if s > 0])
+                
+                # Get game statistics if available
+                try:
+                    games = database.get_all_games()
+                    total_games = len(games)
+                except Exception:
+                    total_games = "N/A"
 
-                # If bulk query returns 0 but we know there should be strikes,
-                # use individual queries
+                # If bulk query returns 0 but we know there should be strikes, use fallback
                 if total_strikes == 0:
-                    # Known user IDs from the JSON file (fallback method)
-                    known_users = [
-                        371536135580549122,
-                        337833732901961729,
-                        710570041220923402,
-                        906475895907291156]
+                    known_users = [371536135580549122, 337833732901961729, 710570041220923402, 906475895907291156]
                     individual_total = 0
                     for user_id in known_users:
                         try:
@@ -107,25 +128,52 @@ class UtilityCommands(commands.Cog):
                             individual_total += strikes
                         except Exception:
                             pass
-
                     if individual_total > 0:
                         total_strikes = individual_total
 
             except RuntimeError:
                 total_strikes = "Database unavailable"
+                users_with_strikes = "N/A"
+                total_games = "N/A"
 
-            # Get current Pacific Time for display
-            pt_now = datetime.now(ZoneInfo("US/Pacific"))
-            pt_time_str = pt_now.strftime("%Y-%m-%d %H:%M:%S PT")
+            # Build detailed status message
+            status_lines = []
+            status_lines.append("🤖 **Ash Bot - System Diagnostics**")
+            
+            # Database status with details
+            if db:
+                if total_games != "N/A" and users_with_strikes != "N/A":
+                    status_lines.append(f"• **Database**: ✅ Connected ({total_games} games, {users_with_strikes} users tracked)")
+                else:
+                    status_lines.append("• **Database**: ✅ Connected")
+            else:
+                status_lines.append("• **Database**: ❌ Unavailable")
 
-            # Basic status information
-            await ctx.send(
-                f"🤖 Ash at your service.\n"
-                f"Database: {'✅ Connected' if db else '❌ Unavailable'}\n"
-                f"Total strikes: {total_strikes}\n"
-                f"Current PT Time: {pt_time_str}\n"
-                f"System: {platform.system()}"
-            )
+            # AI system status with usage stats
+            ai_status_line = f"• **AI System**: {ai_status.get('status_message', 'Unknown')}"
+            if ai_status.get('enabled') and 'usage_stats' in ai_status:
+                usage = ai_status['usage_stats']
+                daily = usage.get('daily_requests', 0)
+                hourly = usage.get('hourly_requests', 0)
+                from ..config import MAX_DAILY_REQUESTS, MAX_HOURLY_REQUESTS
+                ai_status_line += f" ({daily}/{MAX_DAILY_REQUESTS} daily, {hourly}/{MAX_HOURLY_REQUESTS} hourly)"
+            status_lines.append(ai_status_line)
+
+            # Strike management
+            if total_strikes != "Database unavailable":
+                if users_with_strikes != "N/A":
+                    status_lines.append(f"• **Strike Management**: {total_strikes} total strikes across {users_with_strikes} personnel")
+                else:
+                    status_lines.append(f"• **Strike Management**: {total_strikes} total strikes")
+            else:
+                status_lines.append("• **Strike Management**: Database unavailable")
+
+            # Overall status
+            status_lines.append("• **Status**: All systems operational")
+            status_lines.append("")
+            status_lines.append("*Analysis complete. Mission parameters updated.*")
+
+            await ctx.send("\n".join(status_lines))
 
         except Exception as e:
             await ctx.send(f"❌ **System diagnostic error:** {str(e)}")
