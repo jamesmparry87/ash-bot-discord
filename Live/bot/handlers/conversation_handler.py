@@ -26,7 +26,7 @@ from ..utils.permissions import get_user_communication_tier, user_is_mod_by_id
 from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
 
 # Get database instance
-db = get_database()
+db = get_database() # type: ignore
 
 # Global conversation state management
 # user_id: {'step': str, 'data': dict, 'last_activity': datetime}
@@ -99,6 +99,10 @@ async def create_ai_announcement_content(
         if target_channel == 'mod':
             prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. You need to rewrite this announcement content in your analytical, technical style for a moderator briefing.
 
+CRITICAL DISAMBIGUATION RULE: In this Discord server context, "Jonesy" ALWAYS refers to Captain Jonesy - the Discord user, server owner, and streamer/YouTuber (she/her pronouns). This is the default and correct interpretation unless explicitly discussing the 1979 Alien movie. The cat named Jonesy from Alien is a separate entity that is rarely relevant in server discussions.
+
+DEFAULT ASSUMPTION: Any mention of "Jonesy" = Captain Jonesy (the user).
+
 Original content from {author} ({author_context}):
 "{user_content}"
 
@@ -114,6 +118,10 @@ Write 2-4 sentences maximum. Be concise but comprehensive."""
 
         else:  # user channel
             prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. You need to rewrite this announcement content in a user-friendly way while maintaining some of Ash's analytical personality.
+
+CRITICAL DISAMBIGUATION RULE: In this Discord server context, "Jonesy" ALWAYS refers to Captain Jonesy - the Discord user, server owner, and streamer/YouTuber (she/her pronouns). This is the default and correct interpretation unless explicitly discussing the 1979 Alien movie. The cat named Jonesy from Alien is a separate entity that is rarely relevant in server discussions.
+
+DEFAULT ASSUMPTION: Any mention of "Jonesy" = Captain Jonesy (the user).
 
 Original content from {author} ({author_context}):
 "{user_content}"
