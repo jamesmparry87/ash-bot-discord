@@ -49,6 +49,7 @@ HUGGINGFACE_API_KEY = os.getenv('HUGGINGFACE_API_KEY')
 # AI instances
 gemini_model = None
 huggingface_headers = None
+working_hf_model = None
 ai_enabled = False
 ai_status_message = "Offline"
 primary_ai = None
@@ -430,8 +431,11 @@ def attempt_backup_ai(prompt: str) -> Tuple[Optional[str], str]:
             }
         }
         
+        # Use the working model that was found during setup
+        model_to_use = working_hf_model if working_hf_model else "mistralai/Mixtral-8x7B-Instruct-v0.1"
+        
         response = requests.post(  # type: ignore
-            "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3",
+            f"https://api-inference.huggingface.co/models/{model_to_use}",
             headers=huggingface_headers,
             json=payload,
             timeout=30
@@ -670,23 +674,46 @@ def setup_ai_provider(
         elif name == "huggingface":
             global huggingface_headers
             huggingface_headers = {"Authorization": f"Bearer {api_key}"}
-            # Test Hugging Face API
-            test_payload = {
-                "inputs": "Test",
-                "parameters": {"max_new_tokens": 10, "temperature": 0.7}
-            }
-            test_response = module.post(
-                "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3",
-                headers=huggingface_headers,
-                json=test_payload,
-                timeout=10)
-            if test_response.status_code == 200:
-                print(f"✅ Hugging Face AI test successful")
-                return True
-            else:
-                print(
-                    f"⚠️ Hugging Face API test failed: {test_response.status_code}")
-                return False
+            # Test Hugging Face API starting with the model we actually use
+            test_models = [
+                "mistralai/Mixtral-8x7B-Instruct-v0.1",  # Primary backup model
+                "gpt2",  # Fallback option
+                "distilgpt2",  # Alternative fallback
+                "microsoft/DialoGPT-medium"  # Dialog fallback
+            ]
+            
+            for model in test_models:
+                try:
+                    test_payload = {
+                        "inputs": "Test",
+                        "parameters": {"max_new_tokens": 10, "temperature": 0.7}
+                    }
+                    test_response = module.post(
+                        f"https://api-inference.huggingface.co/models/{model}",
+                        headers=huggingface_headers,
+                        json=test_payload,
+                        timeout=10)
+                    
+                    if test_response.status_code == 200:
+                        print(f"✅ Hugging Face AI test successful with {model}")
+                        # Update the working model for actual use
+                        global working_hf_model
+                        working_hf_model = model
+                        return True
+                    elif test_response.status_code == 404:
+                        print(f"⚠️ Model {model} not available (404)")
+                        continue
+                    else:
+                        print(f"⚠️ Model {model} failed: {test_response.status_code}")
+                        continue
+                        
+                except Exception as e:
+                    print(f"⚠️ Error testing {model}: {e}")
+                    continue
+            
+            print("⚠️ Hugging Face API: No models accessible - backup AI disabled")
+            print("   This is normal if you don't have Inference API access")
+            return False
 
         print(f"⚠️ {name.title()} AI setup complete but test response failed")
         return False
