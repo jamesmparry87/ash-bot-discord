@@ -176,7 +176,7 @@ async def check_due_reminders():
             if due_reminders:
                 for i, reminder in enumerate(due_reminders):
                     print(
-                        f"  📌 Reminder {i+1}: ID={reminder.get('id')}, User={reminder.get('user_id')}, Text='{reminder.get('reminder_text', '')[:30]}...', Due={reminder.get('due_at')}")
+                        f"  📌 Reminder {i+1}: ID={reminder.get('id')}, User={reminder.get('user_id')}, Text='{reminder.get('reminder_text', '')[:30]}...', Due={reminder.get('scheduled_time')}")
 
         except Exception as query_e:
             print(f"❌ Database query for due reminders failed: {query_e}")
@@ -553,18 +553,42 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
         delivery_successful = False
 
         if delivery_type == "dm":
-            user = bot.get_user(user_id)
-            if user:
-                try:
-                    await user.send(ash_message)
-                    print(f"✅ Delivered DM reminder to user {user_id}")
-                    delivery_successful = True
-                except Exception as dm_error:
-                    print(f"❌ Failed to send DM to user {user_id}: {dm_error}")
-                    raise RuntimeError(f"Failed to deliver DM reminder to user {user_id}: {dm_error}")
-            else:
-                print(f"❌ Could not fetch user {user_id} for DM reminder")
-                raise RuntimeError(f"Could not fetch user {user_id} for DM delivery")
+            user = None
+            try:
+                # First try cache lookup for quick access
+                user = bot.get_user(user_id)
+                if not user:
+                    # If not in cache, fetch from Discord API
+                    print(f"🔍 User {user_id} not in cache, fetching from Discord API...")
+                    user = await bot.fetch_user(user_id)
+                    
+                if user:
+                    print(f"✅ Successfully obtained user object for {user_id}: {user.name}")
+                else:
+                    print(f"❌ Could not fetch user {user_id} from Discord API")
+                    raise RuntimeError(f"Could not fetch user {user_id} for DM delivery")
+                    
+            except discord.NotFound:
+                print(f"❌ User {user_id} not found on Discord (account may be deleted)")
+                raise RuntimeError(f"User {user_id} not found on Discord")
+            except discord.Forbidden:
+                print(f"❌ Bot lacks permission to fetch user {user_id}")
+                raise RuntimeError(f"Bot lacks permission to fetch user {user_id}")
+            except Exception as fetch_error:
+                print(f"❌ Error fetching user {user_id}: {fetch_error}")
+                raise RuntimeError(f"Error fetching user {user_id}: {fetch_error}")
+
+            # Send the DM
+            try:
+                await user.send(ash_message)
+                print(f"✅ Delivered DM reminder to user {user_id} ({user.name})")
+                delivery_successful = True
+            except discord.Forbidden:
+                print(f"❌ User {user_id} ({user.name}) has DMs disabled or blocked the bot")
+                raise RuntimeError(f"User {user_id} has DMs disabled or blocked the bot")
+            except Exception as dm_error:
+                print(f"❌ Failed to send DM to user {user_id} ({user.name}): {dm_error}")
+                raise RuntimeError(f"Failed to deliver DM reminder to user {user_id}: {dm_error}")
 
         elif delivery_type == "channel" and delivery_channel_id:
             channel = bot.get_channel(delivery_channel_id)
