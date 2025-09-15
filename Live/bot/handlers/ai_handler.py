@@ -677,9 +677,6 @@ def setup_ai_provider(
             # Test Hugging Face API starting with the model we actually use
             test_models = [
                 "mistralai/Mixtral-8x7B-Instruct-v0.1",  # Primary backup model
-                "gpt2",  # Fallback option
-                "distilgpt2",  # Alternative fallback
-                "microsoft/DialoGPT-medium"  # Dialog fallback
             ]
             
             for model in test_models:
@@ -752,8 +749,16 @@ async def generate_ai_trivia_question() -> Optional[Dict[str, Any]]:
             game_context = f"Sample games from database: {'; '.join(game_list[:5])}"
 
         # Create AI prompt for trivia question generation
-        prompt = f"""Generate a trivia question about Captain Jonesy's gaming history based on this data:
+        prompt = f"""You have FULL ACCESS to Captain Jonesy's comprehensive gaming database including complete playtime statistics, episode counts, completion data, and all game metadata. Generate a trivia question based on this data:
 
+DATABASE ACCESS CONFIRMATION:
+- ✅ Total playtime minutes for ALL games
+- ✅ Episode counts and completion statistics  
+- ✅ Series data and franchise information
+- ✅ All gaming metadata including genres, years, platforms
+- ✅ Complete gaming history and patterns
+
+CURRENT DATA SAMPLE:
 Total games played: {stats.get('total_games', 0)}
 {game_context}
 
@@ -762,22 +767,22 @@ Create either:
 2. A multiple-choice question with 4 options (A, B, C, D)
 
 Focus on interesting facts like:
-- Longest/shortest playthroughs
+- Longest/shortest playthroughs (using FULL playtime data)
 - Most episodes in a series
-- Completion patterns
-- Gaming preferences
+- Completion patterns and gaming preferences
+- Statistical comparisons and rankings
 
 Return JSON format:
 {{
     "question_text": "Your question here",
-    "question_type": "single_answer" or "multiple_choice",
+    "question_type": "single_answer" or "multiple_choice",  
     "correct_answer": "The answer",
     "multiple_choice_options": ["A option", "B option", "C option", "D option"] (if multiple choice),
     "is_dynamic": false,
     "category": "statistics" or "games" or "series"
 }}
 
-Make it challenging but answerable from the gaming database."""
+You have complete database access - use ALL available data to create challenging questions."""
 
         # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, JONESY_USER_ID)

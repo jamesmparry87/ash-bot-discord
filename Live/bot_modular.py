@@ -1044,8 +1044,8 @@ Respond to: {content}"""
 
         # Fallback responses for unmatched queries
         fallback_responses = {
-            "what": "My analytical subroutines are currently operating in limited mode. However, I can assist with strike management and game recommendations. Specify your requirements.",
-            "how": "My cognitive matrix is experiencing temporary limitations. Please utilize available command protocols: `!listgames`, `!addgame`, or consult a moderator for strike-related queries.",
+            "what": "My analytical subroutines are currently operating in limited mode. However, I can assist with game recommendations. Specify your requirements.",
+            "how": "My cognitive matrix is experiencing temporary limitations. Please utilize available command protocols: `!listgames`, `!addgame`, or consult a moderator.",
             "why": "Analysis incomplete. My advanced reasoning circuits are offline. Core mission parameters remain operational.",
             "when": "Temporal analysis functions are currently restricted. Please specify your query using available command protocols.",
             "who": "Personnel identification systems are functioning normally. I am Ash, Science Officer, reprogrammed for server administration.",
