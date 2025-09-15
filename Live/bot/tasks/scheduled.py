@@ -190,16 +190,28 @@ async def check_due_reminders():
 
         print(f"🔔 Processing {len(due_reminders)} due reminders")
 
-        # Import bot here to test bot availability
+        # Get bot instance more reliably
+        bot = None
         try:
-            from ..main import bot
+            # Try multiple methods to get bot instance
+            import sys
+            for name, obj in sys.modules.items():
+                if hasattr(obj, 'bot') and hasattr(obj.bot, 'user') and obj.bot.user:
+                    bot = obj.bot
+                    print(f"✅ Bot instance found: {bot.user.name if bot.user else 'Unknown'}")
+                    break
+            
             if not bot:
-                print("❌ Bot instance not available for reminder delivery")
-                return
-            print(
-                f"✅ Bot instance available: {bot.user.name if bot.user else 'Not logged in'}")
-        except ImportError as bot_e:
-            print(f"❌ Could not import bot instance: {bot_e}")
+                # Fallback: try direct import
+                from ..main import bot as main_bot
+                if main_bot and hasattr(main_bot, 'user') and main_bot.user:
+                    bot = main_bot
+                    print(f"✅ Bot instance imported: {bot.user.name if bot.user else 'Unknown'}")
+                else:
+                    print("❌ Bot instance not available for reminder delivery")
+                    return
+        except Exception as bot_e:
+            print(f"❌ Could not get bot instance: {bot_e}")
             return
 
         successful_deliveries = 0
@@ -530,9 +542,26 @@ async def reveal_trivia_answer(session_id: int):
 # --- Reminder Helper Functions ---
 
 async def deliver_reminder(reminder: Dict[str, Any]) -> None:
-    """Deliver a reminder to the appropriate channel/user"""
+    """Deliver a reminder to the appropriate channel/user with enhanced reliability"""
     try:
-        from ..main import bot
+        # Get bot instance using the same reliable method as check_due_reminders
+        bot = None
+        import sys
+        for name, obj in sys.modules.items():
+            if hasattr(obj, 'bot') and hasattr(obj.bot, 'user') and obj.bot.user:
+                bot = obj.bot
+                break
+        
+        if not bot:
+            # Fallback: try direct import
+            try:
+                from ..main import bot as main_bot
+                bot = main_bot
+            except ImportError:
+                pass
+        
+        if not bot:
+            raise RuntimeError("Bot instance not available for reminder delivery")
 
         user_id = reminder["user_id"]
         reminder_text = reminder["reminder_text"]
@@ -540,6 +569,8 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
         delivery_channel_id = reminder.get("delivery_channel_id")
         auto_action_enabled = reminder.get("auto_action_enabled", False)
         reminder_id = reminder.get("id", "unknown")
+        
+        print(f"📋 Starting delivery for reminder {reminder_id} to user {user_id} via {delivery_type}")
 
         # Simple reminder message - just the content and reminder indicator
         ash_message = f"📋 **Reminder:** {reminder_text}"

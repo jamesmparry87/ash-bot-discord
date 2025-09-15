@@ -141,22 +141,18 @@ class RemindersCommands(commands.Cog):
                         # Fallback if import fails
                         formatted_time = f"in {time_str}"
 
-                    target_user = await self.bot.fetch_user(target_user_id)
-                    user_name = target_user.display_name if target_user else 'user'
-
-                    # Enhanced confirmation for moderators
-                    response = f"✅ **Reminder #{reminder_id} set successfully**\n"
-                    response += f"**Target:** {user_name} (<@{target_user_id}>)\n"
-                    response += f"**Time:** {formatted_time}\n"
-                    response += f"**Message:** *{reminder_text}*"
+                    # Simplified confirmation - no unnecessary details
+                    if target_user_id == ctx.author.id:
+                        # Setting reminder for themselves - simple confirmation
+                        response = f"✅ **Reminder set** {formatted_time}\n*{reminder_text}*"
+                    else:
+                        # Setting for someone else - show target
+                        target_user = await self.bot.fetch_user(target_user_id)
+                        user_name = target_user.display_name if target_user else 'user'
+                        response = f"✅ **Reminder set** for {user_name} {formatted_time}\n*{reminder_text}*"
 
                     if auto_action_enabled:
-                        response += f"\n⚡ **Auto-action enabled:** {auto_action_type} (executed if no mod responds within 5 minutes)"
-
-                    if delivery_type == "dm":
-                        response += f"\n**Delivery:** Direct message"
-                    else:
-                        response += f"\n**Delivery:** This channel ({ctx.channel.mention})"  # type: ignore
+                        response += f"\n⚡ Auto-action: {auto_action_type} (if no mod response in 5 minutes)"
 
                     await ctx.send(response)
                 else:
@@ -216,16 +212,8 @@ class RemindersCommands(commands.Cog):
                 if reminder_id:
                     formatted_time = format_reminder_time(parsed["scheduled_time"])
 
-                    # Enhanced confirmation message for moderators
-                    confirmation = f"✅ **Reminder #{reminder_id} set successfully**\n"
-                    confirmation += f"**Time:** {formatted_time}\n"
-                    confirmation += f"**Message:** *{parsed['reminder_text']}*\n"
-                    if delivery_type == "dm":
-                        confirmation += f"\n**Delivery:** Direct message"
-                    elif hasattr(ctx.channel, 'mention'):
-                        confirmation += f"\n**Delivery:** This channel ({ctx.channel.mention})"  # type: ignore
-                    else:
-                        confirmation += f"\n**Delivery:** This channel"
+                    # Simple confirmation message
+                    confirmation = f"✅ **Reminder set** {formatted_time}\n*{parsed['reminder_text']}*"
 
                     await ctx.send(confirmation)
                 else:

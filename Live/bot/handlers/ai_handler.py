@@ -467,6 +467,10 @@ async def call_ai_with_rate_limiting(
     """Make an AI call with proper rate limiting and error handling"""
     global ai_usage_stats
 
+    # Check if this is a time-related query and handle it specially
+    if is_time_query(prompt):
+        return handle_time_query(user_id), "time_response"
+
     # Determine request priority based on context
     priority = determine_request_priority(prompt, user_id, context)
 
@@ -938,6 +942,46 @@ def get_ai_status() -> Dict[str, Any]:
         "backup_ai": backup_ai,
         "usage_stats": ai_usage_stats.copy()
     }
+
+
+def is_time_query(prompt: str) -> bool:
+    """Check if the prompt is asking for the current time"""
+    prompt_lower = prompt.lower()
+    time_keywords = [
+        "what time is it",
+        "current time",
+        "what's the time",
+        "tell me the time",
+        "time is it",
+        "chronometer",
+        "time check"
+    ]
+    
+    return any(keyword in prompt_lower for keyword in time_keywords)
+
+
+def handle_time_query(user_id: int) -> str:
+    """Handle time queries with proper current time"""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    
+    # Determine DST status for proper timezone naming
+    dst_offset = uk_now.dst()
+    is_bst = dst_offset is not None and dst_offset.total_seconds() > 0
+    timezone_name = "BST" if is_bst else "GMT"
+    
+    formatted_time = uk_now.strftime(f"%A, %B %d, %Y at %H:%M:%S {timezone_name}")
+    
+    # Determine the appropriate salutation based on user
+    if user_id == JONESY_USER_ID:
+        salutation = "Captain Jonesy"
+    else:
+        salutation = "Sir Decent Jam"
+    
+    # Return the proper time response without placeholder text
+    return f"{salutation}, my internal chronometer indicates the current time is {formatted_time}. I await further instructions."
 
 
 # Initialize AI on module import
