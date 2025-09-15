@@ -431,7 +431,7 @@ def attempt_backup_ai(prompt: str) -> Tuple[Optional[str], str]:
         }
         
         response = requests.post(  # type: ignore
-            "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
+            "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3",
             headers=huggingface_headers,
             json=payload,
             timeout=30
@@ -676,7 +676,7 @@ def setup_ai_provider(
                 "parameters": {"max_new_tokens": 10, "temperature": 0.7}
             }
             test_response = module.post(
-                "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
+                "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3",
                 headers=huggingface_headers,
                 json=test_payload,
                 timeout=10)
