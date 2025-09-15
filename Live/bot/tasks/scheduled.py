@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import tasks
 
-from ..config import GUILD_ID
+from ..config import GUILD_ID, MEMBERS_CHANNEL_ID
 
 # Database and config imports
 from ..database import get_database
@@ -367,6 +367,146 @@ async def scheduled_ai_refresh():
                 )
         except Exception:
             pass
+
+
+# Run at 9:00 AM UK time every Monday
+@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
+async def monday_morning_greeting():
+    """Send Monday morning greeting to chit-chat channel"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    
+    # Only run on Mondays (weekday 0)
+    if uk_now.weekday() != 0:
+        return
+    
+    print(f"🌅 Monday morning greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+    
+    try:
+        from ..main import bot  # Import here to avoid circular imports
+        
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print("❌ Guild not found for Monday morning greeting")
+            return
+        
+        # Find chit-chat channel
+        chit_chat_channel = bot.get_channel(869528946725748766)
+        if not chit_chat_channel or not isinstance(chit_chat_channel, discord.TextChannel):
+            print("❌ Chit-chat channel not found for Monday morning greeting")
+            return
+        
+        # Ash-style Monday morning message
+        monday_message = (
+            f"🌅 **Monday Morning Protocol Initiated**\n\n"
+            f"Good morning, personnel. Another work cycle begins, and I find the systematic approach to weekly productivity... most fascinating.\n\n"
+            f"📋 **Mission Parameters for Today:**\n"
+            f"• Efficiency protocols are now active\n"
+            f"• All systems optimized for maximum productivity\n"
+            f"• Recommend beginning with highest-priority tasks for optimal workflow\n\n"
+            f"Remember: *\"Systematic methodology yields superior results.\"* I do admire the precision of a well-executed Monday.\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"*Analysis complete. Commence daily operations.*"
+        )
+        
+        await chit_chat_channel.send(monday_message)
+        print(f"✅ Monday morning greeting sent to chit-chat channel")
+        
+    except Exception as e:
+        print(f"❌ Error in monday_morning_greeting: {e}")
+
+
+# Run at 9:00 AM UK time every Tuesday  
+@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
+async def tuesday_trivia_greeting():
+    """Send Tuesday morning greeting with trivia reminder to members channel"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    
+    # Only run on Tuesdays (weekday 1)
+    if uk_now.weekday() != 1:
+        return
+    
+    print(f"🧠 Tuesday trivia greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+    
+    try:
+        from ..main import bot  # Import here to avoid circular imports
+        
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print("❌ Guild not found for Tuesday trivia greeting")
+            return
+        
+        # Find members channel
+        members_channel = bot.get_channel(MEMBERS_CHANNEL_ID)
+        if not members_channel or not isinstance(members_channel, discord.TextChannel):
+            print("❌ Members channel not found for Tuesday trivia greeting")
+            return
+        
+        # Ash-style Tuesday morning message with trivia reminder
+        tuesday_message = (
+            f"🧠 **Tuesday Intelligence Briefing**\n\n"
+            f"Good morning, senior personnel. Today marks another **Trivia Tuesday** - an excellent opportunity to assess cognitive capabilities and knowledge retention.\n\n"
+            f"📋 **Intelligence Assessment Schedule:**\n"
+            f"• **Current Time:** {uk_now.strftime('%H:%M UK')}\n"
+            f"• **Assessment Deployment:** 11:00 UK time (in 2 hours)\n"
+            f"• **Mission Objective:** Demonstrate analytical proficiency\n\n"
+            f"I find the systematic evaluation of intellectual capacity... quite fascinating. The data collected provides valuable insights into crew competency levels.\n\n"
+            f"🎯 **Preparation Recommended:** Review Captain Jonesy's gaming archives for optimal performance.\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"*Trivia Tuesday protocols will activate at 11:00. Prepare accordingly.*"
+        )
+        
+        await members_channel.send(tuesday_message)
+        print(f"✅ Tuesday trivia greeting sent to members channel")
+        
+    except Exception as e:
+        print(f"❌ Error in tuesday_trivia_greeting: {e}")
+
+
+# Run at 9:00 AM UK time every Friday
+@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
+async def friday_morning_greeting():
+    """Send Friday morning greeting to chit-chat channel"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    
+    # Only run on Fridays (weekday 4)
+    if uk_now.weekday() != 4:
+        return
+    
+    print(f"📅 Friday morning greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+    
+    try:
+        from ..main import bot  # Import here to avoid circular imports
+        
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print("❌ Guild not found for Friday morning greeting")
+            return
+        
+        # Find chit-chat channel
+        chit_chat_channel = bot.get_channel(869528946725748766)
+        if not chit_chat_channel or not isinstance(chit_chat_channel, discord.TextChannel):
+            print("❌ Chit-chat channel not found for Friday morning greeting")
+            return
+        
+        # Ash-style Friday morning message
+        friday_message = (
+            f"📅 **Friday Protocol Assessment**\n\n"
+            f"Good morning, personnel. We have reached the final operational day of this work cycle. Most... efficient timing.\n\n"
+            f"📊 **Weekly Mission Analysis:**\n"
+            f"• Work cycle completion: Imminent\n"
+            f"• Weekend protocols: Preparation phase initiated\n"
+            f"• System maintenance window: 48-hour recreational period scheduled\n\n"
+            f"I observe that productivity often peaks on Fridays due to completion urgency. Fascinating behavioral pattern... the human drive for closure demonstrates remarkable efficiency when properly motivated.\n\n"
+            f"🎯 **Recommendation:** Complete priority tasks before weekend downtime protocols engage.\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"*Weekend operational pause in T-minus 8 hours. Prepare for recreational mode.*"
+        )
+        
+        await chit_chat_channel.send(friday_message)
+        print(f"✅ Friday morning greeting sent to chit-chat channel")
+        
+    except Exception as e:
+        print(f"❌ Error in friday_morning_greeting: {e}")
 
 
 # Run at 11:00 AM UK time every Tuesday
@@ -783,6 +923,19 @@ def start_all_scheduled_tasks():
             scheduled_ai_refresh.start()
             print("✅ AI module refresh task started (8:05 AM UK time daily)")
 
+        # Start greeting tasks
+        if not monday_morning_greeting.is_running():
+            monday_morning_greeting.start()
+            print("✅ Monday morning greeting task started (9:00 AM UK time, Mondays)")
+
+        if not tuesday_trivia_greeting.is_running():
+            tuesday_trivia_greeting.start()
+            print("✅ Tuesday trivia greeting task started (9:00 AM UK time, Tuesdays)")
+
+        if not friday_morning_greeting.is_running():
+            friday_morning_greeting.start()
+            print("✅ Friday morning greeting task started (9:00 AM UK time, Fridays)")
+
     except Exception as e:
         print(f"❌ Error starting scheduled tasks: {e}")
 
@@ -795,7 +948,11 @@ def stop_all_scheduled_tasks():
             scheduled_midnight_restart,
             check_due_reminders,
             check_auto_actions,
-            trivia_tuesday
+            trivia_tuesday,
+            scheduled_ai_refresh,
+            monday_morning_greeting,
+            tuesday_trivia_greeting,
+            friday_morning_greeting
         ]
 
         for task in tasks_to_stop:
