@@ -1,2 +1,2 @@
-web: python ash_bot_fallback.py
+web: python bot_modular.py
 sync-staging: python database_sync.py --force

@@ -84,11 +84,13 @@ class ModeratorFAQHandler:
                 # Format section with title
                 response_parts.append(f"\n**{section_title}:**")
                 formatted_content = self.format_content_item(section_content)
-                response_parts.append(self.substitute_variables(formatted_content))
+                response_parts.append(
+                    self.substitute_variables(formatted_content))
             elif section_content:
                 # Content without explicit title
                 formatted_content = self.format_content_item(section_content)
-                response_parts.append(f"\n{self.substitute_variables(formatted_content)}")
+                response_parts.append(
+                    f"\n{self.substitute_variables(formatted_content)}")
 
         return "\n".join(response_parts)
 

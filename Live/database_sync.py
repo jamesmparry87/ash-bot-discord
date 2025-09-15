@@ -40,7 +40,8 @@ class DatabaseSyncManager:
         self.staging_url = os.getenv("DATABASE_URL")
 
         if not self.live_url:
-            raise ValueError("LIVE_DATABASE_URL environment variable not found")
+            raise ValueError(
+                "LIVE_DATABASE_URL environment variable not found")
         if not self.staging_url:
             raise ValueError("DATABASE_URL environment variable not found")
 
@@ -50,7 +51,7 @@ class DatabaseSyncManager:
         # Tables to sync in dependency order (dependencies first)
         self.default_tables = [
             "played_games",           # Independent table
-            "game_recommendations",   # Independent table  
+            "game_recommendations",   # Independent table
             "trivia_questions",      # Independent table
             "trivia_sessions",       # Depends on trivia_questions
             "trivia_answers"         # Depends on trivia_sessions
@@ -60,11 +61,13 @@ class DatabaseSyncManager:
         """Connect to both live and staging databases"""
         try:
             logger.info("🔗 Connecting to live database...")
-            self.live_conn = psycopg2.connect(self.live_url, cursor_factory=RealDictCursor)
+            self.live_conn = psycopg2.connect(
+                self.live_url, cursor_factory=RealDictCursor)
             logger.info("✓ Connected to live database")
 
             logger.info("🔗 Connecting to staging database...")
-            self.staging_conn = psycopg2.connect(self.staging_url, cursor_factory=RealDictCursor)
+            self.staging_conn = psycopg2.connect(
+                self.staging_url, cursor_factory=RealDictCursor)
             logger.info("✓ Connected to staging database")
 
             return True
@@ -89,8 +92,8 @@ class DatabaseSyncManager:
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT EXISTS (
-                        SELECT FROM information_schema.tables 
-                        WHERE table_schema = 'public' 
+                        SELECT FROM information_schema.tables
+                        WHERE table_schema = 'public'
                         AND table_name = %s
                     )
                 """, (table_name,))
@@ -110,7 +113,8 @@ class DatabaseSyncManager:
             logger.error(f"Error getting row count for {table_name}: {e}")
             return 0
 
-    def validate_tables(self, tables_to_sync: List[str]) -> Tuple[List[str], List[str]]:
+    def validate_tables(
+            self, tables_to_sync: List[str]) -> Tuple[List[str], List[str]]:
         """Validate that tables exist in both databases"""
         valid_tables = []
         missing_tables = []
@@ -121,8 +125,10 @@ class DatabaseSyncManager:
 
             if live_exists and staging_exists:
                 live_count = self.get_table_row_count(self.live_conn, table)
-                staging_count = self.get_table_row_count(self.staging_conn, table)
-                logger.info(f"📊 Table '{table}': Live={live_count} rows, Staging={staging_count} rows")
+                staging_count = self.get_table_row_count(
+                    self.staging_conn, table)
+                logger.info(
+                    f"📊 Table '{table}': Live={live_count} rows, Staging={staging_count} rows")
                 valid_tables.append(table)
             else:
                 missing_info = []
@@ -130,12 +136,16 @@ class DatabaseSyncManager:
                     missing_info.append("live")
                 if not staging_exists:
                     missing_info.append("staging")
-                logger.warning(f"⚠️  Table '{table}' missing in: {', '.join(missing_info)}")
+                logger.warning(
+                    f"⚠️  Table '{table}' missing in: {', '.join(missing_info)}")
                 missing_tables.append(table)
 
         return valid_tables, missing_tables
 
-    def clear_staging_table(self, table_name: str, dry_run: bool = False) -> int:
+    def clear_staging_table(
+            self,
+            table_name: str,
+            dry_run: bool = False) -> int:
         """Clear all data from a staging table"""
         if dry_run:
             if self.staging_conn:
@@ -149,13 +159,15 @@ class DatabaseSyncManager:
         try:
             with self.staging_conn.cursor() as cur:
                 # Get count before clearing
-                row_count = self.get_table_row_count(self.staging_conn, table_name)
+                row_count = self.get_table_row_count(
+                    self.staging_conn, table_name)
 
                 # Clear the table
                 cur.execute(f"DELETE FROM {table_name}")
                 self.staging_conn.commit()
 
-                logger.info(f"🗑️  Cleared staging table '{table_name}': {row_count} rows deleted")
+                logger.info(
+                    f"🗑️  Cleared staging table '{table_name}': {row_count} rows deleted")
                 return row_count
 
         except Exception as e:
@@ -168,8 +180,10 @@ class DatabaseSyncManager:
         """Sync data from live to staging for a specific table"""
         if dry_run:
             if self.live_conn:
-                live_count = self.get_table_row_count(self.live_conn, table_name)
-                logger.info(f"🔍 [DRY RUN] Would sync {live_count} rows to staging table: {table_name}")
+                live_count = self.get_table_row_count(
+                    self.live_conn, table_name)
+                logger.info(
+                    f"🔍 [DRY RUN] Would sync {live_count} rows to staging table: {table_name}")
                 return live_count
             return 0
 
@@ -186,25 +200,34 @@ class DatabaseSyncManager:
                 logger.info(f"📭 No data to sync for table '{table_name}'")
                 return 0
 
-            # Get column names from the first row (handle both dict and tuple results)
+            # Get column names from the first row (handle both dict and tuple
+            # results)
             first_row = rows[0]
-            if hasattr(first_row, 'keys') and callable(getattr(first_row, 'keys', None)):
+            if hasattr(
+                first_row,
+                'keys') and callable(
+                getattr(
+                    first_row,
+                    'keys',
+                    None)):
                 # For RealDictRow objects, we can get keys
                 columns = list(first_row.keys())  # type: ignore
             else:
                 # Fallback: get column names from cursor description
                 with self.live_conn.cursor() as desc_cur:
                     desc_cur.execute(f"SELECT * FROM {table_name} LIMIT 1")
-                    columns = [desc[0] for desc in desc_cur.description] if desc_cur.description else []
+                    columns = [
+                        desc[0] for desc in desc_cur.description] if desc_cur.description else []
 
             if not columns:
-                logger.warning(f"⚠️  Could not determine columns for table {table_name}")
+                logger.warning(
+                    f"⚠️  Could not determine columns for table {table_name}")
                 return 0
 
             # Prepare insert statement
             placeholders = ', '.join(['%s'] * len(columns))
             insert_sql = f"""
-                INSERT INTO {table_name} ({', '.join(columns)}) 
+                INSERT INTO {table_name} ({', '.join(columns)})
                 VALUES ({placeholders})
             """
 
@@ -213,15 +236,18 @@ class DatabaseSyncManager:
                 batch_size = 100
                 inserted_count = 0
 
-                # Determine if we have dict-like rows (RealDictRow) or tuple-like rows
+                # Determine if we have dict-like rows (RealDictRow) or
+                # tuple-like rows
                 is_dict_like = hasattr(first_row, 'keys')
 
                 for i in range(0, len(rows), batch_size):
                     batch = rows[i:i + batch_size]
                     # Handle both dict-like and tuple-like rows consistently
                     if is_dict_like:
-                        # For RealDictRow objects, extract values by column name
-                        batch_values = [tuple(row[col] for col in columns) for row in batch]
+                        # For RealDictRow objects, extract values by column
+                        # name
+                        batch_values = [tuple(row[col]
+                                              for col in columns) for row in batch]
                     else:
                         # For tuple rows, use as-is
                         batch_values = [tuple(row) for row in batch]
@@ -231,10 +257,12 @@ class DatabaseSyncManager:
 
                     # Show progress for large tables
                     if len(rows) > 1000 and i % 1000 == 0:
-                        logger.info(f"   📥 Inserted {inserted_count}/{len(rows)} rows...")
+                        logger.info(
+                            f"   📥 Inserted {inserted_count}/{len(rows)} rows...")
 
                 self.staging_conn.commit()
-                logger.info(f"✅ Synced table '{table_name}': {inserted_count} rows imported")
+                logger.info(
+                    f"✅ Synced table '{table_name}': {inserted_count} rows imported")
                 return inserted_count
 
         except Exception as e:
@@ -243,7 +271,11 @@ class DatabaseSyncManager:
                 self.staging_conn.rollback()
             raise
 
-    def sync_tables(self, tables_to_sync: List[str], dry_run: bool = False, force: bool = False) -> Dict[str, int]:
+    def sync_tables(self,
+                    tables_to_sync: List[str],
+                    dry_run: bool = False,
+                    force: bool = False) -> Dict[str,
+                                                 int]:
         """Main sync process - clear staging and import from live"""
 
         if not self.connect_databases():
@@ -255,7 +287,8 @@ class DatabaseSyncManager:
             valid_tables, missing_tables = self.validate_tables(tables_to_sync)
 
             if missing_tables:
-                logger.error(f"❌ Cannot proceed - missing tables: {missing_tables}")
+                logger.error(
+                    f"❌ Cannot proceed - missing tables: {missing_tables}")
                 return {}
 
             if not valid_tables:
@@ -271,8 +304,10 @@ class DatabaseSyncManager:
 
             # Confirmation (unless forced or dry run)
             if not dry_run and not force:
-                logger.warning(f"\n⚠️  WARNING: This will PERMANENTLY DELETE all data in staging tables!")
-                confirmation = input(f"Type 'yes' to continue: ").strip().lower()
+                logger.warning(
+                    f"\n⚠️  WARNING: This will PERMANENTLY DELETE all data in staging tables!")
+                confirmation = input(
+                    f"Type 'yes' to continue: ").strip().lower()
                 if confirmation != 'yes':
                     logger.info("🚫 Sync cancelled by user")
                     return {}
@@ -320,7 +355,9 @@ class DatabaseSyncManager:
         tables = set()
         for key in results.keys():
             if key.endswith('_cleared') or key.endswith('_imported'):
-                table_name = key.replace('_cleared', '').replace('_imported', '')
+                table_name = key.replace(
+                    '_cleared', '').replace(
+                    '_imported', '')
                 tables.add(table_name)
 
         total_cleared = 0
@@ -354,11 +391,10 @@ Examples:
   python database_sync.py --tables played_games,trivia_questions
   python database_sync.py --dry-run
   python database_sync.py --force
-        """
-    )
+        """)
 
     parser.add_argument(
-        "--tables", 
+        "--tables",
         type=str,
         help="Comma-separated list of tables to sync (default: played_games,game_recommendations,trivia_questions,trivia_sessions,trivia_answers)"
     )
@@ -371,7 +407,7 @@ Examples:
 
     parser.add_argument(
         "--force",
-        action="store_true", 
+        action="store_true",
         help="Skip confirmation prompt"
     )
 

@@ -5,7 +5,7 @@ A sophisticated Discord moderation and AI assistant bot featuring strike trackin
 ## Features
 
 - **Strike Management**: Automatic strike tracking with database persistence
-- **AI Conversations**: Powered by Google's Gemini AI with character personality
+- **AI Conversations**: Powered by Google's Gemini AI with Hugging Face backup for character personality interactions
 - **Game Recommendations**: Community-driven game suggestion system
 - **Persistent Data**: PostgreSQL database for reliable data storage
 - **Railway Optimized**: Configured for seamless Railway.app deployment
@@ -38,9 +38,11 @@ Set these environment variables in Railway:
 ```text
 DISCORD_TOKEN=your_discord_bot_token_here
 GOOGLE_API_KEY=your_google_ai_api_key_here
+HUGGINGFACE_API_KEY=your_huggingface_api_token_here
 ```
 
-**Note**: `DATABASE_URL` is automatically provided by Railway's PostgreSQL service.
+**Note**: `DATABASE_URL` is automatically provided by Railway's PostgreSQL service.  
+**Optional**: `HUGGINGFACE_API_KEY` provides backup AI functionality when Gemini limits are reached.
 
 #### 4. Deploy
 
@@ -190,3 +192,6 @@ Thank you for helping to honor his memory.
 
 This bot was originally created by James Michael Parry (Decent_Jam) for Jonesyspacecat's Discord server in Summer 2025.
 
+---
+
+*"Efficiency is paramount. I am programmed for server assistance and analytical precision."* - Ash

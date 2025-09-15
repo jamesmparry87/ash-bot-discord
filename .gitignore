@@ -42,6 +42,8 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+tests/
+documentation/
 
 # Virtual environments
 .env
@@ -72,3 +74,6 @@ Thumbs.db
 bot.lock
 strikes.json
 recommend_list_message_id.txt
+
+# Cline AI assistant files
+.cline/

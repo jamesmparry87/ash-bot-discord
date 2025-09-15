@@ -20,6 +20,8 @@ extend-exclude = '''
 skip-string-normalization = true
 # Skip magic trailing comma to avoid unnecessary formatting changes
 skip-magic-trailing-comma = true
+# Preserve comment formatting to avoid moving type: ignore comments
+preview = true
 
 [tool.isort]
 # Make isort compatible with Black
