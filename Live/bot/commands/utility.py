@@ -395,7 +395,7 @@ class UtilityCommands(commands.Cog):
     async def get_current_time(self, ctx):
         """Get current time in GMT/BST"""
         try:
-            from bot.utils.time_utils import get_uk_time, is_dst_active
+            from ..utils.time_utils import get_uk_time, is_dst_active
 
             uk_now = get_uk_time()
             is_dst = is_dst_active(uk_now)
@@ -425,7 +425,7 @@ class UtilityCommands(commands.Cog):
         """Toggle AI system on/off (moderators only)"""
         try:
             # Import AI handler functions
-            from bot.handlers.ai_handler import ai_enabled, get_ai_status
+            from ..handlers.ai_handler import ai_enabled, get_ai_status
 
             if not ai_enabled:
                 await ctx.send("❌ **AI system is not available.** API keys are not configured or AI handler failed to initialize.")
@@ -438,7 +438,7 @@ class UtilityCommands(commands.Cog):
             # Toggle the status (this would need to be implemented in
             # ai_handler)
             try:
-                from bot.handlers.ai_handler import toggle_ai_system  # type: ignore
+                from ..handlers.ai_handler import toggle_ai_system  # type: ignore
                 new_status = toggle_ai_system()
 
                 status_text = "**enabled**" if new_status else "**disabled**"
@@ -478,7 +478,7 @@ class UtilityCommands(commands.Cog):
             # Handle reset command
             if persona_description.lower() == "reset":
                 try:
-                    from bot.handlers.ai_handler import reset_persona  # type: ignore
+                    from ..handlers.ai_handler import reset_persona  # type: ignore
                     reset_persona()
                     await ctx.send("✅ **AI persona reset** to default Science Officer Ash personality.")
                 except ImportError:
@@ -487,7 +487,7 @@ class UtilityCommands(commands.Cog):
 
             # Set new persona
             try:
-                from bot.handlers.ai_handler import set_ai_persona  # type: ignore
+                from ..handlers.ai_handler import set_ai_persona  # type: ignore
                 success = set_ai_persona(persona_description)
 
                 if success:

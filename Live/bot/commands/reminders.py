@@ -11,10 +11,10 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import commands
 
-from ..database_module import get_database
+from ..database import get_database
 
 # Get database instance
-db = get_database()
+db = get_database()  # type: ignore
 
 
 class RemindersCommands(commands.Cog):
@@ -135,7 +135,7 @@ class RemindersCommands(commands.Cog):
                 if reminder_id:
                     # Use the improved time formatting
                     try:
-                        from bot.tasks.reminders import format_reminder_time
+                        from ..tasks.reminders import format_reminder_time
                         formatted_time = format_reminder_time(scheduled_time)
                     except ImportError:
                         # Fallback if import fails
@@ -161,7 +161,7 @@ class RemindersCommands(commands.Cog):
 
             # Try natural language parsing for other formats
             try:
-                from bot.tasks.reminders import format_reminder_time, parse_natural_reminder, validate_reminder_text
+                from ..tasks.reminders import format_reminder_time, parse_natural_reminder, validate_reminder_text
 
                 parsed = parse_natural_reminder(content, ctx.author.id)
 
