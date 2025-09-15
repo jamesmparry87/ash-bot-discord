@@ -76,6 +76,12 @@ ai_usage_stats = {
     "consecutive_errors": 0,
     "last_error_time": None,
     "rate_limited_until": None,
+    "quota_exhausted": False,
+    "quota_exhausted_time": None,
+    "backup_active": False,
+    "last_backup_attempt": None,
+    "primary_ai_errors": 0,
+    "backup_ai_errors": 0,
 }
 
 
@@ -106,6 +112,14 @@ def reset_daily_usage():
         ai_usage_stats["daily_requests"] = 0
         ai_usage_stats["last_day_reset"] = uk_now.date()
         ai_usage_stats["last_reset_time"] = uk_now
+        
+        # Reset quota exhaustion status and warning flags
+        ai_usage_stats["quota_exhausted"] = False
+        ai_usage_stats["quota_exhausted_time"] = None
+        ai_usage_stats["backup_active"] = False
+        ai_usage_stats["primary_ai_errors"] = 0
+        ai_usage_stats["backup_ai_errors"] = 0
+        reset_quota_warnings()
 
         dst_offset = uk_now.dst()
         is_bst = dst_offset is not None and dst_offset.total_seconds() > 0
@@ -113,6 +127,7 @@ def reset_daily_usage():
 
         print(
             f"🔄 Daily AI usage reset at {uk_now.strftime(f'%Y-%m-%d %H:%M:%S {timezone_name}')} (Google quota reset)")
+        print("✅ AI quota status fully reset - primary AI available")
 
 
 def reset_hourly_usage():
@@ -244,6 +259,9 @@ def record_ai_request():
     ai_usage_stats["hourly_requests"] += 1
     ai_usage_stats["last_request_time"] = pt_now
     ai_usage_stats["consecutive_errors"] = 0
+    
+    # Check for quota usage warnings
+    check_quota_warnings()
 
 
 def record_ai_error():
@@ -262,6 +280,96 @@ def record_ai_error():
             f"⚠️ Too many consecutive AI errors, applying {RATE_LIMIT_COOLDOWN}s cooldown")
 
 
+def check_quota_warnings():
+    """Check for quota usage warnings and send notifications if needed"""
+    daily_usage = ai_usage_stats["daily_requests"]
+    daily_percentage = (daily_usage / MAX_DAILY_REQUESTS) * 100
+    
+    # Track if we've already sent warnings to avoid spam
+    if not hasattr(ai_usage_stats, 'warning_80_sent'):
+        ai_usage_stats['warning_80_sent'] = False
+    if not hasattr(ai_usage_stats, 'warning_95_sent'):
+        ai_usage_stats['warning_95_sent'] = False
+    
+    # Send 80% warning
+    if daily_percentage >= 80 and not ai_usage_stats.get('warning_80_sent', False):
+        ai_usage_stats['warning_80_sent'] = True
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        print(f"⚠️ AI quota warning: {daily_usage}/{MAX_DAILY_REQUESTS} requests used ({daily_percentage:.1f}%) at {uk_now.strftime('%H:%M:%S')}")
+        # Note: DM notification handled by bot instance when available
+    
+    # Send 95% warning
+    if daily_percentage >= 95 and not ai_usage_stats.get('warning_95_sent', False):
+        ai_usage_stats['warning_95_sent'] = True
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        print(f"🚨 AI quota critical: {daily_usage}/{MAX_DAILY_REQUESTS} requests used ({daily_percentage:.1f}%) at {uk_now.strftime('%H:%M:%S')}")
+        # Note: DM notification handled by bot instance when available
+
+
+def reset_quota_warnings():
+    """Reset quota warning flags when daily usage resets"""
+    ai_usage_stats['warning_80_sent'] = False
+    ai_usage_stats['warning_95_sent'] = False
+    print("🔄 Quota warning flags reset")
+
+
+async def send_quota_notification(bot, quota_type: str, current_usage: int, max_usage: int):
+    """Send quota notifications to administrators"""
+    try:
+        if quota_type == "warning_80":
+            message = (f"⚠️ **AI Quota Warning (80%)**\n\n"
+                      f"Current usage: {current_usage}/{max_usage} requests\n"
+                      f"Backup AI will automatically engage if quota is exhausted.\n\n"
+                      f"*This is an automated notification from Ash Bot's proactive monitoring system.*")
+        elif quota_type == "warning_95":
+            message = (f"🚨 **AI Quota Critical (95%)**\n\n" 
+                      f"Current usage: {current_usage}/{max_usage} requests\n"
+                      f"Only {max_usage - current_usage} requests remaining before backup AI activation.\n\n"
+                      f"*This is an automated notification from Ash Bot's proactive monitoring system.*")
+        elif quota_type == "exhausted":
+            backup_status = "Backup AI active" if backup_ai else "No backup AI available"
+            message = (f"🚫 **AI Quota Exhausted**\n\n"
+                      f"Daily limit reached: {max_usage}/{max_usage} requests\n"
+                      f"Status: {backup_status}\n"
+                      f"Reset time: 8:00 AM UK time\n\n"
+                      f"*Automated notification from Ash Bot's monitoring system.*")
+        elif quota_type == "reset":
+            message = (f"✅ **AI Quota Reset**\n\n"
+                      f"Daily quota has been reset to 0/{max_usage}\n"
+                      f"Primary AI ({primary_ai.title() if primary_ai else 'Unknown'}) is now available\n\n"
+                      f"*Automated notification from Ash Bot's monitoring system.*")
+        else:
+            return
+        
+        # Send to JAM only (as requested)
+        success = await send_dm_notification(bot, JAM_USER_ID, message)
+        if success:
+            print(f"✅ Quota notification sent to JAM ({JAM_USER_ID})")
+    
+    except Exception as e:
+        print(f"❌ Error sending quota notification: {e}")
+
+
+def get_quota_reset_countdown():
+    """Get time remaining until next quota reset"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    
+    # Next reset is at 8:00 AM UK time
+    reset_time_today = uk_now.replace(hour=8, minute=0, second=0, microsecond=0)
+    
+    # If it's already past 8 AM today, next reset is tomorrow at 8 AM
+    if uk_now >= reset_time_today:
+        next_reset = reset_time_today + timedelta(days=1)
+    else:
+        next_reset = reset_time_today
+    
+    time_remaining = next_reset - uk_now
+    hours_remaining = int(time_remaining.total_seconds() // 3600)
+    minutes_remaining = int((time_remaining.total_seconds() % 3600) // 60)
+    
+    return hours_remaining, minutes_remaining, next_reset
+
+
 async def send_dm_notification(bot, user_id: int, message: str) -> bool:
     """Send a DM notification to a specific user"""
     try:
@@ -273,6 +381,81 @@ async def send_dm_notification(bot, user_id: int, message: str) -> bool:
     except Exception as e:
         print(f"❌ Failed to send DM to user {user_id}: {e}")
     return False
+
+
+def check_quota_exhaustion(error_message: str) -> bool:
+    """Check if the error indicates quota exhaustion"""
+    error_lower = str(error_message).lower()
+    quota_indicators = [
+        "quota", "exceeded", "rate limit", "429", "limit reached",
+        "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+    ]
+    return any(indicator in error_lower for indicator in quota_indicators)
+
+
+def handle_quota_exhaustion():
+    """Handle quota exhaustion by setting appropriate flags and timestamps"""
+    global ai_usage_stats
+    current_time = datetime.now(pacific_tz)
+    
+    ai_usage_stats["quota_exhausted"] = True
+    ai_usage_stats["quota_exhausted_time"] = current_time
+    ai_usage_stats["primary_ai_errors"] += 1
+    
+    print(f"🚫 Primary AI quota exhausted at {current_time.strftime('%H:%M:%S')} - backup AI will be used if available")
+
+
+def attempt_backup_ai(prompt: str) -> Tuple[Optional[str], str]:
+    """Attempt to use backup AI when primary AI fails"""
+    global ai_usage_stats
+    
+    if backup_ai != "huggingface" or huggingface_headers is None:
+        return None, "no_backup_available"
+    
+    ai_usage_stats["backup_active"] = True
+    ai_usage_stats["last_backup_attempt"] = datetime.now(pacific_tz)
+    
+    try:
+        print(f"🔄 Attempting backup AI (Hugging Face) - daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS}")
+        
+        # Format prompt for Mixtral instruction format
+        formatted_prompt = f"<s>[INST] {prompt} [/INST]"
+        
+        payload = {
+            "inputs": formatted_prompt,
+            "parameters": {
+                "max_new_tokens": 300,
+                "temperature": 0.7,
+                "return_full_text": False
+            }
+        }
+        
+        response = requests.post(  # type: ignore
+            "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
+            headers=huggingface_headers,
+            json=payload,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            response_data = response.json()
+            if response_data and len(response_data) > 0:
+                hf_text = response_data[0].get("generated_text", "").strip()
+                if hf_text:
+                    record_ai_request()  # Count backup usage toward daily total
+                    print(f"✅ Backup AI (Hugging Face) successful")
+                    return hf_text, "backup_success"
+        
+        print(f"❌ Backup AI failed: HTTP {response.status_code}")
+        ai_usage_stats["backup_ai_errors"] += 1
+        record_ai_error()
+        return None, f"backup_failed:{response.status_code}"
+        
+    except Exception as e:
+        print(f"❌ Backup AI error: {e}")
+        ai_usage_stats["backup_ai_errors"] += 1
+        record_ai_error()
+        return None, f"backup_error:{str(e)}"
 
 
 async def call_ai_with_rate_limiting(
@@ -287,11 +470,13 @@ async def call_ai_with_rate_limiting(
     can_request, reason = check_rate_limits(priority)
     if not can_request:
         print(f"⚠️ AI request blocked ({priority} priority): {reason}")
-
-        # Note: DM notification would need bot instance - handled by calling function
-        # if "Daily request limit reached" in reason and primary_ai == "gemini":
-        #     This functionality moved to calling code that has bot instance
-
+        
+        # If primary AI quota is exhausted, try backup AI
+        if "Daily request limit reached" in reason and backup_ai and not ai_usage_stats.get("backup_active", False):
+            backup_response, backup_status = attempt_backup_ai(prompt)
+            if backup_response:
+                return backup_response, "backup_used"
+        
         return None, f"rate_limit:{reason}"
 
     # Import user alias state from utils module
@@ -342,9 +527,14 @@ async def call_ai_with_rate_limiting(
 
     try:
         response_text = None
+        
+        # Reset backup active flag if we're trying primary AI again
+        if ai_usage_stats.get("backup_active", False) and not ai_usage_stats.get("quota_exhausted", False):
+            ai_usage_stats["backup_active"] = False
+            print("🔄 Attempting to resume primary AI usage")
 
-        # Try primary AI first
-        if primary_ai == "gemini" and gemini_model is not None:
+        # Try primary AI first (unless quota is exhausted)
+        if primary_ai == "gemini" and gemini_model is not None and not ai_usage_stats.get("quota_exhausted", False):
             try:
                 print(
                     f"Making Gemini request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
@@ -357,53 +547,37 @@ async def call_ai_with_rate_limiting(
                     response_text = response.text
                     record_ai_request()
                     print(f"✅ Gemini request successful")
+                    # Reset quota exhausted flag if successful
+                    if ai_usage_stats.get("quota_exhausted", False):
+                        ai_usage_stats["quota_exhausted"] = False
+                        print("✅ Primary AI quota restored")
+                    
             except Exception as e:
-                print(f"❌ Gemini AI error: {e}")
-                record_ai_error()
-
-                # Try Hugging Face backup if available
-                if backup_ai == "huggingface" and huggingface_headers is not None:
-                    try:
-                        print(
-                            f"Trying Hugging Face backup (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
-
-                        # Format prompt for Mixtral instruction format
-                        formatted_prompt = f"<s>[INST] {prompt} [/INST]"
-
-                        payload = {
-                            "inputs": formatted_prompt,
-                            "parameters": {
-                                "max_new_tokens": 300,
-                                "temperature": 0.7,
-                                "return_full_text": False
-                            }
-                        }
-
-                        response = requests.post(  # type: ignore
-                            "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
-                            headers=huggingface_headers,
-                            json=payload,
-                            timeout=30
-                        )
-
-                        if response.status_code == 200:
-                            response_data = response.json()
-                            if response_data and len(response_data) > 0:
-                                hf_text = response_data[0].get(
-                                    "generated_text", "").strip()
-                                if hf_text:
-                                    response_text = hf_text
-                                    record_ai_request()
-                                    print(
-                                        f"✅ Hugging Face backup request successful")
-                        else:
-                            print(
-                                f"❌ Hugging Face backup error: {response.status_code}")
-                            record_ai_error()
-                    except Exception as hf_e:
-                        print(f"❌ Hugging Face backup AI error: {hf_e}")
-                        record_ai_error()
-
+                error_str = str(e)
+                print(f"❌ Gemini AI error: {error_str}")
+                
+                # Check if this is a quota exhaustion error
+                if check_quota_exhaustion(error_str):
+                    handle_quota_exhaustion()
+                    # Try backup immediately for quota errors
+                    backup_response, backup_status = attempt_backup_ai(prompt)
+                    if backup_response:
+                        return backup_response, "quota_exhausted_backup_used"
+                else:
+                    record_ai_error()
+        
+        # If primary AI failed or quota exhausted, try backup AI
+        if not response_text:
+            if backup_ai == "huggingface" and huggingface_headers is not None:
+                backup_response, backup_status = attempt_backup_ai(prompt)
+                if backup_response:
+                    response_text = backup_response
+                    return response_text, backup_status
+                else:
+                    return None, backup_status
+            else:
+                return None, "no_ai_available"
+        
         return response_text, "success"
 
     except Exception as e:

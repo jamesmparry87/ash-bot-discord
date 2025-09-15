@@ -94,9 +94,9 @@ RATE_LIMIT_COOLDOWNS = {
     "persistent": 300  # 5 minutes for persistent violations
 }
 
-# AI Configuration
-MAX_DAILY_REQUESTS = 250
-MAX_HOURLY_REQUESTS = 50
+# AI Configuration - Corrected to match actual Gemini free tier limits
+MAX_DAILY_REQUESTS = 50  # Gemini free tier actual limit (was incorrectly 250)
+MAX_HOURLY_REQUESTS = 25  # Reduced proportionally to avoid hitting daily limit too quickly
 MIN_REQUEST_INTERVAL = 2.0
 RATE_LIMIT_COOLDOWN = 30
 
