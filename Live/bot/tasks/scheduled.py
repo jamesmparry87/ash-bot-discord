@@ -1005,6 +1005,65 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         raise
 
 
+async def schedule_delayed_trivia_validation():
+    """Schedule trivia validation to run 2 minutes after bot startup completion"""
+    try:
+        print("⏰ Scheduling delayed trivia validation for 2 minutes after startup...")
+        
+        # Create async task to handle the delay - this will work properly in async context
+        asyncio.create_task(_delayed_trivia_validation())
+        
+        print("✅ Delayed trivia validation scheduled successfully")
+        
+    except Exception as e:
+        print(f"❌ Error scheduling delayed trivia validation: {e}")
+
+
+async def _delayed_trivia_validation():
+    """Internal function to handle the 2-minute delay and execute trivia validation"""
+    try:
+        print("⏳ Starting 2-minute delay for trivia validation...")
+        
+        # Wait exactly 2 minutes (120 seconds)
+        await asyncio.sleep(120)
+        
+        print("🧠 DELAYED TRIVIA VALIDATION: 2-minute delay complete, starting validation...")
+        
+        # Execute the trivia validation with enhanced logging
+        await validate_startup_trivia_questions()
+        
+        print("✅ DELAYED TRIVIA VALIDATION: Process completed")
+        
+        # Check if emergency approval is needed (build day scenario)
+        await check_emergency_trivia_approval()
+        
+    except Exception as e:
+        print(f"❌ DELAYED TRIVIA VALIDATION: Error during delayed execution: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Try to notify JAM of the error
+        try:
+            from ..config import JAM_USER_ID
+            from ..main import bot
+            
+            if hasattr(bot, 'fetch_user'):  # Check if bot is available
+                user = await bot.fetch_user(JAM_USER_ID)
+                if user:
+                    error_message = (
+                        f"❌ **Delayed Trivia Validation Failed**\n\n"
+                        f"The 2-minute delayed trivia validation encountered an error:\n"
+                        f"```\n{str(e)}\n```\n\n"
+                        f"**Impact:** Trivia Tuesday may not have enough questions available.\n"
+                        f"**Action Required:** Manual trivia question submission may be needed.\n\n"
+                        f"*Please check the bot logs for detailed error information.*"
+                    )
+                    await user.send(error_message)
+                    print("✅ DELAYED TRIVIA VALIDATION: Error notification sent to JAM")
+        except Exception:
+            print("❌ DELAYED TRIVIA VALIDATION: Failed to send error notification to JAM")
+
+
 def start_all_scheduled_tasks():
     """Start all scheduled tasks"""
     try:
@@ -1078,6 +1137,156 @@ def stop_all_scheduled_tasks():
 
     except Exception as e:
         print(f"❌ Error stopping scheduled tasks: {e}")
+
+
+async def check_emergency_trivia_approval():
+    """Check if emergency approval is needed for build day scenarios"""
+    try:
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        
+        # Only check on Tuesdays
+        if uk_now.weekday() != 1:
+            print("🕒 EMERGENCY APPROVAL CHECK: Not Tuesday, skipping emergency approval check")
+            return
+        
+        # Calculate time until Trivia Tuesday (11:00 AM UK)
+        trivia_time = uk_now.replace(hour=11, minute=0, second=0, microsecond=0)
+        
+        # If it's already past trivia time, skip
+        if uk_now > trivia_time:
+            print("🕒 EMERGENCY APPROVAL CHECK: Past trivia time, skipping emergency approval")
+            return
+        
+        time_until_trivia_minutes = (trivia_time - uk_now).total_seconds() / 60
+        
+        print(f"🕒 EMERGENCY APPROVAL CHECK: {time_until_trivia_minutes:.1f} minutes until Trivia Tuesday")
+        
+        # If less than 1 hour (60 minutes) until trivia, trigger emergency approval
+        if 0 < time_until_trivia_minutes < 60:
+            print(f"🚨 EMERGENCY APPROVAL NEEDED: Only {time_until_trivia_minutes:.1f} minutes until Trivia Tuesday!")
+            
+            await trigger_emergency_trivia_approval(time_until_trivia_minutes)
+        else:
+            print("✅ EMERGENCY APPROVAL CHECK: Sufficient time until trivia, no emergency approval needed")
+            
+    except Exception as e:
+        print(f"❌ EMERGENCY APPROVAL CHECK: Error during emergency approval check: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+async def trigger_emergency_trivia_approval(minutes_remaining: float):
+    """Trigger emergency approval process for build day scenarios"""
+    try:
+        print(f"🚨 TRIGGERING EMERGENCY APPROVAL: {minutes_remaining:.1f} minutes remaining until Trivia Tuesday")
+        
+        # Check database availability
+        if db is None:
+            print("❌ EMERGENCY APPROVAL: Database not available")
+            return
+        
+        # Get available questions
+        try:
+            available_questions = db.get_available_trivia_questions()  # type: ignore
+            if not available_questions:
+                print("❌ EMERGENCY APPROVAL: No available questions for emergency approval")
+                
+                # Try to generate an emergency question
+                try:
+                    from ..handlers.ai_handler import generate_ai_trivia_question
+                    from ..handlers.conversation_handler import start_jam_question_approval
+                    
+                    print("🔄 EMERGENCY APPROVAL: Generating emergency question")
+                    emergency_question = await generate_ai_trivia_question("emergency_approval")
+                    
+                    if emergency_question:
+                        approval_sent = await start_jam_question_approval(emergency_question)
+                        if approval_sent:
+                            print("✅ EMERGENCY APPROVAL: Emergency question sent to JAM")
+                            
+                            # Send urgent notification to JAM
+                            from ..config import JAM_USER_ID
+                            from ..main import bot
+                            
+                            user = await bot.fetch_user(JAM_USER_ID)
+                            if user:
+                                urgent_message = (
+                                    f"🚨 **URGENT: BUILD DAY EMERGENCY APPROVAL**\n\n"
+                                    f"The bot startup validation completed with only **{minutes_remaining:.0f} minutes** "
+                                    f"remaining until Trivia Tuesday (11:00 AM UK).\n\n"
+                                    f"An emergency question has been generated and requires your **IMMEDIATE** approval.\n\n"
+                                    f"**Time Remaining:** {minutes_remaining:.0f} minutes\n"
+                                    f"**Trivia Start Time:** 11:00 AM UK\n"
+                                    f"**Reason:** Build day scenario - startup validation completed late\n\n"
+                                    f"*Please review and approve the question above as quickly as possible.*"
+                                )
+                                await user.send(urgent_message)
+                                print("✅ EMERGENCY APPROVAL: Urgent notification sent to JAM")
+                        else:
+                            print("❌ EMERGENCY APPROVAL: Failed to send emergency question to JAM")
+                    else:
+                        print("❌ EMERGENCY APPROVAL: Failed to generate emergency question")
+                        
+                except Exception as gen_error:
+                    print(f"❌ EMERGENCY APPROVAL: Error generating emergency question: {gen_error}")
+                
+                return
+            
+            # Select highest priority question
+            selected_question = available_questions[0]  # First question (highest priority)
+            
+            # If it's a dynamic question, calculate the answer
+            if selected_question.get('is_dynamic'):
+                try:
+                    calculated_answer = db.calculate_dynamic_answer(  # type: ignore
+                        selected_question.get('dynamic_query_type', ''))
+                    if calculated_answer:
+                        selected_question['correct_answer'] = calculated_answer
+                        print(f"✅ EMERGENCY APPROVAL: Dynamic answer calculated for question #{selected_question.get('id')}")
+                except Exception as calc_error:
+                    print(f"⚠️ EMERGENCY APPROVAL: Failed to calculate dynamic answer: {calc_error}")
+            
+            # Send for emergency approval
+            try:
+                from ..handlers.conversation_handler import start_jam_question_approval
+                
+                approval_sent = await start_jam_question_approval(selected_question)
+                
+                if approval_sent:
+                    print(f"✅ EMERGENCY APPROVAL: Question #{selected_question.get('id')} sent to JAM for approval")
+                    
+                    # Send urgent build day notification
+                    from ..config import JAM_USER_ID
+                    from ..main import bot
+                    
+                    user = await bot.fetch_user(JAM_USER_ID)
+                    if user:
+                        urgent_message = (
+                            f"🚨 **URGENT: BUILD DAY EMERGENCY APPROVAL**\n\n"
+                            f"The bot startup validation completed with only **{minutes_remaining:.0f} minutes** "
+                            f"remaining until Trivia Tuesday (11:00 AM UK).\n\n"
+                            f"The highest priority question has been selected and requires your **IMMEDIATE** approval.\n\n"
+                            f"**Time Remaining:** {minutes_remaining:.0f} minutes\n"
+                            f"**Question ID:** #{selected_question.get('id', 'Unknown')}\n"
+                            f"**Trivia Start Time:** 11:00 AM UK\n"
+                            f"**Reason:** Build day scenario - startup validation completed late\n\n"
+                            f"*Please review and approve the question above as quickly as possible.*"
+                        )
+                        await user.send(urgent_message)
+                        print("✅ EMERGENCY APPROVAL: Build day notification sent to JAM")
+                else:
+                    print("❌ EMERGENCY APPROVAL: Failed to send question for approval")
+                    
+            except Exception as approval_error:
+                print(f"❌ EMERGENCY APPROVAL: Error sending question for approval: {approval_error}")
+                
+        except Exception as db_error:
+            print(f"❌ EMERGENCY APPROVAL: Database error: {db_error}")
+            
+    except Exception as e:
+        print(f"❌ EMERGENCY APPROVAL: Critical error in emergency approval: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 async def validate_startup_trivia_questions():

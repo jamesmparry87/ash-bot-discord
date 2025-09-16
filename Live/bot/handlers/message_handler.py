@@ -1107,13 +1107,69 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
         return False
 
 
+async def handle_dm_conversations(message: discord.Message) -> bool:
+    """
+    Handle DM conversation flows including JAM approval conversations.
+    Returns True if a conversation was handled, False otherwise.
+    """
+    try:
+        if not isinstance(message.channel, discord.DMChannel):
+            return False
+
+        user_id = message.author.id
+
+        # Import conversation handlers
+        try:
+            from .conversation_handler import (
+                announcement_conversations,
+                handle_announcement_conversation,
+                handle_jam_approval_conversation,
+                handle_mod_trivia_conversation,
+                jam_approval_conversations,
+                mod_trivia_conversations,
+            )
+        except ImportError:
+            print("⚠️ Conversation handlers not available for DM routing")
+            return False
+
+        # Handle announcement conversations
+        if user_id in announcement_conversations:
+            print(f"🔄 Processing announcement conversation for user {user_id}")
+            await handle_announcement_conversation(message)
+            return True
+
+        # Handle mod trivia conversations
+        if user_id in mod_trivia_conversations:
+            print(f"🔄 Processing mod trivia conversation for user {user_id}")
+            await handle_mod_trivia_conversation(message)
+            return True
+
+        # Handle JAM approval conversations
+        if user_id in jam_approval_conversations:
+            print(f"🔄 Processing JAM approval conversation for user {user_id}")
+            await handle_jam_approval_conversation(message)
+            return True
+
+        return False
+
+    except Exception as e:
+        print(f"❌ Error in DM conversation handler: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 async def process_gaming_query_with_context(message: discord.Message) -> bool:
     """
     Main entry point for processing gaming queries with context awareness.
     Returns True if query was handled, False otherwise.
     """
     try:
-        # First, try context-aware processing
+        # First check if this is a DM conversation (including JAM approval)
+        if await handle_dm_conversations(message):
+            return True
+
+        # Then, try context-aware processing for gaming queries
         if await handle_context_aware_query(message):
             return True
 

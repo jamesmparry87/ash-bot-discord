@@ -79,17 +79,20 @@ def update_mod_trivia_activity(user_id: int):
 
 
 def cleanup_jam_approval_conversations():
-    """Remove JAM approval conversations inactive for more than 2 hours"""
+    """Remove JAM approval conversations inactive for more than 24 hours (extended for late responses)"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    cutoff_time = uk_now - timedelta(hours=2)
+    cutoff_time = uk_now - timedelta(hours=24)  # Extended from 2 hours to 24 hours
     expired_users = [
         user_id for user_id,
         data in jam_approval_conversations.items() if data.get(
             "last_activity",
             uk_now) < cutoff_time]
     for user_id in expired_users:
+        # Log extended cleanup for monitoring
+        user_data = jam_approval_conversations.get(user_id, {})
+        conversation_age_hours = (uk_now - user_data.get("last_activity", uk_now)).total_seconds() / 3600
+        print(f"Cleaned up JAM approval conversation for user {user_id} after {conversation_age_hours:.1f} hours of inactivity")
         del jam_approval_conversations[user_id]
-        print(f"Cleaned up expired JAM approval conversation for user {user_id}")
 
 
 def update_jam_approval_activity(user_id: int):

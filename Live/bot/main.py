@@ -241,12 +241,12 @@ async def on_ready():
 
     # Start scheduled tasks
     try:
-        from .tasks.scheduled import start_all_scheduled_tasks, validate_startup_trivia_questions
+        from .tasks.scheduled import start_all_scheduled_tasks, schedule_delayed_trivia_validation
         start_all_scheduled_tasks()
         print("✅ All scheduled tasks started (reminders, trivia, etc.)")
         
-        # Validate trivia questions on startup
-        await validate_startup_trivia_questions()
+        # Schedule trivia validation for 2 minutes after startup completion
+        await schedule_delayed_trivia_validation()
         
     except Exception as e:
         print(f"❌ Error starting scheduled tasks: {e}")
