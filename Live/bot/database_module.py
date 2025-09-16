@@ -1988,8 +1988,7 @@ class DatabaseManager:
             },
             "comparison": {
                 "episode_difference": game1.get("total_episodes", 0) - game2.get("total_episodes", 0),
-                "playtime_difference_minutes": game1.get("total_playtime_minutes", 0) -
-                game2.get("total_playtime_minutes", 0),
+                "playtime_difference_minutes": game1.get("total_playtime_minutes", 0) - game2.get("total_playtime_minutes", 0),
                 "longer_game": (
                     game1["canonical_name"]
                     if game1.get("total_playtime_minutes", 0) > game2.get("total_playtime_minutes", 0)
@@ -1999,13 +1998,7 @@ class DatabaseManager:
                     game1["canonical_name"]
                     if game1.get("total_episodes", 0) > game2.get("total_episodes", 0)
                     else game2["canonical_name"]
-                ),
-            },
-            'comparison': {
-                'episode_difference': game1.get('total_episodes', 0) - game2.get('total_episodes', 0),
-                'playtime_difference_minutes': game1.get('total_playtime_minutes', 0) - game2.get('total_playtime_minutes', 0),
-                'longer_game': game1['canonical_name'] if game1.get('total_playtime_minutes', 0) > game2.get('total_playtime_minutes', 0) else game2['canonical_name'],
-                'more_episodes': game1['canonical_name'] if game1.get('total_episodes', 0) > game2.get('total_episodes', 0) else game2['canonical_name']
+                )
             }
         }
 
@@ -3228,6 +3221,177 @@ class DatabaseManager:
         logger.warning("ai_enhance_game_metadata not implemented yet")
         return {"status": "not_implemented",
                 "message": "AI enhancement functionality not available"}
+
+    def repair_database_sequences(self) -> Dict[str, Any]:
+        """Repair all PostgreSQL sequences to prevent duplicate key errors"""
+        conn = self.get_connection()
+        if not conn:
+            return {"error": "No database connection"}
+
+        try:
+            with conn.cursor() as cur:
+                repair_results = {
+                    "repaired_sequences": [],
+                    "errors": [],
+                    "total_repaired": 0
+                }
+
+                # Define all tables with SERIAL primary keys that need sequence repair
+                tables_with_sequences = [
+                    ("trivia_questions", "trivia_questions_id_seq"),
+                    ("game_recommendations", "game_recommendations_id_seq"),
+                    ("reminders", "reminders_id_seq"),
+                    ("trivia_sessions", "trivia_sessions_id_seq"),
+                    ("trivia_answers", "trivia_answers_id_seq"),
+                    ("played_games", "played_games_id_seq")
+                ]
+
+                for table_name, sequence_name in tables_with_sequences:
+                    try:
+                        # Check if table exists
+                        cur.execute("""
+                            SELECT EXISTS (
+                                SELECT FROM information_schema.tables 
+                                WHERE table_name = %s
+                            )
+                        """, (table_name,))
+                        table_result = cur.fetchone()
+                        if not table_result:
+                            logger.warning(f"Could not check existence of table {table_name}, skipping")
+                            continue
+                        table_exists = table_result[0]
+
+                        if not table_exists:
+                            logger.info(f"Table {table_name} does not exist, skipping")
+                            continue
+
+                        # Get current max ID from table
+                        cur.execute(f"SELECT COALESCE(MAX(id), 0) FROM {table_name}")
+                        max_id_result = cur.fetchone()
+                        if not max_id_result:
+                            logger.warning(f"Could not get max ID from table {table_name}, skipping")
+                            continue
+                        max_id = max_id_result[0]
+
+                        # Get current sequence value
+                        cur.execute(f"SELECT last_value, is_called FROM {sequence_name}")
+                        seq_result = cur.fetchone()
+                        if not seq_result:
+                            logger.warning(f"Could not get sequence value for {sequence_name}, skipping")
+                            continue
+                        last_value = seq_result[0]
+                        is_called = seq_result[1]
+
+                        # Calculate what the next sequence value should be
+                        next_sequence_value = max_id + 1
+
+                        # Check if sequence needs repair
+                        current_sequence_next = last_value + 1 if is_called else last_value
+                        needs_repair = current_sequence_next <= max_id
+
+                        if needs_repair:
+                            # Reset the sequence to the correct value
+                            cur.execute(f"SELECT setval('{sequence_name}', %s, true)", (max_id,))
+                            
+                            repair_info = {
+                                "table": table_name,
+                                "sequence": sequence_name,
+                                "max_id_in_table": max_id,
+                                "old_sequence_value": current_sequence_next,
+                                "new_sequence_value": next_sequence_value,
+                                "status": "repaired"
+                            }
+                            repair_results["repaired_sequences"].append(repair_info)
+                            repair_results["total_repaired"] += 1
+                            logger.info(f"Repaired sequence {sequence_name}: was {current_sequence_next}, now {next_sequence_value}")
+                        else:
+                            repair_info = {
+                                "table": table_name,
+                                "sequence": sequence_name,
+                                "max_id_in_table": max_id,
+                                "current_sequence_value": current_sequence_next,
+                                "status": "ok"
+                            }
+                            repair_results["repaired_sequences"].append(repair_info)
+                            logger.info(f"Sequence {sequence_name} is already correct: {current_sequence_next}")
+
+                    except Exception as e:
+                        error_info = {
+                            "table": table_name,
+                            "sequence": sequence_name,
+                            "error": str(e)
+                        }
+                        repair_results["errors"].append(error_info)
+                        logger.error(f"Error repairing sequence {sequence_name}: {e}")
+
+                conn.commit()
+                logger.info(f"Database sequence repair completed: {repair_results['total_repaired']} sequences repaired")
+                return repair_results
+
+        except Exception as e:
+            logger.error(f"Critical error during sequence repair: {e}")
+            conn.rollback()
+            return {"error": str(e)}
+
+    def safe_add_trivia_question(
+        self,
+        question_text: str,
+        question_type: str,
+        correct_answer: Optional[str] = None,
+        multiple_choice_options: Optional[List[str]] = None,
+        is_dynamic: bool = False,
+        dynamic_query_type: Optional[str] = None,
+        submitted_by_user_id: Optional[int] = None,
+        category: Optional[str] = None,
+        difficulty_level: int = 1,
+    ) -> Optional[int]:
+        """Add trivia question with automatic sequence repair if needed"""
+        try:
+            # Try normal insertion first
+            return self.add_trivia_question(
+                question_text=question_text,
+                question_type=question_type,
+                correct_answer=correct_answer,
+                multiple_choice_options=multiple_choice_options,
+                is_dynamic=is_dynamic,
+                dynamic_query_type=dynamic_query_type,
+                submitted_by_user_id=submitted_by_user_id,
+                category=category,
+                difficulty_level=difficulty_level
+            )
+        except Exception as e:
+            error_str = str(e)
+            if "duplicate key value violates unique constraint" in error_str and "trivia_questions_pkey" in error_str:
+                logger.warning("Detected sequence synchronization issue, attempting repair...")
+                
+                # Repair sequences
+                repair_result = self.repair_database_sequences()
+                
+                if repair_result.get("total_repaired", 0) > 0:
+                    logger.info("Sequence repair completed, retrying trivia question insertion...")
+                    
+                    # Retry the insertion after repair
+                    try:
+                        return self.add_trivia_question(
+                            question_text=question_text,
+                            question_type=question_type,
+                            correct_answer=correct_answer,
+                            multiple_choice_options=multiple_choice_options,
+                            is_dynamic=is_dynamic,
+                            dynamic_query_type=dynamic_query_type,
+                            submitted_by_user_id=submitted_by_user_id,
+                            category=category,
+                            difficulty_level=difficulty_level
+                        )
+                    except Exception as retry_e:
+                        logger.error(f"Trivia question insertion failed even after sequence repair: {retry_e}")
+                        raise retry_e
+                else:
+                    logger.error("Sequence repair failed or found no issues to repair")
+                    raise e
+            else:
+                # Re-raise non-sequence related errors
+                raise e
 
 
 # Singleton database manager instance

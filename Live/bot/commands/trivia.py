@@ -8,6 +8,7 @@ Handles comprehensive trivia management including:
 - Question prioritization and AI generation
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -18,6 +19,9 @@ from discord.ext import commands
 from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..database import get_database
 
+# Set up logging
+logger = logging.getLogger(__name__)
+
 # Get database instance
 db = get_database()  # type: ignore
 
@@ -27,6 +31,47 @@ class TriviaCommands(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+
+    async def _generate_ai_question_fallback(self):
+        """Fallback AI question generation when dedicated function is unavailable"""
+        try:
+            from ..handlers.ai_handler import call_ai_with_rate_limiting
+            
+            # Simple AI prompt for question generation
+            prompt = (
+                "Generate a trivia question about Captain Jonesy's gaming based on her played games database. "
+                "Focus on statistical data like playtime, episode counts, or completion rates. "
+                "Format: Question: [question] | Answer: [answer] | Type: single_answer"
+            )
+            
+            response_text, status = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+            
+            if response_text:
+                # Parse AI response
+                lines = response_text.strip().split('\n')
+                question_text = ""
+                answer = ""
+                
+                for line in lines:
+                    if line.startswith("Question:"):
+                        question_text = line.replace("Question:", "").strip()
+                    elif line.startswith("Answer:"):
+                        answer = line.replace("Answer:", "").strip()
+                
+                if question_text and answer:
+                    return {
+                        'question_text': question_text,
+                        'correct_answer': answer,
+                        'question_type': 'single_answer',
+                        'category': 'ai_generated',
+                        'is_dynamic': False
+                    }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error in fallback AI generation: {e}")
+            return None
 
     @commands.command(name="addtrivia")
     async def add_trivia_question(self, ctx, *, content: Optional[str] = None):
@@ -551,6 +596,177 @@ class TriviaCommands(commands.Cog):
             await start_trivia_conversation(ctx)
         except ImportError:
             await ctx.send("❌ Trivia submission system not available - conversation handler not loaded.")
+
+    @commands.command(name="approvequestion")
+    @commands.has_permissions(manage_messages=True)
+    async def approve_question(self, ctx, target: Optional[str] = None):
+        """Send trivia question to JAM for manual approval (moderators only)"""
+        try:
+            if db is None:
+                await ctx.send("❌ **Database offline.** Cannot access trivia questions without database connection.")
+                return
+
+            # Check if approval system is available
+            try:
+                from ..handlers.conversation_handler import start_jam_question_approval
+            except ImportError:
+                await ctx.send("❌ **Approval system not available.** Conversation handler not loaded.")
+                return
+
+            if not target:
+                # Show usage help
+                help_text = (
+                    "**Manual Question Approval Usage:**\n"
+                    "`!approvequestion <question_id>` - Send specific question to JAM for review\n"
+                    "`!approvequestion auto` - Send next auto-selected question for approval\n"
+                    "`!approvequestion generate` - Generate new question and send for approval\n\n"
+                    "**Examples:**\n"
+                    "• `!approvequestion 25` - Review question #25\n"
+                    "• `!approvequestion auto` - Review what would be auto-selected\n"
+                    "• `!approvequestion generate` - Create and review new AI question\n\n"
+                    "**Use Cases:**\n"
+                    "• Quality check before bonus trivia sessions\n"
+                    "• Review newly added questions\n"
+                    "• Preview auto-selection before events"
+                )
+                await ctx.send(help_text)
+                return
+
+            question_data = None
+
+            if target.lower() == 'auto':
+                # Auto-select next question using priority system
+                try:
+                    # Use same logic as starttrivia command
+                    next_question = db.get_next_trivia_question(exclude_user_id=ctx.author.id)
+                    if not next_question:
+                        await ctx.send("❌ **No available questions for auto-selection.** Use `!addtrivia` to add questions or `!approvequestion generate` to create new ones.")
+                        return
+                    
+                    # Calculate dynamic answer if needed
+                    if next_question.get('is_dynamic') and next_question.get('dynamic_query_type'):
+                        calculated_answer = db.calculate_dynamic_answer(next_question['dynamic_query_type'])
+                        next_question['correct_answer'] = calculated_answer
+                    
+                    question_data = next_question
+                    await ctx.send(f"🎯 **Auto-selected question #{question_data['id']} sent to JAM for approval**\n\nQuestion preview: {question_data['question_text'][:100]}{'...' if len(question_data['question_text']) > 100 else ''}")
+
+                except Exception as e:
+                    logger.error(f"Error auto-selecting question: {e}")
+                    await ctx.send("❌ **Error auto-selecting question.** Database method may need implementation.")
+                    return
+
+            elif target.lower() == 'generate':
+                # Generate new AI question (if available)
+                await ctx.send("🧠 **AI Question Generation**\n\nGenerating new trivia question... This may take a moment.")
+                
+                try:
+                    # Use our internal AI generation method (no problematic imports)
+                    generated_question = await self._generate_ai_question_fallback()
+                    
+                    if generated_question:
+                        question_data = generated_question
+                        await ctx.send(f"✅ **Generated question sent to JAM for approval**\n\nQuestion preview: {question_data.get('question_text', 'Generated question')[:100]}{'...' if len(question_data.get('question_text', '')) > 100 else ''}")
+                    else:
+                        await ctx.send("❌ **AI question generation failed.** System may be unavailable or rate limited.")
+                        return
+
+                except Exception as e:
+                    logger.error(f"Error generating AI question: {e}")
+                    await ctx.send("❌ **Error generating AI question.** System may be temporarily unavailable.")
+                    return
+
+            else:
+                # Specific question ID
+                try:
+                    question_id = int(target)
+                except ValueError:
+                    await ctx.send("❌ **Invalid question ID.** Please provide a number, 'auto', or 'generate'.")
+                    return
+
+                # Get specific question
+                try:
+                    question_data = db.get_trivia_question_by_id(question_id)
+                    if not question_data:
+                        await ctx.send(f"❌ **Question #{question_id} not found.** Use `!listpendingquestions` to see available questions.")
+                        return
+
+                    # Check question status
+                    if question_data.get('status') not in ['available', None]:
+                        await ctx.send(f"❌ **Question #{question_id} is not available for approval.** Status: {question_data.get('status', 'unknown')}")
+                        return
+
+                    # Calculate dynamic answer if needed
+                    if question_data.get('is_dynamic') and question_data.get('dynamic_query_type'):
+                        calculated_answer = db.calculate_dynamic_answer(question_data['dynamic_query_type'])
+                        question_data['correct_answer'] = calculated_answer
+
+                    await ctx.send(f"📋 **Question #{question_id} sent to JAM for approval**\n\nQuestion preview: {question_data['question_text'][:100]}{'...' if len(question_data['question_text']) > 100 else ''}")
+
+                except Exception as e:
+                    logger.error(f"Error retrieving question {question_id}: {e}")
+                    await ctx.send("❌ **Error retrieving question.** Database error or question may not exist.")
+                    return
+
+            # Send to JAM for approval
+            if question_data:
+                try:
+                    approval_success = await start_jam_question_approval(question_data)
+                    
+                    if approval_success:
+                        # Success message sent above, add context
+                        await ctx.send(f"💬 **JAM will receive a DM with approval options.** They can approve, modify, or reject the question.\n\n*Approval conversation will remain active for 24 hours to accommodate late responses.*")
+                    else:
+                        await ctx.send("❌ **Failed to send approval request to JAM.** They may have DMs disabled or system error occurred.")
+
+                except Exception as e:
+                    logger.error(f"Error starting JAM approval workflow: {e}")
+                    await ctx.send("❌ **Error initiating approval workflow.** System may be temporarily unavailable.")
+
+        except Exception as e:
+            logger.error(f"Error in approvequestion command: {e}")
+            await ctx.send("❌ System error occurred while processing approval request.")
+
+    @commands.command(name="approvestatus")
+    @commands.has_permissions(manage_messages=True)
+    async def approval_status(self, ctx):
+        """Check status of pending JAM approvals (moderators only)"""
+        try:
+            from ..handlers.conversation_handler import jam_approval_conversations
+            from ..config import JAM_USER_ID
+            
+            if JAM_USER_ID in jam_approval_conversations:
+                conversation = jam_approval_conversations[JAM_USER_ID]
+                initiated_at = conversation.get('initiated_at')
+                last_activity = conversation.get('last_activity')
+                step = conversation.get('step', 'unknown')
+                
+                if initiated_at:
+                    age = datetime.now(ZoneInfo("Europe/London")) - initiated_at
+                    age_text = f"{age.total_seconds() / 3600:.1f} hours" if age.total_seconds() > 3600 else f"{age.total_seconds() / 60:.0f} minutes"
+                else:
+                    age_text = "Unknown"
+                
+                question_data = conversation.get('data', {}).get('question_data', {})
+                question_preview = question_data.get('question_text', 'Unknown question')[:50] + '...' if len(question_data.get('question_text', '')) > 50 else question_data.get('question_text', 'Unknown question')
+                
+                await ctx.send(
+                    f"⏳ **JAM Approval Status**\n\n"
+                    f"**Status:** Pending approval\n"
+                    f"**Step:** {step.replace('_', ' ').title()}\n"
+                    f"**Question:** {question_preview}\n"
+                    f"**Age:** {age_text}\n"
+                    f"**Timeout:** 24 hours\n\n"
+                    f"*JAM has an active approval conversation waiting for response.*"
+                )
+            else:
+                await ctx.send("✅ **No pending approvals.** JAM does not have any active approval conversations.")
+                
+        except ImportError:
+            await ctx.send("❌ **Approval system not available.** Conversation handler not loaded.")
+        except Exception as e:
+            logger.error(f"Error checking approval status: {e}")
+            await ctx.send("❌ System error occurred while checking approval status.")
 
 
 async def setup(bot):
