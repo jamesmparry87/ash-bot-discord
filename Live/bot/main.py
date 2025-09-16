@@ -171,9 +171,13 @@ async def on_ready():
 
     # Start scheduled tasks
     try:
-        from .tasks.scheduled import start_all_scheduled_tasks
+        from .tasks.scheduled import start_all_scheduled_tasks, validate_startup_trivia_questions
         start_all_scheduled_tasks()
         print("✅ All scheduled tasks started (reminders, trivia, etc.)")
+        
+        # Validate trivia questions on startup
+        await validate_startup_trivia_questions()
+        
     except Exception as e:
         print(f"❌ Error starting scheduled tasks: {e}")
 
@@ -197,7 +201,9 @@ async def on_message(message):
         from .handlers.conversation_handler import (
             announcement_conversations,
             handle_announcement_conversation,
+            handle_jam_approval_conversation,
             handle_mod_trivia_conversation,
+            jam_approval_conversations,
             mod_trivia_conversations,
         )
         from .handlers.message_handler import (
@@ -225,6 +231,11 @@ async def on_message(message):
             # Check for mod trivia conversations
             if user_id in mod_trivia_conversations:
                 await handle_mod_trivia_conversation(message)
+                return
+
+            # Check for JAM approval conversations
+            if user_id in jam_approval_conversations:
+                await handle_jam_approval_conversation(message)
                 return
 
             # Check for natural language announcement triggers (DM only, authorized users only)

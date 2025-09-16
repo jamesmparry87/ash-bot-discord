@@ -185,7 +185,18 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"what.*game.*shortest.*episodes",
             r"which.*game.*fastest.*complete",
             r"what.*game.*most.*time",
-            r"which.*game.*took.*most.*time"
+            r"which.*game.*took.*most.*time",
+            # Additional patterns for playtime queries that were falling through to AI
+            r"what\s+is\s+the\s+longest\s+game.*jonesy.*played",
+            r"which\s+is\s+the\s+longest\s+game.*jonesy.*played", 
+            r"what\s+game\s+took.*longest.*for\s+jonesy",
+            r"what\s+game\s+has\s+the\s+most\s+playtime",
+            r"what\s+game\s+has\s+the\s+longest\s+playtime",
+            r"which\s+game\s+has\s+the\s+most\s+hours",
+            r"what.*longest.*game.*jonesy.*played",
+            r"what.*game.*longest.*playtime",
+            r"which.*game.*longest.*hours",
+            r"what.*game.*most.*hours"
         ],
         "genre": [
             r"what\s+(.*?)\s+games\s+has\s+jonesy\s+played",
@@ -225,6 +236,18 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"has\s+(.+?)\s+been\s+recommended[\?\.]?$",
             r"who\s+recommended\s+(.+?)[\?\.]?$",
             r"what.*recommend.*(.+?)[\?\.]?$"
+        ],
+        "youtube_views": [
+            r"what\s+game\s+has\s+gotten.*most\s+views",
+            r"which\s+game\s+has\s+the\s+most\s+views",
+            r"what\s+game\s+has\s+the\s+highest\s+views",
+            r"what.*game.*most.*views",
+            r"which.*game.*most.*views",
+            r"what.*game.*highest.*views",
+            r"most\s+viewed\s+game",
+            r"highest\s+viewed\s+game",
+            r"what\s+game\s+got.*most\s+views",
+            r"which\s+game\s+got.*most\s+views"
         ]
     }
 
@@ -340,8 +363,10 @@ async def handle_statistical_query(
             else:
                 await message.reply("Database analysis complete. No episode data available for ranking. Mission logging requires enhancement.")
 
-        elif "longest" in lower_content and "complete" in lower_content:
-            # Handle longest completion games
+        elif ("longest" in lower_content and "complete" in lower_content) or \
+             ("longest" in lower_content and "game" in lower_content) or \
+             ("most" in lower_content and ("hours" in lower_content or "playtime" in lower_content)):
+            # Handle longest playtime/completion games - unified handler for all playtime queries
             completion_stats = db.get_longest_completion_games()  # type: ignore
             if completion_stats:
                 top_game = completion_stats[0]
@@ -350,19 +375,27 @@ async def handle_statistical_query(
                     episodes = top_game['total_episodes']
                     game_name = top_game['canonical_name']
 
-                    response = f"Analysis indicates '{game_name}' required maximum completion time: {hours} hours across {episodes} episodes. "
+                    response = f"Database analysis: '{game_name}' demonstrates maximum temporal investment with {hours} hours"
+                    if episodes > 0:
+                        response += f" across {episodes} episodes"
+                    response += f", completion status: {top_game.get('completion_status', 'unknown')}. "
 
                     # Add conversational follow-up
-                    response += f"Fascinating efficiency metrics detected. Would you like me to investigate her completion timeline patterns or compare this against other {top_game.get('genre', 'similar')} gaming commitments?"
+                    if len(completion_stats) > 1:
+                        second_game = completion_stats[1]
+                        second_hours = round(second_game['total_playtime_minutes'] / 60, 1)
+                        response += f"This significantly exceeds the second-longest '{second_game['canonical_name']}' at {second_hours} hours. Would you like me to analyze her other marathon gaming sessions or compare completion patterns?"
+                    else:
+                        response += f"I could investigate her completion timeline patterns or compare this against other {top_game.get('genre', 'similar')} gaming commitments if you require additional analysis."
                 else:
                     # Fall back to episode count if no playtime data
                     episodes = top_game['total_episodes']
                     game_name = top_game['canonical_name']
-                    response = f"Database indicates '{game_name}' required maximum episodes for completion: {episodes} episodes. I could analyze her completion efficiency trends or examine episode-based commitment patterns if additional data is required."
+                    response = f"Database analysis: '{game_name}' demonstrates maximum episode commitment with {episodes} episodes, however temporal data is insufficient. Mission parameters require enhanced playtime logging for comprehensive analysis."
 
                 await message.reply(response)
             else:
-                await message.reply("Database analysis complete. No completed games with sufficient temporal data for ranking. Mission completion logging requires enhancement.")
+                await message.reply("Database analysis complete. Insufficient playtime data available for temporal ranking. Mission parameters require more comprehensive logging.")
 
     except Exception as e:
         print(f"Error in statistical query: {e}")
@@ -584,6 +617,7 @@ async def handle_game_status_query(
 
         # Find all games in this series from played games database
         series_games = []
+        available_game_names = []
         for game in played_games:
             game_lower = game['canonical_name'].lower()
             series_lower = game.get('series_name', '').lower()
@@ -596,11 +630,18 @@ async def handle_game_status_query(
                     status = game.get("completion_status", "unknown")
                     series_games.append(
                         f"'{game['canonical_name']}'{episodes} - {status}")
+                    available_game_names.append(game['canonical_name'])
                     break
 
         # Create disambiguation response with specific games if found
         if series_games:
             games_list = ", ".join(series_games)
+            
+            # Set disambiguation state in conversation context
+            from .context_manager import get_or_create_context
+            context = get_or_create_context(message.author.id, message.channel.id)
+            context.set_disambiguation_state(game_name.title(), "game_status", available_game_names)
+            
             await message.reply(f"Database analysis indicates multiple entries exist in the '{game_name.title()}' series. Captain Jonesy's gaming archives contain: {games_list}. Specify which particular iteration you are referencing for detailed mission data.")
         else:
             await message.reply(f"Database scan complete. No entries found for '{game_name.title()}' series in Captain Jonesy's gaming archives. Either the series has not been engaged or requires more specific designation for accurate retrieval.")
@@ -699,6 +740,67 @@ async def handle_game_details_query(
         return
 
     game_name = match.group(1).strip()
+    game_name_lower = game_name.lower()
+    
+    # Common game series that need disambiguation (same list as game_status_query)
+    game_series_keywords = [
+        "god of war", "final fantasy", "call of duty", "assassin's creed", "grand theft auto", "gta",
+        "the elder scrolls", "fallout", "resident evil", "silent hill", "metal gear", "halo",
+        "gears of war", "dead space", "mass effect", "dragon age", "the witcher", "dark souls",
+        "borderlands", "far cry", "just cause", "saints row", "watch dogs", "dishonored",
+        "bioshock", "tomb raider", "hitman", "splinter cell", "rainbow six", "ghost recon",
+        "battlefield", "need for speed", "fifa", "madden", "nba 2k", "mortal kombat",
+        "street fighter", "tekken", "super mario", "zelda", "pokemon", "sonic",
+        "crash bandicoot", "spyro", "kingdom hearts", "persona", "shin megami tensei",
+        "tales of", "fire emblem", "advance wars"
+    ]
+
+    # Check if this might be a game series query that needs disambiguation
+    is_series_query = False
+    for series in game_series_keywords:
+        if series in game_name_lower and not any(char.isdigit() for char in game_name):
+            is_series_query = True
+            break
+
+    # Also check for generic patterns
+    if not is_series_query:
+        generic_patterns = [
+            r"^(the\s+)?new\s+", r"^(the\s+)?latest\s+", r"^(the\s+)?recent\s+"
+        ]
+        for generic_pattern in generic_patterns:
+            if re.search(generic_pattern, game_name_lower):
+                is_series_query = True
+                break
+
+    if is_series_query:
+        # Get games from PLAYED GAMES database for series disambiguation
+        played_games = db.get_all_played_games()  # type: ignore
+        series_games = []
+        available_game_names = []
+        
+        for game in played_games:
+            game_lower = game['canonical_name'].lower()
+            series_lower = game.get('series_name', '').lower()
+            # Check if this game belongs to the detected series
+            for series in game_series_keywords:
+                if series in game_name_lower and (series in game_lower or series in series_lower):
+                    episodes = f" ({game.get('total_episodes', 0)} episodes)" if game.get("total_episodes", 0) > 0 else ""
+                    status = game.get("completion_status", "unknown")
+                    series_games.append(f"'{game['canonical_name']}'{episodes} - {status}")
+                    available_game_names.append(game['canonical_name'])
+                    break
+
+        # Create disambiguation response with specific games if found
+        if series_games:
+            games_list = ", ".join(series_games)
+            
+            # Set disambiguation state in conversation context
+            from .context_manager import get_or_create_context
+            context = get_or_create_context(message.author.id, message.channel.id)
+            context.set_disambiguation_state(game_name.title(), "game_details", available_game_names)
+            
+            await message.reply(f"Database analysis indicates multiple entries exist in the '{game_name.title()}' series. Captain Jonesy's gaming archives contain: {games_list}. Specify which particular iteration you are referencing for detailed temporal analysis.")
+            return
 
     # Search for the game in PLAYED GAMES database
     played_game = db.get_played_game(game_name)  # type: ignore
@@ -780,6 +882,11 @@ async def handle_recommendation_query(
         await message.reply(f"Negative. '{game_title}' is not present in our recommendation database. No records of this title being suggested for mission parameters.")
 
 
+async def handle_youtube_views_query(message: discord.Message) -> None:
+    """Handle YouTube view count queries - prevents AI fabrication by providing proper response."""
+    await message.reply("Database analysis: YouTube view count metrics require external API integration to prevent data fabrication. This functionality is not currently available - I cannot access YouTube Analytics data to determine which games have received the most views. Mission parameters require YouTube API implementation for accurate viewership analysis.")
+
+
 async def handle_context_aware_query(message: discord.Message) -> bool:
     """
     Handle queries with conversation context awareness.
@@ -791,6 +898,60 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
 
         # Get or create conversation context for this user/channel
         context = get_or_create_context(message.author.id, message.channel.id)
+
+        # FIRST: Check if this is a disambiguation response
+        if context.awaiting_disambiguation:
+            is_disambiguation, matched_game = context.is_disambiguation_response(message.content)
+            
+            if is_disambiguation and matched_game:
+                print(f"Context: Detected disambiguation response: '{message.content}' -> '{matched_game}'")
+                
+                # Clear disambiguation state
+                disambiguation_type = context.disambiguation_type
+                context.clear_disambiguation_state()
+                
+                # Process the resolved query based on the original disambiguation type
+                if disambiguation_type == "game_status":
+                    # Create a resolved game status query
+                    resolved_query = f"has jonesy played {matched_game}"
+                    print(f"Context: Processing resolved game status query: {resolved_query}")
+                    
+                    match = re.search(r"has jonesy played (.+?)$", resolved_query)
+                    if match:
+                        await handle_game_status_query(message, match)
+                        context.add_message(message.content, "user")
+                        context.update_game_context(matched_game, "game_status")
+                        context.add_message("disambiguation_resolved", "bot")
+                        return True
+                        
+                elif disambiguation_type == "game_details":
+                    # Create a resolved game details query
+                    resolved_query = f"how long did jonesy play {matched_game}"
+                    print(f"Context: Processing resolved game details query: {resolved_query}")
+                    
+                    match = re.search(r"how long did jonesy play (.+?)$", resolved_query)
+                    if match:
+                        await handle_game_details_query(message, match)
+                        context.add_message(message.content, "user")
+                        context.update_game_context(matched_game, "game_details")
+                        context.add_message("disambiguation_resolved", "bot")
+                        return True
+                
+                # If we get here, something went wrong with the disambiguation
+                await message.reply(f"Database analysis: Game '{matched_game}' identified, however query type resolution failed. Please specify your analysis requirements.")
+                context.add_message(message.content, "user")
+                context.add_message("disambiguation_failed", "bot")
+                return True
+            elif context.awaiting_disambiguation:
+                # User responded but it didn't match any available options
+                available_games = ", ".join(f"'{game}'" for game in context.available_options[:5])
+                if len(context.available_options) > 5:
+                    available_games += f" and {len(context.available_options) - 5} more"
+                    
+                await message.reply(f"Database analysis: Unable to match '{message.content}' with available options. Available games include: {available_games}. Please specify the exact game title for accurate data retrieval.")
+                context.add_message(message.content, "user")
+                context.add_message("disambiguation_no_match", "bot")
+                return True
 
         # Check if this query needs context resolution
         if not should_use_context(message.content):
@@ -986,6 +1147,8 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
                 await handle_recommendation_query(message, match)
                 game_name = match.group(1).strip()
                 context.update_game_context(game_name, "recommendation")
+            elif query_type == "youtube_views":
+                await handle_youtube_views_query(message)
 
             context.add_message("query_processed", "bot")
             return True

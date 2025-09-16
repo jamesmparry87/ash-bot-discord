@@ -509,6 +509,106 @@ async def friday_morning_greeting():
         print(f"❌ Error in friday_morning_greeting: {e}")
 
 
+# Run at 10:00 AM UK time every Tuesday for pre-approval
+@tasks.loop(time=time(10, 0, tzinfo=ZoneInfo("Europe/London")))
+async def pre_trivia_approval():
+    """Send selected trivia question to JAM for approval 1 hour before posting"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+
+    # Only run on Tuesdays (weekday 1)
+    if uk_now.weekday() != 1:
+        return
+
+    print(f"🧠 Pre-trivia approval task triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+
+    try:
+        from ..handlers.conversation_handler import start_pre_trivia_approval
+
+        # Get next trivia question using existing priority logic
+        if db is None:
+            print("❌ Database not available for pre-trivia approval")
+            return
+
+        # Get available questions using the same logic as the main trivia system
+        available_questions = db.get_available_trivia_questions()  # type: ignore
+        if not available_questions:
+            print("❌ No available trivia questions for pre-approval")
+            
+            # Try to generate an emergency question
+            try:
+                from ..handlers.ai_handler import generate_ai_trivia_question
+                from ..handlers.conversation_handler import start_jam_question_approval
+                
+                print("🔄 Attempting to generate emergency question for today's trivia")
+                emergency_question = await generate_ai_trivia_question()
+                
+                if emergency_question:
+                    # Send emergency question directly to JAM for urgent approval
+                    emergency_sent = await start_jam_question_approval(emergency_question)
+                    if emergency_sent:
+                        print("✅ Emergency question sent to JAM for approval")
+                        # Send urgent notification to JAM
+                        from ..config import JAM_USER_ID
+                        from ..main import bot
+                        
+                        user = await bot.fetch_user(JAM_USER_ID)
+                        if user:
+                            await user.send(
+                                f"🚨 **URGENT: Emergency Trivia Question Generated**\n\n"
+                                f"No questions were available for today's Trivia Tuesday pre-approval.\n"
+                                f"An emergency question has been generated and sent for your immediate approval.\n\n"
+                                f"**Trivia starts in 1 hour at 11:00 AM UK time.**\n\n"
+                                f"*Please review and approve the emergency question as soon as possible.*"
+                            )
+                    else:
+                        print("❌ Failed to send emergency question to JAM")
+                else:
+                    print("❌ Failed to generate emergency question")
+            except Exception as emergency_e:
+                print(f"❌ Emergency question generation failed: {emergency_e}")
+            
+            return
+
+        # Select question using priority system
+        # Priority 1: Recent mod-submitted questions
+        # Priority 2: AI-generated questions
+        # Priority 3: Any unused questions
+        selected_question = available_questions[0]
+
+        # If it's a dynamic question, calculate the answer
+        if selected_question.get('is_dynamic'):
+            calculated_answer = db.calculate_dynamic_answer(  # type: ignore
+                selected_question.get('dynamic_query_type', ''))
+            if calculated_answer:
+                selected_question['correct_answer'] = calculated_answer
+
+        # Send for JAM approval
+        success = await start_pre_trivia_approval(selected_question)
+        
+        if success:
+            print(f"✅ Pre-trivia approval request sent to JAM for question #{selected_question.get('id')}")
+        else:
+            print("❌ Failed to send pre-trivia approval request")
+
+    except Exception as e:
+        print(f"❌ Error in pre_trivia_approval task: {e}")
+        # Try to notify JAM of the error
+        try:
+            from ..config import JAM_USER_ID
+            from ..main import bot
+
+            user = await bot.fetch_user(JAM_USER_ID)
+            if user:
+                await user.send(
+                    f"⚠️ **Pre-Trivia Approval Error**\n\n"
+                    f"Failed to send today's question for approval at 10:00 AM.\n"
+                    f"Error: {str(e)}\n\n"
+                    f"*Manual intervention may be required for today's Trivia Tuesday.*"
+                )
+        except Exception:
+            pass
+
+
 # Run at 11:00 AM UK time every Tuesday
 @tasks.loop(time=time(11, 0, tzinfo=ZoneInfo("Europe/London")))
 async def trivia_tuesday():
@@ -936,6 +1036,10 @@ def start_all_scheduled_tasks():
             friday_morning_greeting.start()
             print("✅ Friday morning greeting task started (9:00 AM UK time, Fridays)")
 
+        if not pre_trivia_approval.is_running():
+            pre_trivia_approval.start()
+            print("✅ Pre-trivia approval task started (10:00 AM UK time, Tuesdays)")
+
     except Exception as e:
         print(f"❌ Error starting scheduled tasks: {e}")
 
@@ -952,7 +1056,8 @@ def stop_all_scheduled_tasks():
             scheduled_ai_refresh,
             monday_morning_greeting,
             tuesday_trivia_greeting,
-            friday_morning_greeting
+            friday_morning_greeting,
+            pre_trivia_approval
         ]
 
         for task in tasks_to_stop:
@@ -963,3 +1068,64 @@ def stop_all_scheduled_tasks():
 
     except Exception as e:
         print(f"❌ Error stopping scheduled tasks: {e}")
+
+
+async def validate_startup_trivia_questions():
+    """Check that there are at least 5 active questions available on startup"""
+    try:
+        if db is None:
+            print("❌ Database not available for startup trivia validation")
+            return
+
+        # Check for available questions
+        available_questions = db.get_available_trivia_questions()  # type: ignore
+        question_count = len(available_questions) if available_questions else 0
+        
+        print(f"🧠 Startup trivia validation: {question_count} available questions found")
+        
+        # If we have at least 5 questions, we're good
+        if question_count >= 5:
+            print("✅ Sufficient trivia questions available")
+            return
+
+        # Need to generate more questions
+        questions_needed = 5 - question_count
+        print(f"🔄 Need to generate {questions_needed} additional trivia questions")
+
+        # Generate questions one by one and send for JAM approval
+        from ..handlers.ai_handler import generate_ai_trivia_question
+        from ..handlers.conversation_handler import start_jam_question_approval
+
+        for i in range(questions_needed):
+            try:
+                print(f"🔄 Generating trivia question {i+1}/{questions_needed}")
+                
+                # Generate AI question
+                question_data = await generate_ai_trivia_question()
+                
+                if question_data:
+                    print(f"✅ Generated question {i+1}: {question_data.get('question_text', '')[:50]}...")
+                    
+                    # Send to JAM for approval
+                    approval_sent = await start_jam_question_approval(question_data)
+                    
+                    if approval_sent:
+                        print(f"✅ Question {i+1} sent to JAM for approval")
+                    else:
+                        print(f"⚠️ Failed to send question {i+1} for approval")
+                        
+                    # Small delay between questions to avoid overwhelming JAM
+                    import asyncio
+                    await asyncio.sleep(2)
+                    
+                else:
+                    print(f"❌ Failed to generate question {i+1}")
+                    
+            except Exception as e:
+                print(f"❌ Error generating question {i+1}: {e}")
+                continue
+
+        print(f"🧠 Startup trivia generation complete - sent {questions_needed} questions for JAM approval")
+
+    except Exception as e:
+        print(f"❌ Error in startup trivia validation: {e}")

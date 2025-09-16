@@ -29,10 +29,21 @@ class TriviaCommands(commands.Cog):
         self.bot = bot
 
     @commands.command(name="addtrivia")
-    @commands.has_permissions(manage_messages=True)
     async def add_trivia_question(self, ctx, *, content: Optional[str] = None):
         """Add a trivia question to the database (moderators only)"""
         try:
+            # Check if user is a moderator (works in both DM and server context)
+            from ..utils.permissions import user_is_mod_by_id
+            if not await user_is_mod_by_id(ctx.author.id):
+                await ctx.send("❌ **Access denied.** Trivia question submission requires moderator privileges.")
+                return
+            
+            # If in DM, route to conversation handler for enhanced experience
+            if ctx.guild is None:
+                from ..handlers.conversation_handler import start_trivia_conversation
+                await start_trivia_conversation(ctx)
+                return
+            
             if not content:
                 # Progressive disclosure help
                 help_text = (

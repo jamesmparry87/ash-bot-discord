@@ -41,6 +41,12 @@ class ConversationContext:
         # Statistical context
         self.last_stats_context: Optional[Dict[str, Any]] = None
         self.last_series_mentioned: Optional[str] = None
+        
+        # Disambiguation state tracking
+        self.awaiting_disambiguation: bool = False
+        self.disambiguation_series: Optional[str] = None
+        self.disambiguation_type: Optional[str] = None  # 'game_status', 'game_details', etc.
+        self.available_options: List[str] = []  # Games available for selection
 
     def add_message(self, content: str, message_type: str = "user"):
         """Add a message to the conversation history"""
@@ -75,6 +81,48 @@ class ConversationContext:
     def update_series_context(self, series_name: str):
         """Update series context"""
         self.last_series_mentioned = series_name
+
+    def set_disambiguation_state(self, series_name: str, query_type: str, available_games: Optional[List[str]] = None):
+        """Set the context to awaiting disambiguation for a game series"""
+        self.awaiting_disambiguation = True
+        self.disambiguation_series = series_name
+        self.disambiguation_type = query_type
+        self.available_options = available_games or []
+        self.last_activity = datetime.now(ZoneInfo("Europe/London"))
+        print(f"Context: Set disambiguation state for '{series_name}' with {len(self.available_options)} options")
+
+    def clear_disambiguation_state(self):
+        """Clear the disambiguation state"""
+        self.awaiting_disambiguation = False
+        self.disambiguation_series = None
+        self.disambiguation_type = None
+        self.available_options = []
+        
+    def is_disambiguation_response(self, content: str) -> Tuple[bool, Optional[str]]:
+        """
+        Check if content matches one of the available disambiguation options.
+        Returns (is_match, matched_game_name)
+        """
+        if not self.awaiting_disambiguation or not self.available_options:
+            return False, None
+            
+        content_lower = content.lower().strip()
+        
+        # Direct match check
+        for game_option in self.available_options:
+            game_lower = game_option.lower()
+            # Check for exact match or if the response contains the game name
+            if content_lower == game_lower or game_lower in content_lower:
+                return True, game_option
+                
+        # Check if response is similar enough to any option (fuzzy matching)
+        from difflib import SequenceMatcher
+        for game_option in self.available_options:
+            similarity = SequenceMatcher(None, content_lower, game_option.lower()).ratio()
+            if similarity > 0.8:  # 80% similarity threshold
+                return True, game_option
+                
+        return False, None
 
     def update_jonesy_context(self, content: str):
         """Update Jonesy context based on conversation content"""

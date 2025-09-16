@@ -359,27 +359,16 @@ async def initialize_modular_components():
         # Import message handler functions
         global message_handler_functions
         from bot.handlers.message_handler import (
-            handle_game_details_query,
-            handle_game_status_query,
-            handle_genre_query,
             handle_pineapple_pizza_enforcement,
-            handle_recommendation_query,
-            handle_statistical_query,
             handle_strike_detection,
-            handle_year_query,
-            route_query,
+            process_gaming_query_with_context,
         )
 
         message_handler_functions = {
             'handle_strike_detection': handle_strike_detection,
             'handle_pineapple_pizza_enforcement': handle_pineapple_pizza_enforcement,
-            'route_query': route_query,
-            'handle_statistical_query': handle_statistical_query,
-            'handle_genre_query': handle_genre_query,
-            'handle_year_query': handle_year_query,
-            'handle_game_status_query': handle_game_status_query,
-            'handle_game_details_query': handle_game_details_query,
-            'handle_recommendation_query': handle_recommendation_query}
+            'process_gaming_query_with_context': process_gaming_query_with_context,
+        }
 
         status_report["message_handlers"] = True
         print("✅ Message handlers initialized successfully")
@@ -683,27 +672,8 @@ async def on_message(message):
                 # Handle other natural language commands here as needed
                 # For now, fall through to normal processing for other patterns
 
-            # PRIORITY 3: Route and handle database queries
-            query_type, match = message_handler_functions['route_query'](
-                content)
-
-            if query_type == "statistical":
-                await message_handler_functions['handle_statistical_query'](message, content)
-                return
-            elif query_type == "genre" and match:
-                await message_handler_functions['handle_genre_query'](message, match)
-                return
-            elif query_type == "year" and match:
-                await message_handler_functions['handle_year_query'](message, match)
-                return
-            elif query_type == "game_status" and match:
-                await message_handler_functions['handle_game_status_query'](message, match)
-                return
-            elif query_type == "game_details" and match:
-                await message_handler_functions['handle_game_details_query'](message, match)
-                return
-            elif query_type == "recommendation" and match:
-                await message_handler_functions['handle_recommendation_query'](message, match)
+            # PRIORITY 3: Use the unified context-aware gaming query processor
+            if await message_handler_functions['process_gaming_query_with_context'](message):
                 return
             else:
                 # PRIORITY 4: Handle with general conversation/FAQ system

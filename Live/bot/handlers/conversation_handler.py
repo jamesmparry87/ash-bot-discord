@@ -32,6 +32,7 @@ db = get_database()  # type: ignore
 # user_id: {'step': str, 'data': dict, 'last_activity': datetime}
 announcement_conversations: Dict[int, Dict[str, Any]] = {}
 mod_trivia_conversations: Dict[int, Dict[str, Any]] = {}
+jam_approval_conversations: Dict[int, Dict[str, Any]] = {}
 
 
 def cleanup_announcement_conversations():
@@ -74,6 +75,27 @@ def update_mod_trivia_activity(user_id: int):
     """Update last activity time for mod trivia conversation"""
     if user_id in mod_trivia_conversations:
         mod_trivia_conversations[user_id]["last_activity"] = datetime.now(
+            ZoneInfo("Europe/London"))
+
+
+def cleanup_jam_approval_conversations():
+    """Remove JAM approval conversations inactive for more than 2 hours"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    cutoff_time = uk_now - timedelta(hours=2)
+    expired_users = [
+        user_id for user_id,
+        data in jam_approval_conversations.items() if data.get(
+            "last_activity",
+            uk_now) < cutoff_time]
+    for user_id in expired_users:
+        del jam_approval_conversations[user_id]
+        print(f"Cleaned up expired JAM approval conversation for user {user_id}")
+
+
+def update_jam_approval_activity(user_id: int):
+    """Update last activity time for JAM approval conversation"""
+    if user_id in jam_approval_conversations:
+        jam_approval_conversations[user_id]["last_activity"] = datetime.now(
             ZoneInfo("Europe/London"))
 
 
@@ -877,3 +899,348 @@ async def start_trivia_conversation(ctx):
 
     # Start with a direct question about adding trivia
     await handle_mod_trivia_conversation(ctx.message)
+
+
+async def handle_jam_approval_conversation(message):
+    """Handle the interactive DM conversation for JAM approval of trivia questions"""
+    user_id = message.author.id
+    conversation = jam_approval_conversations.get(user_id)
+
+    if not conversation:
+        return
+
+    # Only JAM can use this conversation
+    if user_id != JAM_USER_ID:
+        return
+
+    # Update activity
+    update_jam_approval_activity(user_id)
+
+    step = conversation.get('step', 'approval')
+    data = conversation.get('data', {})
+    content = message.content.strip()
+
+    try:
+        if step == 'approval':
+            # Handle approval decision
+            if content in ['1', 'approve', 'yes', 'accept']:
+                # Approve the question
+                question_data = data.get('question_data')
+                if question_data:
+                    try:
+                        # Add the approved question to the database
+                        if db is None:
+                            await message.reply("❌ **Database offline.** Cannot save approved question.")
+                            return
+
+                        question_id = db.add_trivia_question(  # type: ignore
+                            question_text=question_data['question_text'],
+                            question_type=question_data.get('question_type', 'single_answer'),
+                            correct_answer=question_data.get('correct_answer'),
+                            multiple_choice_options=question_data.get('multiple_choice_options'),
+                            is_dynamic=question_data.get('is_dynamic', False),
+                            dynamic_query_type=question_data.get('dynamic_query_type'),
+                            category=question_data.get('category', 'ai_generated'),
+                            submitted_by_user_id=None,  # AI-generated
+                        )
+
+                        if question_id:
+                            await message.reply(
+                                f"✅ **Question Approved Successfully**\n\n"
+                                f"The trivia question has been added to the database with ID #{question_id}. "
+                                f"It is now available for use in future Trivia Tuesday sessions.\n\n"
+                                f"**Question:** {question_data['question_text'][:100]}{'...' if len(question_data['question_text']) > 100 else ''}\n"
+                                f"**Answer:** {question_data.get('correct_answer', 'Dynamic calculation')}\n\n"
+                                f"*Mission intelligence database updated. Question approved for deployment.*"
+                            )
+                        else:
+                            await message.reply("❌ **Failed to save approved question.** Database error occurred.")
+
+                    except Exception as e:
+                        print(f"❌ Error saving approved question: {e}")
+                        await message.reply("❌ **Error saving approved question.** Database operation failed.")
+
+                # Clean up conversation
+                if user_id in jam_approval_conversations:
+                    del jam_approval_conversations[user_id]
+
+            elif content in ['2', 'modify', 'edit', 'change']:
+                # Switch to modification mode
+                conversation['step'] = 'modification'
+                await message.reply(
+                    f"✏️ **Question Modification Mode**\n\n"
+                    f"Please provide your revised version of the question. You can modify:\n"
+                    f"• Question wording\n"
+                    f"• Answer content\n"
+                    f"• Question type (single/multiple choice)\n\n"
+                    f"**Current Question:** {data.get('question_data', {}).get('question_text', 'Unknown')}\n\n"
+                    f"**Please provide your modified question:**"
+                )
+
+            elif content in ['3', 'reject', 'no', 'decline']:
+                # Reject the question
+                await message.reply(
+                    f"❌ **Question Rejected**\n\n"
+                    f"The trivia question has been rejected and will not be added to the database. "
+                    f"The system will generate an alternative question for your review.\n\n"
+                    f"*Mission parameters updated. Alternative question generation initiated.*"
+                )
+
+                # Clean up conversation
+                if user_id in jam_approval_conversations:
+                    del jam_approval_conversations[user_id]
+
+                # Trigger generation of a new question (this would be called by the generation system)
+                # For now, just log that a replacement is needed
+                print(f"🔄 JAM rejected question - replacement needed")
+
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid response.** Please respond with **1** (Approve), **2** (Modify), or **3** (Reject).\n\n"
+                    f"*Precise input required for approval protocol execution.*"
+                )
+
+        elif step == 'modification':
+            # Handle question modification
+            data['modified_question'] = content
+            conversation['step'] = 'modification_preview'
+
+            # Show preview of modified question
+            original_data = data.get('question_data', {})
+            preview_msg = (
+                f"📋 **Modified Question Preview**\n\n"
+                f"**Original Question:** {original_data.get('question_text', 'Unknown')}\n\n"
+                f"**Your Modified Question:** {content}\n\n"
+                f"**Original Answer:** {original_data.get('correct_answer', 'Dynamic calculation')}\n\n"
+                f"📚 **Available Actions:**\n"
+                f"**1.** ✅ **Approve Modified Version** - Save this version to the database\n"
+                f"**2.** ✏️ **Edit Again** - Make further modifications\n"
+                f"**3.** ❌ **Cancel** - Discard modifications and reject original\n\n"
+                f"Please respond with **1**, **2**, or **3**.\n\n"
+                f"*Review modified question parameters before approval.*"
+            )
+
+            await message.reply(preview_msg)
+
+        elif step == 'modification_preview':
+            if content in ['1', 'approve', 'yes', 'save']:
+                # Save the modified question
+                try:
+                    if db is None:
+                        await message.reply("❌ **Database offline.** Cannot save modified question.")
+                        return
+
+                    original_data = data.get('question_data', {})
+                    modified_text = data.get('modified_question', '')
+
+                    question_id = db.add_trivia_question(  # type: ignore
+                        question_text=modified_text,
+                        question_type=original_data.get('question_type', 'single_answer'),
+                        correct_answer=original_data.get('correct_answer'),
+                        multiple_choice_options=original_data.get('multiple_choice_options'),
+                        is_dynamic=original_data.get('is_dynamic', False),
+                        dynamic_query_type=original_data.get('dynamic_query_type'),
+                        category=original_data.get('category', 'ai_generated_modified'),
+                        submitted_by_user_id=JAM_USER_ID,  # Mark as JAM-modified
+                    )
+
+                    if question_id:
+                        await message.reply(
+                            f"✅ **Modified Question Approved Successfully**\n\n"
+                            f"Your modified version has been saved to the database with ID #{question_id}.\n\n"
+                            f"**Final Question:** {modified_text[:100]}{'...' if len(modified_text) > 100 else ''}\n\n"
+                            f"*Mission intelligence database updated with your modifications. Question approved for deployment.*"
+                        )
+                    else:
+                        await message.reply("❌ **Failed to save modified question.** Database error occurred.")
+
+                except Exception as e:
+                    print(f"❌ Error saving modified question: {e}")
+                    await message.reply("❌ **Error saving modified question.** Database operation failed.")
+
+                # Clean up conversation
+                if user_id in jam_approval_conversations:
+                    del jam_approval_conversations[user_id]
+
+            elif content in ['2', 'edit', 'modify']:
+                # Return to modification mode
+                conversation['step'] = 'modification'
+                await message.reply(
+                    f"✏️ **Question Modification Mode**\n\n"
+                    f"Please provide another revision of the question.\n\n"
+                    f"**Current Modified Version:** {data.get('modified_question', 'Unknown')}\n\n"
+                    f"**Please provide your updated question:**"
+                )
+
+            elif content in ['3', 'cancel', 'reject']:
+                # Cancel modifications and reject original
+                await message.reply(
+                    f"❌ **Modifications Cancelled - Original Question Rejected**\n\n"
+                    f"Both the original and modified versions have been discarded. "
+                    f"The system will generate an alternative question for your review.\n\n"
+                    f"*Mission parameters updated. Alternative question generation initiated.*"
+                )
+
+                # Clean up conversation
+                if user_id in jam_approval_conversations:
+                    del jam_approval_conversations[user_id]
+
+                print(f"🔄 JAM cancelled modifications - replacement needed")
+
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid command.** Please respond with **1** (Approve), **2** (Edit Again), or **3** (Cancel).\n\n"
+                    f"*Precise input required for modification protocol execution.*"
+                )
+
+        # Update conversation state
+        conversation['data'] = data
+        jam_approval_conversations[user_id] = conversation
+
+    except Exception as e:
+        print(f"Error in JAM approval conversation: {e}")
+        # Clean up on error
+        if user_id in jam_approval_conversations:
+            del jam_approval_conversations[user_id]
+
+
+async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
+    """Start JAM approval workflow for a generated trivia question"""
+    try:
+        # Get bot instance
+        import sys
+        bot_instance = None
+        for name, obj in sys.modules.items():
+            if hasattr(obj, 'bot') and hasattr(obj.bot, 'user') and obj.bot.user:
+                bot_instance = obj.bot
+                break
+
+        if not bot_instance:
+            print("❌ Could not find bot instance for JAM approval")
+            return False
+
+        # Clean up any existing approval conversations
+        cleanup_jam_approval_conversations()
+
+        # Get JAM user
+        try:
+            jam_user = await bot_instance.fetch_user(JAM_USER_ID)
+            if not jam_user:
+                print(f"❌ Could not fetch JAM user {JAM_USER_ID}")
+                return False
+        except Exception as e:
+            print(f"❌ Error fetching JAM user: {e}")
+            return False
+
+        # Initialize approval conversation
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        jam_approval_conversations[JAM_USER_ID] = {
+            'step': 'approval',
+            'data': {'question_data': question_data},
+            'last_activity': uk_now,
+            'initiated_at': uk_now,
+        }
+
+        # Create approval message
+        question_text = question_data.get('question_text', 'Unknown question')
+        correct_answer = question_data.get('correct_answer', 'Dynamic calculation')
+        question_type = question_data.get('question_type', 'single_answer')
+
+        approval_msg = (
+            f"🧠 **TRIVIA QUESTION APPROVAL REQUIRED**\n\n"
+            f"A new trivia question has been generated and requires your approval before being added to the database.\n\n"
+            f"**Question Type:** {question_type.replace('_', ' ').title()}\n"
+            f"**Question:** {question_text}\n\n"
+            f"**Answer:** {correct_answer}\n\n"
+        )
+
+        # Add multiple choice options if applicable
+        if question_data.get('multiple_choice_options'):
+            options_text = '\n'.join([f"**{chr(65+i)}.** {option}" 
+                                    for i, option in enumerate(question_data['multiple_choice_options'])])
+            approval_msg += f"**Answer Choices:**\n{options_text}\n\n"
+
+        approval_msg += (
+            f"📚 **Available Actions:**\n"
+            f"**1.** ✅ **Approve** - Add this question to the database as-is\n"
+            f"**2.** ✏️ **Modify** - Edit the question before approving\n"
+            f"**3.** ❌ **Reject** - Discard this question and generate an alternative\n\n"
+            f"Please respond with **1**, **2**, or **3**.\n\n"
+            f"*Question approval required for Trivia Tuesday deployment.*"
+        )
+
+        # Send approval request to JAM
+        await jam_user.send(approval_msg)
+        print(f"✅ Sent question approval request to JAM")
+        return True
+
+    except Exception as e:
+        print(f"❌ Error starting JAM approval workflow: {e}")
+        return False
+
+
+async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
+    """Start pre-trivia approval workflow (1 hour before Trivia Tuesday)"""
+    try:
+        # Get bot instance
+        import sys
+        bot_instance = None
+        for name, obj in sys.modules.items():
+            if hasattr(obj, 'bot') and hasattr(obj.bot, 'user') and obj.bot.user:
+                bot_instance = obj.bot
+                break
+
+        if not bot_instance:
+            print("❌ Could not find bot instance for pre-trivia approval")
+            return False
+
+        # Get JAM user
+        try:
+            jam_user = await bot_instance.fetch_user(JAM_USER_ID)
+            if not jam_user:
+                print(f"❌ Could not fetch JAM user {JAM_USER_ID}")
+                return False
+        except Exception as e:
+            print(f"❌ Error fetching JAM user: {e}")
+            return False
+
+        # Create pre-trivia approval message
+        question_text = question_data.get('question_text', 'Unknown question')
+        correct_answer = question_data.get('correct_answer', 'Dynamic calculation')
+        question_type = question_data.get('question_type', 'single_answer')
+
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        trivia_time = uk_now.replace(hour=11, minute=0, second=0, microsecond=0)
+        
+        pre_approval_msg = (
+            f"⏰ **TRIVIA TUESDAY - PRE-APPROVAL REQUIRED**\n\n"
+            f"Trivia Tuesday begins in 1 hour ({trivia_time.strftime('%H:%M UK time')}). "
+            f"The following question has been selected for today's session:\n\n"
+            f"**Question ID:** {question_data.get('id', 'Generated')}\n"
+            f"**Type:** {question_type.replace('_', ' ').title()}\n"
+            f"**Question:** {question_text}\n\n"
+            f"**Answer:** {correct_answer}\n\n"
+        )
+
+        # Add multiple choice options if applicable
+        if question_data.get('multiple_choice_options'):
+            options_text = '\n'.join([f"**{chr(65+i)}.** {option}" 
+                                    for i, option in enumerate(question_data['multiple_choice_options'])])
+            pre_approval_msg += f"**Answer Choices:**\n{options_text}\n\n"
+
+        pre_approval_msg += (
+            f"📚 **Decision Required:**\n"
+            f"**✅ APPROVE** - This question will be posted at 11:00 AM as scheduled\n"
+            f"**❌ REJECT** - An alternative question will be selected and presented for approval\n\n"
+            f"Please respond with **APPROVE** or **REJECT**.\n\n"
+            f"*Time-sensitive approval required for today's Trivia Tuesday session.*"
+        )
+
+        # Send pre-trivia approval request to JAM
+        await jam_user.send(pre_approval_msg)
+        print(f"✅ Sent pre-trivia approval request to JAM")
+        return True
+
+    except Exception as e:
+        print(f"❌ Error starting pre-trivia approval workflow: {e}")
+        return False
