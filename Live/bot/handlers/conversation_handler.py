@@ -1105,31 +1105,71 @@ async def handle_jam_approval_conversation(message):
 
 
 async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
-    """Start JAM approval workflow for a generated trivia question"""
+    """Start JAM approval workflow for a generated trivia question with enhanced reliability"""
     try:
-        # Get bot instance
-        import sys
+        print(f"🚀 Starting JAM approval workflow for question: {question_data.get('question_text', 'Unknown')[:50]}...")
+        
+        # Get bot instance with enhanced detection
         bot_instance = None
-        for name, obj in sys.modules.items():
-            if hasattr(obj, 'bot') and hasattr(obj.bot, 'user') and obj.bot.user:
-                bot_instance = obj.bot
-                break
-
+        import sys
+        
+        # Strategy 1: Search through all modules for bot instance
+        modules_copy = dict(sys.modules)  # Create a copy to avoid iteration issues
+        for name, obj in modules_copy.items():
+            if hasattr(obj, 'bot') and hasattr(obj.bot, 'user'):
+                try:
+                    if obj.bot.user:  # Check if bot is actually logged in
+                        bot_instance = obj.bot
+                        print(f"✅ Found bot instance in module: {name}")
+                        break
+                except Exception:
+                    continue
+        
+        # Strategy 2: Direct import fallback
+        if not bot_instance:
+            try:
+                from ..main import bot as main_bot
+                if main_bot and hasattr(main_bot, 'user') and main_bot.user:
+                    bot_instance = main_bot
+                    print("✅ Bot instance imported from main module")
+                else:
+                    print("⚠️ Main bot instance not ready (user not logged in)")
+            except ImportError as e:
+                print(f"⚠️ Could not import bot from main: {e}")
+        
         if not bot_instance:
             print("❌ Could not find bot instance for JAM approval")
             return False
 
         # Clean up any existing approval conversations
-        cleanup_jam_approval_conversations()
-
-        # Get JAM user
         try:
-            jam_user = await bot_instance.fetch_user(JAM_USER_ID)
-            if not jam_user:
-                print(f"❌ Could not fetch JAM user {JAM_USER_ID}")
-                return False
-        except Exception as e:
-            print(f"❌ Error fetching JAM user: {e}")
+            cleanup_jam_approval_conversations()
+            print("✅ Cleaned up existing JAM approval conversations")
+        except Exception as cleanup_e:
+            print(f"⚠️ Error during cleanup: {cleanup_e}")
+
+        # Get JAM user with retry logic
+        jam_user = None
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                print(f"🔍 Attempting to fetch JAM user {JAM_USER_ID} (attempt {attempt + 1}/{max_attempts})")
+                jam_user = await bot_instance.fetch_user(JAM_USER_ID)
+                if jam_user:
+                    print(f"✅ Successfully fetched JAM user: {jam_user.name}#{jam_user.discriminator}")
+                    break
+                else:
+                    print(f"⚠️ Fetch returned None for JAM user {JAM_USER_ID}")
+            except Exception as e:
+                print(f"⚠️ Error fetching JAM user (attempt {attempt + 1}): {e}")
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(2)  # Wait before retry
+                else:
+                    print(f"❌ Failed to fetch JAM user after {max_attempts} attempts")
+                    return False
+
+        if not jam_user:
+            print(f"❌ Could not fetch JAM user {JAM_USER_ID} after all attempts")
             return False
 
         # Initialize approval conversation
@@ -1140,25 +1180,32 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
             'last_activity': uk_now,
             'initiated_at': uk_now,
         }
+        print("✅ Initialized JAM approval conversation state")
 
-        # Create approval message
+        # Create approval message with enhanced formatting
         question_text = question_data.get('question_text', 'Unknown question')
         correct_answer = question_data.get('correct_answer', 'Dynamic calculation')
         question_type = question_data.get('question_type', 'single_answer')
+        category = question_data.get('category', 'ai_generated')
 
         approval_msg = (
             f"🧠 **TRIVIA QUESTION APPROVAL REQUIRED**\n\n"
             f"A new trivia question has been generated and requires your approval before being added to the database.\n\n"
             f"**Question Type:** {question_type.replace('_', ' ').title()}\n"
+            f"**Category:** {category.replace('_', ' ').title()}\n"
             f"**Question:** {question_text}\n\n"
             f"**Answer:** {correct_answer}\n\n"
         )
 
         # Add multiple choice options if applicable
-        if question_data.get('multiple_choice_options'):
+        if question_data.get('multiple_choice_options') and question_data.get('question_type') == 'multiple_choice':
             options_text = '\n'.join([f"**{chr(65+i)}.** {option}" 
                                     for i, option in enumerate(question_data['multiple_choice_options'])])
             approval_msg += f"**Answer Choices:**\n{options_text}\n\n"
+
+        # Add dynamic question info if applicable
+        if question_data.get('is_dynamic'):
+            approval_msg += f"**Note:** This is a dynamic question - the answer will be calculated from the gaming database when used.\n\n"
 
         approval_msg += (
             f"📚 **Available Actions:**\n"
@@ -1169,13 +1216,56 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
             f"*Question approval required for Trivia Tuesday deployment.*"
         )
 
-        # Send approval request to JAM
-        await jam_user.send(approval_msg)
-        print(f"✅ Sent question approval request to JAM")
-        return True
+        # Send approval request to JAM with retry logic
+        message_sent = False
+        max_send_attempts = 3
+        for attempt in range(max_send_attempts):
+            try:
+                print(f"📤 Attempting to send approval message to JAM (attempt {attempt + 1}/{max_send_attempts})")
+                await jam_user.send(approval_msg)
+                message_sent = True
+                print(f"✅ Successfully sent question approval request to JAM")
+                break
+            except discord.Forbidden:
+                print(f"❌ JAM has DMs disabled or blocked the bot")
+                return False
+            except discord.HTTPException as e:
+                print(f"⚠️ HTTP error sending message (attempt {attempt + 1}): {e}")
+                if attempt < max_send_attempts - 1:
+                    await asyncio.sleep(2)  # Wait before retry
+                else:
+                    print(f"❌ Failed to send message after {max_send_attempts} attempts")
+                    return False
+            except Exception as e:
+                print(f"⚠️ Unexpected error sending message (attempt {attempt + 1}): {e}")
+                if attempt < max_send_attempts - 1:
+                    await asyncio.sleep(2)  # Wait before retry
+                else:
+                    print(f"❌ Failed to send message due to unexpected error: {e}")
+                    return False
+
+        if message_sent:
+            print("✅ JAM approval workflow started successfully")
+            return True
+        else:
+            print("❌ Failed to send approval message to JAM")
+            # Clean up conversation state if message failed
+            if JAM_USER_ID in jam_approval_conversations:
+                del jam_approval_conversations[JAM_USER_ID]
+            return False
 
     except Exception as e:
-        print(f"❌ Error starting JAM approval workflow: {e}")
+        print(f"❌ Critical error in JAM approval workflow: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Clean up conversation state on critical error
+        try:
+            if JAM_USER_ID in jam_approval_conversations:
+                del jam_approval_conversations[JAM_USER_ID]
+        except:
+            pass
+        
         return False
 
 

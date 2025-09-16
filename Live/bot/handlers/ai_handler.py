@@ -150,6 +150,11 @@ def determine_request_priority(
     prompt_lower = prompt.lower()
     context_lower = context.lower()
 
+    # Startup priority: Bypass all rate limiting for critical startup tasks
+    startup_contexts = ["startup", "validation", "bootstrap", "initialization"]
+    if any(keyword in context_lower for keyword in startup_contexts):
+        return "startup"
+
     # Low priority: Auto-actions, background tasks, announcements (check first
     # for efficiency)
     low_priority_contexts = ["auto", "background", "scheduled", "announcement"]
@@ -204,6 +209,11 @@ def get_progressive_penalty_duration(consecutive_errors: int) -> int:
 def check_rate_limits(priority: str = "medium") -> Tuple[bool, str]:
     """Check if we can make an AI request without hitting rate limits with priority support"""
     global ai_usage_stats
+
+    # Startup priority bypasses ALL rate limiting
+    if priority == "startup":
+        print(f"🔥 STARTUP priority request - bypassing all rate limits")
+        return True, "OK"
 
     # Reset counters if needed
     reset_daily_usage()
@@ -723,9 +733,132 @@ def setup_ai_provider(
         return False
 
 
-async def generate_ai_trivia_question() -> Optional[Dict[str, Any]]:
+def robust_json_parse(response_text: str) -> Optional[Dict[str, Any]]:
+    """Robustly parse JSON from AI response with multiple fallback strategies"""
+    if not response_text or not response_text.strip():
+        return None
+    
+    original_text = response_text
+    print(f"🔍 Raw AI response length: {len(response_text)} chars")
+    
+    # Strategy 1: Basic cleanup and parse
+    try:
+        # Remove common markdown formatting
+        cleaned = response_text.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        elif cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+        
+        print(f"🔍 After basic cleanup: {len(cleaned)} chars")
+        result = json.loads(cleaned)
+        print("✅ Strategy 1 (basic cleanup) successful")
+        return result
+    except json.JSONDecodeError as e:
+        print(f"⚠️ Strategy 1 failed: {e}")
+    
+    # Strategy 2: Find JSON block in response
+    try:
+        # Look for { ... } block
+        start_idx = response_text.find('{')
+        if start_idx == -1:
+            print("⚠️ Strategy 2: No opening brace found")
+            return None
+            
+        # Find matching closing brace
+        brace_count = 0
+        end_idx = -1
+        for i in range(start_idx, len(response_text)):
+            if response_text[i] == '{':
+                brace_count += 1
+            elif response_text[i] == '}':
+                brace_count -= 1
+                if brace_count == 0:
+                    end_idx = i
+                    break
+        
+        if end_idx == -1:
+            print("⚠️ Strategy 2: No matching closing brace found")
+            return None
+            
+        json_block = response_text[start_idx:end_idx + 1]
+        print(f"🔍 Strategy 2 extracted JSON block: {len(json_block)} chars")
+        result = json.loads(json_block)
+        print("✅ Strategy 2 (JSON block extraction) successful")
+        return result
+    except json.JSONDecodeError as e:
+        print(f"⚠️ Strategy 2 failed: {e}")
+    
+    # Strategy 3: Line-by-line reconstruction
+    try:
+        lines = response_text.split('\n')
+        json_lines = []
+        in_json = False
+        
+        for line in lines:
+            line = line.strip()
+            if line.startswith('{') or ('"' in line and ':' in line):
+                in_json = True
+            if in_json:
+                json_lines.append(line)
+            if line.endswith('}') and in_json:
+                break
+        
+        if json_lines:
+            reconstructed = '\n'.join(json_lines)
+            print(f"🔍 Strategy 3 reconstructed: {len(reconstructed)} chars")
+            result = json.loads(reconstructed)
+            print("✅ Strategy 3 (line reconstruction) successful")
+            return result
+    except json.JSONDecodeError as e:
+        print(f"⚠️ Strategy 3 failed: {e}")
+    
+    # Strategy 4: Character-by-character cleaning
+    try:
+        # Remove all non-JSON characters before first {
+        start_idx = response_text.find('{')
+        if start_idx > 0:
+            response_text = response_text[start_idx:]
+        
+        # Remove all non-JSON characters after last }
+        end_idx = response_text.rfind('}')
+        if end_idx != -1 and end_idx < len(response_text) - 1:
+            response_text = response_text[:end_idx + 1]
+        
+        # Fix common JSON issues
+        cleaned = response_text
+        
+        # Fix single quotes to double quotes (but be careful with content)
+        # Only fix quotes around keys and simple string values
+        import re
+        cleaned = re.sub(r"'(\w+)':", r'"\1":', cleaned)  # 'key': -> "key":
+        cleaned = re.sub(r':\s*\'([^\']*?)\'', r': "\1"', cleaned)  # : 'value' -> : "value"
+        
+        # Fix trailing commas
+        cleaned = re.sub(r',\s*}', '}', cleaned)
+        cleaned = re.sub(r',\s*]', ']', cleaned)
+        
+        print(f"🔍 Strategy 4 cleaned: {len(cleaned)} chars")
+        result = json.loads(cleaned)
+        print("✅ Strategy 4 (character cleaning) successful")
+        return result
+    except json.JSONDecodeError as e:
+        print(f"⚠️ Strategy 4 failed: {e}")
+    
+    # All strategies failed
+    print(f"❌ All JSON parsing strategies failed for response:")
+    print(f"   First 200 chars: {original_text[:200]}...")
+    print(f"   Last 200 chars: ...{original_text[-200:]}")
+    return None
+
+
+async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[str, Any]]:
     """Generate a trivia question using AI based on gaming database statistics"""
     if not ai_enabled:
+        print("❌ AI not enabled for trivia question generation")
         return None
 
     # Check if database is available
@@ -752,8 +885,10 @@ async def generate_ai_trivia_question() -> Optional[Dict[str, Any]]:
 
             game_context = f"Sample games from database: {'; '.join(game_list[:5])}"
 
-        # Create AI prompt for trivia question generation
-        prompt = f"""You have FULL ACCESS to Captain Jonesy's comprehensive gaming database including complete playtime statistics, episode counts, completion data, and all game metadata. Generate a trivia question based on this data:
+        # Create AI prompt for trivia question generation with enhanced JSON instructions
+        prompt = f"""CRITICAL: Return ONLY valid JSON. No extra text, explanations, or markdown formatting.
+
+You have FULL ACCESS to Captain Jonesy's comprehensive gaming database. Generate a trivia question based on this data:
 
 DATABASE ACCESS CONFIRMATION:
 - ✅ Total playtime minutes for ALL games
@@ -776,46 +911,62 @@ Focus on interesting facts like:
 - Completion patterns and gaming preferences
 - Statistical comparisons and rankings
 
-Return JSON format:
+RETURN ONLY THIS JSON FORMAT (no backticks, no extra text):
 {{
     "question_text": "Your question here",
-    "question_type": "single_answer" or "multiple_choice",  
+    "question_type": "single_answer",
     "correct_answer": "The answer",
-    "multiple_choice_options": ["A option", "B option", "C option", "D option"] (if multiple choice),
+    "multiple_choice_options": ["A option", "B option", "C option", "D option"],
     "is_dynamic": false,
-    "category": "statistics" or "games" or "series"
+    "category": "statistics"
 }}
 
-You have complete database access - use ALL available data to create challenging questions."""
+IMPORTANT: 
+- Use "single_answer" or "multiple_choice" for question_type
+- Include multiple_choice_options array ONLY if question_type is "multiple_choice"
+- Category should be "statistics", "games", or "series"
+- Return ONLY the JSON object, nothing else"""
 
-        # Call AI with rate limiting
-        response_text, status_message = await call_ai_with_rate_limiting(prompt, JONESY_USER_ID)
+        # Call AI with appropriate context and rate limiting
+        print(f"🧠 Generating trivia question with context: {context}")
+        response_text, status_message = await call_ai_with_rate_limiting(prompt, JONESY_USER_ID, context)
 
         if response_text:
-            try:
-                # Clean up response
-                if response_text.startswith("```json"):
-                    response_text = response_text[7:]
-                if response_text.startswith("```"):
-                    response_text = response_text[3:]
-                if response_text.endswith("```"):
-                    response_text = response_text[:-3]
-
-                ai_question = json.loads(response_text.strip())
-
+            print(f"✅ AI response received: {len(response_text)} characters")
+            
+            # Use robust JSON parsing
+            ai_question = robust_json_parse(response_text)
+            
+            if ai_question:
                 # Validate required fields
-                if all(
-                    key in ai_question for key in [
-                        "question_text",
-                        "question_type",
-                        "correct_answer"]):
+                required_fields = ["question_text", "question_type", "correct_answer"]
+                if all(key in ai_question for key in required_fields):
+                    # Validate question_type
+                    if ai_question["question_type"] not in ["single_answer", "multiple_choice"]:
+                        print(f"⚠️ Invalid question_type: {ai_question['question_type']}, defaulting to single_answer")
+                        ai_question["question_type"] = "single_answer"
+                    
+                    # Ensure required fields for multiple choice
+                    if ai_question["question_type"] == "multiple_choice":
+                        if "multiple_choice_options" not in ai_question or not ai_question["multiple_choice_options"]:
+                            print("⚠️ Multiple choice question missing options, converting to single answer")
+                            ai_question["question_type"] = "single_answer"
+                            ai_question["multiple_choice_options"] = None
+                    
+                    # Set defaults for optional fields
+                    if "is_dynamic" not in ai_question:
+                        ai_question["is_dynamic"] = False
+                    if "category" not in ai_question:
+                        ai_question["category"] = "ai_generated"
+                    
+                    print(f"✅ Valid trivia question generated: {ai_question['question_text'][:50]}...")
                     return ai_question
                 else:
-                    print("❌ AI question missing required fields")
+                    missing_fields = [field for field in required_fields if field not in ai_question]
+                    print(f"❌ AI question missing required fields: {missing_fields}")
                     return None
-
-            except json.JSONDecodeError as e:
-                print(f"❌ Failed to parse AI trivia question: {e}")
+            else:
+                print("❌ Failed to parse AI response as valid JSON")
                 return None
         else:
             print(f"❌ AI trivia question generation failed: {status_message}")
@@ -823,6 +974,8 @@ You have complete database access - use ALL available data to create challenging
 
     except Exception as e:
         print(f"❌ Error generating AI trivia question: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
