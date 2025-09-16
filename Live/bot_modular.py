@@ -380,10 +380,14 @@ async def initialize_modular_components():
 
     # 5. Start Scheduled Tasks
     try:
-        from bot.tasks.scheduled import start_all_scheduled_tasks
+        from bot.tasks.scheduled import start_all_scheduled_tasks, validate_startup_trivia_questions
         start_all_scheduled_tasks()
-        status_report["scheduled_tasks"] = True
         print("✅ Scheduled tasks started successfully")
+        
+        # Validate trivia questions on startup
+        await validate_startup_trivia_questions()
+        
+        status_report["scheduled_tasks"] = True
 
     except Exception as e:
         status_report["errors"].append(f"Scheduled Tasks: {e}")

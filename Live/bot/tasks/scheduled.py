@@ -21,16 +21,26 @@ from discord.ext import tasks
 from ..config import GUILD_ID, MEMBERS_CHANNEL_ID
 
 # Database and config imports
-from ..database import get_database
+try:
+    from ..database import get_database
+    # Get database instance
+    db = get_database()  # type: ignore
+    print("✅ Scheduled tasks: Database connection established")
+except Exception as db_error:
+    print(f"⚠️ Scheduled tasks: Database not available - {db_error}")
+    db = None
 
 # Import integrations
-from ..integrations.youtube import execute_youtube_auto_post
+try:
+    from ..integrations.youtube import execute_youtube_auto_post
+except ImportError:
+    print("⚠️ YouTube integration not available for scheduled tasks")
+    async def execute_youtube_auto_post(*args, **kwargs):
+        print("⚠️ YouTube auto-post not available - integration not loaded")
+        return None
 
 # Global state for trivia
 active_trivia_sessions = {}
-
-# Get database instance
-db = get_database()  # type: ignore
 
 
 @tasks.loop(time=time(12, 0))  # Run at 12:00 PM (midday) every day
@@ -1072,60 +1082,98 @@ def stop_all_scheduled_tasks():
 
 async def validate_startup_trivia_questions():
     """Check that there are at least 5 active questions available on startup"""
+    print("🧠 STARTUP TRIVIA VALIDATION: Starting validation process...")
+    
     try:
         if db is None:
-            print("❌ Database not available for startup trivia validation")
+            print("❌ STARTUP TRIVIA VALIDATION: Database not available")
             return
 
+        print("✅ STARTUP TRIVIA VALIDATION: Database connection confirmed")
+
+        # Check if required database methods exist
+        if not hasattr(db, 'get_available_trivia_questions'):
+            print("❌ STARTUP TRIVIA VALIDATION: Database missing get_available_trivia_questions method")
+            return
+
+        print("✅ STARTUP TRIVIA VALIDATION: Database methods verified")
+
         # Check for available questions
-        available_questions = db.get_available_trivia_questions()  # type: ignore
-        question_count = len(available_questions) if available_questions else 0
-        
-        print(f"🧠 Startup trivia validation: {question_count} available questions found")
+        try:
+            available_questions = db.get_available_trivia_questions()  # type: ignore
+            question_count = len(available_questions) if available_questions else 0
+            
+            print(f"🧠 STARTUP TRIVIA VALIDATION: {question_count} available questions found in database")
+            
+            if available_questions:
+                for i, q in enumerate(available_questions[:3]):  # Show first 3 for confirmation
+                    print(f"   📋 Question {i+1}: {q.get('question_text', q.get('question', 'Unknown'))[:50]}...")
+            
+        except Exception as db_error:
+            print(f"❌ STARTUP TRIVIA VALIDATION: Database query failed - {db_error}")
+            return
         
         # If we have at least 5 questions, we're good
         if question_count >= 5:
-            print("✅ Sufficient trivia questions available")
+            print(f"✅ STARTUP TRIVIA VALIDATION: Sufficient questions available ({question_count}/5)")
             return
 
         # Need to generate more questions
         questions_needed = 5 - question_count
-        print(f"🔄 Need to generate {questions_needed} additional trivia questions")
+        print(f"🔄 STARTUP TRIVIA VALIDATION: Need to generate {questions_needed} additional questions")
+
+        # Check if AI handler is available
+        try:
+            from ..handlers.ai_handler import generate_ai_trivia_question
+            from ..handlers.conversation_handler import start_jam_question_approval
+            print("✅ STARTUP TRIVIA VALIDATION: AI handler and conversation handler loaded")
+        except ImportError as import_error:
+            print(f"❌ STARTUP TRIVIA VALIDATION: Failed to import required modules - {import_error}")
+            return
 
         # Generate questions one by one and send for JAM approval
-        from ..handlers.ai_handler import generate_ai_trivia_question
-        from ..handlers.conversation_handler import start_jam_question_approval
-
+        successful_generations = 0
         for i in range(questions_needed):
             try:
-                print(f"🔄 Generating trivia question {i+1}/{questions_needed}")
+                print(f"🔄 STARTUP TRIVIA VALIDATION: Generating question {i+1}/{questions_needed}")
                 
                 # Generate AI question
                 question_data = await generate_ai_trivia_question()
                 
                 if question_data:
-                    print(f"✅ Generated question {i+1}: {question_data.get('question_text', '')[:50]}...")
+                    question_text = question_data.get('question_text', question_data.get('question', 'Unknown'))
+                    print(f"✅ STARTUP TRIVIA VALIDATION: Generated question {i+1}: {question_text[:50]}...")
                     
                     # Send to JAM for approval
                     approval_sent = await start_jam_question_approval(question_data)
                     
                     if approval_sent:
-                        print(f"✅ Question {i+1} sent to JAM for approval")
+                        print(f"✅ STARTUP TRIVIA VALIDATION: Question {i+1} sent to JAM for approval")
+                        successful_generations += 1
                     else:
-                        print(f"⚠️ Failed to send question {i+1} for approval")
+                        print(f"⚠️ STARTUP TRIVIA VALIDATION: Failed to send question {i+1} for approval")
                         
                     # Small delay between questions to avoid overwhelming JAM
                     import asyncio
                     await asyncio.sleep(2)
                     
                 else:
-                    print(f"❌ Failed to generate question {i+1}")
+                    print(f"❌ STARTUP TRIVIA VALIDATION: Failed to generate question {i+1}")
                     
-            except Exception as e:
-                print(f"❌ Error generating question {i+1}: {e}")
+            except Exception as generation_error:
+                print(f"❌ STARTUP TRIVIA VALIDATION: Error generating question {i+1}: {generation_error}")
+                import traceback
+                traceback.print_exc()
                 continue
 
-        print(f"🧠 Startup trivia generation complete - sent {questions_needed} questions for JAM approval")
+        print(f"🧠 STARTUP TRIVIA VALIDATION: Complete - generated {successful_generations}/{questions_needed} questions")
+        
+        if successful_generations > 0:
+            print(f"📬 STARTUP TRIVIA VALIDATION: JAM should receive {successful_generations} DM(s) for question approval")
+        else:
+            print("⚠️ STARTUP TRIVIA VALIDATION: No questions were successfully generated or sent for approval")
 
     except Exception as e:
-        print(f"❌ Error in startup trivia validation: {e}")
+        print(f"❌ STARTUP TRIVIA VALIDATION: Critical error - {e}")
+        import traceback
+        traceback.print_exc()
