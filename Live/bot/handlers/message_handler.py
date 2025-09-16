@@ -232,10 +232,10 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"what's the total time for (.+?)[\?\.]?$"
         ],
         "recommendation": [
-            r"is\s+(.+?)\s+recommended[\?\.]?$",
-            r"has\s+(.+?)\s+been\s+recommended[\?\.]?$",
-            r"who\s+recommended\s+(.+?)[\?\.]?$",
-            r"what.*recommend.*(.+?)[\?\.]?$"
+            r"^is\s+(.+?)\s+recommended[\?\.]?$",  # Must be at start of message
+            r"^has\s+(.+?)\s+been\s+recommended[\?\.]?$",  # Must be at start of message
+            r"^who\s+recommended\s+(.+?)[\?\.]?$",  # Must be at start of message
+            r"^what\s+(?:games?\s+)?(?:do\s+you\s+|would\s+you\s+|should\s+i\s+)?recommend\s+(.+?)[\?\.]?$"  # More specific pattern
         ],
         "youtube_views": [
             r"what\s+game\s+has\s+gotten.*most\s+views",

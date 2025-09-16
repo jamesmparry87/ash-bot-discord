@@ -613,22 +613,37 @@ async def on_message(message):
         # For guild messages, commands were already handled above, so nothing more to do
         return
 
+    # Check if this is a moderator channel
+    is_mod_channel = False
+    if not is_dm and hasattr(message.channel, 'id'):
+        is_mod_channel = await is_moderator_channel(message.channel.id)
+
     try:
         # Handle strikes in violation channel (guild messages only)
         if not is_dm and await message_handler_functions['handle_strike_detection'](message, bot):
             return
 
-        # Handle pineapple pizza enforcement
-        if await message_handler_functions['handle_pineapple_pizza_enforcement'](message):
-            return
+        # Handle pineapple pizza enforcement (skip in mod channels unless directly mentioned)
+        if not is_mod_channel or is_mentioned or message.content.lower().startswith('ash'):
+            if await message_handler_functions['handle_pineapple_pizza_enforcement'](message):
+                return
 
         # Determine if we should process this message for queries/conversation
-        should_process_query = (
-            is_dm or  # All DMs get processed
-            is_mentioned or  # Explicit mentions
-            message.content.lower().startswith('ash') or  # "ash" prefix
-            is_implicit_game_query  # Implicit game queries like "Has Jonesy played Gears of War?"
-        )
+        if is_mod_channel:
+            # In mod channels, only process direct mentions/interactions
+            should_process_query = (
+                is_mentioned or  # Direct @Ash mentions
+                message.content.lower().startswith('ash')  # "ash" prefix
+            )
+            print(f"🔧 Mod channel detected - limiting to direct mentions only")
+        else:
+            # Normal processing for non-mod channels
+            should_process_query = (
+                is_dm or  # All DMs get processed
+                is_mentioned or  # Explicit mentions
+                message.content.lower().startswith('ash') or  # "ash" prefix
+                is_implicit_game_query  # Implicit game queries like "Has Jonesy played Gears of War?"
+            )
 
         if should_process_query:
             content = message.content
@@ -1066,11 +1081,37 @@ Respond to: {content}"""
         await message.reply("System anomaly detected. Diagnostic protocols engaged. Please retry your request.")
 
 
+def is_casual_conversation_not_query(content: str) -> bool:
+    """Detect if a message is casual conversation/narrative rather than a query"""
+    content_lower = content.lower()
+    
+    # Patterns that indicate the message is describing past events or casual conversation
+    casual_conversation_patterns = [
+        r"and then",  # "and then someone recommends"
+        r"someone (?:said|says|recommends?|suggested?)",  # "someone recommends Portal"
+        r"(?:he|she|they) (?:said|says|recommends?|suggested?)",  # "she said..."
+        r"the fact that",  # "the fact that Jam says"
+        r"jam says",  # "Jam says remember what games"
+        r"remember (?:when|that|what)",  # "remember what games"
+        r"i (?:was|am) (?:telling|talking about)",  # "I was telling someone"
+        r"we were (?:discussing|talking about)",  # "we were discussing"
+        r"yesterday (?:someone|he|she|they)",  # "yesterday someone said"
+        r"earlier (?:someone|he|she|they)",  # "earlier they mentioned"
+        r"(?:mentioned|talked about|discussed) (?:that|how|what)",  # "mentioned that..."
+    ]
+    
+    return any(re.search(pattern, content_lower) for pattern in casual_conversation_patterns)
+
+
 def detect_implicit_game_query(content: str) -> bool:
     """Detect if a message is likely a game-related query even without explicit bot mention"""
     content_lower = content.lower()
 
-    # Game query patterns
+    # First check if this is casual conversation rather than a query
+    if is_casual_conversation_not_query(content):
+        return False
+
+    # Game query patterns - Made more specific to avoid false positives on casual conversation
     game_query_patterns = [
         r"has\s+jonesy\s+played",
         r"did\s+jonesy\s+play",
@@ -1083,9 +1124,10 @@ def detect_implicit_game_query(content: str) -> bool:
         r"what.*game.*most.*playtime",
         r"which.*game.*most.*episodes",
         r"what.*game.*longest.*complete",
-        r"is\s+.+\s+recommended",
-        r"who\s+recommended\s+.+",
-        r"what.*recommend.*",
+        # More specific recommendation patterns to avoid casual conversation
+        r"^is\s+.+\s+recommended\s*[\?\.]?$",  # Must be at start and end of message
+        r"^who\s+recommended\s+.+[\?\.]?$",   # Must be at start and end of message
+        r"^what\s+(games?\s+)?(?:do\s+you\s+|would\s+you\s+|should\s+i\s+)?recommend", # Direct recommendation requests only
         r"jonesy.*gaming\s+(history|database|archive)",
     ]
 
