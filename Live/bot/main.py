@@ -282,6 +282,27 @@ async def on_message(message):
             process_gaming_query_with_context,
         )
 
+        # Check if this is a moderator channel and if bot was mentioned
+        is_mod_channel = message.guild and message.channel.id in [
+            869530924302344233,  # Discord Mods
+            1213488470798893107,  # Newt Mods  
+            1280085269600669706,  # Twitch Mods
+            1393987338329260202  # The Airlock
+        ]
+        
+        # In mod channels, only respond to direct @mentions of the bot (except for strike detection and DM conversations)
+        if is_mod_channel and bot.user not in message.mentions:
+            # Still allow strike detection to work
+            if await handle_strike_detection(message, bot):
+                return  # Strike was processed, don't continue
+            
+            # Process commands but skip all other responses
+            await bot.process_commands(message)
+            return
+        
+        # Check if bot was mentioned in mod channel but continue processing
+        bot_mentioned_in_mod = is_mod_channel and bot.user in message.mentions
+
         # Handle strike detection in violation channel
         if await handle_strike_detection(message, bot):
             return  # Strike was processed, don't continue

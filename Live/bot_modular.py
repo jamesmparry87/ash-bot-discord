@@ -394,7 +394,7 @@ async def initialize_modular_components():
             
             if not main_module_running:
                 # Schedule validation to run 2 minutes after startup (non-blocking)
-                schedule_delayed_trivia_validation() # type: ignore
+                asyncio.create_task(schedule_delayed_trivia_validation())
                 print("✅ Delayed trivia validation scheduled for 2 minutes after startup (non-blocking)")
             else:
                 print("⚠️ Skipping trivia validation - will be handled by bot/main.py to prevent duplication")

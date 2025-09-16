@@ -441,33 +441,49 @@ def should_use_context(content: str) -> bool:
     """
     Determine if a query should use conversation context.
     Returns True for ambiguous queries that likely need context resolution.
+    Now more specific to gaming contexts to avoid false positives.
     """
     content_lower = content.lower()
 
-    # Ambiguous pronouns that need context
+    # First check for gaming-specific ambiguous pronouns that need context
     ambiguous_patterns = [
-        r'\bit\b',
-        r'\bshe\b',
-        r'\bher\b',
+        r'\bit\b.*\b(game|play|hours|minutes|episode|complete|finish)',  # "it" near gaming terms
+        r'\b(game|play|hours|minutes|episode|complete|finish).*\bit\b',  # gaming terms near "it"
+        r'\bshe\b.*\b(game|play|played|hours|minutes|episode|complete|finish)',  # "she" near gaming terms
+        r'\b(game|play|played|hours|minutes|episode|complete|finish).*\bshe\b',  # gaming terms near "she"
+        r'\bher\b.*\b(game|play|played|hours|minutes|episode|complete|finish)',  # "her" near gaming terms  
+        r'\b(game|play|played|hours|minutes|episode|complete|finish).*\bher\b',  # gaming terms near "her"
         r'\bthat\s+(game|one|series)\b',
-        r'\bthe\s+game\b',
+        r'\bthe\s+game\b(?!\s+(is|was|will be|take))',  # "the game" but not "the game is/was/will be/take"
         r'\bthose\s+games\b'
     ]
 
-    for pattern in ambiguous_patterns:
-        if re.search(pattern, content_lower):
-            return True
+    # Check if any ambiguous patterns match
+    has_ambiguous_pronouns = any(re.search(pattern, content_lower) for pattern in ambiguous_patterns)
+    
+    if has_ambiguous_pronouns:
+        return True
 
-    # Short follow-up questions
-    if len(content.split()) <= 6:
-        follow_up_starters = [
-            'how long', 'how much', 'what about', 'tell me',
-            'did she', 'has she', 'when did', 'where did',
-            'how many', 'which one'
+    # Gaming-specific short follow-up questions that imply missing context
+    if len(content.split()) <= 8:  # Short questions that might need context
+        # These patterns indicate follow-up questions that need pronoun/context resolution
+        gaming_follow_up_patterns = [
+            r'^how long did (she|her)',  # "how long did she..." 
+            r'^how much time did (she|her)',  # "how much time did she..."
+            r'^what about her\b',  # "what about her"
+            r'^tell me about (her|it)\b',  # "tell me about her/it"
+            r'^did she play\b',  # "did she play" (without specifying game)
+            r'^has she played\b',  # "has she played" (without specifying game)  
+            r'^when did she\b',  # "when did she..."
+            r'^where did she\b',  # "where did she..."
+            r'^how many hours did (she|her|it)\b',  # "how many hours did she/it..."
+            r'^how many episodes did (she|her|it)\b',  # "how many episodes did it..."
+            r'^which one did\b',  # "which one did..."
+            r'^what game did she\b'  # This is actually specific, so maybe remove
         ]
 
-        for starter in follow_up_starters:
-            if content_lower.startswith(starter):
+        for pattern in gaming_follow_up_patterns:
+            if re.search(pattern, content_lower):
                 return True
 
     return False
