@@ -42,6 +42,10 @@ except ImportError:
 # Global state for trivia
 active_trivia_sessions = {}
 
+# Startup validation lock to prevent multiple concurrent validations
+_startup_validation_lock = False
+_startup_validation_completed = False
+
 
 @tasks.loop(time=time(12, 0))  # Run at 12:00 PM (midday) every day
 async def scheduled_games_update():
@@ -1291,7 +1295,22 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
 
 async def validate_startup_trivia_questions():
     """Check that there are at least 5 active questions available on startup with improved error handling"""
+    global _startup_validation_lock, _startup_validation_completed
+    
     print("🧠 STARTUP TRIVIA VALIDATION: Starting validation process...")
+    
+    # Check if validation is already in progress or completed
+    if _startup_validation_lock:
+        print("⏳ STARTUP TRIVIA VALIDATION: Validation already in progress, skipping duplicate")
+        return
+        
+    if _startup_validation_completed:
+        print("✅ STARTUP TRIVIA VALIDATION: Validation already completed on this startup, skipping")
+        return
+    
+    # Acquire the lock
+    _startup_validation_lock = True
+    print("🔒 STARTUP TRIVIA VALIDATION: Lock acquired, proceeding with validation")
     
     try:
         if db is None:
@@ -1469,3 +1488,9 @@ async def validate_startup_trivia_questions():
                     print("✅ STARTUP TRIVIA VALIDATION: Error notification sent to JAM")
         except Exception:
             print("❌ STARTUP TRIVIA VALIDATION: Failed to send error notification to JAM")
+    
+    finally:
+        # Mark validation as completed and release the lock
+        _startup_validation_completed = True
+        _startup_validation_lock = False
+        print("🔓 STARTUP TRIVIA VALIDATION: Lock released, validation marked as completed")

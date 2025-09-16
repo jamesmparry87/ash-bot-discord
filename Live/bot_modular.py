@@ -380,11 +380,11 @@ async def initialize_modular_components():
 
     # 5. Start Scheduled Tasks
     try:
-        from bot.tasks.scheduled import start_all_scheduled_tasks, validate_startup_trivia_questions
+        from bot.tasks.scheduled import start_all_scheduled_tasks, validate_startup_trivia_questions, schedule_delayed_trivia_validation
         start_all_scheduled_tasks()
         print("✅ Scheduled tasks started successfully")
         
-        # Validate trivia questions on startup (ONLY if running standalone)
+        # Schedule delayed trivia validation (non-blocking for deployment safety)
         # Skip if bot/main.py is also running to prevent duplication
         try:
             # Check if we're running as the primary entry point
@@ -393,13 +393,14 @@ async def initialize_modular_components():
                                     for frame in sys.modules.keys())
             
             if not main_module_running:
-                await validate_startup_trivia_questions()
-                print("✅ Startup trivia validation completed (standalone mode)")
+                # Schedule validation to run 2 minutes after startup (non-blocking)
+                schedule_delayed_trivia_validation() # type: ignore
+                print("✅ Delayed trivia validation scheduled for 2 minutes after startup (non-blocking)")
             else:
                 print("⚠️ Skipping trivia validation - will be handled by bot/main.py to prevent duplication")
                 
         except Exception as validation_error:
-            print(f"⚠️ Trivia validation check failed: {validation_error}")
+            print(f"⚠️ Trivia validation scheduling failed: {validation_error}")
         
         status_report["scheduled_tasks"] = True
 

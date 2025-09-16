@@ -559,16 +559,37 @@ async def call_ai_with_rate_limiting(
                 generation_config = {
                     "max_output_tokens": 300,
                     "temperature": 0.7}
-                response = gemini_model.generate_content(
-                    prompt, generation_config=generation_config)
-                if response and hasattr(response, "text") and response.text:
-                    response_text = response.text
-                    record_ai_request()
-                    print(f"✅ Gemini request successful")
-                    # Reset quota exhausted flag if successful
-                    if ai_usage_stats.get("quota_exhausted", False):
-                        ai_usage_stats["quota_exhausted"] = False
-                        print("✅ Primary AI quota restored")
+                
+                # Determine timeout based on context priority
+                timeout_duration = 15.0 if context == "startup_validation" else 30.0
+                
+                # Create async wrapper for Gemini call with timeout
+                import asyncio
+                async def make_gemini_request():
+                    return gemini_model.generate_content( # type: ignore
+                        prompt, generation_config=generation_config)
+                
+                try:
+                    # Use asyncio.wait_for to implement timeout
+                    response = await asyncio.wait_for(
+                        make_gemini_request(), 
+                        timeout=timeout_duration
+                    )
+                    
+                    if response and hasattr(response, "text") and response.text:
+                        response_text = response.text
+                        record_ai_request()
+                        print(f"✅ Gemini request successful (timeout: {timeout_duration}s)")
+                        # Reset quota exhausted flag if successful
+                        if ai_usage_stats.get("quota_exhausted", False):
+                            ai_usage_stats["quota_exhausted"] = False
+                            print("✅ Primary AI quota restored")
+                
+                except asyncio.TimeoutError:
+                    print(f"❌ Gemini AI request timed out after {timeout_duration}s")
+                    record_ai_error()
+                    # Don't attempt backup for timeout - return timeout error
+                    return None, f"timeout_error:{timeout_duration}s"
                     
             except Exception as e:
                 error_str = str(e)
@@ -577,10 +598,8 @@ async def call_ai_with_rate_limiting(
                 # Check if this is a quota exhaustion error
                 if check_quota_exhaustion(error_str):
                     handle_quota_exhaustion()
-                    # Try backup immediately for quota errors
-                    backup_response, backup_status = attempt_backup_ai(prompt)
-                    if backup_response:
-                        return backup_response, "quota_exhausted_backup_used"
+                    # Don't attempt backup for deployment safety
+                    return None, "quota_exhausted_no_backup"
                 else:
                     record_ai_error()
         
@@ -666,7 +685,7 @@ def setup_ai_provider(
         api_key: Optional[str],
         module: Optional[Any],
         is_available: bool) -> bool:
-    """Initialize and test an AI provider (Gemini or Hugging Face)."""
+    """Initialize and test an AI provider (Gemini only - Hugging Face disabled)."""
     if not api_key:
         print(
             f"⚠️ {name.upper()}_API_KEY not found - {name.title()} features disabled")
@@ -680,50 +699,34 @@ def setup_ai_provider(
             global gemini_model
             module.configure(api_key=api_key)
             gemini_model = module.GenerativeModel('gemini-1.5-flash')
-            test_response = gemini_model.generate_content("Test")
-            if test_response and hasattr(
-                    test_response, 'text') and test_response.text:
-                print(f"✅ Gemini AI test successful")
-                return True
+            
+            # Test with timeout to prevent hanging
+            test_generation_config = {
+                "max_output_tokens": 10,
+                "temperature": 0.7
+            }
+            
+            # Add timeout wrapper for test
+            import asyncio
+            async def test_gemini():
+                return gemini_model.generate_content("Test", generation_config=test_generation_config) # type: ignore
+            
+            try:
+                # Run with 10 second timeout for initial test
+                test_response = asyncio.get_event_loop().run_until_complete(
+                    asyncio.wait_for(test_gemini(), timeout=10.0)
+                )
+                
+                if test_response and hasattr(test_response, 'text') and test_response.text:
+                    print(f"✅ Gemini AI test successful (with timeout protection)")
+                    return True
+            except asyncio.TimeoutError:
+                print(f"❌ Gemini AI test timed out after 10 seconds")
+                return False
+                
         elif name == "huggingface":
-            global huggingface_headers
-            huggingface_headers = {"Authorization": f"Bearer {api_key}"}
-            # Test Hugging Face API starting with the model we actually use
-            test_models = [
-                "mistralai/Mixtral-8x7B-Instruct-v0.1",  # Primary backup model
-            ]
-            
-            for model in test_models:
-                try:
-                    test_payload = {
-                        "inputs": "Test",
-                        "parameters": {"max_new_tokens": 10, "temperature": 0.7}
-                    }
-                    test_response = module.post(
-                        f"https://api-inference.huggingface.co/models/{model}",
-                        headers=huggingface_headers,
-                        json=test_payload,
-                        timeout=10)
-                    
-                    if test_response.status_code == 200:
-                        print(f"✅ Hugging Face AI test successful with {model}")
-                        # Update the working model for actual use
-                        global working_hf_model
-                        working_hf_model = model
-                        return True
-                    elif test_response.status_code == 404:
-                        print(f"⚠️ Model {model} not available (404)")
-                        continue
-                    else:
-                        print(f"⚠️ Model {model} failed: {test_response.status_code}")
-                        continue
-                        
-                except Exception as e:
-                    print(f"⚠️ Error testing {model}: {e}")
-                    continue
-            
-            print("⚠️ Hugging Face API: No models accessible - backup AI disabled")
-            print("   This is normal if you don't have Inference API access")
+            # Hugging Face backup explicitly disabled to prevent hanging
+            print("⚠️ Hugging Face AI disabled to prevent deployment hangs")
             return False
 
         print(f"⚠️ {name.title()} AI setup complete but test response failed")

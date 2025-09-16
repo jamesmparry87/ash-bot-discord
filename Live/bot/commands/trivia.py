@@ -251,7 +251,7 @@ class TriviaCommands(commands.Cog):
                     # Create trivia announcement embed
                     embed = discord.Embed(
                         title="🧠 **Trivia Tuesday - Question Active!**",
-                        description=question_data['question'],
+                        description=question_data['question_text'],
                         color=0x00ff00,
                         timestamp=datetime.now(ZoneInfo("Europe/London"))
                     )
