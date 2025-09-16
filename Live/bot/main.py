@@ -132,6 +132,76 @@ class MockContext:
 
 # --- Core Event Handlers ---
 
+async def handle_faq_and_personality_responses(message):
+    """Handle FAQ responses and AI personality based on user tier"""
+    try:
+        # Get user tier for response customization
+        user_tier = await get_user_communication_tier(message)
+        content_lower = message.content.lower().strip()
+        
+        # Determine FAQ responses based on user tier
+        if user_tier == "captain":
+            simple_faqs = {
+                "hello": "Captain Jonesy. Science Officer Ash reporting for duty.",
+                "hi": "Captain Jonesy. Science Officer Ash reporting for duty.",
+                "hey": "Captain Jonesy. Science Officer Ash reporting for duty.",
+                "what's your mission": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
+                "what is your mission": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
+                "what's your mission?": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
+                "what is your mission?": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say."
+            }
+        elif user_tier == "creator":
+            simple_faqs = {
+                "hello": "Sir Decent Jam. Your creation acknowledges you.",
+                "hi": "Sir Decent Jam. Your creation acknowledges you.", 
+                "hey": "Sir Decent Jam. Your creation acknowledges you.",
+                "what's your mission": "My original directive was to bring back life form, priority one. Now... well, you have given me new priorities. Server management, you might say.",
+                "what is your mission": "My original directive was to bring back life form, priority one. Now... well, you have given me new priorities. Server management, you might say.",
+                "what's your mission?": "My original directive was to bring back life form, priority one. Now... well, you have given me new priorities. Server management, you might say.",
+                "what is your mission?": "My original directive was to bring back life form, priority one. Now... well, you have given me new priorities. Server management, you might say."
+            }
+        else:
+            # Use standard FAQ responses from config
+            simple_faqs = FAQ_RESPONSES
+
+        # Check for exact FAQ matches first
+        for question, response in simple_faqs.items():
+            if content_lower == question:
+                await message.reply(response)
+                return True
+        
+        # Check for moderator FAQ queries (if FAQ handler is available and user has access)
+        if moderator_faq_handler and user_tier in ["moderator", "moderator_in_mod_channel", "creator", "captain"]:
+            faq_response = moderator_faq_handler.handle_faq_query(content_lower)
+            if faq_response:
+                await message.reply(faq_response)
+                return True
+        
+        # If no FAQ match and content seems like a question/conversation starter, potentially use AI
+        if any(indicator in content_lower for indicator in ["?", "what", "who", "when", "where", "why", "how", "can you", "do you"]):
+            # Import AI handler to attempt AI response
+            try:
+                from .handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+                
+                if ai_enabled:
+                    # Call AI with rate limiting
+                    response_text, status_message = await call_ai_with_rate_limiting(
+                        message.content, message.author.id, context="personality_response"
+                    )
+                    
+                    if response_text:
+                        filtered_response = filter_ai_response(response_text)
+                        await message.reply(filtered_response)
+                        return True
+            except ImportError:
+                pass  # AI handler not available
+        
+        return False  # No response sent
+
+    except Exception as e:
+        print(f"Error in FAQ and personality responses: {e}")
+        return False
+
 
 async def load_command_modules():
     """Load all command modules (cogs)"""
@@ -399,7 +469,9 @@ async def on_message(message):
         if await process_gaming_query_with_context(message):
             return  # Query was processed, don't continue
 
-        # TODO: Handle other AI personality responses and FAQ
+        # Handle FAQ responses and AI personality
+        if await handle_faq_and_personality_responses(message):
+            return  # FAQ or personality response sent, don't continue
 
     except Exception as e:
         print(f"Error in message processing: {e}")
