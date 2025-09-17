@@ -132,6 +132,149 @@ class MockContext:
 
 # --- Core Event Handlers ---
 
+async def handle_trivia_response(message):
+    """Handle trivia session responses from users"""
+    try:
+        # Only process in guild channels, not DMs
+        if not message.guild:
+            return False
+
+        # Skip if message starts with ! (command)
+        if message.content.startswith('!'):
+            return False
+
+        # Check if there's an active trivia session
+        active_session = db.get_active_trivia_session()
+        if not active_session:
+            return False
+
+        user_id = message.author.id
+        session_id = active_session['id']
+        answer_text = message.content.strip()
+
+        # Skip empty messages
+        if not answer_text:
+            return False
+
+        # Check if user already answered this session
+        existing_answers = db.get_trivia_session_answers(session_id)
+        user_already_answered = any(answer['user_id'] == user_id for answer in existing_answers)
+        
+        if user_already_answered:
+            # User already submitted an answer, provide feedback
+            await message.react("❌")
+            return True
+
+        # Normalize answer for better matching
+        normalized_answer = normalize_trivia_answer(answer_text)
+        
+        # Submit answer to database
+        answer_id = db.submit_trivia_answer(session_id, user_id, answer_text, normalized_answer)
+        
+        if answer_id:
+            # Check if this is the correct answer
+            correct_answer = active_session.get('calculated_answer') or active_session.get('correct_answer')
+            is_correct = False
+            
+            if correct_answer:
+                is_correct = (
+                    answer_text.lower().strip() == correct_answer.lower().strip() or
+                    normalized_answer.lower().strip() == correct_answer.lower().strip()
+                )
+            
+            # Check if this is the first correct answer
+            is_first_correct = False
+            if is_correct:
+                # Count existing correct answers (excluding conflicts)
+                correct_count = len([a for a in existing_answers if a.get('is_correct', False) and not a.get('conflict_detected', False)])
+                is_first_correct = (correct_count == 0)
+                
+                # Update the answer to mark as correct in database
+                if answer_id:
+                    try:
+                        # Mark this specific answer as correct
+                        conn = db.get_connection()
+                        if conn:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    "UPDATE trivia_answers SET is_correct = TRUE WHERE id = %s",
+                                    (answer_id,)
+                                )
+                                if is_first_correct:
+                                    cur.execute(
+                                        "UPDATE trivia_answers SET is_first_correct = TRUE WHERE id = %s",
+                                        (answer_id,)
+                                    )
+                                conn.commit()
+                    except Exception as e:
+                        print(f"Error updating trivia answer correctness: {e}")
+            
+            # Provide user feedback
+            if is_correct:
+                if is_first_correct:
+                    await message.react("🏆")
+                    await message.reply("🏆 **Correct!** You got the first correct answer!")
+                else:
+                    await message.react("✅")
+                    await message.reply("✅ **Correct!** Well done!")
+            else:
+                await message.react("📝")
+                await message.reply("📝 **Answer recorded.** Results will be revealed when the session ends!")
+            
+            print(f"Trivia answer submitted: User {user_id}, Session {session_id}, Answer: '{answer_text}', Correct: {is_correct}")
+            return True
+        else:
+            # Database submission failed
+            await message.react("❌")
+            return True
+            
+    except Exception as e:
+        print(f"Error in trivia response handler: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def normalize_trivia_answer(answer_text):
+    """Normalize trivia answers for better matching"""
+    import re
+    
+    # Convert to lowercase
+    normalized = answer_text.lower().strip()
+    
+    # Remove common prefixes (apply multiple times for compound prefixes)
+    prefixes_to_remove = [
+        "my answer is ", "i think ", "i believe ", "it's ", "its ", 
+        "probably ", "maybe ", "i guess ", "the answer is ",
+        "the ", "a ", "an "
+    ]
+    
+    # Keep removing prefixes until no more can be removed
+    changed = True
+    while changed:
+        changed = False
+        for prefix in prefixes_to_remove:
+            if normalized.startswith(prefix):
+                normalized = normalized[len(prefix):].strip()
+                changed = True
+                break
+    
+    # Remove common suffixes
+    suffixes_to_remove = ["!", "?", ".", ",", ";", ":"]
+    for suffix in suffixes_to_remove:
+        if normalized.endswith(suffix):
+            normalized = normalized[:-1].strip()
+    
+    # Handle multiple choice answers (A, B, C, D)
+    if re.match(r'^[abcd]$', normalized):
+        normalized = normalized.upper()
+    
+    # Remove extra spaces
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+    
+    return normalized
+
+
 async def handle_faq_and_personality_responses(message):
     """Handle FAQ responses and AI personality based on user tier"""
     try:
@@ -497,6 +640,10 @@ async def on_message(message):
         # Handle pineapple pizza enforcement
         if await handle_pineapple_pizza_enforcement(message):
             return  # Pizza enforcement triggered, don't continue
+
+        # Handle trivia session responses
+        if await handle_trivia_response(message):
+            return  # Trivia response processed, don't continue
 
         # Handle context-aware gaming queries
         if await process_gaming_query_with_context(message):
