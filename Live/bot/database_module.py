@@ -3073,7 +3073,7 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 # Get session and question details
                 cur.execute("""
-                    SELECT ts.*, tq.question_text, tq.correct_answer, tq.calculated_answer
+                    SELECT ts.*, tq.question_text, tq.correct_answer, ts.calculated_answer
                     FROM trivia_sessions ts
                     JOIN trivia_questions tq ON ts.question_id = tq.id
                     WHERE ts.id = %s
