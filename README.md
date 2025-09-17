@@ -69,6 +69,9 @@ The bot automatically creates these tables on first run:
 - **strikes**: User strike tracking
 - **game_recommendations**: Community game suggestions
 - **bot_config**: Bot configuration storage
+- **trivia_questions**: Trivia question pool and metadata
+- **trivia_sessions**: Active/completed trivia session tracking
+- **trivia_responses**: User answers and participation records
 
 ### Bot Commands
 
@@ -78,7 +81,44 @@ The bot automatically creates these tables on first run:
 - `!recommend <name> - <reason>` - Add game recommendation (alias)
 - `!listgames` - List all game recommendations
 
-#### Moderator Commands (Requires "Manage Messages" permission)
+#### Trivia Tuesday Commands
+
+**For Everyone:**
+
+- Simply reply to trivia questions when a session is active
+- For multiple choice: Reply with letter (A, B, C, D)
+- For single answer: Reply with your answer
+
+**For Moderators:**
+
+- `!starttrivia` - Start trivia session with auto-selected question
+- `!starttrivia <question_id>` - Start session with specific question
+- `!endtrivia` - End current session and show results
+- `!addtrivia <question> | answer:<answer> | type:<single/multiple>` - Add new trivia question
+- `!addtrivia <question> | answer:<answer> | choices:A,B,C,D | type:multiple` - Add multiple choice question
+- `!listpendingquestions` - View available questions
+- `!trivialeaderboard [all/month/week]` - Show participation statistics
+- `!resettrivia` - Reset answered questions to available status
+- `!approvequestion <id/auto/generate>` - Send question to JAM for approval
+- `!approvestatus` - Check pending approval status
+
+**Trivia Session Example:**
+
+1. Moderator runs `!starttrivia`
+2. Bot posts question with embed
+3. Users reply with answers in channel
+4. Moderator runs `!endtrivia` when ready
+5. Bot shows results, correct answer, and winner
+
+**Question Examples:**
+
+```text
+!addtrivia What game has Jonesy played the most? | answer:God of War | type:single
+
+!addtrivia Which genre does Jonesy prefer? | answer:B | choices:Action,RPG,Horror,Puzzle | type:multiple
+```
+
+#### General Moderator Commands (Requires "Manage Messages" permission)
 
 - `!strikes @user` - Check user's strikes
 - `!resetstrikes @user` - Reset user's strikes
