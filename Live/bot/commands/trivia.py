@@ -79,7 +79,7 @@ class TriviaCommands(commands.Cog):
         try:
             # Check if user is a moderator (works in both DM and server context)
             from ..utils.permissions import user_is_mod_by_id
-            if not await user_is_mod_by_id(ctx.author.id):
+            if not await user_is_mod_by_id(ctx.author.id, self.bot):
                 await ctx.send("❌ **Access denied.** Trivia question submission requires moderator privileges.")
                 return
             
