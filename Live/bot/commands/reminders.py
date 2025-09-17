@@ -141,12 +141,12 @@ class RemindersCommands(commands.Cog):
                         # Fallback if import fails
                         formatted_time = f"in {time_str}"
 
-                    # Simplified confirmation - no unnecessary details
+                    # Simplified confirmation - no user mentions or tags
                     if target_user_id == ctx.author.id:
                         # Setting reminder for themselves - simple confirmation
                         response = f"✅ **Reminder set** {formatted_time}\n*{reminder_text}*"
                     else:
-                        # Setting for someone else - show target
+                        # Setting for someone else - show target name only (no mentions)
                         target_user = await self.bot.fetch_user(target_user_id)
                         user_name = target_user.display_name if target_user else 'user'
                         response = f"✅ **Reminder set** for {user_name} {formatted_time}\n*{reminder_text}*"
