@@ -879,8 +879,15 @@ async def start_trivia_conversation(ctx):
         )
         return
 
-    # Check if user is a moderator
-    if not await user_is_mod_by_id(ctx.author.id):
+    # Check if user is a moderator - need bot instance for DM permission checking
+    bot_instance = None
+    import sys
+    for name, obj in sys.modules.items():
+        if hasattr(obj, 'bot') and hasattr(obj.bot, 'user') and obj.bot.user:
+            bot_instance = obj.bot
+            break
+    
+    if not await user_is_mod_by_id(ctx.author.id, bot_instance):
         await ctx.send(
             f"❌ **Access denied.** Trivia question submission protocols are restricted to moderators only. "
             f"Your clearance level is insufficient for trivia database modification capabilities.\n\n"
