@@ -236,6 +236,18 @@ async def load_command_modules():
 async def on_ready():
     print(f"🤖 Ash Bot (Refactored) is ready. Logged in as {bot.user}")
 
+    # Clean up any hanging trivia sessions on startup
+    try:
+        cleanup_result = db.cleanup_hanging_trivia_sessions()
+        if cleanup_result and cleanup_result.get("cleaned_sessions", 0) > 0:
+            print(f"🧹 Cleaned up {cleanup_result['cleaned_sessions']} hanging trivia sessions")
+            for session in cleanup_result.get('sessions', []):
+                print(f"   • Session {session['session_id']}: {session['question_text'][:50]}...")
+        else:
+            print("✅ No hanging trivia sessions found")
+    except Exception as e:
+        print(f"⚠️ Trivia session cleanup warning: {e}")
+
     # Load command modules
     await load_command_modules()
 

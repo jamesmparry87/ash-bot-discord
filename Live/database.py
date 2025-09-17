@@ -3080,7 +3080,7 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 # Get session and question details
                 cur.execute("""
-                    SELECT ts.*, tq.question_text, tq.correct_answer, tq.calculated_answer
+                    SELECT ts.*, tq.question_text, tq.correct_answer, ts.calculated_answer
                     FROM trivia_sessions ts
                     JOIN trivia_questions tq ON ts.question_id = tq.id
                     WHERE ts.id = %s
@@ -3191,6 +3191,72 @@ class DatabaseManager:
     def reset_trivia_questions(self) -> int:
         """Reset all answered questions to available (alias for reset_all_trivia_questions_status)"""
         return self.reset_all_trivia_questions_status('answered', 'available')
+
+    def cleanup_hanging_trivia_sessions(self) -> Dict[str, Any]:
+        """Cleanup any hanging trivia sessions on startup"""
+        conn = self.get_connection()
+        if not conn:
+            return {"error": "No database connection", "cleaned_sessions": 0}
+
+        try:
+            with conn.cursor() as cur:
+                # Find all active sessions
+                cur.execute("""
+                    SELECT ts.id, ts.question_id, ts.started_at, tq.question_text
+                    FROM trivia_sessions ts
+                    JOIN trivia_questions tq ON ts.question_id = tq.id
+                    WHERE ts.status = 'active'
+                    ORDER BY ts.started_at ASC
+                """)
+                hanging_sessions = cur.fetchall()
+
+                if not hanging_sessions:
+                    logger.info("No hanging trivia sessions found during cleanup")
+                    return {"cleaned_sessions": 0, "sessions": []}
+
+                cleaned_sessions = []
+                for session in hanging_sessions:
+                    session_dict = dict(session)
+                    session_id = session_dict['id']
+                    
+                    # Mark session as expired
+                    cur.execute("""
+                        UPDATE trivia_sessions
+                        SET status = 'expired', ended_at = CURRENT_TIMESTAMP
+                        WHERE id = %s
+                    """, (session_id,))
+                    
+                    # Reset the question status to available so it can be used again
+                    cur.execute("""
+                        UPDATE trivia_questions
+                        SET status = 'available'
+                        WHERE id = %s
+                    """, (session_dict['question_id'],))
+                    
+                    cleaned_sessions.append({
+                        'session_id': session_id,
+                        'question_id': session_dict['question_id'],
+                        'question_text': session_dict.get('question_text', 'Unknown'),
+                        'started_at': session_dict.get('started_at')
+                    })
+                    
+                    logger.info(f"Cleaned hanging trivia session {session_id} (Question: {session_dict.get('question_text', 'Unknown')})")
+
+                conn.commit()
+                total_cleaned = len(cleaned_sessions)
+                
+                if total_cleaned > 0:
+                    logger.info(f"Trivia session cleanup complete: {total_cleaned} hanging sessions cleaned")
+                
+                return {
+                    "cleaned_sessions": total_cleaned,
+                    "sessions": cleaned_sessions
+                }
+
+        except Exception as e:
+            logger.error(f"Error during trivia session cleanup: {e}")
+            conn.rollback()
+            return {"error": str(e), "cleaned_sessions": 0}
 
     # --- Missing Announcement System ---
 
