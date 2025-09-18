@@ -133,47 +133,91 @@ class MockContext:
 # --- Core Event Handlers ---
 
 async def handle_trivia_response(message):
-    """Handle trivia session responses from users"""
+    """Handle trivia session responses from users with comprehensive logging and error handling"""
     try:
+        print(f"🧠 TRIVIA DEBUG: Processing message from user {message.author.id} in channel {message.channel.id}")
+        print(f"🧠 TRIVIA DEBUG: Message content: '{message.content}'")
+        
         # Only process in guild channels, not DMs
         if not message.guild:
+            print(f"🧠 TRIVIA DEBUG: Skipping DM message")
             return False
 
         # Skip if message starts with ! (command)
         if message.content.startswith('!'):
+            print(f"🧠 TRIVIA DEBUG: Skipping command message")
             return False
 
+        # Validate database connection
+        if db is None:
+            print(f"❌ TRIVIA ERROR: Database instance is None")
+            return False
+            
         # Check if there's an active trivia session
-        active_session = db.get_active_trivia_session()
+        print(f"🧠 TRIVIA DEBUG: Checking for active trivia session...")
+        try:
+            active_session = db.get_active_trivia_session()
+            print(f"🧠 TRIVIA DEBUG: Active session result: {active_session}")
+        except Exception as session_error:
+            print(f"❌ TRIVIA ERROR: Failed to get active session: {session_error}")
+            import traceback
+            traceback.print_exc()
+            return False
+            
         if not active_session:
+            print(f"🧠 TRIVIA DEBUG: No active trivia session found")
             return False
 
+        print(f"✅ TRIVIA DEBUG: Found active session {active_session.get('id')}")
+        
         user_id = message.author.id
         session_id = active_session['id']
         answer_text = message.content.strip()
 
         # Skip empty messages
         if not answer_text:
+            print(f"🧠 TRIVIA DEBUG: Skipping empty message")
             return False
 
+        print(f"🧠 TRIVIA DEBUG: Processing answer submission for session {session_id}")
+        
         # Check if user already answered this session
-        existing_answers = db.get_trivia_session_answers(session_id)
+        try:
+            existing_answers = db.get_trivia_session_answers(session_id)
+            print(f"🧠 TRIVIA DEBUG: Found {len(existing_answers)} existing answers")
+        except Exception as answers_error:
+            print(f"❌ TRIVIA ERROR: Failed to get existing answers: {answers_error}")
+            return False
+            
         user_already_answered = any(answer['user_id'] == user_id for answer in existing_answers)
         
         if user_already_answered:
+            print(f"🧠 TRIVIA DEBUG: User {user_id} already answered this session")
             # User already submitted an answer, provide feedback
             await message.react("❌")
             return True
 
         # Normalize answer for better matching
         normalized_answer = normalize_trivia_answer(answer_text)
+        print(f"🧠 TRIVIA DEBUG: Normalized answer: '{answer_text}' → '{normalized_answer}'")
         
         # Submit answer to database
-        answer_id = db.submit_trivia_answer(session_id, user_id, answer_text, normalized_answer)
+        print(f"🧠 TRIVIA DEBUG: Submitting answer to database...")
+        try:
+            answer_id = db.submit_trivia_answer(session_id, user_id, answer_text, normalized_answer)
+            print(f"🧠 TRIVIA DEBUG: Answer submitted with ID: {answer_id}")
+        except Exception as submit_error:
+            print(f"❌ TRIVIA ERROR: Failed to submit answer: {submit_error}")
+            import traceback
+            traceback.print_exc()
+            await message.react("❌")
+            return True
         
         if answer_id:
             # Check if this is the correct answer
             correct_answer = active_session.get('calculated_answer') or active_session.get('correct_answer')
+            print(f"🧠 TRIVIA DEBUG: Correct answer is: '{correct_answer}'")
+            
             is_correct = False
             
             if correct_answer:
@@ -181,6 +225,7 @@ async def handle_trivia_response(message):
                     answer_text.lower().strip() == correct_answer.lower().strip() or
                     normalized_answer.lower().strip() == correct_answer.lower().strip()
                 )
+                print(f"🧠 TRIVIA DEBUG: Answer correctness: {is_correct}")
             
             # Check if this is the first correct answer
             is_first_correct = False
@@ -188,48 +233,57 @@ async def handle_trivia_response(message):
                 # Count existing correct answers (excluding conflicts)
                 correct_count = len([a for a in existing_answers if a.get('is_correct', False) and not a.get('conflict_detected', False)])
                 is_first_correct = (correct_count == 0)
+                print(f"🧠 TRIVIA DEBUG: Is first correct: {is_first_correct} (existing correct: {correct_count})")
                 
                 # Update the answer to mark as correct in database
-                if answer_id:
-                    try:
-                        # Mark this specific answer as correct
-                        conn = db.get_connection()
-                        if conn:
-                            with conn.cursor() as cur:
+                try:
+                    print(f"🧠 TRIVIA DEBUG: Updating answer correctness in database...")
+                    # Mark this specific answer as correct
+                    conn = db.get_connection()
+                    if conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "UPDATE trivia_answers SET is_correct = TRUE WHERE id = %s",
+                                (answer_id,)
+                            )
+                            if is_first_correct:
                                 cur.execute(
-                                    "UPDATE trivia_answers SET is_correct = TRUE WHERE id = %s",
+                                    "UPDATE trivia_answers SET is_first_correct = TRUE WHERE id = %s",
                                     (answer_id,)
                                 )
-                                if is_first_correct:
-                                    cur.execute(
-                                        "UPDATE trivia_answers SET is_first_correct = TRUE WHERE id = %s",
-                                        (answer_id,)
-                                    )
-                                conn.commit()
-                    except Exception as e:
-                        print(f"Error updating trivia answer correctness: {e}")
+                            conn.commit()
+                            print(f"✅ TRIVIA DEBUG: Database updated successfully")
+                except Exception as update_error:
+                    print(f"❌ TRIVIA ERROR: Failed to update answer correctness: {update_error}")
             
             # Provide user feedback
-            if is_correct:
-                if is_first_correct:
-                    await message.react("🏆")
-                    await message.reply("🏆 **Correct!** You got the first correct answer!")
+            try:
+                if is_correct:
+                    if is_first_correct:
+                        await message.react("🏆")
+                        await message.reply("🏆 **Correct!** You got the first correct answer!")
+                        print(f"✅ TRIVIA SUCCESS: First correct answer by user {user_id}")
+                    else:
+                        await message.react("✅")
+                        await message.reply("✅ **Correct!** Well done!")
+                        print(f"✅ TRIVIA SUCCESS: Correct answer by user {user_id}")
                 else:
-                    await message.react("✅")
-                    await message.reply("✅ **Correct!** Well done!")
-            else:
-                await message.react("📝")
-                await message.reply("📝 **Answer recorded.** Results will be revealed when the session ends!")
+                    await message.react("📝")
+                    await message.reply("📝 **Answer recorded.** Results will be revealed when the session ends!")
+                    print(f"✅ TRIVIA SUCCESS: Answer recorded for user {user_id}")
+            except Exception as feedback_error:
+                print(f"❌ TRIVIA ERROR: Failed to provide user feedback: {feedback_error}")
             
-            print(f"Trivia answer submitted: User {user_id}, Session {session_id}, Answer: '{answer_text}', Correct: {is_correct}")
+            print(f"✅ TRIVIA COMPLETE: User {user_id}, Session {session_id}, Answer: '{answer_text}', Correct: {is_correct}")
             return True
         else:
+            print(f"❌ TRIVIA ERROR: Answer submission returned no ID")
             # Database submission failed
             await message.react("❌")
             return True
             
     except Exception as e:
-        print(f"Error in trivia response handler: {e}")
+        print(f"❌ TRIVIA CRITICAL ERROR: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -465,7 +519,7 @@ async def on_message(message):
         # Get message content for natural language processing
         content_lower = message.content.lower()
 
-        # Handle interactive DM conversations
+        # Handle interactive DM conversations (DM ONLY - don't interfere with guild messages)
         if isinstance(message.channel, discord.DMChannel):
             user_id = message.author.id
 
@@ -474,7 +528,7 @@ async def on_message(message):
                 await handle_announcement_conversation(message)
                 return
 
-            # Check for mod trivia conversations
+            # Check for mod trivia conversations (DM ONLY)
             if user_id in mod_trivia_conversations:
                 await handle_mod_trivia_conversation(message)
                 return

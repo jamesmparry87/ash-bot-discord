@@ -1165,6 +1165,23 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
     Returns True if query was handled, False otherwise.
     """
     try:
+        # DEFENSIVE CHECK: Skip gaming queries if trivia session is active
+        # This prevents interference with trivia answers
+        if db is not None:
+            try:
+                active_trivia = db.get_active_trivia_session()
+                if active_trivia:
+                    # Check if this looks like a potential trivia answer (short response)
+                    message_words = len(message.content.strip().split())
+                    if message_words <= 4:  # Short messages are likely trivia answers
+                        print(f"🧠 GAMING QUERY SKIP: Active trivia session detected, skipping gaming query processing for short message: '{message.content}'")
+                        return False
+                    else:
+                        print(f"🧠 GAMING QUERY: Active trivia session but longer message ({message_words} words), processing as potential gaming query")
+            except Exception as trivia_check_error:
+                print(f"⚠️ GAMING QUERY: Error checking trivia session: {trivia_check_error}")
+                # Continue with normal processing if trivia check fails
+        
         # First check if this is a DM conversation (including JAM approval)
         if await handle_dm_conversations(message):
             return True
