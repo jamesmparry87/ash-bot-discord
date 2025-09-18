@@ -276,7 +276,7 @@ class DatabaseManager:
                 """)
 
                 conn.commit()
-                logger.info("Database tables initialized successfully")
+                print("✅ Database tables initialized successfully")
         except Exception as e:
             logger.error(f"Database initialization failed: {e}")
             conn.rollback()

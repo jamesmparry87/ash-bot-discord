@@ -598,7 +598,24 @@ async def on_message(message):
     # Check for implicit game queries (even without mentions)
     is_implicit_game_query = detect_implicit_game_query(message.content)
 
-    # Handle DM conversation flows first
+    # PRIORITY 2: Check for trivia answer replies BEFORE mod channel restrictions
+    # This ensures trivia answers work in ALL channels, including mod channels
+    if not is_dm:  # Only check in guild channels
+        try:
+            is_trivia_reply, trivia_session = await is_trivia_answer_reply(message)
+            if is_trivia_reply and trivia_session:
+                print(f"🎯 TRIVIA: Processing answer reply in channel {message.channel.id}")
+                success = await process_trivia_answer(message, trivia_session)
+                if success:
+                    print(f"✅ TRIVIA: Successfully processed answer from user {message.author.id}")
+                else:
+                    print(f"⚠️ TRIVIA: Failed to process answer from user {message.author.id}")
+                return  # Exit early - trivia answer has been handled
+        except Exception as e:
+            print(f"❌ Error checking for trivia answer reply: {e}")
+            # Continue with normal message processing if trivia check fails
+
+    # Handle DM conversation flows
     if is_dm:
         try:
             # Clean up expired conversations
@@ -795,6 +812,86 @@ FAQ_RESPONSES = {
 async def is_moderator_channel(channel_id: int) -> bool:
     """Check if a channel allows moderator function discussions"""
     return channel_id in MODERATOR_CHANNEL_IDS
+
+
+async def is_trivia_answer_reply(message):
+    """Check if message is a reply to an active trivia question"""
+    try:
+        # Check if this message is a reply
+        if not hasattr(message, 'reference') or not message.reference:
+            return False, None
+            
+        # Get the message being replied to
+        try:
+            replied_to_message = await message.channel.fetch_message(message.reference.message_id)
+        except (discord.NotFound, discord.Forbidden):
+            return False, None
+        
+        # Check if we have database connection
+        if db is None:
+            return False, None
+            
+        # Get active trivia session
+        try:
+            active_session = db.get_active_trivia_session()
+            if not active_session:
+                return False, None
+        except Exception:
+            return False, None
+            
+        # Check if the replied-to message matches our tracked trivia messages
+        replied_to_id = replied_to_message.id
+        session_question_msg_id = active_session.get('question_message_id')
+        session_confirmation_msg_id = active_session.get('confirmation_message_id')
+        
+        if replied_to_id == session_question_msg_id or replied_to_id == session_confirmation_msg_id:
+            print(f"🧠 TRIVIA: Detected answer reply from user {message.author.id}: '{message.content}' → session {active_session['id']}")
+            return True, active_session
+            
+        return False, None
+        
+    except Exception as e:
+        print(f"❌ Error checking trivia answer reply: {e}")
+        return False, None
+
+
+async def process_trivia_answer(message, trivia_session):
+    """Process a trivia answer submission"""
+    try:
+        if db is None:
+            return False
+            
+        # Extract answer text
+        answer_text = message.content.strip()
+        
+        # Normalize answer for matching (basic cleanup)
+        normalized_answer = answer_text.lower().strip()
+        
+        # Submit answer to database
+        answer_id = db.submit_trivia_answer(
+            session_id=trivia_session['id'],
+            user_id=message.author.id,
+            answer_text=answer_text,
+            normalized_answer=normalized_answer
+        )
+        
+        if answer_id:
+            print(f"✅ TRIVIA: Submitted answer #{answer_id} from user {message.author.id} for session {trivia_session['id']}")
+            
+            # React to acknowledge the submission
+            try:
+                await message.add_reaction("📝")  # Notebook emoji to show submission received
+            except Exception as reaction_error:
+                print(f"⚠️ Could not add reaction to trivia answer: {reaction_error}")
+            
+            return True
+        else:
+            print(f"❌ TRIVIA: Failed to submit answer from user {message.author.id}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error processing trivia answer: {e}")
+        return False
 
 
 async def get_user_communication_tier(message):

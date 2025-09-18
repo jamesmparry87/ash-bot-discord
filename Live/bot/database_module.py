@@ -265,7 +265,7 @@ class DatabaseManager:
                 """)
 
                 conn.commit()
-                logger.info("Database tables initialized successfully")
+                print("✅ Database tables initialized successfully")
         except Exception as e:
             logger.error(f"Database initialization failed: {e}")
             conn.rollback()
@@ -2591,6 +2591,54 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting active trivia session: {e}")
             return None
+
+    def update_trivia_session_messages(
+        self,
+        session_id: int,
+        question_message_id: int,
+        confirmation_message_id: int,
+        channel_id: int
+    ) -> bool:
+        """Update trivia session with Discord message IDs for reply tracking"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                # First check if the columns exist, if not add them
+                cur.execute("""
+                    ALTER TABLE trivia_sessions 
+                    ADD COLUMN IF NOT EXISTS question_message_id BIGINT,
+                    ADD COLUMN IF NOT EXISTS confirmation_message_id BIGINT,
+                    ADD COLUMN IF NOT EXISTS channel_id BIGINT
+                """)
+                
+                # Update the session with message tracking info
+                cur.execute(
+                    """
+                    UPDATE trivia_sessions 
+                    SET question_message_id = %s, 
+                        confirmation_message_id = %s, 
+                        channel_id = %s
+                    WHERE id = %s
+                    """,
+                    (question_message_id, confirmation_message_id, channel_id, session_id)
+                )
+                
+                conn.commit()
+                success = cur.rowcount > 0
+                
+                if success:
+                    logger.info(f"Updated trivia session {session_id} with message tracking: Q:{question_message_id}, C:{confirmation_message_id}, Ch:{channel_id}")
+                else:
+                    logger.warning(f"Failed to update trivia session {session_id} - session not found")
+                
+                return success
+        except Exception as e:
+            logger.error(f"Error updating trivia session messages: {e}")
+            conn.rollback()
+            return False
 
     def submit_trivia_answer(
             self,
