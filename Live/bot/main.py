@@ -132,91 +132,94 @@ class MockContext:
 
 # --- Core Event Handlers ---
 
-async def handle_trivia_response(message):
-    """Handle trivia session responses from users with comprehensive logging and error handling"""
+async def handle_trivia_reply(message):
+    """Handle replies to trivia question or confirmation messages"""
     try:
-        print(f"🧠 TRIVIA DEBUG: Processing message from user {message.author.id} in channel {message.channel.id}")
-        print(f"🧠 TRIVIA DEBUG: Message content: '{message.content}'")
+        print(f"🧠 TRIVIA REPLY: Processing reply from user {message.author.id}")
+        print(f"🧠 TRIVIA REPLY: Message content: '{message.content}'")
         
         # Only process in guild channels, not DMs
         if not message.guild:
-            print(f"🧠 TRIVIA DEBUG: Skipping DM message")
+            print(f"🧠 TRIVIA REPLY: Skipping DM message")
             return False
 
         # Skip if message starts with ! (command)
         if message.content.startswith('!'):
-            print(f"🧠 TRIVIA DEBUG: Skipping command message")
+            print(f"🧠 TRIVIA REPLY: Skipping command message")
             return False
 
         # Validate database connection
         if db is None:
-            print(f"❌ TRIVIA ERROR: Database instance is None")
+            print(f"❌ TRIVIA REPLY ERROR: Database instance is None")
             return False
             
-        # Check if there's an active trivia session
-        print(f"🧠 TRIVIA DEBUG: Checking for active trivia session...")
+        # Get the message ID being replied to
+        replied_to_message_id = message.reference.message_id
+        print(f"🧠 TRIVIA REPLY: Reply to message ID: {replied_to_message_id}")
+        
+        # Check if this is a reply to an active trivia session message
         try:
-            active_session = db.get_active_trivia_session()
-            print(f"🧠 TRIVIA DEBUG: Active session result: {active_session}")
+            trivia_session = db.get_trivia_session_by_message_id(replied_to_message_id)
+            print(f"🧠 TRIVIA REPLY: Session lookup result: {trivia_session}")
         except Exception as session_error:
-            print(f"❌ TRIVIA ERROR: Failed to get active session: {session_error}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ TRIVIA REPLY ERROR: Failed to get session by message ID: {session_error}")
             return False
             
-        if not active_session:
-            print(f"🧠 TRIVIA DEBUG: No active trivia session found")
+        if not trivia_session:
+            print(f"🧠 TRIVIA REPLY: No active trivia session found for message ID {replied_to_message_id}")
             return False
 
-        print(f"✅ TRIVIA DEBUG: Found active session {active_session.get('id')}")
+        print(f"✅ TRIVIA REPLY: Found trivia session {trivia_session.get('id')} for message reply")
         
         user_id = message.author.id
-        session_id = active_session['id']
+        session_id = trivia_session['id']
         answer_text = message.content.strip()
 
         # Skip empty messages
         if not answer_text:
-            print(f"🧠 TRIVIA DEBUG: Skipping empty message")
+            print(f"🧠 TRIVIA REPLY: Skipping empty message")
             return False
 
-        print(f"🧠 TRIVIA DEBUG: Processing answer submission for session {session_id}")
+        print(f"🧠 TRIVIA REPLY: Processing answer submission for session {session_id}")
         
         # Check if user already answered this session
         try:
             existing_answers = db.get_trivia_session_answers(session_id)
-            print(f"🧠 TRIVIA DEBUG: Found {len(existing_answers)} existing answers")
+            print(f"🧠 TRIVIA REPLY: Found {len(existing_answers)} existing answers")
         except Exception as answers_error:
-            print(f"❌ TRIVIA ERROR: Failed to get existing answers: {answers_error}")
+            print(f"❌ TRIVIA REPLY ERROR: Failed to get existing answers: {answers_error}")
             return False
             
         user_already_answered = any(answer['user_id'] == user_id for answer in existing_answers)
         
         if user_already_answered:
-            print(f"🧠 TRIVIA DEBUG: User {user_id} already answered this session")
-            # User already submitted an answer, provide feedback
+            print(f"🧠 TRIVIA REPLY: User {user_id} already answered this session")
+            # User already submitted an answer, provide transactional feedback
             await message.react("❌")
+            await message.reply("❌ **Already answered.** You can only submit one answer per trivia session.")
             return True
 
         # Normalize answer for better matching
         normalized_answer = normalize_trivia_answer(answer_text)
-        print(f"🧠 TRIVIA DEBUG: Normalized answer: '{answer_text}' → '{normalized_answer}'")
+        print(f"🧠 TRIVIA REPLY: Normalized answer: '{answer_text}' → '{normalized_answer}'")
         
         # Submit answer to database
-        print(f"🧠 TRIVIA DEBUG: Submitting answer to database...")
+        print(f"🧠 TRIVIA REPLY: Submitting answer to database...")
         try:
             answer_id = db.submit_trivia_answer(session_id, user_id, answer_text, normalized_answer)
-            print(f"🧠 TRIVIA DEBUG: Answer submitted with ID: {answer_id}")
+            print(f"🧠 TRIVIA REPLY: Answer submitted with ID: {answer_id}")
         except Exception as submit_error:
-            print(f"❌ TRIVIA ERROR: Failed to submit answer: {submit_error}")
+            print(f"❌ TRIVIA REPLY ERROR: Failed to submit answer: {submit_error}")
             import traceback
             traceback.print_exc()
             await message.react("❌")
+            await message.reply("❌ **Submission failed.** Please try again.")
             return True
         
         if answer_id:
             # Check if this is the correct answer
-            correct_answer = active_session.get('calculated_answer') or active_session.get('correct_answer')
-            print(f"🧠 TRIVIA DEBUG: Correct answer is: '{correct_answer}'")
+            correct_answer = trivia_session.get('calculated_answer') or trivia_session.get('correct_answer')
+            print(f"🧠 TRIVIA REPLY: Correct answer is: '{correct_answer}'")
             
             is_correct = False
             
@@ -225,7 +228,7 @@ async def handle_trivia_response(message):
                     answer_text.lower().strip() == correct_answer.lower().strip() or
                     normalized_answer.lower().strip() == correct_answer.lower().strip()
                 )
-                print(f"🧠 TRIVIA DEBUG: Answer correctness: {is_correct}")
+                print(f"🧠 TRIVIA REPLY: Answer correctness: {is_correct}")
             
             # Check if this is the first correct answer
             is_first_correct = False
@@ -233,11 +236,11 @@ async def handle_trivia_response(message):
                 # Count existing correct answers (excluding conflicts)
                 correct_count = len([a for a in existing_answers if a.get('is_correct', False) and not a.get('conflict_detected', False)])
                 is_first_correct = (correct_count == 0)
-                print(f"🧠 TRIVIA DEBUG: Is first correct: {is_first_correct} (existing correct: {correct_count})")
+                print(f"🧠 TRIVIA REPLY: Is first correct: {is_first_correct} (existing correct: {correct_count})")
                 
                 # Update the answer to mark as correct in database
                 try:
-                    print(f"🧠 TRIVIA DEBUG: Updating answer correctness in database...")
+                    print(f"🧠 TRIVIA REPLY: Updating answer correctness in database...")
                     # Mark this specific answer as correct
                     conn = db.get_connection()
                     if conn:
@@ -252,40 +255,181 @@ async def handle_trivia_response(message):
                                     (answer_id,)
                                 )
                             conn.commit()
-                            print(f"✅ TRIVIA DEBUG: Database updated successfully")
+                            print(f"✅ TRIVIA REPLY: Database updated successfully")
                 except Exception as update_error:
-                    print(f"❌ TRIVIA ERROR: Failed to update answer correctness: {update_error}")
+                    print(f"❌ TRIVIA REPLY ERROR: Failed to update answer correctness: {update_error}")
             
-            # Provide user feedback
+            # Provide consistent neutral feedback (don't reveal correctness until session ends)
             try:
+                await message.react("📝")
+                await message.reply("📝 **Answer recorded.** Results will be revealed when the session ends!")
+                
+                # Log the actual result for debugging/monitoring (but don't show to user)
                 if is_correct:
                     if is_first_correct:
-                        await message.react("🏆")
-                        await message.reply("🏆 **Correct!** You got the first correct answer!")
-                        print(f"✅ TRIVIA SUCCESS: First correct answer by user {user_id}")
+                        print(f"✅ TRIVIA REPLY SUCCESS: First correct answer by user {user_id} (kept secret)")
                     else:
-                        await message.react("✅")
-                        await message.reply("✅ **Correct!** Well done!")
-                        print(f"✅ TRIVIA SUCCESS: Correct answer by user {user_id}")
+                        print(f"✅ TRIVIA REPLY SUCCESS: Correct answer by user {user_id} (kept secret)")
                 else:
-                    await message.react("📝")
-                    await message.reply("📝 **Answer recorded.** Results will be revealed when the session ends!")
-                    print(f"✅ TRIVIA SUCCESS: Answer recorded for user {user_id}")
+                    print(f"✅ TRIVIA REPLY SUCCESS: Answer recorded for user {user_id} (incorrect, kept secret)")
+                    
             except Exception as feedback_error:
-                print(f"❌ TRIVIA ERROR: Failed to provide user feedback: {feedback_error}")
+                print(f"❌ TRIVIA REPLY ERROR: Failed to provide user feedback: {feedback_error}")
             
-            print(f"✅ TRIVIA COMPLETE: User {user_id}, Session {session_id}, Answer: '{answer_text}', Correct: {is_correct}")
+            print(f"✅ TRIVIA REPLY COMPLETE: User {user_id}, Session {session_id}, Answer: '{answer_text}', Correct: {is_correct}")
             return True
         else:
-            print(f"❌ TRIVIA ERROR: Answer submission returned no ID")
+            print(f"❌ TRIVIA REPLY ERROR: Answer submission returned no ID")
             # Database submission failed
             await message.react("❌")
+            await message.reply("❌ **Submission failed.** Database error occurred.")
             return True
             
     except Exception as e:
-        print(f"❌ TRIVIA CRITICAL ERROR: {e}")
+        print(f"❌ TRIVIA REPLY CRITICAL ERROR: {e}")
         import traceback
         traceback.print_exc()
+        return False
+
+
+async def handle_trivia_clarification(message):
+    """Handle clarifying questions during active trivia sessions"""
+    try:
+        # Only process in guild channels, not DMs
+        if not message.guild:
+            return False
+
+        # Skip if message starts with ! (command) or is empty
+        if message.content.startswith('!') or not message.content.strip():
+            return False
+
+        # Skip if message is too long (likely not a clarification)
+        if len(message.content) > 200:
+            return False
+
+        # Validate database connection
+        if db is None:
+            return False
+            
+        # Check if there's an active trivia session in this channel
+        try:
+            active_session = db.get_active_trivia_session()
+            if not active_session:
+                return False
+                
+            # Only handle clarifications in the same channel as the trivia session
+            if active_session.get('channel_id') != message.channel.id:
+                return False
+                
+        except Exception:
+            return False
+        
+        # Check if message looks like a question (contains question indicators)
+        question_indicators = [
+            "?", "what", "when", "where", "why", "how", "who", "which", "will you",
+            "do you", "can you", "does", "would", "should", "could", "is", "are",
+            "mean", "accept", "count", "consider"
+        ]
+        
+        content_lower = message.content.lower()
+        if not any(indicator in content_lower for indicator in question_indicators):
+            return False
+            
+        print(f"🧠 TRIVIA CLARIFICATION: Detected potential clarification from user {message.author.id}: '{message.content}'")
+        
+        # Provide AI-powered contextual response for trivia clarification
+        try:
+            from .handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting
+            
+            if ai_enabled:
+                # Create context-aware prompt for trivia clarification
+                question_text = active_session.get('question_text', 'Unknown question')
+                clarification_prompt = (
+                    f"You are helping with a trivia session. The current question is: \"{question_text}\"\n\n"
+                    f"A user is asking for clarification: \"{message.content}\"\n\n"
+                    "Provide a helpful, brief clarification that doesn't give away the answer. "
+                    "If the question is about scoring/partial credit, explain that exact answers are required. "
+                    "Keep your response under 100 words and maintain the bot's analytical personality."
+                )
+                
+                response_text, status = await call_ai_with_rate_limiting(
+                    clarification_prompt, message.author.id, context="trivia_clarification"
+                )
+                
+                if response_text:
+                    # Filter and send AI response
+                    from .handlers.ai_handler import filter_ai_response
+                    filtered_response = filter_ai_response(response_text)
+                    
+                    await message.reply(f"🤖 **Trivia Clarification:** {filtered_response}")
+                    print(f"✅ TRIVIA CLARIFICATION: AI response provided to user {message.author.id}")
+                    return True
+                    
+        except ImportError:
+            pass  # AI handler not available
+        except Exception as ai_error:
+            print(f"⚠️ TRIVIA CLARIFICATION: AI error: {ai_error}")
+        
+        # Fallback response if AI is not available
+        fallback_responses = [
+            "🤖 **Trivia Clarification:** Please provide your best answer based on your understanding of the question. Exact answers are preferred for accuracy.",
+            "🤖 **Trivia Clarification:** The question should be answered as precisely as possible. If you're unsure about specifics, provide your best interpretation.",
+            "🤖 **Trivia Clarification:** Answer based on the information provided in the question. Additional context may not be available during active sessions."
+        ]
+        
+        import random
+        fallback_response = random.choice(fallback_responses)
+        
+        await message.reply(fallback_response)
+        print(f"✅ TRIVIA CLARIFICATION: Fallback response provided to user {message.author.id}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ TRIVIA CLARIFICATION ERROR: {e}")
+        return False
+
+
+async def handle_trivia_response(message):
+    """Legacy trivia response handler - now primarily for fallback"""
+    try:
+        # This function is kept for backward compatibility but should rarely be used
+        # The new reply-based system should handle most cases
+        print(f"🧠 TRIVIA LEGACY: Processing message from user {message.author.id} (fallback handler)")
+        
+        # Only process in guild channels, not DMs
+        if not message.guild:
+            return False
+
+        # Skip if message starts with ! (command)
+        if message.content.startswith('!'):
+            return False
+
+        # Validate database connection
+        if db is None:
+            return False
+            
+        # Check if there's an active trivia session
+        try:
+            active_session = db.get_active_trivia_session()
+        except Exception:
+            return False
+            
+        if not active_session:
+            return False
+
+        # If we get here, it means there's an active session but the message wasn't a reply
+        # This could be an old-style answer attempt - provide helpful guidance
+        if len(message.content.strip()) <= 50:  # Likely an answer attempt
+            await message.reply(
+                "💡 **Tip:** To submit trivia answers, please **reply** to the trivia question message above. "
+                "This ensures your answer is properly recorded!"
+            )
+            return True
+        
+        return False
+            
+    except Exception as e:
+        print(f"❌ TRIVIA LEGACY ERROR: {e}")
         return False
 
 
@@ -695,7 +839,16 @@ async def on_message(message):
         if await handle_pineapple_pizza_enforcement(message):
             return  # Pizza enforcement triggered, don't continue
 
-        # Handle trivia session responses
+        # PRIORITY 1: Handle replies to trivia messages (reply-based trivia system)
+        if message.reference and message.reference.message_id:
+            if await handle_trivia_reply(message):
+                return  # Trivia reply processed, don't continue
+
+        # PRIORITY 2: Handle trivia clarifying questions during active sessions
+        if await handle_trivia_clarification(message):
+            return  # Trivia clarification processed, don't continue
+
+        # PRIORITY 3: Handle legacy trivia responses (fallback for non-reply answers)
         if await handle_trivia_response(message):
             return  # Trivia response processed, don't continue
 

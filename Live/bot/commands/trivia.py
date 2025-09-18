@@ -267,12 +267,12 @@ class TriviaCommands(commands.Cog):
                             inline=False)
                         embed.add_field(
                             name="💡 **How to Answer:**",
-                            value="Reply with the letter (A, B, C, D) of your choice!",
+                            value="**Reply to this message** with the letter (A, B, C, D) of your choice!",
                             inline=False)
                     else:
                         embed.add_field(
                             name="💡 **How to Answer:**",
-                            value="Reply with your answer in this channel!",
+                            value="**Reply to this message** with your answer!",
                             inline=False)
 
                     embed.add_field(
@@ -282,10 +282,29 @@ class TriviaCommands(commands.Cog):
                     embed.set_footer(
                         text=f"Started by {ctx.author.display_name} • End with !endtrivia")
 
-                    await ctx.send(embed=embed)
+                    # Send question embed and capture message ID
+                    question_message = await ctx.send(embed=embed)
 
-                    # Send confirmation to moderator
-                    await ctx.send(f"✅ **Trivia session #{session_id} started** with question #{question_data['id']}.\n\n*Use `!endtrivia` when ready to reveal answers and end the session.*")
+                    # Send confirmation to moderator and capture message ID  
+                    confirmation_message = await ctx.send(f"✅ **Trivia session #{session_id} started** with question #{question_data['id']}.\n\n*Use `!endtrivia` when ready to reveal answers and end the session.*\n\n**Note:** Users should reply to either message above to submit answers.")
+
+                    # Update session with message tracking information
+                    try:
+                        update_success = db.update_trivia_session_messages(  # type: ignore
+                            session_id=session_id,
+                            question_message_id=question_message.id,
+                            confirmation_message_id=confirmation_message.id,
+                            channel_id=ctx.channel.id
+                        )
+                        
+                        if update_success:
+                            print(f"✅ Trivia session {session_id} updated with message tracking: Q:{question_message.id}, C:{confirmation_message.id}")
+                        else:
+                            print(f"⚠️ Warning: Failed to update trivia session {session_id} with message IDs")
+                            
+                    except Exception as msg_tracking_error:
+                        print(f"❌ Error updating trivia session message tracking: {msg_tracking_error}")
+                        # Continue anyway - session is still functional without message tracking
 
                 else:
                     await ctx.send("❌ **Failed to start trivia session.** Database error occurred.")

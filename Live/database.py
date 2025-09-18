@@ -157,10 +157,21 @@ class DatabaseManager:
                         ended_at TIMESTAMP,
                         first_correct_user_id BIGINT,
                         total_participants INTEGER DEFAULT 0,
-                        correct_answers_count INTEGER DEFAULT 0
+                        correct_answers_count INTEGER DEFAULT 0,
+                        question_message_id BIGINT, -- Message ID of the question embed
+                        confirmation_message_id BIGINT, -- Message ID of the confirmation message
+                        channel_id BIGINT -- Channel where the session is active
                     )
                 """
                 )
+
+                # Add new message tracking columns to existing trivia_sessions table if they don't exist
+                cur.execute("""
+                    ALTER TABLE trivia_sessions
+                    ADD COLUMN IF NOT EXISTS question_message_id BIGINT,
+                    ADD COLUMN IF NOT EXISTS confirmation_message_id BIGINT,
+                    ADD COLUMN IF NOT EXISTS channel_id BIGINT
+                """)
 
                 # Create trivia_answers table
                 cur.execute(
@@ -3068,6 +3079,68 @@ class DatabaseManager:
             started_by: int) -> Optional[int]:
         """Start trivia session (alias for create_trivia_session)"""
         return self.create_trivia_session(question_id, "weekly")
+
+    def update_trivia_session_messages(
+            self,
+            session_id: int,
+            question_message_id: int,
+            confirmation_message_id: int,
+            channel_id: int) -> bool:
+        """Update trivia session with message tracking information"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE trivia_sessions
+                    SET question_message_id = %s,
+                        confirmation_message_id = %s,
+                        channel_id = %s
+                    WHERE id = %s
+                """,
+                    (question_message_id, confirmation_message_id, channel_id, session_id),
+                )
+                conn.commit()
+                
+                success = cur.rowcount > 0
+                if success:
+                    logger.info(f"Updated trivia session {session_id} with message tracking: Q:{question_message_id}, C:{confirmation_message_id}, Ch:{channel_id}")
+                return success
+        except Exception as e:
+            logger.error(f"Error updating trivia session message IDs: {e}")
+            conn.rollback()
+            return False
+
+    def get_trivia_session_by_message_id(self, message_id: int) -> Optional[Dict[str, Any]]:
+        """Get trivia session by question or confirmation message ID"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT ts.*, tq.question_text, tq.question_type, tq.correct_answer,
+                           tq.multiple_choice_options, tq.is_dynamic, tq.dynamic_query_type,
+                           tq.submitted_by_user_id, tq.category
+                    FROM trivia_sessions ts
+                    JOIN trivia_questions tq ON ts.question_id = tq.id
+                    WHERE ts.status = 'active'
+                    AND (ts.question_message_id = %s OR ts.confirmation_message_id = %s)
+                    ORDER BY ts.started_at DESC
+                    LIMIT 1
+                """,
+                    (message_id, message_id),
+                )
+                result = cur.fetchone()
+                return dict(result) if result else None
+        except Exception as e:
+            logger.error(f"Error getting trivia session by message ID {message_id}: {e}")
+            return None
 
     def end_trivia_session(self, session_id: int,
                            ended_by: int) -> Optional[Dict[str, Any]]:
