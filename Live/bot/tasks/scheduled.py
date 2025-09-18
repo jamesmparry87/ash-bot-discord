@@ -1294,7 +1294,7 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
 
 
 async def validate_startup_trivia_questions():
-    """Check that there are at least 5 active questions available on startup with improved error handling"""
+    """Check that there are at least 5 active questions available on startup with non-blocking execution"""
     global _startup_validation_lock, _startup_validation_completed
     
     print("🧠 STARTUP TRIVIA VALIDATION: Starting validation process...")
@@ -1328,20 +1328,14 @@ async def validate_startup_trivia_questions():
 
         print("✅ STARTUP TRIVIA VALIDATION: Database methods verified")
 
-        # Check for available questions with retry logic
+        # Check for available questions with retry logic (quick check only)
         available_questions = None
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                available_questions = db.get_available_trivia_questions()  # type: ignore
-                break
-            except Exception as db_error:
-                print(f"⚠️ STARTUP TRIVIA VALIDATION: Database query attempt {attempt + 1}/{max_retries} failed - {db_error}")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(2)  # Wait before retry
-                else:
-                    print("❌ STARTUP TRIVIA VALIDATION: All database query attempts failed")
-                    return
+        try:
+            available_questions = db.get_available_trivia_questions()  # type: ignore
+        except Exception as db_error:
+            print(f"⚠️ STARTUP TRIVIA VALIDATION: Database query failed - {db_error}")
+            print("⚠️ STARTUP TRIVIA VALIDATION: Continuing with assumption of 0 questions")
+            available_questions = []
         
         question_count = len(available_questions) if available_questions else 0
         print(f"🧠 STARTUP TRIVIA VALIDATION: {question_count} available questions found in database")
@@ -1356,141 +1350,118 @@ async def validate_startup_trivia_questions():
             print(f"✅ STARTUP TRIVIA VALIDATION: Sufficient questions available ({question_count}/5)")
             return
 
-        # Need to generate more questions
-        questions_needed = min(5 - question_count, 4)  # Cap at 4 to avoid overwhelming JAM
-        print(f"🔄 STARTUP TRIVIA VALIDATION: Need to generate {questions_needed} additional questions")
-
-        # Check if AI handler is available
-        try:
-            from ..handlers.ai_handler import generate_ai_trivia_question
-            from ..handlers.conversation_handler import start_jam_question_approval
-            print("✅ STARTUP TRIVIA VALIDATION: AI handler and conversation handler loaded")
-        except ImportError as import_error:
-            print(f"❌ STARTUP TRIVIA VALIDATION: Failed to import required modules - {import_error}")
-            return
-
-        # Generate questions with improved error handling and retry logic
-        successful_generations = 0
-        failed_generations = 0
+        # Create background task for AI generation to avoid blocking Discord heartbeat
+        print(f"🔄 STARTUP TRIVIA VALIDATION: Need to generate {5 - question_count} additional questions")
+        print("🔄 STARTUP TRIVIA VALIDATION: Creating non-blocking background task for AI generation...")
         
-        for i in range(questions_needed):
-            attempt_count = 0
-            max_attempts = 3
-            question_generated = False
-            
-            while attempt_count < max_attempts and not question_generated:
-                try:
-                    attempt_count += 1
-                    print(f"🔄 STARTUP TRIVIA VALIDATION: Generating question {i+1}/{questions_needed} (attempt {attempt_count}/{max_attempts})")
-                    
-                    # Generate AI question with startup context for rate limit bypass
-                    question_data = await generate_ai_trivia_question("startup_validation")
-                    
-                    if question_data and isinstance(question_data, dict):
-                        # Validate the generated question
-                        required_fields = ['question_text', 'question_type', 'correct_answer']
-                        if all(field in question_data for field in required_fields):
-                            question_text = question_data.get('question_text', 'Unknown')
-                            print(f"✅ STARTUP TRIVIA VALIDATION: Generated question {i+1}: {question_text[:50]}...")
-                            
-                            # Send to JAM for approval
-                            approval_sent = await start_jam_question_approval(question_data)
-                            
-                            if approval_sent:
-                                print(f"✅ STARTUP TRIVIA VALIDATION: Question {i+1} sent to JAM for approval")
-                                successful_generations += 1
-                                question_generated = True
-                            else:
-                                print(f"⚠️ STARTUP TRIVIA VALIDATION: Failed to send question {i+1} for approval (attempt {attempt_count})")
-                        else:
-                            missing_fields = [f for f in required_fields if f not in question_data]
-                            print(f"⚠️ STARTUP TRIVIA VALIDATION: Generated question {i+1} missing fields: {missing_fields} (attempt {attempt_count})")
-                    else:
-                        print(f"⚠️ STARTUP TRIVIA VALIDATION: Failed to generate valid question {i+1} (attempt {attempt_count})")
-                    
-                    if not question_generated and attempt_count < max_attempts:
-                        # Wait before retry with exponential backoff
-                        wait_time = 2 ** attempt_count
-                        print(f"⏳ STARTUP TRIVIA VALIDATION: Waiting {wait_time}s before retry...")
-                        await asyncio.sleep(wait_time)
-                        
-                except Exception as generation_error:
-                    print(f"❌ STARTUP TRIVIA VALIDATION: Error generating question {i+1} (attempt {attempt_count}): {generation_error}")
-                    if attempt_count >= max_attempts:
-                        failed_generations += 1
-                        print(f"💥 STARTUP TRIVIA VALIDATION: Question {i+1} failed after {max_attempts} attempts")
-                    elif attempt_count < max_attempts:
-                        wait_time = 2 ** attempt_count
-                        print(f"⏳ STARTUP TRIVIA VALIDATION: Waiting {wait_time}s before retry...")
-                        await asyncio.sleep(wait_time)
-
-            # Small delay between different questions to avoid overwhelming systems
-            if i < questions_needed - 1:  # Don't wait after the last question
-                await asyncio.sleep(3)
-
-        # Final status report
-        print(f"🧠 STARTUP TRIVIA VALIDATION: Complete - generated {successful_generations}/{questions_needed} questions")
+        # Create completely detached background task that won't block startup
+        asyncio.create_task(_background_question_generation(question_count))
         
-        if failed_generations > 0:
-            print(f"⚠️ STARTUP TRIVIA VALIDATION: {failed_generations} questions failed to generate after multiple attempts")
-        
-        if successful_generations > 0:
-            print(f"📬 STARTUP TRIVIA VALIDATION: JAM should receive {successful_generations} DM(s) for question approval")
-            
-            # Send summary notification to JAM if multiple questions were generated
-            if successful_generations > 1:
-                try:
-                    from ..config import JAM_USER_ID
-                    from ..main import bot
-                    
-                    if hasattr(bot, 'fetch_user'):  # Check if bot is available
-                        user = await bot.fetch_user(JAM_USER_ID)
-                        if user:
-                            summary_message = (
-                                f"🧠 **Startup Trivia Validation Summary**\n\n"
-                                f"Generated **{successful_generations}** new trivia questions for your approval.\n"
-                                f"Each question has been sent as a separate message above.\n\n"
-                                f"**Current Status:**\n"
-                                f"• Questions generated: {successful_generations}/{questions_needed}\n"
-                                f"• Failed attempts: {failed_generations}\n"
-                                f"• Next Trivia Tuesday requires these approved questions\n\n"
-                                f"*Please review and approve/modify each question when convenient.*"
-                            )
-                            await user.send(summary_message)
-                            print("✅ STARTUP TRIVIA VALIDATION: Summary notification sent to JAM")
-                except Exception as summary_error:
-                    print(f"⚠️ STARTUP TRIVIA VALIDATION: Failed to send summary to JAM: {summary_error}")
-        else:
-            print("⚠️ STARTUP TRIVIA VALIDATION: No questions were successfully generated or sent for approval")
+        print("✅ STARTUP TRIVIA VALIDATION: Background question generation started (non-blocking)")
 
     except Exception as e:
         print(f"❌ STARTUP TRIVIA VALIDATION: Critical error - {e}")
         import traceback
         traceback.print_exc()
-        
-        # Try to notify JAM of the critical error
-        try:
-            from ..config import JAM_USER_ID
-            from ..main import bot
-            
-            if hasattr(bot, 'fetch_user'):  # Check if bot is available
-                user = await bot.fetch_user(JAM_USER_ID)
-                if user:
-                    error_message = (
-                        f"❌ **Startup Trivia Validation Failed**\n\n"
-                        f"Critical error during trivia question validation:\n"
-                        f"```\n{str(e)}\n```\n\n"
-                        f"**Impact:** Trivia Tuesday may not have enough questions available.\n"
-                        f"**Action Required:** Manual trivia question submission may be needed.\n\n"
-                        f"*Please check the bot logs for detailed error information.*"
-                    )
-                    await user.send(error_message)
-                    print("✅ STARTUP TRIVIA VALIDATION: Error notification sent to JAM")
-        except Exception:
-            print("❌ STARTUP TRIVIA VALIDATION: Failed to send error notification to JAM")
     
     finally:
         # Mark validation as completed and release the lock
         _startup_validation_completed = True
         _startup_validation_lock = False
         print("🔓 STARTUP TRIVIA VALIDATION: Lock released, validation marked as completed")
+
+
+async def _background_question_generation(current_question_count: int):
+    """Background task for generating trivia questions without blocking startup"""
+    try:
+        print(f"🧠 BACKGROUND QUESTION GENERATION: Starting with {current_question_count} existing questions")
+        
+        questions_needed = min(5 - current_question_count, 4)  # Cap at 4 to avoid overwhelming JAM
+        
+        # Check if AI handler is available
+        try:
+            from ..handlers.ai_handler import generate_ai_trivia_question
+            from ..handlers.conversation_handler import start_jam_question_approval
+            print("✅ BACKGROUND GENERATION: AI handler and conversation handler loaded")
+        except ImportError as import_error:
+            print(f"❌ BACKGROUND GENERATION: Failed to import required modules - {import_error}")
+            return
+
+        # Generate questions with improved error handling
+        successful_generations = 0
+        failed_generations = 0
+        
+        for i in range(questions_needed):
+            try:
+                print(f"🔄 BACKGROUND GENERATION: Generating question {i+1}/{questions_needed}")
+                
+                # Generate AI question with startup context for rate limit bypass
+                question_data = await generate_ai_trivia_question("startup_validation")
+                
+                if question_data and isinstance(question_data, dict):
+                    # Validate the generated question
+                    required_fields = ['question_text', 'question_type', 'correct_answer']
+                    if all(field in question_data for field in required_fields):
+                        question_text = question_data.get('question_text', 'Unknown')
+                        print(f"✅ BACKGROUND GENERATION: Generated question {i+1}: {question_text[:50]}...")
+                        
+                        # Send to JAM for approval
+                        approval_sent = await start_jam_question_approval(question_data)
+                        
+                        if approval_sent:
+                            print(f"✅ BACKGROUND GENERATION: Question {i+1} sent to JAM for approval")
+                            successful_generations += 1
+                        else:
+                            print(f"⚠️ BACKGROUND GENERATION: Failed to send question {i+1} for approval")
+                            failed_generations += 1
+                    else:
+                        missing_fields = [f for f in required_fields if f not in question_data]
+                        print(f"⚠️ BACKGROUND GENERATION: Generated question {i+1} missing fields: {missing_fields}")
+                        failed_generations += 1
+                else:
+                    print(f"⚠️ BACKGROUND GENERATION: Failed to generate valid question {i+1}")
+                    failed_generations += 1
+                    
+            except Exception as generation_error:
+                print(f"❌ BACKGROUND GENERATION: Error generating question {i+1}: {generation_error}")
+                failed_generations += 1
+
+            # Small delay between questions to avoid overwhelming systems
+            if i < questions_needed - 1:  # Don't wait after the last question
+                await asyncio.sleep(5)
+
+        # Final status report
+        print(f"🧠 BACKGROUND GENERATION: Complete - generated {successful_generations}/{questions_needed} questions")
+        
+        if successful_generations > 0:
+            print(f"📬 BACKGROUND GENERATION: JAM should receive {successful_generations} DM(s) for question approval")
+            
+            # Send summary notification to JAM
+            try:
+                from ..config import JAM_USER_ID
+                from ..main import bot
+                
+                if hasattr(bot, 'fetch_user') and bot.user:  # Check if bot is available and ready
+                    user = await bot.fetch_user(JAM_USER_ID)
+                    if user:
+                        summary_message = (
+                            f"🧠 **Startup Background Question Generation Complete**\n\n"
+                            f"Generated **{successful_generations}** new trivia questions for your approval.\n"
+                            f"Each question has been sent as a separate message above.\n\n"
+                            f"**Status:**\n"
+                            f"• Questions generated: {successful_generations}/{questions_needed}\n"
+                            f"• Failed attempts: {failed_generations}\n"
+                            f"• Generation completed in background after bot startup\n\n"
+                            f"*Please review and approve/modify each question when convenient.*"
+                        )
+                        await user.send(summary_message)
+                        print("✅ BACKGROUND GENERATION: Summary notification sent to JAM")
+            except Exception as summary_error:
+                print(f"⚠️ BACKGROUND GENERATION: Failed to send summary to JAM: {summary_error}")
+        else:
+            print("⚠️ BACKGROUND GENERATION: No questions were successfully generated or sent for approval")
+
+    except Exception as e:
+        print(f"❌ BACKGROUND GENERATION: Critical error - {e}")
+        import traceback
+        traceback.print_exc()

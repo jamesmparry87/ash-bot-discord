@@ -13,12 +13,12 @@ The `!triviatest` command provides a complete end-to-end test of the reply detec
 **(Moderator permissions required)**
 
 ### **What It Does**
-1. **Creates test session** with fake question ID (999999)  
+1. **Creates real temporary test question** in database (satisfies foreign key constraints)  
 2. **Posts test messages** with clear "TEST MODE" indicators
 3. **Captures message IDs** using the same workflow as real trivia
 4. **Waits for replies** to either test message
 5. **Validates reply detection** using production logic
-6. **Auto-cleanup** after 60 seconds
+6. **Auto-cleanup** after 60 seconds (removes test question and session)
 
 ### **Expected Workflow**
 ```

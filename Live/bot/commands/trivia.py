@@ -808,31 +808,78 @@ class TriviaCommands(commands.Cog):
 
             print(f"🧪 TRIVIA TEST: Starting test initiated by {ctx.author.id} in channel {ctx.channel.id}")
 
-            # Create a test trivia session entry 
+            # Create a real temporary test question in the database to satisfy foreign key constraints
             test_question_data = {
-                'id': 999999,  # Use fake ID for testing
-                'question_text': 'What is the name of the science officer android in this Discord server?',
+                'question_text': '🧪 TEST: What is the name of the science officer android in this Discord server?',
                 'question_type': 'single',
                 'correct_answer': 'Ash',
-                'choices': None
+                'multiple_choice_options': None,
+                'is_dynamic': False,
+                'dynamic_query_type': None,
+                'submitted_by_user_id': ctx.author.id,
+                'category': 'test',
+                'difficulty_level': 1
             }
 
-            # Start test session (use a special test session)
+            # Insert temporary test question into database
+            test_question_id = None
+            try:
+                test_question_id = db.add_trivia_question(
+                    question_text=test_question_data['question_text'],
+                    question_type=test_question_data['question_type'],
+                    correct_answer=test_question_data['correct_answer'],
+                    multiple_choice_options=test_question_data['multiple_choice_options'],
+                    is_dynamic=test_question_data['is_dynamic'],
+                    dynamic_query_type=test_question_data['dynamic_query_type'],
+                    submitted_by_user_id=test_question_data['submitted_by_user_id'],
+                    category=test_question_data['category'],
+                    difficulty_level=test_question_data['difficulty_level']
+                )
+                
+                if not test_question_id:
+                    await ctx.send("❌ **Test question creation failed.** Database error occurred.")
+                    return
+                    
+                print(f"🧪 TRIVIA TEST: Created temporary test question {test_question_id}")
+                
+            except Exception as question_error:
+                await ctx.send(f"❌ **Test question creation failed:** {question_error}")
+                return
+
+            # Start test session using the real question ID
             try:
                 test_session_id = db.create_trivia_session(
-                    question_id=test_question_data['id'],
+                    question_id=test_question_id,
                     session_type="test",
                     calculated_answer=test_question_data['correct_answer']
                 )
                 
                 if not test_session_id:
                     await ctx.send("❌ **Test session creation failed.** Database error occurred.")
+                    # Clean up the test question if session creation failed
+                    try:
+                        conn = db.get_connection()
+                        if conn:
+                            with conn.cursor() as cur:
+                                cur.execute("DELETE FROM trivia_questions WHERE id = %s", (test_question_id,))
+                                conn.commit()
+                    except Exception:
+                        pass  # Best effort cleanup
                     return
                     
                 print(f"🧪 TRIVIA TEST: Created test session {test_session_id}")
                 
             except Exception as session_error:
                 await ctx.send(f"❌ **Test session creation failed:** {session_error}")
+                # Clean up the test question if session creation failed
+                try:
+                    conn = db.get_connection()
+                    if conn:
+                        with conn.cursor() as cur:
+                            cur.execute("DELETE FROM trivia_questions WHERE id = %s", (test_question_id,))
+                            conn.commit()
+                except Exception:
+                    pass  # Best effort cleanup
                 return
 
             # Create test question embed with clear TEST indicators

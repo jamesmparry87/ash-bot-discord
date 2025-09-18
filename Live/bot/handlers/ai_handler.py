@@ -617,18 +617,21 @@ async def call_ai_with_rate_limiting(
                 # Determine timeout based on context priority
                 timeout_duration = 15.0 if context == "startup_validation" else 30.0
                 
-                # Create async wrapper for Gemini call with timeout
+                # Create truly async wrapper using thread pool to prevent blocking
                 import asyncio
-                async def make_gemini_request():
+                import concurrent.futures
+                
+                def sync_gemini_call():
+                    """Synchronous Gemini call to run in thread pool"""
                     return gemini_model.generate_content( # type: ignore
                         prompt, generation_config=generation_config)
                 
                 try:
-                    # Use asyncio.wait_for to implement timeout
-                    response = await asyncio.wait_for(
-                        make_gemini_request(), 
-                        timeout=timeout_duration
-                    )
+                    # Use thread pool executor to prevent blocking the event loop
+                    loop = asyncio.get_event_loop()
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = loop.run_in_executor(executor, sync_gemini_call)
+                        response = await asyncio.wait_for(future, timeout=timeout_duration)
                     
                     if response and hasattr(response, "text") and response.text:
                         response_text = response.text
