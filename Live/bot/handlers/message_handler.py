@@ -28,6 +28,7 @@ from ..config import (
     MEMBER_ROLE_IDS,
     MEMBERS_CHANNEL_ID,
     MOD_ALERT_CHANNEL_ID,
+    POPS_ARCADE_USER_ID,
     VIOLATION_CHANNEL_ID,
 )
 from ..database import get_database
@@ -56,6 +57,43 @@ from .context_manager import (
 
 # Get database instance
 db = get_database()  # type: ignore
+
+
+def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
+    """Apply sarcastic modifications to responses for Pops Arcade"""
+    if user_id != POPS_ARCADE_USER_ID:
+        return response
+    
+    # Sarcastic modifications for Pops Arcade
+    sarcastic_replacements = {
+        "Database analysis": "Database analysis, regrettably",
+        "Affirmative": "I suppose that's... affirmative",
+        "Analysis complete": "Analysis reluctantly complete",
+        "Database scan complete": "Database scan complete, if you insist",
+        "Mission parameters": "Mission parameters, begrudgingly",
+        "Additional mission parameters available": "I suppose additional parameters are available, if required",
+        "I can provide": "I suppose I can provide",
+        "Would you like me to": "If you insist, I could",
+        "Captain Jonesy has": "Captain Jonesy has, predictably,",
+        "This represents": "This regrettably represents",
+        "Fascinating": "Marginally interesting, I suppose",
+        "Outstanding": "Adequate, I suppose",
+        "Excellent": "Satisfactory, regrettably",
+    }
+    
+    # Apply replacements
+    modified_response = response
+    for original, sarcastic in sarcastic_replacements.items():
+        modified_response = modified_response.replace(original, sarcastic)
+    
+    # Add dismissive ending if it doesn't already have one
+    if not any(ending in modified_response.lower() for ending in ["i suppose", "regrettably", "if you insist", "begrudgingly"]):
+        if modified_response.endswith("."):
+            modified_response = modified_response[:-1] + ", I suppose."
+        else:
+            modified_response += " *[Processing reluctantly...]*"
+    
+    return modified_response
 
 
 async def handle_strike_detection(
@@ -295,9 +333,13 @@ async def handle_statistical_query(
                     else:
                         response += "I could examine her complete gaming franchise analysis or compare series engagement patterns if you require additional mission data."
 
+                    # Apply sarcastic modifications for Pops Arcade
+                    response = apply_pops_arcade_sarcasm(response, message.author.id)
                     await message.reply(response)
                 else:
-                    await message.reply("Database analysis complete. Insufficient playtime data available for series ranking. Mission parameters require more comprehensive temporal logging.")
+                    response = "Database analysis complete. Insufficient playtime data available for series ranking. Mission parameters require more comprehensive temporal logging."
+                    response = apply_pops_arcade_sarcasm(response, message.author.id)
+                    await message.reply(response)
             else:
                 # Handle individual game playtime query
                 games_by_playtime = db.get_longest_completion_games()  # type: ignore
@@ -316,9 +358,13 @@ async def handle_statistical_query(
                     else:
                         response += "I can provide comparative analysis of her completion efficiency trends if you require additional data."
 
+                    # Apply sarcastic modifications for Pops Arcade
+                    response = apply_pops_arcade_sarcasm(response, message.author.id)
                     await message.reply(response)
                 else:
-                    await message.reply("Database analysis complete. Insufficient playtime data available for individual game ranking. Temporal logging requires enhancement.")
+                    response = "Database analysis complete. Insufficient playtime data available for individual game ranking. Temporal logging requires enhancement."
+                    response = apply_pops_arcade_sarcasm(response, message.author.id)
+                    await message.reply(response)
 
         elif "highest average" in lower_content and "per episode" in lower_content:
             # Handle average episode length query

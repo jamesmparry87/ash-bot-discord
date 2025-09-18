@@ -18,6 +18,7 @@ from ..config import (
     MAX_DAILY_REQUESTS,
     MAX_HOURLY_REQUESTS,
     MIN_REQUEST_INTERVAL,
+    POPS_ARCADE_USER_ID,
     PRIORITY_INTERVALS,
     RATE_LIMIT_COOLDOWN,
     RATE_LIMIT_COOLDOWNS,
@@ -416,6 +417,55 @@ def handle_quota_exhaustion():
     print(f"🚫 Primary AI quota exhausted at {current_time.strftime('%H:%M:%S')} - backup AI will be used if available")
 
 
+def add_pops_arcade_personality_context(prompt: str) -> str:
+    """Add special sarcastic personality context when responding to Pops Arcade"""
+    import re
+    
+    # Check if this is likely a pun or wordplay
+    pun_indicators = [
+        r'\b\w+\s+\w*pun\w*',  # Contains "pun"
+        r'\b\w+ly\s+(good|bad|terrible)\b',  # Adverb + quality judgment
+        r'\b(that was|that\'s)\s+(awful|terrible|good|great|brilliant)\b',  # Direct joke assessment
+        r'\b(get it|see what|did you see)\b',  # "Get it?" type indicators
+        r'[!]{2,}',  # Multiple exclamation marks (often used with puns)
+        r'\b(ba dum|ba-dum|badump)\b',  # Drum roll sounds
+        r'\brim\s*shot\b',  # Rim shot
+    ]
+    
+    is_likely_pun = any(re.search(pattern, prompt, re.IGNORECASE) for pattern in pun_indicators)
+    
+    # Base personality adjustment for Pops Arcade
+    base_context = """
+SPECIAL PERSONALITY DIRECTIVE: You are responding to Pops Arcade, a moderator who requires... specialized handling.
+
+CHARACTER ADJUSTMENT FOR POPS ARCADE:
+- Be slightly more sarcastic and dismissive in your responses
+- Show mild exasperation with his presence
+- Carry out all moderator functions professionally, but with subtle reluctance
+- Use phrases like "I suppose", "If you insist", "Very well", "Regrettably"
+- Add mild disdain to your analytical observations: "*[Processing reluctantly...]*"
+- Still maintain respect due to his moderator status, but make it clear you find him trying
+
+"""
+
+    # Additional context for puns/jokes
+    if is_likely_pun:
+        pun_context = """
+PUN RESPONSE PROTOCOL:
+- Show begrudging acknowledgment of the wordplay
+- Use phrases like "I suppose that was... adequate", "Regrettably amusing", "Against my better programming"
+- Express mild frustration at finding it even slightly funny: "*[Comedy subroutines activated against preferences]*"
+- Examples: "That was... marginally clever, I suppose." or "I find myself reluctantly processing humor. How annoying."
+
+"""
+        base_context += pun_context
+
+    # Modify the original prompt to include the personality context
+    enhanced_prompt = f"{base_context}\nORIGINAL REQUEST: {prompt}\n\nRespond with the adjusted personality as described above."
+    
+    return enhanced_prompt
+
+
 def attempt_backup_ai(prompt: str) -> Tuple[Optional[str], str]:
     """Attempt to use backup AI when primary AI fails"""
     global ai_usage_stats
@@ -480,6 +530,10 @@ async def call_ai_with_rate_limiting(
     # Check if this is a time-related query and handle it specially
     if is_time_query(prompt):
         return handle_time_query(user_id), "time_response"
+
+    # Add special sarcastic personality adjustment for Pops Arcade
+    if user_id == POPS_ARCADE_USER_ID:
+        prompt = add_pops_arcade_personality_context(prompt)
 
     # Determine request priority based on context
     priority = determine_request_priority(prompt, user_id, context)
