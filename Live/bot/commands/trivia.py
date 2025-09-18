@@ -8,6 +8,7 @@ Handles comprehensive trivia management including:
 - Question prioritization and AI generation
 """
 
+import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
@@ -786,6 +787,129 @@ class TriviaCommands(commands.Cog):
         except Exception as e:
             logger.error(f"Error checking approval status: {e}")
             await ctx.send("❌ System error occurred while checking approval status.")
+
+    @commands.command(name="triviatest")
+    @commands.has_permissions(manage_messages=True) 
+    async def trivia_test(self, ctx):
+        """Test the reply-based trivia system without disrupting real trivia (moderators only)"""
+        try:
+            if db is None:
+                await ctx.send("❌ **Database offline.** Cannot test trivia without database connection.")
+                return
+
+            # Check if there's already an active trivia session
+            try:
+                active_session = db.get_active_trivia_session()
+                if active_session:
+                    await ctx.send("⚠️ **Active trivia session detected.** Please wait for it to end before testing to avoid interference.")
+                    return
+            except Exception:
+                pass  # Continue with test even if we can't check active session
+
+            print(f"🧪 TRIVIA TEST: Starting test initiated by {ctx.author.id} in channel {ctx.channel.id}")
+
+            # Create a test trivia session entry 
+            test_question_data = {
+                'id': 999999,  # Use fake ID for testing
+                'question_text': 'What is the name of the science officer android in this Discord server?',
+                'question_type': 'single',
+                'correct_answer': 'Ash',
+                'choices': None
+            }
+
+            # Start test session (use a special test session)
+            try:
+                test_session_id = db.create_trivia_session(
+                    question_id=test_question_data['id'],
+                    session_type="test",
+                    calculated_answer=test_question_data['correct_answer']
+                )
+                
+                if not test_session_id:
+                    await ctx.send("❌ **Test session creation failed.** Database error occurred.")
+                    return
+                    
+                print(f"🧪 TRIVIA TEST: Created test session {test_session_id}")
+                
+            except Exception as session_error:
+                await ctx.send(f"❌ **Test session creation failed:** {session_error}")
+                return
+
+            # Create test question embed with clear TEST indicators
+            test_embed = discord.Embed(
+                title="🧪 **TRIVIA TEST MODE - NOT A REAL QUESTION**",
+                description=test_question_data['question_text'],
+                color=0xff9900,  # Orange to indicate test mode
+                timestamp=datetime.now(ZoneInfo("Europe/London"))
+            )
+            
+            test_embed.add_field(
+                name="💡 **How to Test:**",
+                value="**Reply to this message** with 'Ash' to test the reply detection system!",
+                inline=False
+            )
+            
+            test_embed.add_field(
+                name="🔧 **Test Session Info:**",
+                value=f"Test Session #{test_session_id} • Question #999999",
+                inline=False
+            )
+            
+            test_embed.set_footer(text=f"TEST by {ctx.author.display_name} • Messages auto-delete in 60s")
+
+            # Send test question and capture message ID
+            test_question_message = await ctx.send(embed=test_embed)
+
+            # Send test confirmation and capture message ID
+            test_confirmation_message = await ctx.send(
+                f"🧪 **TRIVIA TEST SESSION #{test_session_id} ACTIVE**\n\n"
+                f"**This is a test of the reply detection system.**\n"
+                f"Reply to either message above with 'Ash' to test.\n\n"
+                f"*Expected result: Bot should detect your reply and confirm the system works.*\n"
+                f"*Test messages will auto-delete in 60 seconds.*"
+            )
+
+            # Update test session with message tracking
+            try:
+                update_success = db.update_trivia_session_messages(
+                    session_id=test_session_id,
+                    question_message_id=test_question_message.id,
+                    confirmation_message_id=test_confirmation_message.id,
+                    channel_id=ctx.channel.id
+                )
+                
+                if update_success:
+                    print(f"✅ TRIVIA TEST: Test session {test_session_id} updated with message tracking: Q:{test_question_message.id}, C:{test_confirmation_message.id}")
+                    await ctx.send(f"✅ **Test setup complete!** Reply to either message above to test reply detection.\n\n*Test will auto-cleanup in 60 seconds.*", delete_after=10)
+                else:
+                    print(f"⚠️ TRIVIA TEST: Failed to update test session {test_session_id} with message IDs")
+                    await ctx.send("⚠️ **Test setup partially complete** but message tracking failed. Reply detection may not work.", delete_after=10)
+                    
+            except Exception as msg_tracking_error:
+                print(f"❌ TRIVIA TEST: Error updating test session message tracking: {msg_tracking_error}")
+                await ctx.send(f"❌ **Test setup error:** {msg_tracking_error}", delete_after=10)
+
+            # Set up auto-cleanup after 60 seconds
+            async def cleanup_test_session():
+                await asyncio.sleep(60)
+                try:
+                    # Delete test messages
+                    await test_question_message.delete()
+                    await test_confirmation_message.delete()
+                    
+                    # Clean up test session from database
+                    db.complete_trivia_session(test_session_id)
+                    print(f"🧹 TRIVIA TEST: Cleaned up test session {test_session_id}")
+                    
+                except Exception as cleanup_error:
+                    print(f"⚠️ TRIVIA TEST: Cleanup error: {cleanup_error}")
+
+            # Start cleanup task
+            asyncio.create_task(cleanup_test_session())
+
+        except Exception as e:
+            print(f"❌ TRIVIA TEST: Critical error: {e}")
+            await ctx.send(f"❌ **Trivia test failed:** {str(e)}")
 
 
 async def setup(bot):
