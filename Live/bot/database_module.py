@@ -2723,20 +2723,91 @@ class DatabaseManager:
                     "calculated_answer") or session_dict.get("correct_answer")
 
                 if correct_answer:
-                    # Mark correct answers (excluding conflicts)
-                    cur.execute(
-                        """
-                        UPDATE trivia_answers
-                        SET is_correct = TRUE
-                        WHERE session_id = %s
-                        AND conflict_detected = FALSE
-                        AND (
-                            LOWER(TRIM(answer_text)) = LOWER(TRIM(%s))
-                            OR LOWER(TRIM(normalized_answer)) = LOWER(TRIM(%s))
-                        )
-                    """,
-                        (session_id, correct_answer, correct_answer),
-                    )
+                    # Enhanced fuzzy matching for trivia answers
+                    from bot_modular import normalize_trivia_answer, extract_time_components
+                    
+                    # Normalize the correct answer for comparison
+                    normalized_correct = normalize_trivia_answer(correct_answer)
+                    correct_time_data = extract_time_components(correct_answer)
+                    
+                    print(f"🧠 TRIVIA: Matching against correct answer: '{correct_answer}' → normalized: '{normalized_correct}'")
+                    
+                    # Get all answers for this session to process them individually
+                    cur.execute("""
+                        SELECT id, user_id, answer_text, normalized_answer
+                        FROM trivia_answers
+                        WHERE session_id = %s AND conflict_detected = FALSE
+                    """, (session_id,))
+                    
+                    all_answers = cur.fetchall()
+                    correct_answer_ids = []
+                    first_correct_answer = None
+                    
+                    for answer_row in all_answers:
+                        answer_dict = dict(answer_row)
+                        answer_id = answer_dict['id']
+                        user_id = answer_dict['user_id']
+                        original_answer = answer_dict['answer_text']
+                        normalized_answer = answer_dict['normalized_answer'] or ''
+                        
+                        is_correct = False
+                        match_type = None
+                        
+                        # Level 1: Exact match (case-insensitive)
+                        if original_answer.lower().strip() == correct_answer.lower().strip():
+                            is_correct = True
+                            match_type = "exact"
+                        
+                        # Level 2: Normalized match (fuzzy but full points)
+                        elif normalized_answer.lower().strip() == normalized_correct.lower().strip():
+                            is_correct = True
+                            match_type = "normalized"
+                        
+                        # Level 3: Numerical time matching (for time-based answers)
+                        elif correct_time_data['has_time']:
+                            user_time_data = extract_time_components(original_answer)
+                            if user_time_data['has_time']:
+                                # Allow some tolerance for time answers
+                                time_diff = abs(user_time_data['total_minutes'] - correct_time_data['total_minutes'])
+                                
+                                if time_diff == 0:
+                                    # Exact time match
+                                    is_correct = True
+                                    match_type = "time_exact"
+                                elif time_diff <= 5:  # Within 5 minutes tolerance
+                                    is_correct = True
+                                    match_type = "time_close"
+                        
+                        # Level 4: Partial word matching (for complex answers)
+                        if not is_correct and len(normalized_correct.split()) > 1:
+                            correct_words = set(normalized_correct.split())
+                            answer_words = set(normalized_answer.split())
+                            
+                            # If user answer contains most of the correct answer words
+                            if len(correct_words) > 0:
+                                match_ratio = len(correct_words.intersection(answer_words)) / len(correct_words)
+                                if match_ratio >= 0.7:  # 70% word overlap
+                                    is_correct = True
+                                    match_type = "partial"
+                        
+                        if is_correct:
+                            correct_answer_ids.append(answer_id)
+                            if first_correct_answer is None:
+                                first_correct_answer = {'id': answer_id, 'user_id': user_id}
+                            
+                            print(f"✅ TRIVIA: Answer {answer_id} marked correct ({match_type}): '{original_answer}'")
+                        else:
+                            print(f"❌ TRIVIA: Answer {answer_id} incorrect: '{original_answer}' ≠ '{correct_answer}'")
+                    
+                    # Update all correct answers in batch
+                    if correct_answer_ids:
+                        cur.execute("""
+                            UPDATE trivia_answers
+                            SET is_correct = TRUE
+                            WHERE id = ANY(%s)
+                        """, (correct_answer_ids,))
+                        
+                        print(f"🎯 TRIVIA: Marked {len(correct_answer_ids)} answers as correct")
 
                     # Only calculate counts if not provided as parameters
                     if total_participants is None or correct_count is None:

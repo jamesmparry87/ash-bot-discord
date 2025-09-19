@@ -915,8 +915,338 @@ def robust_json_parse(response_text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+# Question diversity tracking
+question_history = {
+    "used_patterns": [],
+    "category_cooldowns": {},
+    "template_usage": {},
+    "last_questions": [],
+    "pattern_weights": {}
+}
+
+def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
+    """Get diverse question templates organized by category"""
+    return {
+        "comparison": [
+            {
+                "template": "Which game has more episodes - {game1} or {game2}?",
+                "answer_logic": "compare_episodes",
+                "type": "single_answer",
+                "weight": 1.0
+            },
+            {
+                "template": "What took longer to complete - {game1} or {game2}?",
+                "answer_logic": "compare_playtime",
+                "type": "single_answer", 
+                "weight": 1.0
+            },
+            {
+                "template": "Which was completed first - {game1} or {game2}?",
+                "answer_logic": "compare_completion_date",
+                "type": "single_answer",
+                "weight": 0.8
+            }
+        ],
+        "ranking": [
+            {
+                "template": "What game has the most episodes?",
+                "answer_logic": "max_episodes",
+                "type": "single_answer",
+                "weight": 0.5  # Lower weight due to overuse
+            },
+            {
+                "template": "Which game took the longest to complete?",
+                "answer_logic": "max_playtime", 
+                "type": "single_answer",
+                "weight": 0.3  # Very low weight - overused
+            },
+            {
+                "template": "What game was completed most recently?",
+                "answer_logic": "latest_completion",
+                "type": "single_answer",
+                "weight": 1.0
+            },
+            {
+                "template": "Which game has the shortest episodes on average?",
+                "answer_logic": "min_avg_episode_length",
+                "type": "single_answer", 
+                "weight": 1.2  # Higher weight - more interesting
+            }
+        ],
+        "statistical": [
+            {
+                "template": "What percentage of games are completed?",
+                "answer_logic": "completion_percentage",
+                "type": "single_answer",
+                "weight": 1.1
+            },
+            {
+                "template": "How many total hours has Jonesy spent gaming?",
+                "answer_logic": "total_hours_played",
+                "type": "single_answer",
+                "weight": 0.8
+            },
+            {
+                "template": "What's the average episode count across all games?",
+                "answer_logic": "avg_episodes",
+                "type": "single_answer",
+                "weight": 1.0
+            },
+            {
+                "template": "How many different genres has Jonesy played?",
+                "answer_logic": "unique_genres",
+                "type": "single_answer",
+                "weight": 1.3  # High interest, rarely asked
+            }
+        ],
+        "categorical": [
+            {
+                "template": "What genre appears most frequently in Jonesy's library?",
+                "answer_logic": "most_common_genre",
+                "type": "single_answer",
+                "weight": 1.1
+            },
+            {
+                "template": "Which platform has Jonesy used most?",
+                "answer_logic": "most_common_platform", 
+                "type": "single_answer",
+                "weight": 1.2
+            },
+            {
+                "template": "What series has the most games in Jonesy's collection?",
+                "answer_logic": "largest_series",
+                "type": "single_answer",
+                "weight": 1.0
+            }
+        ],
+        "multiple_choice": [
+            {
+                "template": "Which of these games took the longest to complete?",
+                "answer_logic": "mc_longest_game",
+                "type": "multiple_choice",
+                "weight": 1.4  # Multiple choice is more engaging
+            },
+            {
+                "template": "Which game has the most episodes?",
+                "answer_logic": "mc_most_episodes",
+                "type": "multiple_choice", 
+                "weight": 1.2
+            },
+            {
+                "template": "Which of these is NOT a genre Jonesy has played?",
+                "answer_logic": "mc_genre_exclusion",
+                "type": "multiple_choice",
+                "weight": 1.5  # Very engaging format
+            }
+        ]
+    }
+
+def calculate_template_weights(templates: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
+    """Calculate dynamic weights based on usage history and cooldowns"""
+    current_time = datetime.now(pacific_tz)
+    
+    # Apply cooldowns and usage penalties
+    for category, template_list in templates.items():
+        # Category cooldown check
+        category_cooldown = question_history["category_cooldowns"].get(category, None)
+        if category_cooldown and current_time < category_cooldown:
+            # Reduce weights for category in cooldown
+            for template in template_list:
+                template["weight"] *= 0.3
+                
+        # Individual template usage penalties
+        for template in template_list:
+            template_id = template.get("template", "")[:20]  # Use first 20 chars as ID
+            usage_count = question_history["template_usage"].get(template_id, 0)
+            
+            # Apply usage penalty (more usage = lower weight)
+            if usage_count > 0:
+                penalty = max(0.2, 1.0 - (usage_count * 0.2))
+                template["weight"] *= penalty
+    
+    return templates
+
+def select_best_template(games_data: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Select the best template based on data availability and weights"""
+    templates = get_question_templates()
+    weighted_templates = calculate_template_weights(templates)
+    
+    viable_templates = []
+    
+    # Check each template for data viability
+    for category, template_list in weighted_templates.items():
+        for template in template_list:
+            # Check if we have enough data for this template
+            if is_template_viable(template, games_data):
+                viable_templates.append((template, category))
+    
+    if not viable_templates:
+        print("⚠️ No viable templates found for current data")
+        return None
+    
+    # Weight-based selection
+    total_weight = sum(template["weight"] for template, _ in viable_templates)
+    import random
+    
+    if total_weight > 0:
+        # Weighted random selection
+        target = random.uniform(0, total_weight)
+        current_weight = 0
+        
+        for template, category in viable_templates:
+            current_weight += template["weight"]
+            if current_weight >= target:
+                return {**template, "category": category}
+    
+    # Fallback to random selection
+    template, category = random.choice(viable_templates)
+    return {**template, "category": category}
+
+def is_template_viable(template: Dict[str, Any], games_data: List[Dict[str, Any]]) -> bool:
+    """Check if template can be answered with available data"""
+    answer_logic = template.get("answer_logic", "")
+    
+    # Comparison templates need at least 2 games
+    if answer_logic.startswith("compare_") and len(games_data) < 2:
+        return False
+    
+    # Multiple choice needs at least 3 games for good options
+    if template.get("type") == "multiple_choice" and len(games_data) < 3:
+        return False
+        
+    # Episode-based questions need games with episode data
+    if "episode" in answer_logic:
+        if not any(game.get("total_episodes", 0) > 0 for game in games_data):
+            return False
+    
+    # Playtime questions need games with playtime data
+    if "playtime" in answer_logic or "hours" in answer_logic:
+        if not any(game.get("total_playtime_minutes", 0) > 0 for game in games_data):
+            return False
+    
+    # Genre questions need games with genre data
+    if "genre" in answer_logic:
+        if not any(game.get("genre") for game in games_data):
+            return False
+            
+    return True
+
+def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute the answer logic and return question data"""
+    if logic == "compare_episodes":
+        # Pick two games with episode data
+        games_with_episodes = [g for g in games_data if g.get("total_episodes", 0) > 0]
+        if len(games_with_episodes) >= 2:
+            import random
+            game1, game2 = random.sample(games_with_episodes, 2)
+            winner = game1 if game1.get("total_episodes", 0) > game2.get("total_episodes", 0) else game2
+            return {
+                "question_text": template["template"].format(game1=game1["canonical_name"], game2=game2["canonical_name"]),
+                "correct_answer": winner["canonical_name"],
+                "question_type": "single_answer"
+            }
+    
+    elif logic == "compare_playtime":
+        games_with_playtime = [g for g in games_data if g.get("total_playtime_minutes", 0) > 0]
+        if len(games_with_playtime) >= 2:
+            import random
+            game1, game2 = random.sample(games_with_playtime, 2)
+            winner = game1 if game1.get("total_playtime_minutes", 0) > game2.get("total_playtime_minutes", 0) else game2
+            return {
+                "question_text": template["template"].format(game1=game1["canonical_name"], game2=game2["canonical_name"]),
+                "correct_answer": winner["canonical_name"],
+                "question_type": "single_answer"
+            }
+    
+    elif logic == "max_episodes":
+        games_with_episodes = [g for g in games_data if g.get("total_episodes", 0) > 0]
+        if games_with_episodes:
+            winner = max(games_with_episodes, key=lambda x: x.get("total_episodes", 0))
+            return {
+                "question_text": template["template"],
+                "correct_answer": winner["canonical_name"],
+                "question_type": "single_answer"
+            }
+    
+    elif logic == "max_playtime":
+        games_with_playtime = [g for g in games_data if g.get("total_playtime_minutes", 0) > 0]
+        if games_with_playtime:
+            winner = max(games_with_playtime, key=lambda x: x.get("total_playtime_minutes", 0))
+            return {
+                "question_text": template["template"],
+                "correct_answer": winner["canonical_name"],
+                "question_type": "single_answer"
+            }
+    
+    elif logic == "completion_percentage":
+        completed = len([g for g in games_data if g.get("completion_status") == "completed"])
+        percentage = round((completed / len(games_data)) * 100) if games_data else 0
+        return {
+            "question_text": template["template"],
+            "correct_answer": f"{percentage}%",
+            "question_type": "single_answer"
+        }
+    
+    elif logic == "most_common_genre":
+        genres = [g.get("genre") for g in games_data if g.get("genre")]
+        if genres:
+            from collections import Counter
+            most_common = Counter(genres).most_common(1)[0][0]
+            return {
+                "question_text": template["template"],
+                "correct_answer": most_common,
+                "question_type": "single_answer"
+            }
+    
+    elif logic == "mc_longest_game":
+        games_with_playtime = [g for g in games_data if g.get("total_playtime_minutes", 0) > 0]
+        if len(games_with_playtime) >= 3:
+            import random
+            # Pick the longest game and 3 others for choices
+            longest = max(games_with_playtime, key=lambda x: x.get("total_playtime_minutes", 0))
+            others = [g for g in games_with_playtime if g != longest]
+            choices = [longest] + random.sample(others, min(3, len(others)))
+            random.shuffle(choices)
+            
+            choice_names = [g["canonical_name"] for g in choices]
+            correct_letter = chr(65 + choice_names.index(longest["canonical_name"]))  # A, B, C, D
+            
+            return {
+                "question_text": template["template"],
+                "correct_answer": correct_letter,
+                "question_type": "multiple_choice",
+                "multiple_choice_options": choice_names
+            }
+    
+    # Fallback - return None if logic couldn't execute
+    return {}
+
+def update_question_history(question_data: Dict[str, Any], category: str):
+    """Update question history to track usage and implement cooldowns"""
+    current_time = datetime.now(pacific_tz)
+    
+    # Add to recent questions list (keep last 10)
+    question_history["last_questions"].append({
+        "question": question_data.get("question_text", "")[:50],
+        "category": category,
+        "timestamp": current_time
+    })
+    if len(question_history["last_questions"]) > 10:
+        question_history["last_questions"].pop(0)
+    
+    # Update template usage count
+    template_id = question_data.get("question_text", "")[:20]
+    question_history["template_usage"][template_id] = question_history["template_usage"].get(template_id, 0) + 1
+    
+    # Set category cooldown if used too recently
+    recent_usage = sum(1 for q in question_history["last_questions"][-3:] if q["category"] == category)
+    if recent_usage >= 2:  # Used 2 times in last 3 questions
+        cooldown_duration = 30 * 60  # 30 minutes
+        question_history["category_cooldowns"][category] = current_time + timedelta(seconds=cooldown_duration)
+        print(f"⏰ Category '{category}' on cooldown for 30 minutes due to recent usage")
+
 async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[str, Any]]:
-    """Generate a trivia question using AI based on gaming database statistics"""
+    """Generate a diverse trivia question using template-based system with AI fallback"""
     if not ai_enabled:
         print("❌ AI not enabled for trivia question generation")
         return None
@@ -927,113 +1257,109 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
         return None
 
     try:
-        # Get gaming statistics for context
+        print(f"🧠 Generating diverse trivia question with context: {context}")
+        
+        # Get all available games data
+        all_games = db.get_all_played_games()
+        
+        if not all_games:
+            print("❌ No games data available for question generation")
+            return None
+        
+        print(f"📊 Available games data: {len(all_games)} games")
+        
+        # Try template-based generation first (more reliable and diverse)
+        try:
+            selected_template = select_best_template(all_games)
+            
+            if selected_template:
+                question_data = execute_answer_logic(
+                    selected_template["answer_logic"], 
+                    all_games, 
+                    selected_template
+                )
+                
+                if question_data and question_data.get("question_text"):
+                    # Add metadata
+                    question_data.update({
+                        "is_dynamic": False,
+                        "category": selected_template.get("category", "template_generated"),
+                        "generation_method": "template"
+                    })
+                    
+                    # Update history
+                    update_question_history(question_data, selected_template.get("category", "unknown"))
+                    
+                    print(f"✅ Template-generated question: {question_data['question_text'][:50]}...")
+                    return question_data
+        
+        except Exception as template_error:
+            print(f"⚠️ Template generation failed: {template_error}")
+        
+        # Fallback to AI generation (with improved prompt)
         stats = db.get_played_games_stats()
-        sample_games = db.get_random_played_games(10)
-
-        # Create a prompt for AI question generation
+        sample_games = all_games[:5]  # Use first 5 games for context
+        
+        # Create detailed game context
         game_context = ""
         if sample_games:
-            game_list = []
+            game_details = []
             for game in sample_games:
-                episodes_info = f" ({game.get('total_episodes', 0)} eps)" if game.get(
-                    'total_episodes', 0) > 0 else ""
+                episodes_info = f" ({game.get('total_episodes', 0)} eps)" if game.get('total_episodes', 0) > 0 else ""
                 status = game.get('completion_status', 'unknown')
                 playtime = game.get('total_playtime_minutes', 0)
-                game_list.append(
-                    f"{game['canonical_name']}{episodes_info} - {status} - {playtime//60}h {playtime%60}m")
+                genre = game.get('genre', 'unknown')
+                game_details.append(
+                    f"{game['canonical_name']}{episodes_info} - {status} - {playtime//60}h {playtime%60}m - {genre}")
 
-            game_context = f"Sample games from database: {'; '.join(game_list[:5])}"
+            game_context = f"Available games: {'; '.join(game_details)}"
 
-        # Create AI prompt for trivia question generation with enhanced JSON instructions
-        prompt = f"""CRITICAL: Return ONLY valid JSON. No extra text, explanations, or markdown formatting.
+        # Enhanced AI prompt with diversity focus
+        recent_categories = [q["category"] for q in question_history["last_questions"][-5:]]
+        avoid_categories = list(set(recent_categories)) if recent_categories else []
+        
+        prompt = f"""CRITICAL: Generate a DIVERSE trivia question. Avoid these recently used categories: {avoid_categories}
 
-You have FULL ACCESS to Captain Jonesy's comprehensive gaming database. Generate a trivia question based on this data:
+FORCED DIVERSITY: Use one of these UNDERUSED categories:
+- Comparative analysis (compare 2 games directly)  
+- Statistical breakdowns (percentages, averages, totals)
+- Categorical insights (genres, platforms, series)
+- Timeline questions (first/last played, completion order)
 
-DATABASE ACCESS CONFIRMATION:
-- ✅ Total playtime minutes for ALL games
-- ✅ Episode counts and completion statistics  
-- ✅ Series data and franchise information
-- ✅ All gaming metadata including genres, years, platforms
-- ✅ Complete gaming history and patterns
-
-CURRENT DATA SAMPLE:
-Total games played: {stats.get('total_games', 0)}
+DATABASE CONTEXT:
+Total games: {stats.get('total_games', 0)}
 {game_context}
 
-Create either:
-1. A single-answer question about gaming statistics or specific games
-2. A multiple-choice question with 4 options (A, B, C, D)
-
-Focus on interesting facts like:
-- Longest/shortest playthroughs (using FULL playtime data)
-- Most episodes in a series
-- Completion patterns and gaming preferences
-- Statistical comparisons and rankings
-
-RETURN ONLY THIS JSON FORMAT (no backticks, no extra text):
+RETURN ONLY JSON (no markdown, no extra text):
 {{
-    "question_text": "Your question here",
+    "question_text": "Your diverse question here",
     "question_type": "single_answer",
     "correct_answer": "The answer",
-    "multiple_choice_options": ["A option", "B option", "C option", "D option"],
     "is_dynamic": false,
-    "category": "statistics"
+    "category": "ai_generated"
 }}
 
-IMPORTANT: 
-- Use "single_answer" or "multiple_choice" for question_type
-- Include multiple_choice_options array ONLY if question_type is "multiple_choice"
-- Category should be "statistics", "games", or "series"
-- Return ONLY the JSON object, nothing else"""
+Focus on COMPARATIVE or STATISTICAL questions that are different from typical "most playtime" questions."""
 
-        # Call AI with appropriate context and rate limiting
-        print(f"🧠 Generating trivia question with context: {context}")
+        # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, JONESY_USER_ID, context)
 
         if response_text:
-            print(f"✅ AI response received: {len(response_text)} characters")
+            print(f"✅ AI fallback response received: {len(response_text)} characters")
             
-            # Use robust JSON parsing
+            # Parse AI response
             ai_question = robust_json_parse(response_text)
             
-            if ai_question:
-                # Validate required fields
-                required_fields = ["question_text", "question_type", "correct_answer"]
-                if all(key in ai_question for key in required_fields):
-                    # Validate question_type
-                    if ai_question["question_type"] not in ["single_answer", "multiple_choice"]:
-                        print(f"⚠️ Invalid question_type: {ai_question['question_type']}, defaulting to single_answer")
-                        ai_question["question_type"] = "single_answer"
-                    
-                    # Ensure required fields for multiple choice
-                    if ai_question["question_type"] == "multiple_choice":
-                        if "multiple_choice_options" not in ai_question or not ai_question["multiple_choice_options"]:
-                            print("⚠️ Multiple choice question missing options, converting to single answer")
-                            ai_question["question_type"] = "single_answer"
-                            ai_question["multiple_choice_options"] = None
-                    
-                    # Set defaults for optional fields
-                    if "is_dynamic" not in ai_question:
-                        ai_question["is_dynamic"] = False
-                    if "category" not in ai_question:
-                        ai_question["category"] = "ai_generated"
-                    
-                    print(f"✅ Valid trivia question generated: {ai_question['question_text'][:50]}...")
-                    return ai_question
-                else:
-                    missing_fields = [field for field in required_fields if field not in ai_question]
-                    print(f"❌ AI question missing required fields: {missing_fields}")
-                    return None
-            else:
-                print("❌ Failed to parse AI response as valid JSON")
-                return None
-        else:
-            print(f"❌ AI trivia question generation failed: {status_message}")
-            return None
+            if ai_question and all(key in ai_question for key in ["question_text", "question_type", "correct_answer"]):
+                ai_question["generation_method"] = "ai_fallback"
+                print(f"✅ AI fallback question generated: {ai_question['question_text'][:50]}...")
+                return ai_question
+        
+        print(f"❌ AI fallback failed: {status_message}")
+        return None
 
     except Exception as e:
-        print(f"❌ Error generating AI trivia question: {e}")
+        print(f"❌ Error in diverse trivia generation: {e}")
         import traceback
         traceback.print_exc()
         return None

@@ -33,6 +33,80 @@ class TriviaCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    def _is_natural_multiple_choice_format(self, content: str) -> bool:
+        """Check if content is in natural multiple choice format"""
+        import re
+        # Look for pattern: A option, B option, C option with correct answer
+        lines = content.strip().split('\n')
+        if len(lines) < 4:  # Need at least question + 2 choices + answer
+            return False
+        
+        # Check for A. B. C. pattern or A) B) C) pattern
+        choice_pattern = re.compile(r'^[A-D][.)]\s+.+', re.IGNORECASE)
+        choice_count = 0
+        
+        for line in lines:
+            if choice_pattern.match(line.strip()):
+                choice_count += 1
+        
+        # Check for "correct answer" or "answer:" line
+        has_answer_line = any(
+            'correct answer' in line.lower() or 'answer:' in line.lower() 
+            for line in lines
+        )
+        
+        return choice_count >= 2 and has_answer_line
+
+    def _parse_natural_multiple_choice(self, content: str) -> Optional[dict]:
+        """Parse natural multiple choice format into structured data"""
+        import re
+        
+        lines = [line.strip() for line in content.strip().split('\n') if line.strip()]
+        if not lines:
+            return None
+        
+        question_text = ""
+        choices = []
+        correct_answer = ""
+        
+        # Find question (usually first line without A. B. C. pattern and not answer line)
+        choice_pattern = re.compile(r'^[A-D][.)]\s+(.+)', re.IGNORECASE)
+        answer_pattern = re.compile(r'(?:correct\s+answer:?\s*|answer:?\s*)([A-D])', re.IGNORECASE)
+        
+        for line in lines:
+            # Check if this is a choice line
+            choice_match = choice_pattern.match(line)
+            if choice_match:
+                choices.append(choice_match.group(1).strip())
+                continue
+            
+            # Check if this is the answer line
+            answer_match = answer_pattern.search(line)
+            if answer_match:
+                correct_answer = answer_match.group(1).upper()
+                continue
+            
+            # If not a choice or answer, assume it's part of the question
+            if not question_text:
+                question_text = line
+            else:
+                question_text += " " + line
+        
+        # Validate we have everything we need
+        if not question_text or len(choices) < 2 or not correct_answer:
+            return None
+        
+        # Validate correct answer is a valid choice letter
+        choice_index = ord(correct_answer) - ord('A')
+        if choice_index < 0 or choice_index >= len(choices):
+            return None
+        
+        return {
+            'question': question_text.strip(),
+            'choices': choices,
+            'answer': correct_answer,
+        }
+
     async def _generate_ai_question_fallback(self):
         """Fallback AI question generation when dedicated function is unavailable"""
         try:
@@ -116,44 +190,57 @@ class TriviaCommands(commands.Cog):
                 await ctx.send("❌ **Trivia system not available.** Database methods need implementation.\n\n*Required method: `add_trivia_question(question, answer, question_type, choices, created_by)`*")
                 return
 
-            # Parse question components
-            parts = content.split(' | ')
-            if len(parts) < 3:
-                await ctx.send("❌ **Invalid format.** Use: `!addtrivia <question> | answer:<answer> | type:<single/multiple>`")
-                return
+            # Check if this is natural multiple choice format (contains A. B. C. pattern)
+            if self._is_natural_multiple_choice_format(content):
+                parsed_data = self._parse_natural_multiple_choice(content)
+                if not parsed_data:
+                    await ctx.send("❌ **Invalid multiple choice format.** Expected format:\n```\nQuestion text?\nA Option 1\nB Option 2\nC Option 3\nCorrect answer: B```")
+                    return
+                    
+                question_text = parsed_data['question']
+                answer = parsed_data['answer']
+                question_type = 'multiple'
+                choices = parsed_data['choices']
+                
+            else:
+                # Parse traditional pipe-separated format
+                parts = content.split(' | ')
+                if len(parts) < 3:
+                    await ctx.send("❌ **Invalid format.** Use: `!addtrivia <question> | answer:<answer> | type:<single/multiple>`")
+                    return
 
-            question_text = parts[0].strip()
+                question_text = parts[0].strip()
 
-            # Parse answer
-            answer = None
-            question_type = "single"  # default
-            choices = []
+                # Parse answer
+                answer = None
+                question_type = "single"  # default
+                choices = []
 
-            for part in parts[1:]:
-                if ':' in part:
-                    key, value = part.split(':', 1)
-                    key = key.strip().lower()
-                    value = value.strip()
+                for part in parts[1:]:
+                    if ':' in part:
+                        key, value = part.split(':', 1)
+                        key = key.strip().lower()
+                        value = value.strip()
 
-                    if key == 'answer':
-                        answer = value
-                    elif key == 'type':
-                        if value.lower() in ['single', 'multiple']:
-                            question_type = value.lower()
-                        else:
-                            await ctx.send("❌ **Invalid type.** Use: single or multiple")
-                            return
-                    elif key == 'choices':
-                        choices = [choice.strip()
-                                   for choice in value.split(',')]
+                        if key == 'answer':
+                            answer = value
+                        elif key == 'type':
+                            if value.lower() in ['single', 'multiple']:
+                                question_type = value.lower()
+                            else:
+                                await ctx.send("❌ **Invalid type.** Use: single or multiple")
+                                return
+                        elif key == 'choices':
+                            choices = [choice.strip()
+                                       for choice in value.split(',')]
 
-            if not answer:
-                await ctx.send("❌ **Answer is required.** Format: `| answer:<correct_answer>`")
-                return
+                if not answer:
+                    await ctx.send("❌ **Answer is required.** Format: `| answer:<correct_answer>`")
+                    return
 
-            if question_type == 'multiple' and not choices:
-                await ctx.send("❌ **Choices required for multiple choice.** Format: `| choices:A,B,C,D`")
-                return
+                if question_type == 'multiple' and not choices:
+                    await ctx.send("❌ **Choices required for multiple choice.** Format: `| choices:A,B,C,D`")
+                    return
 
             if len(question_text) < 10:
                 await ctx.send("❌ **Question too short.** Please provide a meaningful trivia question.")

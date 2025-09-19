@@ -855,8 +855,135 @@ async def is_trivia_answer_reply(message):
         return False, None
 
 
+def normalize_trivia_answer(answer_text: str) -> str:
+    """Enhanced normalization for trivia answers with fuzzy matching support"""
+    import re
+    
+    # Start with the original text
+    normalized = answer_text.strip()
+    
+    # Remove common punctuation but preserve important chars like hyphens in compound words
+    normalized = re.sub(r'[.,!?;:"\'()[\]{}]', '', normalized)
+    
+    # Handle common game/media abbreviations and variations
+    abbreviation_map = {
+        'gta': 'grand theft auto',
+        'cod': 'call of duty', 
+        'gtav': 'grand theft auto v',
+        'gtaiv': 'grand theft auto iv',
+        'rdr': 'red dead redemption',
+        'rdr2': 'red dead redemption 2',
+        'gow': 'god of war',
+        'tlou': 'the last of us',
+        'botw': 'breath of the wild',
+        'totk': 'tears of the kingdom',
+        'ff': 'final fantasy',
+        'ffvii': 'final fantasy vii',
+        'ffx': 'final fantasy x',
+        'mgs': 'metal gear solid',
+        'loz': 'legend of zelda',
+        'zelda': 'legend of zelda',
+        'pokemon': 'pokémon',
+        'mario': 'super mario',
+        'doom': 'doom',
+        'halo': 'halo',
+        'fallout': 'fallout'
+    }
+    
+    # Apply abbreviation expansions (case insensitive)
+    words = normalized.lower().split()
+    expanded_words = []
+    for word in words:
+        if word in abbreviation_map:
+            expanded_words.extend(abbreviation_map[word].split())
+        else:
+            expanded_words.append(word)
+    normalized = ' '.join(expanded_words)
+    
+    # Remove filler words that don't change meaning
+    filler_words = ['and', 'the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by',
+                    'about', 'approximately', 'roughly', 'around', 'over', 'under', 'just',
+                    'exactly', 'precisely', 'nearly', 'almost', 'close to', 'more than', 'less than']
+    
+    # Split into words and filter out filler words
+    words = normalized.split()
+    filtered_words = [word for word in words if word not in filler_words]
+    
+    # Rejoin and clean up extra spaces
+    normalized = ' '.join(filtered_words)
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+    
+    return normalized
+
+
+def extract_time_components(text: str) -> dict:
+    """Extract time components from text for numerical matching"""
+    import re
+    
+    result = {
+        'total_minutes': 0,
+        'hours': 0,
+        'minutes': 0,
+        'has_time': False,
+        'is_approximate': False
+    }
+    
+    # Check for approximation indicators
+    approx_patterns = r'\b(about|approximately|roughly|around|over|under|just|nearly|almost|close to)\b'
+    if re.search(approx_patterns, text.lower()):
+        result['is_approximate'] = True
+    
+    # Extract hours and minutes patterns
+    time_patterns = [
+        r'(\d+)\s*hours?\s*(?:and\s*)?(\d+)\s*minutes?',  # "18 hours and 20 minutes" 
+        r'(\d+)\s*h\s*(\d+)\s*m',                         # "18h 20m"
+        r'(\d+):(\d+)',                                   # "18:20"
+        r'(\d+)\s*hours?\s*(\d+)',                        # "18 hours 20"
+    ]
+    
+    for pattern in time_patterns:
+        match = re.search(pattern, text.lower())
+        if match:
+            result['hours'] = int(match.group(1))
+            result['minutes'] = int(match.group(2))
+            result['total_minutes'] = result['hours'] * 60 + result['minutes']
+            result['has_time'] = True
+            return result
+    
+    # Try hours only patterns
+    hours_patterns = [
+        r'(\d+)\s*hours?',  # "18 hours"
+        r'(\d+)\s*h\b',     # "18h"
+    ]
+    
+    for pattern in hours_patterns:
+        match = re.search(pattern, text.lower())
+        if match:
+            result['hours'] = int(match.group(1))
+            result['total_minutes'] = result['hours'] * 60
+            result['has_time'] = True
+            return result
+    
+    # Try minutes only patterns  
+    minutes_patterns = [
+        r'(\d+)\s*minutes?',  # "1200 minutes"
+        r'(\d+)\s*mins?',     # "1200 mins"
+        r'(\d+)\s*m\b',       # "1200m"
+    ]
+    
+    for pattern in minutes_patterns:
+        match = re.search(pattern, text.lower())
+        if match:
+            result['minutes'] = int(match.group(1))
+            result['total_minutes'] = result['minutes'] 
+            result['has_time'] = True
+            return result
+    
+    return result
+
+
 async def process_trivia_answer(message, trivia_session):
-    """Process a trivia answer submission"""
+    """Process a trivia answer submission with enhanced normalization"""
     try:
         if db is None:
             return False
@@ -864,8 +991,10 @@ async def process_trivia_answer(message, trivia_session):
         # Extract answer text
         answer_text = message.content.strip()
         
-        # Normalize answer for matching (basic cleanup)
-        normalized_answer = answer_text.lower().strip()
+        # Enhanced normalization for fuzzy matching
+        normalized_answer = normalize_trivia_answer(answer_text)
+        
+        print(f"🧠 TRIVIA: Processing answer - Original: '{answer_text}' → Normalized: '{normalized_answer}'")
         
         # Submit answer to database
         answer_id = db.submit_trivia_answer(
