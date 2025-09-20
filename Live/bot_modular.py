@@ -62,14 +62,21 @@ except Exception as e:
     print(f"❌ Failed to load configuration: {e}")
     sys.exit(1)
 
-# Import the database manager (fallback to main directory)
+# Import the enhanced database manager with trivia methods
 try:
-    from database import DatabaseManager
-    db = DatabaseManager()
+    from bot.database_module import DatabaseManager, get_database
+    db = get_database()
     print("✅ Database manager loaded successfully")
 except ImportError as e:
-    print(f"❌ Failed to import database from main directory: {e}")
-    db = None
+    print(f"❌ Failed to import enhanced database manager: {e}")
+    # Fallback to old database
+    try:
+        from database import DatabaseManager
+        db = DatabaseManager()
+        print("⚠️ Using fallback database (enhanced trivia features may not be available)")
+    except ImportError as e2:
+        print(f"❌ Failed to import fallback database manager: {e2}")
+        db = None
 
 # Import ModeratorFAQHandler system
 try:
