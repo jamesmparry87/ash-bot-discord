@@ -925,118 +925,165 @@ question_history = {
 }
 
 def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
-    """Get diverse question templates organized by category"""
+    """Get diverse question templates organized by category - now with more engaging varieties!"""
     return {
-        "comparison": [
+        "genre_adventures": [
             {
-                "template": "Which game has more episodes - {game1} or {game2}?",
-                "answer_logic": "compare_episodes",
+                "template": "What horror game did Jonesy play most recently?",
+                "answer_logic": "latest_genre_game",
                 "type": "single_answer",
-                "weight": 1.0
+                "weight": 1.8,  # High weight - very engaging
+                "genre_filter": "horror"
             },
             {
-                "template": "What took longer to complete - {game1} or {game2}?",
-                "answer_logic": "compare_playtime",
+                "template": "Which RPG took Jonesy the most episodes to complete?",
+                "answer_logic": "longest_episodes_by_genre",
                 "type": "single_answer", 
-                "weight": 1.0
+                "weight": 1.6,
+                "genre_filter": "rpg"
             },
             {
-                "template": "Which was completed first - {game1} or {game2}?",
-                "answer_logic": "compare_completion_date",
+                "template": "How many different horror games has Jonesy played?",
+                "answer_logic": "count_games_by_genre",
                 "type": "single_answer",
-                "weight": 0.8
+                "weight": 1.5,
+                "genre_filter": "horror"
             }
         ],
-        "ranking": [
+        "gaming_milestones": [
             {
-                "template": "What game has the most episodes?",
+                "template": "Which was Jonesy's first completed game?",
+                "answer_logic": "first_completed_game",
+                "type": "single_answer",
+                "weight": 1.9  # Very interesting milestone
+            },
+            {
+                "template": "What's the shortest game Jonesy has completed?",
+                "answer_logic": "shortest_completed_game",
+                "type": "single_answer",
+                "weight": 1.7
+            },
+            {
+                "template": "Which game did Jonesy abandon after the fewest episodes?",
+                "answer_logic": "earliest_dropped_game",
+                "type": "single_answer",
+                "weight": 1.4
+            }
+        ],
+        "series_explorer": [
+            {
+                "template": "How many games has Jonesy played in the {series} series?",
+                "answer_logic": "count_series_games",
+                "type": "single_answer",
+                "weight": 1.6
+            },
+            {
+                "template": "Which series has Jonesy spent the most time playing?",
+                "answer_logic": "series_most_time",
+                "type": "single_answer",
+                "weight": 1.5
+            },
+            {
+                "template": "What's the largest game series in Jonesy's collection?",
+                "answer_logic": "largest_series",
+                "type": "single_answer",
+                "weight": 1.3
+            }
+        ],
+        "gaming_stories": [
+            {
+                "template": "What game took Jonesy the most episodes to finish?",
                 "answer_logic": "max_episodes",
                 "type": "single_answer",
-                "weight": 0.5  # Lower weight due to overuse
+                "weight": 1.2  # Improved weight, more story-focused phrasing
             },
+            {
+                "template": "Which completed game had Jonesy's longest individual episodes?",
+                "answer_logic": "longest_avg_episode_completed",
+                "type": "single_answer",
+                "weight": 1.4
+            },
+            {
+                "template": "What's the most recent game Jonesy completed?",
+                "answer_logic": "most_recent_completion",
+                "type": "single_answer",
+                "weight": 1.6
+            }
+        ],
+        "timeline_fun": [
+            {
+                "template": "Which game did Jonesy complete first - {game1} or {game2}?",
+                "answer_logic": "compare_completion_order",
+                "type": "single_answer",
+                "weight": 1.5
+            },
+            {
+                "template": "Did Jonesy play {game1} before or after {game2}?", 
+                "answer_logic": "compare_play_order",
+                "type": "single_answer",
+                "weight": 1.4
+            },
+            {
+                "template": "Which came first in Jonesy's gaming journey - {game1} or {game2}?",
+                "answer_logic": "compare_first_played",
+                "type": "single_answer",
+                "weight": 1.3
+            }
+        ],
+        "fun_facts": [
+            {
+                "template": "What percentage of Jonesy's games are completed?",
+                "answer_logic": "completion_percentage",
+                "type": "single_answer",
+                "weight": 1.4  # More engaging phrasing
+            },
+            {
+                "template": "How many different genres has Jonesy explored?",
+                "answer_logic": "unique_genres_count",
+                "type": "single_answer",
+                "weight": 1.7
+            },
+            {
+                "template": "What's Jonesy's most played genre?",
+                "answer_logic": "most_common_genre",
+                "type": "single_answer",
+                "weight": 1.5
+            }
+        ],
+        "multiple_choice_fun": [
+            {
+                "template": "Which of these games did Jonesy complete?",
+                "answer_logic": "mc_completed_game",
+                "type": "multiple_choice",
+                "weight": 1.8  # Very engaging
+            },
+            {
+                "template": "Which horror game has Jonesy played?",
+                "answer_logic": "mc_genre_game",
+                "type": "multiple_choice", 
+                "weight": 1.7,
+                "genre_filter": "horror"
+            },
+            {
+                "template": "Which of these is a series Jonesy has explored?",
+                "answer_logic": "mc_series_played",
+                "type": "multiple_choice",
+                "weight": 1.6
+            }
+        ],
+        # Keep some of the old ones with reduced weights
+        "legacy_stats": [
             {
                 "template": "Which game took the longest to complete?",
                 "answer_logic": "max_playtime", 
                 "type": "single_answer",
-                "weight": 0.3  # Very low weight - overused
+                "weight": 0.2  # Very low weight - legacy/backup
             },
             {
-                "template": "What game was completed most recently?",
-                "answer_logic": "latest_completion",
+                "template": "What game has the most episodes?",
+                "answer_logic": "max_episodes",
                 "type": "single_answer",
-                "weight": 1.0
-            },
-            {
-                "template": "Which game has the shortest episodes on average?",
-                "answer_logic": "min_avg_episode_length",
-                "type": "single_answer", 
-                "weight": 1.2  # Higher weight - more interesting
-            }
-        ],
-        "statistical": [
-            {
-                "template": "What percentage of games are completed?",
-                "answer_logic": "completion_percentage",
-                "type": "single_answer",
-                "weight": 1.1
-            },
-            {
-                "template": "How many total hours has Jonesy spent gaming?",
-                "answer_logic": "total_hours_played",
-                "type": "single_answer",
-                "weight": 0.8
-            },
-            {
-                "template": "What's the average episode count across all games?",
-                "answer_logic": "avg_episodes",
-                "type": "single_answer",
-                "weight": 1.0
-            },
-            {
-                "template": "How many different genres has Jonesy played?",
-                "answer_logic": "unique_genres",
-                "type": "single_answer",
-                "weight": 1.3  # High interest, rarely asked
-            }
-        ],
-        "categorical": [
-            {
-                "template": "What genre appears most frequently in Jonesy's library?",
-                "answer_logic": "most_common_genre",
-                "type": "single_answer",
-                "weight": 1.1
-            },
-            {
-                "template": "Which platform has Jonesy used most?",
-                "answer_logic": "most_common_platform", 
-                "type": "single_answer",
-                "weight": 1.2
-            },
-            {
-                "template": "What series has the most games in Jonesy's collection?",
-                "answer_logic": "largest_series",
-                "type": "single_answer",
-                "weight": 1.0
-            }
-        ],
-        "multiple_choice": [
-            {
-                "template": "Which of these games took the longest to complete?",
-                "answer_logic": "mc_longest_game",
-                "type": "multiple_choice",
-                "weight": 1.4  # Multiple choice is more engaging
-            },
-            {
-                "template": "Which game has the most episodes?",
-                "answer_logic": "mc_most_episodes",
-                "type": "multiple_choice", 
-                "weight": 1.2
-            },
-            {
-                "template": "Which of these is NOT a genre Jonesy has played?",
-                "answer_logic": "mc_genre_exclusion",
-                "type": "multiple_choice",
-                "weight": 1.5  # Very engaging format
+                "weight": 0.3  # Low weight - backup only
             }
         ]
     }
@@ -1133,11 +1180,13 @@ def is_template_viable(template: Dict[str, Any], games_data: List[Dict[str, Any]
 
 def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template: Dict[str, Any]) -> Dict[str, Any]:
     """Execute the answer logic and return question data"""
+    import random
+    from collections import Counter
+    
     if logic == "compare_episodes":
         # Pick two games with episode data
         games_with_episodes = [g for g in games_data if g.get("total_episodes", 0) > 0]
         if len(games_with_episodes) >= 2:
-            import random
             game1, game2 = random.sample(games_with_episodes, 2)
             winner = game1 if game1.get("total_episodes", 0) > game2.get("total_episodes", 0) else game2
             return {
@@ -1149,7 +1198,6 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
     elif logic == "compare_playtime":
         games_with_playtime = [g for g in games_data if g.get("total_playtime_minutes", 0) > 0]
         if len(games_with_playtime) >= 2:
-            import random
             game1, game2 = random.sample(games_with_playtime, 2)
             winner = game1 if game1.get("total_playtime_minutes", 0) > game2.get("total_playtime_minutes", 0) else game2
             return {
@@ -1190,7 +1238,6 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
     elif logic == "most_common_genre":
         genres = [g.get("genre") for g in games_data if g.get("genre")]
         if genres:
-            from collections import Counter
             most_common = Counter(genres).most_common(1)[0][0]
             return {
                 "question_text": template["template"],
@@ -1198,10 +1245,60 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
                 "question_type": "single_answer"
             }
     
+    elif logic == "unique_genres_count":
+        genres = [g.get("genre") for g in games_data if g.get("genre")]
+        unique_count = len(set(genres)) if genres else 0
+        return {
+            "question_text": template["template"],
+            "correct_answer": str(unique_count),
+            "question_type": "single_answer"
+        }
+    
+    elif logic == "first_completed_game":
+        completed_games = [g for g in games_data if g.get("completion_status") == "completed"]
+        if completed_games:
+            # Use the first game in the list as a simple implementation
+            first_completed = completed_games[0]
+            return {
+                "question_text": template["template"],
+                "correct_answer": first_completed["canonical_name"],
+                "question_type": "single_answer"
+            }
+    
+    elif logic == "shortest_completed_game":
+        completed_games = [g for g in games_data if g.get("completion_status") == "completed" and g.get("total_playtime_minutes", 0) > 0]
+        if completed_games:
+            shortest = min(completed_games, key=lambda x: x.get("total_playtime_minutes", 0))
+            return {
+                "question_text": template["template"],
+                "correct_answer": shortest["canonical_name"],
+                "question_type": "single_answer"
+            }
+    
+    elif logic == "most_recent_completion":
+        completed_games = [g for g in games_data if g.get("completion_status") == "completed"]
+        if completed_games:
+            # Use last game in list as most recent (simple implementation)
+            most_recent = completed_games[-1]
+            return {
+                "question_text": template["template"],
+                "correct_answer": most_recent["canonical_name"],
+                "question_type": "single_answer"
+            }
+    
+    elif logic == "largest_series":
+        series_counts = Counter([g.get("series_name") for g in games_data if g.get("series_name")])
+        if series_counts:
+            largest_series = series_counts.most_common(1)[0][0]
+            return {
+                "question_text": template["template"],
+                "correct_answer": largest_series,
+                "question_type": "single_answer"
+            }
+    
     elif logic == "mc_longest_game":
         games_with_playtime = [g for g in games_data if g.get("total_playtime_minutes", 0) > 0]
         if len(games_with_playtime) >= 3:
-            import random
             # Pick the longest game and 3 others for choices
             longest = max(games_with_playtime, key=lambda x: x.get("total_playtime_minutes", 0))
             others = [g for g in games_with_playtime if g != longest]
@@ -1218,7 +1315,27 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
                 "multiple_choice_options": choice_names
             }
     
-    # Fallback - return None if logic couldn't execute
+    elif logic == "mc_completed_game":
+        completed_games = [g for g in games_data if g.get("completion_status") == "completed"]
+        incomplete_games = [g for g in games_data if g.get("completion_status") != "completed"]
+        
+        if len(completed_games) >= 1 and len(incomplete_games) >= 2:
+            correct_game = random.choice(completed_games)
+            wrong_games = random.sample(incomplete_games, min(3, len(incomplete_games)))
+            choices = [correct_game] + wrong_games
+            random.shuffle(choices)
+            
+            choice_names = [g["canonical_name"] for g in choices]
+            correct_letter = chr(65 + choice_names.index(correct_game["canonical_name"]))
+            
+            return {
+                "question_text": template["template"],
+                "correct_answer": correct_letter,
+                "question_type": "multiple_choice",
+                "multiple_choice_options": choice_names
+            }
+    
+    # Fallback - return empty dict if logic couldn't execute
     return {}
 
 def update_question_history(question_data: Dict[str, Any], category: str):
@@ -1314,32 +1431,37 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
 
             game_context = f"Available games: {'; '.join(game_details)}"
 
-        # Enhanced AI prompt with diversity focus
+        # Enhanced AI prompt with casual, fun focus
         recent_categories = [q["category"] for q in question_history["last_questions"][-5:]]
         avoid_categories = list(set(recent_categories)) if recent_categories else []
         
-        prompt = f"""CRITICAL: Generate a DIVERSE trivia question. Avoid these recently used categories: {avoid_categories}
+        prompt = f"""Generate a FUN trivia question about Captain Jonesy's gaming! Keep it casual and interesting.
 
-FORCED DIVERSITY: Use one of these UNDERUSED categories:
-- Comparative analysis (compare 2 games directly)  
-- Statistical breakdowns (percentages, averages, totals)
-- Categorical insights (genres, platforms, series)
-- Timeline questions (first/last played, completion order)
+AVOID these overused categories: {avoid_categories}
 
-DATABASE CONTEXT:
+PREFERRED QUESTION TYPES (pick one):
+🎮 **Genre Adventures**: "What horror game did Jonesy play most recently?" 
+🏆 **Gaming Milestones**: "Which was Jonesy's first completed RPG?"
+📚 **Series Explorer**: "How many Resident Evil games has Jonesy played?"
+🎯 **Gaming Stories**: "What game took Jonesy the most episodes to finish?"
+🕐 **Timeline Fun**: "Which game did Jonesy complete first - [Game A] or [Game B]?"
+⭐ **Hidden Gems**: "What's the shortest game Jonesy has completed?"
+
+AVAILABLE GAMES: {game_context}
 Total games: {stats.get('total_games', 0)}
-{game_context}
 
-RETURN ONLY JSON (no markdown, no extra text):
+CREATE a question that sounds like friends chatting about gaming, NOT a statistics exam!
+
+RETURN ONLY JSON:
 {{
-    "question_text": "Your diverse question here",
-    "question_type": "single_answer",
+    "question_text": "Your casual, fun question here",
+    "question_type": "single_answer", 
     "correct_answer": "The answer",
     "is_dynamic": false,
     "category": "ai_generated"
 }}
 
-Focus on COMPARATIVE or STATISTICAL questions that are different from typical "most playtime" questions."""
+Make it conversational and engaging - like asking a friend about their gaming experiences!"""
 
         # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, JONESY_USER_ID, context)
@@ -1525,3 +1647,19 @@ def handle_time_query(user_id: int) -> str:
 
 # Initialize AI on module import
 initialize_ai()
+
+# Export list for proper module interface
+__all__ = [
+    'call_ai_with_rate_limiting',
+    'filter_ai_response', 
+    'generate_ai_trivia_question',
+    'create_ai_announcement_content',
+    'initialize_ai',
+    'get_ai_status',
+    'reset_daily_usage',
+    'ai_enabled',
+    'ai_status_message',
+    'primary_ai',
+    'backup_ai',
+    'ai_usage_stats'
+]

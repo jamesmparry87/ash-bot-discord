@@ -96,10 +96,8 @@ intents.guilds = True
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Global state tracking (will be moved to appropriate modules later)
+# Global state tracking (trivia_sessions only - others imported from conversation_handler)
 trivia_sessions = {}
-mod_trivia_conversations = {}
-announcement_conversations = {}
 
 # Initialize moderator FAQ handler
 moderator_faq_handler = None
