@@ -2698,7 +2698,7 @@ class DatabaseManager:
         total_participants: Optional[int] = None,
         correct_count: Optional[int] = None,
     ) -> bool:
-        """Complete a trivia session and mark correct answers"""
+        """Complete a trivia session and mark correct answers with enhanced fuzzy matching"""
         conn = self.get_connection()
         if not conn:
             return False
@@ -2716,142 +2716,131 @@ class DatabaseManager:
                 )
                 session = cur.fetchone()
                 if not session:
+                    logger.error(f"Trivia session {session_id} not found")
                     return False
 
                 session_dict = dict(session)
-                correct_answer = session_dict.get(
-                    "calculated_answer") or session_dict.get("correct_answer")
+                correct_answer = session_dict.get("calculated_answer") or session_dict.get("correct_answer")
 
-                if correct_answer:
-                    # Enhanced fuzzy matching for trivia answers
-                    from bot_modular import normalize_trivia_answer, extract_time_components
+                if not correct_answer:
+                    logger.error(f"No correct answer found for session {session_id}")
+                    return False
+
+                # Debug output for answer matching
+                print(f"🧠 TRIVIA: Session {session_id} - Correct answer: '{correct_answer}'")
+                
+                # Get all answers for this session (excluding conflicts)
+                cur.execute("""
+                    SELECT id, user_id, answer_text, normalized_answer, conflict_detected
+                    FROM trivia_answers
+                    WHERE session_id = %s
+                    ORDER BY submitted_at ASC
+                """, (session_id,))
+                
+                all_answers = cur.fetchall()
+                print(f"🧠 TRIVIA: Found {len(all_answers)} total answers for session {session_id}")
+                
+                correct_answer_ids = []
+                close_answer_ids = []  # For half points
+                first_correct_answer = None
+                
+                # Process each answer with enhanced matching
+                for answer_row in all_answers:
+                    answer_dict = dict(answer_row)
+                    answer_id = answer_dict['id']
+                    user_id = answer_dict['user_id']
+                    original_answer = answer_dict['answer_text'].strip()
+                    normalized_answer = (answer_dict['normalized_answer'] or '').strip()
+                    is_conflict = answer_dict['conflict_detected']
                     
-                    # Normalize the correct answer for comparison
-                    normalized_correct = normalize_trivia_answer(correct_answer)
-                    correct_time_data = extract_time_components(correct_answer)
+                    # Skip conflict answers but log them
+                    if is_conflict:
+                        print(f"🚫 TRIVIA: Skipping conflict answer {answer_id} from user {user_id}: '{original_answer}'")
+                        continue
                     
-                    print(f"🧠 TRIVIA: Matching against correct answer: '{correct_answer}' → normalized: '{normalized_correct}'")
+                    print(f"🔍 TRIVIA: Evaluating answer {answer_id} from user {user_id}: '{original_answer}'")
                     
-                    # Get all answers for this session to process them individually
+                    # Answer matching with multiple levels
+                    score, match_type = self._evaluate_trivia_answer(
+                        original_answer, correct_answer, 'single'
+                    )
+                    
+                    # Determine correctness based on score
+                    is_correct = score >= 1.0
+                    is_close = 0.7 <= score < 1.0
+                    
+                    if is_correct:
+                        correct_answer_ids.append(answer_id)
+                        if first_correct_answer is None:
+                            first_correct_answer = {'id': answer_id, 'user_id': user_id}
+                        print(f"✅ TRIVIA: Answer {answer_id} CORRECT ({match_type}, score: {score:.2f}): '{original_answer}' matches '{correct_answer}'")
+                    elif is_close:
+                        close_answer_ids.append(answer_id)
+                        print(f"🔶 TRIVIA: Answer {answer_id} CLOSE ({match_type}, score: {score:.2f}): '{original_answer}' ~= '{correct_answer}'")
+                    else:
+                        print(f"❌ TRIVIA: Answer {answer_id} WRONG ({match_type}, score: {score:.2f}): '{original_answer}' ≠ '{correct_answer}'")
+                
+                # Update correct answers (full points)
+                if correct_answer_ids:
                     cur.execute("""
-                        SELECT id, user_id, answer_text, normalized_answer
+                        UPDATE trivia_answers
+                        SET is_correct = TRUE
+                        WHERE id = ANY(%s)
+                    """, (correct_answer_ids,))
+                    print(f"🎯 TRIVIA: Marked {len(correct_answer_ids)} answers as CORRECT")
+                
+                # Update close answers (half points) - add column if needed
+                if close_answer_ids:
+                    try:
+                        cur.execute("""
+                            ALTER TABLE trivia_answers 
+                            ADD COLUMN IF NOT EXISTS is_close BOOLEAN DEFAULT FALSE
+                        """)
+                        
+                        cur.execute("""
+                            UPDATE trivia_answers
+                            SET is_close = TRUE
+                            WHERE id = ANY(%s)
+                        """, (close_answer_ids,))
+                        print(f"🔶 TRIVIA: Marked {len(close_answer_ids)} answers as CLOSE (half points)")
+                    except Exception as close_error:
+                        print(f"⚠️ TRIVIA: Could not update close answers: {close_error}")
+
+                # Calculate participant counts (excluding conflicts)
+                if total_participants is None or correct_count is None:
+                    cur.execute("""
+                        SELECT COUNT(*) as total_participants,
+                               COUNT(CASE WHEN is_correct = TRUE THEN 1 END) as correct_count
                         FROM trivia_answers
                         WHERE session_id = %s AND conflict_detected = FALSE
                     """, (session_id,))
-                    
-                    all_answers = cur.fetchall()
-                    correct_answer_ids = []
-                    first_correct_answer = None
-                    
-                    for answer_row in all_answers:
-                        answer_dict = dict(answer_row)
-                        answer_id = answer_dict['id']
-                        user_id = answer_dict['user_id']
-                        original_answer = answer_dict['answer_text']
-                        normalized_answer = answer_dict['normalized_answer'] or ''
-                        
-                        is_correct = False
-                        match_type = None
-                        
-                        # Level 1: Exact match (case-insensitive)
-                        if original_answer.lower().strip() == correct_answer.lower().strip():
-                            is_correct = True
-                            match_type = "exact"
-                        
-                        # Level 2: Normalized match (fuzzy but full points)
-                        elif normalized_answer.lower().strip() == normalized_correct.lower().strip():
-                            is_correct = True
-                            match_type = "normalized"
-                        
-                        # Level 3: Numerical time matching (for time-based answers)
-                        elif correct_time_data['has_time']:
-                            user_time_data = extract_time_components(original_answer)
-                            if user_time_data['has_time']:
-                                # Allow some tolerance for time answers
-                                time_diff = abs(user_time_data['total_minutes'] - correct_time_data['total_minutes'])
-                                
-                                if time_diff == 0:
-                                    # Exact time match
-                                    is_correct = True
-                                    match_type = "time_exact"
-                                elif time_diff <= 5:  # Within 5 minutes tolerance
-                                    is_correct = True
-                                    match_type = "time_close"
-                        
-                        # Level 4: Partial word matching (for complex answers)
-                        if not is_correct and len(normalized_correct.split()) > 1:
-                            correct_words = set(normalized_correct.split())
-                            answer_words = set(normalized_answer.split())
-                            
-                            # If user answer contains most of the correct answer words
-                            if len(correct_words) > 0:
-                                match_ratio = len(correct_words.intersection(answer_words)) / len(correct_words)
-                                if match_ratio >= 0.7:  # 70% word overlap
-                                    is_correct = True
-                                    match_type = "partial"
-                        
-                        if is_correct:
-                            correct_answer_ids.append(answer_id)
-                            if first_correct_answer is None:
-                                first_correct_answer = {'id': answer_id, 'user_id': user_id}
-                            
-                            print(f"✅ TRIVIA: Answer {answer_id} marked correct ({match_type}): '{original_answer}'")
-                        else:
-                            print(f"❌ TRIVIA: Answer {answer_id} incorrect: '{original_answer}' ≠ '{correct_answer}'")
-                    
-                    # Update all correct answers in batch
-                    if correct_answer_ids:
-                        cur.execute("""
-                            UPDATE trivia_answers
-                            SET is_correct = TRUE
-                            WHERE id = ANY(%s)
-                        """, (correct_answer_ids,))
-                        
-                        print(f"🎯 TRIVIA: Marked {len(correct_answer_ids)} answers as correct")
+                    counts = cur.fetchone()
 
-                    # Only calculate counts if not provided as parameters
-                    if total_participants is None or correct_count is None:
-                        cur.execute(
-                            """
-                            SELECT COUNT(*) as total_participants,
-                                   COUNT(CASE WHEN is_correct = TRUE THEN 1 END) as correct_count
-                            FROM trivia_answers
-                            WHERE session_id = %s AND conflict_detected = FALSE
-                        """,
-                            (session_id,),
-                        )
-                        counts = cur.fetchone()
+                    if counts:
+                        counts_dict = dict(counts)
+                        total_participants = int(counts_dict["total_participants"]) if total_participants is None else total_participants
+                        correct_count = int(counts_dict["correct_count"]) if correct_count is None else correct_count
 
-                        if counts:
-                            if total_participants is None:
-                                total_participants = int(
-                                    counts["total_participants"])  # type: ignore
-                            if correct_count is None:
-                                correct_count = int(
-                                    counts["correct_count"])  # type: ignore
+                # Use defaults if still None
+                total_participants = total_participants or 0
+                correct_count = correct_count or 0
 
-                    # Use defaults if still None after database query
-                    if total_participants is None:
-                        total_participants = 0
-                    if correct_count is None:
-                        correct_count = 0
+                # Mark first correct answer
+                if first_correct_answer and not first_correct_user_id:
+                    first_correct_user_id = first_correct_answer['user_id']
+                
+                if first_correct_user_id:
+                    cur.execute("""
+                        UPDATE trivia_answers
+                        SET is_first_correct = TRUE
+                        WHERE session_id = %s
+                        AND user_id = %s
+                        AND is_correct = TRUE
+                        AND NOT conflict_detected
+                    """, (session_id, first_correct_user_id))
 
-                    # Mark first correct answer
-                    if first_correct_user_id:
-                        cur.execute(
-                            """
-                            UPDATE trivia_answers
-                            SET is_first_correct = TRUE
-                            WHERE session_id = %s
-                            AND user_id = %s
-                            AND is_correct = TRUE
-                        """,
-                            (session_id, first_correct_user_id),
-                        )
-
-                # Update session
-                cur.execute(
-                    """
+                # Update session status
+                cur.execute("""
                     UPDATE trivia_sessions
                     SET status = 'completed',
                         ended_at = CURRENT_TIMESTAMP,
@@ -2859,29 +2848,25 @@ class DatabaseManager:
                         total_participants = %s,
                         correct_answers_count = %s
                     WHERE id = %s
-                """,
-                    (first_correct_user_id, total_participants, correct_count, session_id),
-                )
+                """, (first_correct_user_id, total_participants, correct_count, session_id))
 
-                # Mark the question as 'answered' so it won't be chosen again
+                # Mark the question as 'answered'
                 question_id = session_dict.get("question_id")
                 if question_id:
-                    cur.execute(
-                        """
+                    cur.execute("""
                         UPDATE trivia_questions
                         SET status = 'answered'
                         WHERE id = %s
-                    """,
-                        (question_id,),
-                    )
-                    logger.info(
-                        f"Marked trivia question {question_id} as 'answered'")
+                    """, (question_id,))
+                    print(f"📝 TRIVIA: Marked question {question_id} as 'answered'")
 
                 conn.commit()
+                print(f"✅ TRIVIA: Session {session_id} completed - {correct_count}/{total_participants} correct")
                 logger.info(f"Completed trivia session {session_id}")
                 return True
+                
         except Exception as e:
-            logger.error(f"Error completing trivia session: {e}")
+            logger.error(f"Error completing trivia session {session_id}: {e}")
             conn.rollback()
             return False
 
@@ -2907,6 +2892,138 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting trivia session answers: {e}")
             return []
+
+    def _evaluate_trivia_answer(self, user_answer: str, correct_answer: str, question_type: str) -> tuple[float, str]:
+        """
+        Evaluate a trivia answer with enhanced fuzzy matching.
+        Returns: (score, match_type) where score is 0.0-1.0
+        """
+        import difflib
+        
+        # Clean up inputs
+        user_clean = user_answer.strip()
+        correct_clean = correct_answer.strip()
+        
+        # Normalize answers for better matching
+        user_normalized = self._normalize_answer_for_matching(user_clean)
+        correct_normalized = self._normalize_answer_for_matching(correct_clean)
+        
+        # Level 1: Exact match (case-insensitive)
+        if user_clean.lower() == correct_clean.lower():
+            return 1.0, "exact_case_insensitive"
+        
+        # Level 2: Normalized exact match
+        if user_normalized.lower() == correct_normalized.lower():
+            return 1.0, "normalized_exact"
+        
+        # Level 3: Fuzzy string matching with high threshold (correct answers)
+        similarity_exact = difflib.SequenceMatcher(None, user_clean.lower(), correct_clean.lower()).ratio()
+        if similarity_exact >= 0.9:  # 90% similarity = correct
+            return 1.0, "fuzzy_high"
+        
+        # Level 4: Close matches (partial credit)
+        if similarity_exact >= 0.7:  # 70-89% similarity = close
+            return 0.8, "fuzzy_close"
+        
+        # Level 5: Word-based matching for multi-word answers
+        if len(correct_clean.split()) > 1:
+            correct_words = set(word.lower() for word in correct_clean.split())
+            answer_words = set(word.lower() for word in user_clean.split())
+            
+            # Calculate word overlap
+            if len(correct_words) > 0:
+                overlap_ratio = len(correct_words.intersection(answer_words)) / len(correct_words)
+                
+                if overlap_ratio >= 0.8:  # 80% word overlap = correct
+                    return 1.0, "word_overlap_high"
+                elif overlap_ratio >= 0.6:  # 60% word overlap = close
+                    return 0.75, "word_overlap_medium"
+        
+        # Level 6: Handle numerical/time answers
+        if self._contains_numbers(correct_clean) and self._contains_numbers(user_clean):
+            correct_nums = self._extract_numbers(correct_clean)
+            answer_nums = self._extract_numbers(user_clean)
+            
+            # Check for numerical matches with tolerance
+            for c_num in correct_nums:
+                for a_num in answer_nums:
+                    # Within 5% tolerance for large numbers, exact for small numbers
+                    tolerance = max(1, c_num * 0.05) if c_num > 20 else 0
+                    if abs(c_num - a_num) <= tolerance:
+                        if abs(c_num - a_num) == 0:
+                            return 1.0, "numerical_exact"
+                        else:
+                            return 0.8, "numerical_close"
+        
+        # Level 7: Common abbreviations and variations
+        if self._check_abbreviation_match(user_clean, correct_clean):
+            return 1.0, "abbreviation_match"
+        
+        # Level 8: Weak similarity for debugging
+        if similarity_exact >= 0.3:
+            return similarity_exact, "weak_similarity"
+        
+        return 0.0, "no_match"
+    
+    def _normalize_answer_for_matching(self, answer: str) -> str:
+        """Normalize an answer for enhanced matching"""
+        import re
+        
+        # Remove common punctuation
+        normalized = re.sub(r'[.,!?;:"\'()[\]{}]', '', answer)
+        
+        # Handle common game abbreviations
+        abbreviations = {
+            'gta': 'grand theft auto',
+            'cod': 'call of duty',
+            'gow': 'god of war',
+            'rdr': 'red dead redemption',
+            'tlou': 'the last of us',
+            'ff': 'final fantasy'
+        }
+        
+        words = normalized.lower().split()
+        expanded_words = []
+        for word in words:
+            if word in abbreviations:
+                expanded_words.extend(abbreviations[word].split())
+            else:
+                expanded_words.append(word)
+        
+        # Remove filler words
+        filler_words = {'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'with'}
+        filtered_words = [word for word in expanded_words if word not in filler_words]
+        
+        return ' '.join(filtered_words).strip()
+    
+    def _contains_numbers(self, text: str) -> bool:
+        """Check if text contains numbers"""
+        import re
+        return bool(re.search(r'\d', text))
+    
+    def _extract_numbers(self, text: str) -> list[float]:
+        """Extract numbers from text"""
+        import re
+        numbers = re.findall(r'\d+\.?\d*', text)
+        return [float(num) for num in numbers]
+    
+    def _check_abbreviation_match(self, answer: str, correct: str) -> bool:
+        """Check for common abbreviation matches"""
+        answer_lower = answer.lower().strip()
+        correct_lower = correct.lower().strip()
+        
+        # Color abbreviations
+        color_abbrev = {
+            'b': 'blue', 'r': 'red', 'g': 'green', 'y': 'yellow', 
+            'w': 'white', 'bl': 'black', 'o': 'orange', 'p': 'purple'
+        }
+        
+        if answer_lower in color_abbrev and color_abbrev[answer_lower] == correct_lower:
+            return True
+        if correct_lower in color_abbrev and color_abbrev[correct_lower] == answer_lower:
+            return True
+            
+        return False
 
     def calculate_dynamic_answer(
             self, dynamic_query_type: str) -> Optional[str]:

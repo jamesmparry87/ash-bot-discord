@@ -108,44 +108,106 @@ class TriviaCommands(commands.Cog):
         }
 
     async def _generate_ai_question_fallback(self):
-        """Fallback AI question generation when dedicated function is unavailable"""
+        """Enhanced AI question generation with fan-accessible questions"""
         try:
             from ..handlers.ai_handler import call_ai_with_rate_limiting
+            import random
             
-            # Simple AI prompt for question generation
-            prompt = (
-                "Generate a trivia question about Captain Jonesy's gaming based on her played games database. "
-                "Focus on statistical data like playtime, episode counts, or completion rates. "
-                "Format: Question: [question] | Answer: [answer] | Type: single_answer"
-            )
+            # Multiple question types for variety
+            question_types = [
+                {
+                    'type': 'fan_observable',
+                    'prompt': (
+                        "Generate a trivia question about Captain Jonesy's gaming that dedicated fans and stream viewers could realistically answer. "
+                        "Focus on observable patterns like: most played genres, memorable series, recent completions, gaming preferences. "
+                        "Avoid exact statistics - use questions about trends fans would notice. "
+                        "Examples: 'What genre does Jonesy play most often?', 'Which game series has she completed multiple entries from?' "
+                        "Format: Question: [question] | Answer: [answer]"
+                    )
+                },
+                {
+                    'type': 'gaming_knowledge',
+                    'prompt': (
+                        "Generate a general gaming trivia question that relates to games Captain Jonesy has played. "
+                        "Focus on gaming history, popular games, or industry knowledge that gaming enthusiasts would know. "
+                        "Examples: 'What genre is God of War?', 'Which company developed The Last of Us?', 'What does RPG stand for?' "
+                        "Format: Question: [question] | Answer: [answer]"
+                    )
+                },
+                {
+                    'type': 'broad_database',
+                    'prompt': (
+                        "Generate a trivia question about Captain Jonesy's gaming habits using broad categories instead of exact numbers. "
+                        "Focus on questions fans could estimate: 'more action or RPG games?', 'games from which decade?', 'completed vs abandoned?' "
+                        "Avoid precise statistics - use comparative or categorical questions. "
+                        "Format: Question: [question] | Answer: [answer]"
+                    )
+                },
+                {
+                    'type': 'memorable_moments',
+                    'prompt': (
+                        "Generate a trivia question about memorable gaming moments or notable games from Captain Jonesy's streams. "
+                        "Focus on things regular viewers would remember: longest series, recent favorites, gaming reactions. "
+                        "Examples: 'What was the most recent horror game Jonesy completed?', 'Which platformer series has she played most entries from?' "
+                        "Format: Question: [question] | Answer: [answer]"
+                    )
+                }
+            ]
             
-            response_text, status = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+            # Randomly select a question type for variety
+            selected_type = random.choice(question_types)
+            
+            response_text, status = await call_ai_with_rate_limiting(selected_type['prompt'], JAM_USER_ID)
             
             if response_text:
-                # Parse AI response
+                # Parse AI response with improved parsing
                 lines = response_text.strip().split('\n')
                 question_text = ""
                 answer = ""
                 
+                # Try to extract from formatted response first
                 for line in lines:
+                    line = line.strip()
                     if line.startswith("Question:"):
                         question_text = line.replace("Question:", "").strip()
                     elif line.startswith("Answer:"):
                         answer = line.replace("Answer:", "").strip()
                 
-                if question_text and answer:
+                # Fallback: try to parse from pipe-separated format
+                if not question_text or not answer:
+                    for line in lines:
+                        if '|' in line:
+                            parts = line.split('|')
+                            if len(parts) >= 2:
+                                q_part = parts[0].strip()
+                                a_part = parts[1].strip()
+                                if 'Question:' in q_part:
+                                    question_text = q_part.replace('Question:', '').strip()
+                                if 'Answer:' in a_part:
+                                    answer = a_part.replace('Answer:', '').strip()
+                
+                # Basic validation
+                if question_text and answer and len(question_text) > 10 and len(answer) > 0:
+                    # Clean up the question and answer
+                    question_text = question_text.strip('?"')
+                    if not question_text.endswith('?'):
+                        question_text += '?'
+                    
                     return {
                         'question_text': question_text,
-                        'correct_answer': answer,
-                        'question_type': 'single_answer',
-                        'category': 'ai_generated',
+                        'correct_answer': answer.strip(),
+                        'question_type': 'single',
+                        'category': f"ai_{selected_type['type']}",
+                        'difficulty_level': 2,  # Medium difficulty
                         'is_dynamic': False
                     }
+                else:
+                    logger.warning(f"AI generated invalid question format: Q='{question_text}', A='{answer}'")
             
             return None
             
         except Exception as e:
-            logger.error(f"Error in fallback AI generation: {e}")
+            logger.error(f"Error in enhanced AI generation: {e}")
             return None
 
     @commands.command(name="addtrivia")
@@ -878,7 +940,7 @@ class TriviaCommands(commands.Cog):
     @commands.command(name="triviatest")
     @commands.has_permissions(manage_messages=True) 
     async def trivia_test(self, ctx):
-        """Test the reply-based trivia system without disrupting real trivia (moderators only)"""
+        """Comprehensive test of reply-based trivia system including answer recording and acknowledgment (moderators only)"""
         try:
             if db is None:
                 await ctx.send("❌ **Database offline.** Cannot test trivia without database connection.")
@@ -893,157 +955,299 @@ class TriviaCommands(commands.Cog):
             except Exception:
                 pass  # Continue with test even if we can't check active session
 
-            print(f"🧪 TRIVIA TEST: Starting test initiated by {ctx.author.id} in channel {ctx.channel.id}")
+            print(f"🧪 TRIVIA TEST: Starting comprehensive test initiated by {ctx.author.id} in channel {ctx.channel.id}")
 
-            # Create a real temporary test question in the database to satisfy foreign key constraints
-            test_question_data = {
-                'question_text': '🧪 TEST: What is the name of the science officer android in this Discord server?',
-                'question_type': 'single',
-                'correct_answer': 'Ash',
-                'multiple_choice_options': None,
-                'is_dynamic': False,
-                'dynamic_query_type': None,
-                'submitted_by_user_id': ctx.author.id,
-                'category': 'test',
-                'difficulty_level': 1
-            }
+            # Create test questions with different answer variations to test fuzzy matching
+            test_questions = [
+                {
+                    'question_text': '🧪 TEST: What is the name of the science officer android in this Discord server?',
+                    'question_type': 'single',
+                    'correct_answer': 'Ash',
+                    'test_answers': ['Ash', 'ash', 'ASH', 'A', 'Bishop']  # Mix of correct variations and wrong answers
+                },
+                {
+                    'question_text': '🧪 TEST: What color combines red and yellow?',
+                    'question_type': 'single', 
+                    'correct_answer': 'Orange',
+                    'test_answers': ['orange', 'Orange', 'ORANGE', 'oranje', 'blue']  # Test fuzzy matching
+                }
+            ]
 
-            # Insert temporary test question into database
-            test_question_id = None
-            try:
-                test_question_id = db.add_trivia_question(
-                    question_text=test_question_data['question_text'],
-                    question_type=test_question_data['question_type'],
-                    correct_answer=test_question_data['correct_answer'],
-                    multiple_choice_options=test_question_data['multiple_choice_options'],
-                    is_dynamic=test_question_data['is_dynamic'],
-                    dynamic_query_type=test_question_data['dynamic_query_type'],
-                    submitted_by_user_id=test_question_data['submitted_by_user_id'],
-                    category=test_question_data['category'],
-                    difficulty_level=test_question_data['difficulty_level']
-                )
+            test_results = []
+            
+            for question_idx, test_question_data in enumerate(test_questions, 1):
+                print(f"🧪 TRIVIA TEST: Running test {question_idx}/{len(test_questions)}")
                 
-                if not test_question_id:
-                    await ctx.send("❌ **Test question creation failed.** Database error occurred.")
-                    return
-                    
-                print(f"🧪 TRIVIA TEST: Created temporary test question {test_question_id}")
-                
-            except Exception as question_error:
-                await ctx.send(f"❌ **Test question creation failed:** {question_error}")
-                return
-
-            # Start test session using the real question ID
-            try:
-                test_session_id = db.create_trivia_session(
-                    question_id=test_question_id,
-                    session_type="test",
-                    calculated_answer=test_question_data['correct_answer']
-                )
-                
-                if not test_session_id:
-                    await ctx.send("❌ **Test session creation failed.** Database error occurred.")
-                    # Clean up the test question if session creation failed
-                    try:
-                        conn = db.get_connection()
-                        if conn:
-                            with conn.cursor() as cur:
-                                cur.execute("DELETE FROM trivia_questions WHERE id = %s", (test_question_id,))
-                                conn.commit()
-                    except Exception:
-                        pass  # Best effort cleanup
-                    return
-                    
-                print(f"🧪 TRIVIA TEST: Created test session {test_session_id}")
-                
-            except Exception as session_error:
-                await ctx.send(f"❌ **Test session creation failed:** {session_error}")
-                # Clean up the test question if session creation failed
+                # Create temporary test question in database
+                test_question_id = None
                 try:
-                    conn = db.get_connection()
-                    if conn:
-                        with conn.cursor() as cur:
-                            cur.execute("DELETE FROM trivia_questions WHERE id = %s", (test_question_id,))
-                            conn.commit()
-                except Exception:
-                    pass  # Best effort cleanup
-                return
+                    test_question_id = db.add_trivia_question(
+                        question_text=test_question_data['question_text'],
+                        question_type=test_question_data['question_type'],
+                        correct_answer=test_question_data['correct_answer'],
+                        multiple_choice_options=None,
+                        is_dynamic=False,
+                        dynamic_query_type=None,
+                        submitted_by_user_id=ctx.author.id,
+                        category='test',
+                        difficulty_level=1
+                    )
+                    
+                    if not test_question_id:
+                        await ctx.send(f"❌ **Test question {question_idx} creation failed.** Database error occurred.")
+                        continue
+                        
+                    print(f"🧪 TRIVIA TEST: Created temporary test question {test_question_id}")
+                    
+                except Exception as question_error:
+                    await ctx.send(f"❌ **Test question {question_idx} creation failed:** {question_error}")
+                    continue
 
-            # Create test question embed with clear TEST indicators
-            test_embed = discord.Embed(
-                title="🧪 **TRIVIA TEST MODE - NOT A REAL QUESTION**",
-                description=test_question_data['question_text'],
-                color=0xff9900,  # Orange to indicate test mode
+                # Start test session
+                try:
+                    test_session_id = db.create_trivia_session(
+                        question_id=test_question_id,
+                        session_type="test",
+                        calculated_answer=test_question_data['correct_answer']
+                    )
+                    
+                    if not test_session_id:
+                        await ctx.send(f"❌ **Test session {question_idx} creation failed.** Database error occurred.")
+                        continue
+                        
+                    print(f"🧪 TRIVIA TEST: Created test session {test_session_id}")
+                    
+                except Exception as session_error:
+                    await ctx.send(f"❌ **Test session {question_idx} creation failed:** {session_error}")
+                    continue
+
+                # Create test question embed
+                test_embed = discord.Embed(
+                    title=f"🧪 **TRIVIA TEST {question_idx}/{len(test_questions)} - ANSWER VALIDATION TEST**",
+                    description=test_question_data['question_text'],
+                    color=0xff9900,
+                    timestamp=datetime.now(ZoneInfo("Europe/London"))
+                )
+                
+                test_embed.add_field(
+                    name="🔬 **Test Purpose:**",
+                    value="Testing answer recording, fuzzy matching, and acknowledgment system",
+                    inline=False
+                )
+                
+                test_embed.add_field(
+                    name="💡 **How to Test:**",
+                    value=f"**Reply to this message** with '{test_question_data['correct_answer']}' to test the system!",
+                    inline=False
+                )
+                
+                test_embed.add_field(
+                    name="🔧 **Test Session Info:**",
+                    value=f"Test Session #{test_session_id} • Expected: '{test_question_data['correct_answer']}'",
+                    inline=False
+                )
+                
+                test_embed.set_footer(text=f"TEST by {ctx.author.display_name} • Auto-testing in progress...")
+
+                # Send test question and capture message ID
+                test_question_message = await ctx.send(embed=test_embed)
+
+                # Update test session with message tracking
+                try:
+                    update_success = db.update_trivia_session_messages(
+                        session_id=test_session_id,
+                        question_message_id=test_question_message.id,
+                        confirmation_message_id=test_question_message.id,  # Use same message for simplicity
+                        channel_id=ctx.channel.id
+                    )
+                    
+                    if not update_success:
+                        print(f"⚠️ TRIVIA TEST: Failed to update test session {test_session_id} with message IDs")
+                        
+                except Exception as msg_tracking_error:
+                    print(f"❌ TRIVIA TEST: Error updating test session message tracking: {msg_tracking_error}")
+
+                # Automatically test answer variations
+                test_variation_results = []
+                
+                for test_answer in test_question_data['test_answers']:
+                    print(f"🧪 TRIVIA TEST: Testing answer variation: '{test_answer}'")
+                    
+                    try:
+                        # Test the answer evaluation directly
+                        if hasattr(db, '_evaluate_trivia_answer'):
+                            score, match_type = db._evaluate_trivia_answer(
+                                test_answer, 
+                                test_question_data['correct_answer'],
+                                test_question_data['question_type']
+                            )
+                            
+                            # Determine result
+                            if score >= 1.0:
+                                result = "✅ CORRECT"
+                            elif score >= 0.7:
+                                result = f"🟡 PARTIAL ({int(score * 100)}%)"
+                            else:
+                                result = f"❌ INCORRECT ({int(score * 100)}%)"
+                                
+                            test_variation_results.append({
+                                'answer': test_answer,
+                                'score': score,
+                                'match_type': match_type,
+                                'result': result
+                            })
+                            
+                            print(f"🧪 TRIVIA TEST: Answer '{test_answer}' → Score: {score}, Type: {match_type}, Result: {result}")
+                            
+                        else:
+                            test_variation_results.append({
+                                'answer': test_answer,
+                                'error': 'Evaluation method not available'
+                            })
+                            
+                    except Exception as eval_error:
+                        print(f"❌ TRIVIA TEST: Error evaluating answer '{test_answer}': {eval_error}")
+                        test_variation_results.append({
+                            'answer': test_answer,
+                            'error': str(eval_error)
+                        })
+                
+                # Compile test results
+                test_results.append({
+                    'question_id': test_question_id,
+                    'session_id': test_session_id,
+                    'question': test_question_data['question_text'],
+                    'correct_answer': test_question_data['correct_answer'],
+                    'variations': test_variation_results
+                })
+                
+                # Clean up test session immediately
+                try:
+                    db.complete_trivia_session(test_session_id)
+                    await test_question_message.delete()
+                    print(f"🧹 TRIVIA TEST: Cleaned up test session {test_session_id}")
+                except Exception as cleanup_error:
+                    print(f"⚠️ TRIVIA TEST: Cleanup error for session {test_session_id}: {cleanup_error}")
+                
+                # Brief pause between tests
+                await asyncio.sleep(2)
+
+            # Generate comprehensive test report
+            report_embed = discord.Embed(
+                title="🧪 **TRIVIA TEST REPORT - Answer Recording & Acknowledgment**",
+                description="Comprehensive test of the trivia answer matching system",
+                color=0x00ff00,
                 timestamp=datetime.now(ZoneInfo("Europe/London"))
             )
             
-            test_embed.add_field(
-                name="💡 **How to Test:**",
-                value="**Reply to this message** with 'Ash' to test the reply detection system!",
-                inline=False
-            )
+            total_tests = sum(len(result['variations']) for result in test_results)
+            successful_tests = 0
+            partial_tests = 0
+            failed_tests = 0
             
-            test_embed.add_field(
-                name="🔧 **Test Session Info:**",
-                value=f"Test Session #{test_session_id} • Question #999999",
-                inline=False
-            )
-            
-            test_embed.set_footer(text=f"TEST by {ctx.author.display_name} • Messages auto-delete in 60s")
-
-            # Send test question and capture message ID
-            test_question_message = await ctx.send(embed=test_embed)
-
-            # Send test confirmation and capture message ID
-            test_confirmation_message = await ctx.send(
-                f"🧪 **TRIVIA TEST SESSION #{test_session_id} ACTIVE**\n\n"
-                f"**This is a test of the reply detection system.**\n"
-                f"Reply to either message above with 'Ash' to test.\n\n"
-                f"*Expected result: Bot should detect your reply and confirm the system works.*\n"
-                f"*Test messages will auto-delete in 60 seconds.*"
-            )
-
-            # Update test session with message tracking
-            try:
-                update_success = db.update_trivia_session_messages(
-                    session_id=test_session_id,
-                    question_message_id=test_question_message.id,
-                    confirmation_message_id=test_confirmation_message.id,
-                    channel_id=ctx.channel.id
-                )
+            for result in test_results:
+                question_summary = f"**Q:** {result['question'][:50]}...\n**Expected:** {result['correct_answer']}\n"
                 
-                if update_success:
-                    print(f"✅ TRIVIA TEST: Test session {test_session_id} updated with message tracking: Q:{test_question_message.id}, C:{test_confirmation_message.id}")
-                    await ctx.send(f"✅ **Test setup complete!** Reply to either message above to test reply detection.\n\n*Test will auto-cleanup in 60 seconds.*", delete_after=10)
-                else:
-                    print(f"⚠️ TRIVIA TEST: Failed to update test session {test_session_id} with message IDs")
-                    await ctx.send("⚠️ **Test setup partially complete** but message tracking failed. Reply detection may not work.", delete_after=10)
-                    
-            except Exception as msg_tracking_error:
-                print(f"❌ TRIVIA TEST: Error updating test session message tracking: {msg_tracking_error}")
-                await ctx.send(f"❌ **Test setup error:** {msg_tracking_error}", delete_after=10)
-
-            # Set up auto-cleanup after 60 seconds
-            async def cleanup_test_session():
-                await asyncio.sleep(60)
-                try:
-                    # Delete test messages
-                    await test_question_message.delete()
-                    await test_confirmation_message.delete()
-                    
-                    # Clean up test session from database
-                    db.complete_trivia_session(test_session_id)
-                    print(f"🧹 TRIVIA TEST: Cleaned up test session {test_session_id}")
-                    
-                except Exception as cleanup_error:
-                    print(f"⚠️ TRIVIA TEST: Cleanup error: {cleanup_error}")
-
-            # Start cleanup task
-            asyncio.create_task(cleanup_test_session())
+                variation_details = []
+                for variation in result['variations']:
+                    if 'error' in variation:
+                        variation_details.append(f"❌ '{variation['answer']}' → ERROR: {variation['error']}")
+                        failed_tests += 1
+                    else:
+                        variation_details.append(f"{variation['result']} '{variation['answer']}' ({variation['match_type']})")
+                        if variation['score'] >= 1.0:
+                            successful_tests += 1
+                        elif variation['score'] >= 0.7:
+                            partial_tests += 1
+                        else:
+                            failed_tests += 1
+                
+                question_summary += "\n".join(variation_details)
+                
+                report_embed.add_field(
+                    name=f"Test Question #{result['question_id']}",
+                    value=question_summary,
+                    inline=False
+                )
+            
+            # Add overall statistics
+            accuracy = (successful_tests / total_tests * 100) if total_tests > 0 else 0
+            
+            report_embed.add_field(
+                name="📊 **Test Statistics**",
+                value=(
+                    f"**Total Tests:** {total_tests}\n"
+                    f"**✅ Correct:** {successful_tests}\n"
+                    f"**🟡 Partial:** {partial_tests}\n" 
+                    f"**❌ Failed:** {failed_tests}\n"
+                    f"**🎯 Accuracy:** {accuracy:.1f}%"
+                ),
+                inline=False
+            )
+            
+            # Add system status
+            system_status = []
+            if hasattr(db, '_evaluate_trivia_answer'):
+                system_status.append("✅ Enhanced answer matching available")
+            else:
+                system_status.append("❌ Enhanced answer matching not found")
+                
+            if hasattr(db, 'submit_trivia_answer'):
+                system_status.append("✅ Answer submission system available")
+            else:
+                system_status.append("❌ Answer submission system not found")
+                
+            report_embed.add_field(
+                name="🔧 **System Status**",
+                value="\n".join(system_status),
+                inline=False
+            )
+            
+            # Determine overall result
+            if accuracy >= 80 and failed_tests == 0:
+                report_embed.color = 0x00ff00  # Green - success
+                report_embed.add_field(
+                    name="🎉 **Overall Result**",
+                    value="**TEST PASSED** - Answer recording and acknowledgment system is working correctly!",
+                    inline=False
+                )
+            elif accuracy >= 60:
+                report_embed.color = 0xffaa00  # Orange - warning
+                report_embed.add_field(
+                    name="⚠️ **Overall Result**", 
+                    value="**PARTIAL SUCCESS** - System is working but may need adjustments.",
+                    inline=False
+                )
+            else:
+                report_embed.color = 0xff0000  # Red - failure
+                report_embed.add_field(
+                    name="❌ **Overall Result**",
+                    value="**TEST FAILED** - Answer recording system needs attention.",
+                    inline=False
+                )
+            
+            report_embed.set_footer(text="For manual testing, use !starttrivia to create a real session and reply to test live functionality")
+            
+            await ctx.send(embed=report_embed)
+            
+            # Send follow-up instructions
+            followup_message = (
+                "🧪 **Test Complete!** The automated test shows how the answer matching system performs.\n\n"
+                "**For Live Testing:**\n"
+                "1. Use `!starttrivia` to create a real trivia session\n"
+                "2. Reply to the trivia question with your answer\n" 
+                "3. Check that you get a 📝 reaction (acknowledgment)\n"
+                "4. Use `!endtrivia` to see if your answer was recorded correctly\n\n"
+                "**This verifies the complete flow:** Reply detection → Answer processing → Database recording → User acknowledgment"
+            )
+            
+            await ctx.send(followup_message)
+            
+            print(f"🧪 TRIVIA TEST: Comprehensive test completed - {successful_tests}/{total_tests} successful ({accuracy:.1f}%)")
 
         except Exception as e:
             print(f"❌ TRIVIA TEST: Critical error: {e}")
-            await ctx.send(f"❌ **Trivia test failed:** {str(e)}")
+            await ctx.send(f"❌ **Comprehensive trivia test failed:** {str(e)}")
 
 
 async def setup(bot):
