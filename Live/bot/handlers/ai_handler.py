@@ -417,6 +417,12 @@ def handle_quota_exhaustion():
     print(f"🚫 Primary AI quota exhausted at {current_time.strftime('%H:%M:%S')} - backup AI will be used if available")
 
 
+def apply_ash_persona_to_ai_prompt(content_prompt: str, context_type: str = "general") -> str:
+    """Apply centralized Ash persona from config.py to any AI prompt for efficiency"""
+    base_persona = BOT_PERSONA["primary_personality"]
+    return f"{base_persona}\n\nUSER REQUEST: {content_prompt}\n\nRespond as Ash with the personality described above."
+
+
 def add_pops_arcade_personality_context(prompt: str) -> str:
     """Add special sarcastic personality context when responding to Pops Arcade"""
     import re
@@ -1431,11 +1437,11 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
 
             game_context = f"Available games: {'; '.join(game_details)}"
 
-        # Enhanced AI prompt with casual, fun focus
+        # Enhanced AI prompt with Ash's analytical persona but engaging content
         recent_categories = [q["category"] for q in question_history["last_questions"][-5:]]
         avoid_categories = list(set(recent_categories)) if recent_categories else []
         
-        prompt = f"""Generate a FUN trivia question about Captain Jonesy's gaming! Keep it casual and interesting.
+        content_prompt = f"""Generate a trivia question about Captain Jonesy's gaming experiences. Deliver it in your analytical style but make the content engaging and conversational.
 
 AVOID these overused categories: {avoid_categories}
 
@@ -1445,23 +1451,25 @@ PREFERRED QUESTION TYPES (pick one):
 📚 **Series Explorer**: "How many Resident Evil games has Jonesy played?"
 🎯 **Gaming Stories**: "What game took Jonesy the most episodes to finish?"
 🕐 **Timeline Fun**: "Which game did Jonesy complete first - [Game A] or [Game B]?"
-⭐ **Hidden Gems**: "What's the shortest game Jonesy has completed?"
+⭐ **Fun Facts**: "What percentage of Jonesy's games are completed?"
 
 AVAILABLE GAMES: {game_context}
 Total games: {stats.get('total_games', 0)}
 
-CREATE a question that sounds like friends chatting about gaming, NOT a statistics exam!
+Create a question that focuses on gaming experiences and milestones rather than dry statistics. Phrase it in your analytical style but keep the content interesting.
 
 RETURN ONLY JSON:
 {{
-    "question_text": "Your casual, fun question here",
+    "question_text": "Your analytically-phrased but engaging question here",
     "question_type": "single_answer", 
     "correct_answer": "The answer",
     "is_dynamic": false,
     "category": "ai_generated"
 }}
 
-Make it conversational and engaging - like asking a friend about their gaming experiences!"""
+Focus on Captain Jonesy's gaming journey and achievements rather than statistical analysis."""
+
+        prompt = apply_ash_persona_to_ai_prompt(content_prompt, "trivia_generation")
 
         # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, JONESY_USER_ID, context)
@@ -1505,45 +1513,41 @@ async def create_ai_announcement_content(
             author = "Sir Decent Jam"
             author_context = "the bot creator and systems architect"
 
-        # Create AI prompt based on target channel
+        # Create AI prompt based on target channel using centralized persona
         if target_channel == 'mod':
-            prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. You need to rewrite this announcement content in your analytical, technical style for a moderator briefing.
-
-CRITICAL DISAMBIGUATION RULE: In this Discord server context, "Jonesy" ALWAYS refers to Captain Jonesy - the Discord user, server owner, and streamer/YouTuber (she/her pronouns). This is the default and correct interpretation unless explicitly discussing the 1979 Alien movie. The cat named Jonesy from Alien is a separate entity that is rarely relevant in server discussions.
-
-DEFAULT ASSUMPTION: Any mention of "Jonesy" = Captain Jonesy (the user).
+            content_prompt = f"""Rewrite this announcement content in your analytical, technical style for a moderator briefing.
 
 Original content from {author} ({author_context}):
 "{user_content}"
 
-Rewrite this as a technical briefing for moderators in Ash's voice. Be analytical, precise, and focus on:
+Rewrite this as a technical briefing for moderators. Be analytical, precise, and focus on:
 - Technical implementation details
 - Operational efficiency improvements
 - System functionality enhancements
 - Mission-critical parameters
 
 Use phrases like "Analysis indicates", "System diagnostics confirm", "Operational parameters enhanced", etc.
-Keep it professional but maintain Ash's clinical, analytical personality.
+Keep it professional but maintain your clinical, analytical personality.
 Write 2-4 sentences maximum. Be concise but comprehensive."""
+            
+            prompt = apply_ash_persona_to_ai_prompt(content_prompt, "mod_announcement")
 
         else:  # user channel
-            prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. You need to rewrite this announcement content in a user-friendly way while maintaining some of Ash's analytical personality.
-
-CRITICAL DISAMBIGUATION RULE: In this Discord server context, "Jonesy" ALWAYS refers to Captain Jonesy - the Discord user, server owner, and streamer/YouTuber (she/her pronouns). This is the default and correct interpretation unless explicitly discussing the 1979 Alien movie. The cat named Jonesy from Alien is a separate entity that is rarely relevant in server discussions.
-
-DEFAULT ASSUMPTION: Any mention of "Jonesy" = Captain Jonesy (the user).
+            content_prompt = f"""Rewrite this announcement content in a user-friendly way while maintaining some of your analytical personality.
 
 Original content from {author} ({author_context}):
 "{user_content}"
 
-Rewrite this as a community announcement that's accessible to regular users but still has Ash's analytical undertones. Focus on:
+Rewrite this as a community announcement that's accessible to regular users but still has your analytical undertones. Focus on:
 - User benefits and improvements
 - How features enhance the user experience
 - Clear, helpful explanations
 - Practical usage information
 
-Be helpful and informative, but keep subtle hints of Ash's analytical nature.
+Be helpful and informative, but keep subtle hints of your analytical nature.
 Write 2-4 sentences maximum. Make it engaging and user-focused."""
+            
+            prompt = apply_ash_persona_to_ai_prompt(content_prompt, "user_announcement")
 
         # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, user_id)

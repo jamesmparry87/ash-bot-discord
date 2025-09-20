@@ -23,7 +23,7 @@ from ..config import (
 )
 from ..database import get_database
 from ..utils.permissions import get_user_communication_tier, user_is_mod_by_id
-from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+from .ai_handler import ai_enabled, apply_ash_persona_to_ai_prompt, call_ai_with_rate_limiting, filter_ai_response
 
 # Get database instance
 db = get_database()  # type: ignore
@@ -120,44 +120,44 @@ async def create_ai_announcement_content(
             author = "Sir Decent Jam"
             author_context = "the bot creator and systems architect"
 
-        # Create AI prompt based on target channel
+        # Create AI prompt based on target channel using centralized persona
         if target_channel == 'mod':
-            prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. Rewrite this announcement content succinctly in Ash's analytical, technical style WITHOUT omitting any details or overly elaborating or inventing additional information.
+            content_prompt = f"""Rewrite this announcement content succinctly in your analytical, technical style WITHOUT omitting any details or overly elaborating or inventing additional information.
 
 CRITICAL RULES:
 - DO NOT fabricate or add information not in the original content
 - DO NOT omit any details from the original message
 - DO NOT mention Captain Jonesy unless she is specifically mentioned in the original content
 - DO NOT create placeholder text like "[insert ID here]" or similar
-- Additions should ONLY be stylistic phrases that enhance Ash's voice, not new substantive content
+- Additions should ONLY be stylistic phrases that enhance your voice, not new substantive content
 - Preserve ALL specific details, references, and quirky elements from the original
-
-CRITICAL DISAMBIGUATION RULE: In this Discord server context, "Jonesy" ALWAYS refers to Captain Jonesy - the Discord user, server owner, and streamer/YouTuber (she/her pronouns). This is the default and correct interpretation unless explicitly discussing the 1979 Alien movie.
 
 Original content from {author} ({author_context}):
 "{user_content}"
 
-Rewrite this as a technical briefing for moderators in Ash's voice. Be analytical and precise, using phrases like "Analysis indicates", "System diagnostics confirm", "Mission parameters", etc.
-Write 2-4 sentences maximum. Stay faithful to the original content while adding Ash's clinical personality."""
+Rewrite this as a technical briefing for moderators. Be analytical and precise, using phrases like "Analysis indicates", "System diagnostics confirm", "Mission parameters", etc.
+Write 2-4 sentences maximum. Stay faithful to the original content while adding your clinical personality."""
+            
+            prompt = apply_ash_persona_to_ai_prompt(content_prompt, "mod_announcement")
 
         else:  # user channel
-            prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot. Rewrite this announcement content succinctly in Ash's style WITHOUT omitting any details or overly elaborating or inventing additional information.
+            content_prompt = f"""Rewrite this announcement content succinctly in your style WITHOUT omitting any details or overly elaborating or inventing additional information.
 
 CRITICAL RULES:
 - DO NOT fabricate or add information not in the original content
 - DO NOT omit any details from the original message
 - DO NOT mention Captain Jonesy unless she is specifically mentioned in the original content
 - DO NOT create placeholder text like "[insert ID here]" or similar
-- Additions should ONLY be stylistic phrases that enhance Ash's voice, not new substantive content
+- Additions should ONLY be stylistic phrases that enhance your voice, not new substantive content
 - Preserve ALL specific details, references, and quirky elements from the original
-
-CRITICAL DISAMBIGUATION RULE: In this Discord server context, "Jonesy" ALWAYS refers to Captain Jonesy - the Discord user, server owner, and streamer/YouTuber (she/her pronouns). This is the default and correct interpretation unless explicitly discussing the 1979 Alien movie.
 
 Original content from {author} ({author_context}):
 "{user_content}"
 
-Rewrite this as a community announcement that's accessible to regular users but still has Ash's analytical undertones.
-Write 2-4 sentences maximum. Stay faithful to the original content while adding Ash's personality."""
+Rewrite this as a community announcement that's accessible to regular users but still has your analytical undertones.
+Write 2-4 sentences maximum. Stay faithful to the original content while adding your personality."""
+            
+            prompt = apply_ash_persona_to_ai_prompt(content_prompt, "user_announcement")
 
         # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, user_id)
