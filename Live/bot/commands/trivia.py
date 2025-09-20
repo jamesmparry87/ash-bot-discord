@@ -18,13 +18,13 @@ import discord
 from discord.ext import commands
 
 from ..config import JAM_USER_ID, JONESY_USER_ID
-from ..database import get_database
+from ..database_module import DatabaseManager, get_database
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
 # Get database instance
-db = get_database()  # type: ignore
+db: DatabaseManager = get_database()
 
 
 class TriviaCommands(commands.Cog):

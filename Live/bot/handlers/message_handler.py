@@ -31,7 +31,7 @@ from ..config import (
     POPS_ARCADE_USER_ID,
     VIOLATION_CHANNEL_ID,
 )
-from ..database import get_database
+from ..database_module import DatabaseManager, get_database
 from ..utils.permissions import (
     cleanup_expired_aliases,
     get_member_conversation_count,
@@ -56,7 +56,7 @@ from .context_manager import (
 )
 
 # Get database instance
-db = get_database()  # type: ignore
+db: DatabaseManager = get_database()
 
 
 def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:

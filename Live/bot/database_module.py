@@ -157,10 +157,21 @@ class DatabaseManager:
                         ended_at TIMESTAMP,
                         first_correct_user_id BIGINT,
                         total_participants INTEGER DEFAULT 0,
-                        correct_answers_count INTEGER DEFAULT 0
+                        correct_answers_count INTEGER DEFAULT 0,
+                        question_message_id BIGINT, -- Message ID of the question embed
+                        confirmation_message_id BIGINT, -- Message ID of the confirmation message
+                        channel_id BIGINT -- Channel where the session is active
                     )
                 """
                 )
+
+                # Add new message tracking columns to existing trivia_sessions table if they don't exist
+                cur.execute("""
+                    ALTER TABLE trivia_sessions
+                    ADD COLUMN IF NOT EXISTS question_message_id BIGINT,
+                    ADD COLUMN IF NOT EXISTS confirmation_message_id BIGINT,
+                    ADD COLUMN IF NOT EXISTS channel_id BIGINT
+                """)
 
                 # Create trivia_answers table
                 cur.execute(
@@ -2592,6 +2603,34 @@ class DatabaseManager:
             logger.error(f"Error getting active trivia session: {e}")
             return None
 
+    def get_trivia_session_by_message_id(self, message_id: int) -> Optional[Dict[str, Any]]:
+        """Get trivia session by question or confirmation message ID"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT ts.*, tq.question_text, tq.question_type, tq.correct_answer,
+                           tq.multiple_choice_options, tq.is_dynamic, tq.dynamic_query_type,
+                           tq.submitted_by_user_id, tq.category, ts.calculated_answer
+                    FROM trivia_sessions ts
+                    JOIN trivia_questions tq ON ts.question_id = tq.id
+                    WHERE ts.status = 'active'
+                    AND (ts.question_message_id = %s OR ts.confirmation_message_id = %s)
+                    ORDER BY ts.started_at DESC
+                    LIMIT 1
+                    """,
+                    (message_id, message_id)
+                )
+                result = cur.fetchone()
+                return dict(result) if result else None
+        except Exception as e:
+            logger.error(f"Error getting trivia session by message ID {message_id}: {e}")
+            return None
+
     def update_trivia_session_messages(
         self,
         session_id: int,
@@ -3321,35 +3360,56 @@ class DatabaseManager:
 
                 session_dict = dict(session)
 
-                # Get all answers for this session
+                # Get all answers for this session (before evaluation)
                 answers = self.get_trivia_session_answers(session_id)
 
-                # Calculate results
-                total_participants = len(
-                    [a for a in answers if not a.get('conflict_detected', False)])
-                correct_answers = len([a for a in answers if a.get(
-                    'is_correct', False) and not a.get('conflict_detected', False)])
-                first_correct_user = next(
-                    (a for a in answers if a.get(
-                        'is_first_correct', False)), None)
+                # Calculate unique participants (count unique users, not total answers)
+                non_conflict_answers = [a for a in answers if not a.get('conflict_detected', False)]
+                unique_participants = len(set(a['user_id'] for a in non_conflict_answers))
+                
+                print(f"🧠 TRIVIA: Session {session_id} - Raw answers: {len(answers)}, Non-conflict: {len(non_conflict_answers)}, Unique users: {unique_participants}")
 
-                # Complete the session
-                first_correct_user_id = first_correct_user['user_id'] if first_correct_user else None
+                # Complete the session with enhanced evaluation (pass None to let it calculate properly)
                 success = self.complete_trivia_session(
-                    session_id, first_correct_user_id, total_participants, correct_answers)
+                    session_id, 
+                    first_correct_user_id=None,  # Let complete_trivia_session determine this
+                    total_participants=unique_participants,  # Use unique count
+                    correct_count=None  # Let complete_trivia_session calculate this with enhanced matching
+                )
 
                 if success:
-                    correct_answer = session_dict.get(
-                        'calculated_answer') or session_dict.get('correct_answer')
-                    return {
-                        'session_id': session_id,
-                        'question_id': session_dict.get('question_id'),
-                        'question': session_dict.get('question_text'),
-                        'correct_answer': correct_answer,
-                        'total_participants': total_participants,
-                        'correct_answers': correct_answers,
-                        'first_correct': first_correct_user
-                    }
+                    # Get the updated results after enhanced evaluation
+                    cur.execute("""
+                        SELECT ts.*, tq.question_text, ts.calculated_answer, tq.correct_answer
+                        FROM trivia_sessions ts
+                        JOIN trivia_questions tq ON ts.question_id = tq.id
+                        WHERE ts.id = %s
+                    """, (session_id,))
+                    updated_session = cur.fetchone()
+                    
+                    if updated_session:
+                        updated_session_dict = dict(updated_session)
+                        
+                        # Get first correct user info
+                        cur.execute("""
+                            SELECT user_id, answer_text FROM trivia_answers
+                            WHERE session_id = %s AND is_first_correct = TRUE
+                            LIMIT 1
+                        """, (session_id,))
+                        first_correct_result = cur.fetchone()
+                        first_correct_user = dict(first_correct_result) if first_correct_result else None
+
+                        correct_answer = updated_session_dict.get('calculated_answer') or updated_session_dict.get('correct_answer')
+                        
+                        return {
+                            'session_id': session_id,
+                            'question_id': updated_session_dict.get('question_id'),
+                            'question': updated_session_dict.get('question_text'),
+                            'correct_answer': correct_answer,
+                            'total_participants': updated_session_dict.get('total_participants', unique_participants),
+                            'correct_answers': updated_session_dict.get('correct_answers_count', 0),
+                            'first_correct': first_correct_user
+                        }
 
                 return None
         except Exception as e:

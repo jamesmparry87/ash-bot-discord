@@ -9,7 +9,7 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Union
 from zoneinfo import ZoneInfo
 
 import discord
@@ -64,8 +64,8 @@ except Exception as e:
 
 # Import the enhanced database manager with trivia methods
 try:
-    from bot.database_module import DatabaseManager, get_database
-    db = get_database()
+    from bot.database_module import DatabaseManager as EnhancedDatabaseManager, get_database
+    db: Union[EnhancedDatabaseManager, 'DatabaseManager', None] = get_database()
     print("✅ Database manager loaded successfully")
 except ImportError as e:
     print(f"❌ Failed to import enhanced database manager: {e}")

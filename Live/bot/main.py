@@ -28,7 +28,7 @@ from .config import (
     TOKEN,
     VIOLATION_CHANNEL_ID,
 )
-from .database import get_database
+from .database_module import DatabaseManager, get_database
 from .utils.permissions import (
     get_user_communication_tier,
     increment_member_conversation_count,
@@ -38,7 +38,7 @@ from .utils.permissions import (
 )
 
 # Get database instance
-db = get_database()  # type: ignore
+db: DatabaseManager = get_database()
 
 # Import existing moderator FAQ handler from Live directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
