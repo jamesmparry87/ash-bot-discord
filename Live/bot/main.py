@@ -603,6 +603,8 @@ async def on_ready():
         
     except Exception as e:
         print(f"❌ Error starting scheduled tasks: {e}")
+        import traceback
+        traceback.print_exc()
 
     # Initialize AI handlers (if available)
     try:
