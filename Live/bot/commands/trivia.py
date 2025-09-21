@@ -34,27 +34,47 @@ class TriviaCommands(commands.Cog):
         self.bot = bot
 
     def _is_natural_multiple_choice_format(self, content: str) -> bool:
-        """Check if content is in natural multiple choice format"""
+        """
+        Check if content is in natural multiple choice format for user-friendly question submission
+        
+        This allows moderators to submit questions in a readable format like:
+        What is the capital of France?
+        A. London
+        B. Paris
+        C. Berlin
+        D. Madrid
+        Correct answer: B
+        
+        Args:
+            content (str): The raw input content from the user
+            
+        Returns:
+            bool: True if content matches natural multiple choice format
+        """
         import re
-        # Look for pattern: A option, B option, C option with correct answer
+        # Split content into individual lines for analysis
         lines = content.strip().split('\n')
-        if len(lines) < 4:  # Need at least question + 2 choices + answer
+        
+        # Basic validation: Need at least question + 2 choices + answer line
+        if len(lines) < 4:
             return False
         
-        # Check for A. B. C. pattern or A) B) C) pattern
+        # Pattern to match choice lines: "A. option" or "A) option"
         choice_pattern = re.compile(r'^[A-D][.)]\s+.+', re.IGNORECASE)
         choice_count = 0
         
+        # Count how many lines match the choice pattern
         for line in lines:
             if choice_pattern.match(line.strip()):
                 choice_count += 1
         
-        # Check for "correct answer" or "answer:" line
+        # Look for answer indication line
         has_answer_line = any(
             'correct answer' in line.lower() or 'answer:' in line.lower() 
             for line in lines
         )
         
+        # Valid if we have at least 2 choices and an answer line
         return choice_count >= 2 and has_answer_line
 
     def _parse_natural_multiple_choice(self, content: str) -> Optional[dict]:

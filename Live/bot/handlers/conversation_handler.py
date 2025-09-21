@@ -916,19 +916,17 @@ async def handle_jam_approval_conversation(message):
     user_id = message.author.id
     conversation = jam_approval_conversations.get(user_id)
 
-    print(f"🔍 JAM APPROVAL DEBUG: User {user_id} sent message: '{message.content}'")
-    print(f"🔍 JAM APPROVAL DEBUG: Conversation exists: {conversation is not None}")
+    # Get conversation data - only JAM should have approval conversations
+    conversation = jam_approval_conversations.get(user_id)
 
     if not conversation:
-        print(f"❌ JAM APPROVAL DEBUG: No conversation found for user {user_id}")
         return
 
     # Only JAM can use this conversation
     if user_id != JAM_USER_ID:
-        print(f"❌ JAM APPROVAL DEBUG: User {user_id} is not JAM ({JAM_USER_ID})")
         return
 
-    print(f"✅ JAM APPROVAL DEBUG: Processing approval conversation for JAM")
+    print(f"🔄 JAM APPROVAL: Processing approval conversation")
 
     # Update activity
     update_jam_approval_activity(user_id)
@@ -936,9 +934,6 @@ async def handle_jam_approval_conversation(message):
     step = conversation.get('step', 'approval')
     data = conversation.get('data', {})
     content = message.content.strip()
-
-    print(f"🔍 JAM APPROVAL DEBUG: Current step: {step}")
-    print(f"🔍 JAM APPROVAL DEBUG: Message content: '{content}'")
 
     try:
         if step == 'approval':

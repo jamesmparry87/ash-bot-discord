@@ -249,7 +249,30 @@ except ImportError as e:
 
 
 async def initialize_modular_components():
-    """Initialize all modular components and return detailed status report"""
+    """
+    Initialize all modular components of the bot system
+    
+    This function handles the startup sequence for the modular Discord bot,
+    loading each component with graceful fallback handling. Components include:
+    - Database connection and management
+    - AI integration (Gemini + Claude fallback)
+    - Command modules (strikes, games, trivia, etc.)
+    - Message handlers for various response types
+    - Scheduled tasks (database updates, cleanup)
+    
+    Returns:
+        dict: Detailed status report containing:
+            - ai_handler (bool): AI system initialization success
+            - database (bool): Database connection success
+            - commands (bool): Command system operational status
+            - scheduled_tasks (bool): Background tasks started
+            - message_handlers (bool): Message processing available
+            - fallback_mode (bool): Whether fallback mode is needed
+            - errors (list): Critical errors that occurred
+            - command_failures (list): Non-critical command loading issues
+            - loaded_commands (list): Successfully loaded command modules
+            - failed_commands (list): Command modules that failed to load
+    """
     status_report = {
         "ai_handler": False,
         "database": False,

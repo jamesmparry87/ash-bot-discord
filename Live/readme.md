@@ -105,14 +105,19 @@ Better error messages now show correct formatting instead of full FAQ dump.
 
 ### **For Users**
 
-Weekly trivia runs Tuesdays at 11am UK time - just participate when questions are posted!
+Weekly trivia runs Tuesdays at 11am UK time - just participate when questions are posted! **Reply to trivia messages** to submit answers - Ash will acknowledge with a 📝 reaction.
 
 ### **For Moderators**
 
-- `!addtrivia` - Launches DM-based question submission
-- All trivia commands now have both command-based AND conversational approaches
-- Spoof data available for testing in development
-- Live production database integration on main branch
+- `!addtrivia` - Enhanced DM-based question submission with natural language support
+- `!starttrivia` - Start trivia session (auto-selects question or use specific ID)
+- `!endtrivia` - End session and show results with comprehensive statistics  
+- `!trivialeaderboard` - View participation statistics and leaderboards
+- `!listpendingquestions` - See submitted questions awaiting use
+- `!triviatest` - Comprehensive system test for debugging
+- **Reply-based system**: Users reply to trivia messages instead of using commands
+- Advanced answer matching with fuzzy logic for variations and typos
+- AI question generation with JAM approval workflow for quality control
 
 ---
 

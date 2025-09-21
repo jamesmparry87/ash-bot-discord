@@ -170,19 +170,12 @@ async def handle_strike_detection(
                     await mod_channel.send(f"⚠️ **Strike attempt blocked:** Cannot strike Captain Jonesy. She is the commanding officer.")
                 continue
 
-            # Debug logging
-            print(f"DEBUG: Adding strike to user {user.id} ({user.name})")
+            # Add strike to user and verify the operation
             old_count = db.get_user_strikes(user.id)  # type: ignore
-            print(f"DEBUG: User {user.id} had {old_count} strikes before")
-
             count = db.add_user_strike(user.id)  # type: ignore
-            print(
-                f"DEBUG: User {user.id} now has {count} strikes after adding")
-
-            # Verify the strike was actually added
             verify_count = db.get_user_strikes(user.id)  # type: ignore
-            print(
-                f"DEBUG: Verification query shows {verify_count} strikes for user {user.id}")
+            
+            print(f"✅ STRIKE: Added strike to user {user.id} ({user.name}) - Total: {count} (was {old_count}, verified: {verify_count})")
 
             mod_channel = bot.get_channel(MOD_ALERT_CHANNEL_ID)
             # Only send if mod_channel is a TextChannel
