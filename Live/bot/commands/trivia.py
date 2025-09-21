@@ -566,6 +566,16 @@ class TriviaCommands(commands.Cog):
 
                     await ctx.send(embed=embed)
 
+                    # Ensure minimum question pool after session
+                    try:
+                        pool_result = db.ensure_minimum_question_pool(5)
+                        logger.info(f"Question pool management after trivia: {pool_result}")
+                        
+                        if pool_result.get('still_needed', 0) > 0:
+                            logger.warning(f"Question pool needs {pool_result['still_needed']} more questions")
+                    except Exception as pool_error:
+                        logger.error(f"Error managing question pool: {pool_error}")
+
                     # Thank you message
                     await ctx.send("🎉 **Thank you for participating in Trivia Tuesday!** Use `!trivialeaderboard` to see overall standings.")
 

@@ -3334,6 +3334,151 @@ class DatabaseManager:
             logger.error(f"Error getting trivia question statistics: {e}")
             return {}
 
+    def check_question_duplicate(self, question_text: str, similarity_threshold: float = 0.8) -> Optional[Dict[str, Any]]:
+        """Check if a similar question already exists in the database"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                # Get all existing questions
+                cur.execute("""
+                    SELECT id, question_text, status, created_at
+                    FROM trivia_questions
+                    WHERE is_active = TRUE
+                    ORDER BY created_at DESC
+                """)
+                existing_questions = cur.fetchall()
+
+                if not existing_questions:
+                    return None
+
+                # Normalize the new question for comparison
+                new_question_normalized = self._normalize_question_text(question_text)
+
+                # Check each existing question
+                import difflib
+                
+                for existing in existing_questions:
+                    existing_dict = dict(existing)
+                    existing_text = existing_dict.get('question_text', '')
+                    existing_normalized = self._normalize_question_text(existing_text)
+
+                    # Calculate similarity
+                    similarity = difflib.SequenceMatcher(
+                        None, 
+                        new_question_normalized.lower(), 
+                        existing_normalized.lower()
+                    ).ratio()
+
+                    if similarity >= similarity_threshold:
+                        logger.info(f"Duplicate question detected: {similarity:.2f} similarity to question #{existing_dict['id']}")
+                        return {
+                            'duplicate_id': existing_dict['id'],
+                            'duplicate_text': existing_text,
+                            'similarity_score': similarity,
+                            'status': existing_dict.get('status'),
+                            'created_at': existing_dict.get('created_at')
+                        }
+
+                return None  # No duplicate found
+
+        except Exception as e:
+            logger.error(f"Error checking for duplicate questions: {e}")
+            return None
+
+    def _normalize_question_text(self, question_text: str) -> str:
+        """Normalize question text for duplicate comparison"""
+        import re
+        
+        # Remove common variations that don't change meaning
+        normalized = question_text.strip()
+        
+        # Remove punctuation and extra spaces
+        normalized = re.sub(r'[^\w\s]', ' ', normalized)
+        normalized = re.sub(r'\s+', ' ', normalized)
+        
+        # Remove common question words that don't affect uniqueness
+        filler_words = ['what', 'which', 'who', 'when', 'where', 'how', 'did', 'has', 'is', 'was', 'the', 'a', 'an']
+        words = normalized.lower().split()
+        filtered_words = [word for word in words if word not in filler_words]
+        
+        return ' '.join(filtered_words)
+
+    def ensure_minimum_question_pool(self, minimum_count: int = 5) -> Dict[str, Any]:
+        """Ensure there are at least minimum_count available questions in the pool"""
+        conn = self.get_connection()
+        if not conn:
+            return {"error": "No database connection", "available_count": 0}
+
+        try:
+            with conn.cursor() as cur:
+                # Count current available questions
+                cur.execute("""
+                    SELECT COUNT(*) as available_count
+                    FROM trivia_questions
+                    WHERE is_active = TRUE AND status = 'available'
+                """)
+                result = cur.fetchone()
+                current_available = int(cast(RealDictRow, result)['available_count']) if result else 0
+
+                logger.info(f"Current available questions: {current_available}/{minimum_count}")
+
+                if current_available >= minimum_count:
+                    return {
+                        "status": "sufficient",
+                        "available_count": current_available,
+                        "required_count": minimum_count,
+                        "action_taken": "none"
+                    }
+
+                # Calculate how many questions we need
+                needed_count = minimum_count - current_available
+
+                # Strategy 1: Try to recycle old 'answered' questions (cooldown approach)
+                recycled_count = 0
+                cur.execute("""
+                    SELECT id, question_text, last_used_at
+                    FROM trivia_questions
+                    WHERE is_active = TRUE 
+                    AND status = 'answered'
+                    AND (last_used_at IS NULL OR last_used_at < NOW() - INTERVAL '2 weeks')
+                    ORDER BY last_used_at ASC NULLS FIRST
+                    LIMIT %s
+                """, (needed_count,))
+                
+                recyclable_questions = cur.fetchall()
+                
+                if recyclable_questions:
+                    question_ids = [cast(RealDictRow, q)['id'] for q in recyclable_questions]
+                    cur.execute("""
+                        UPDATE trivia_questions
+                        SET status = 'available'
+                        WHERE id = ANY(%s)
+                    """, (question_ids,))
+                    
+                    recycled_count = cur.rowcount
+                    conn.commit()
+                    logger.info(f"Recycled {recycled_count} old questions back to available status")
+
+                # Check if we have enough now
+                remaining_needed = needed_count - recycled_count
+
+                return {
+                    "status": "pool_managed",
+                    "available_count": current_available + recycled_count,
+                    "required_count": minimum_count,
+                    "recycled_count": recycled_count,
+                    "still_needed": remaining_needed,
+                    "action_taken": f"recycled_{recycled_count}_questions"
+                }
+
+        except Exception as e:
+            logger.error(f"Error ensuring minimum question pool: {e}")
+            conn.rollback()
+            return {"error": str(e), "available_count": 0}
+
     # --- Missing Trivia Methods for Command Compatibility ---
 
     def get_trivia_question(

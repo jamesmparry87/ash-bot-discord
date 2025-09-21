@@ -1406,32 +1406,47 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
         print(f"📊 Available games data: {len(all_games)} games")
 
         # Try template-based generation first (more reliable and diverse)
-        try:
-            selected_template = select_best_template(all_games)
+        max_template_attempts = 3
+        for attempt in range(max_template_attempts):
+            try:
+                selected_template = select_best_template(all_games)
 
-            if selected_template:
-                question_data = execute_answer_logic(
-                    selected_template["answer_logic"],
-                    all_games,
-                    selected_template
-                )
+                if selected_template:
+                    question_data = execute_answer_logic(
+                        selected_template["answer_logic"],
+                        all_games,
+                        selected_template
+                    )
 
-                if question_data and question_data.get("question_text"):
-                    # Add metadata
-                    question_data.update({
-                        "is_dynamic": False,
-                        "category": selected_template.get("category", "template_generated"),
-                        "generation_method": "template"
-                    })
+                    if question_data and question_data.get("question_text"):
+                        # Check for duplicates before accepting this question
+                        duplicate_info = db.check_question_duplicate(
+                            question_data["question_text"], 
+                            similarity_threshold=0.8
+                        )
+                        
+                        if duplicate_info:
+                            print(f"🔍 Template question duplicate detected (attempt {attempt+1}/{max_template_attempts}): {duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']}")
+                            if attempt < max_template_attempts - 1:
+                                continue  # Try generating a different template question
+                        else:
+                            # Add metadata
+                            question_data.update({
+                                "is_dynamic": False,
+                                "category": selected_template.get("category", "template_generated"),
+                                "generation_method": "template"
+                            })
 
-                    # Update history
-                    update_question_history(question_data, selected_template.get("category", "unknown"))
+                            # Update history
+                            update_question_history(question_data, selected_template.get("category", "unknown"))
 
-                    print(f"✅ Template-generated question: {question_data['question_text'][:50]}...")
-                    return question_data
-
-        except Exception as template_error:
-            print(f"⚠️ Template generation failed: {template_error}")
+                            print(f"✅ Template-generated question (unique): {question_data['question_text'][:50]}...")
+                            return question_data
+                            
+            except Exception as template_error:
+                print(f"⚠️ Template generation attempt {attempt+1} failed: {template_error}")
+                if attempt == max_template_attempts - 1:
+                    print(f"❌ All template generation attempts failed")
 
         # Fallback to AI generation (with improved prompt)
         stats = db.get_played_games_stats()
@@ -1489,20 +1504,36 @@ Focus on direct questions about Captain Jonesy's gaming journey - no verbose ana
         prompt = apply_ash_persona_to_ai_prompt(content_prompt, "trivia_generation")
 
         # Call AI with rate limiting
-        response_text, status_message = await call_ai_with_rate_limiting(prompt, JONESY_USER_ID, context)
+        max_ai_attempts = 3
+        for ai_attempt in range(max_ai_attempts):
+            response_text, status_message = await call_ai_with_rate_limiting(prompt, JONESY_USER_ID, context)
 
-        if response_text:
-            print(f"✅ AI fallback response received: {len(response_text)} characters")
+            if response_text:
+                print(f"✅ AI fallback response received: {len(response_text)} characters (attempt {ai_attempt+1}/{max_ai_attempts})")
 
-            # Parse AI response
-            ai_question = robust_json_parse(response_text)
+                # Parse AI response
+                ai_question = robust_json_parse(response_text)
 
-            if ai_question and all(key in ai_question for key in ["question_text", "question_type", "correct_answer"]):
-                ai_question["generation_method"] = "ai_fallback"
-                print(f"✅ AI fallback question generated: {ai_question['question_text'][:50]}...")
-                return ai_question
+                if ai_question and all(key in ai_question for key in ["question_text", "question_type", "correct_answer"]):
+                    # Check for duplicates before accepting this AI question
+                    duplicate_info = db.check_question_duplicate(
+                        ai_question["question_text"], 
+                        similarity_threshold=0.8
+                    )
+                    
+                    if duplicate_info:
+                        print(f"🔍 AI question duplicate detected (attempt {ai_attempt+1}/{max_ai_attempts}): {duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']}")
+                        if ai_attempt < max_ai_attempts - 1:
+                            continue  # Try generating a different AI question
+                    else:
+                        ai_question["generation_method"] = "ai_fallback"
+                        print(f"✅ AI fallback question generated (unique): {ai_question['question_text'][:50]}...")
+                        return ai_question
+            else:
+                print(f"❌ AI fallback attempt {ai_attempt+1} failed: {status_message}")
+                break  # Don't retry on rate limits or API failures
 
-        print(f"❌ AI fallback failed: {status_message}")
+        print(f"❌ All AI generation attempts failed")
         return None
 
     except Exception as e:
