@@ -987,14 +987,12 @@ async def handle_jam_approval_conversation(message):
             elif content in ['2', 'modify', 'edit', 'change']:
                 # Switch to modification mode
                 conversation['step'] = 'modification'
+                current_question = data.get('question_data', {}).get('question_text', 'Unknown')
                 await message.reply(
-                    f"✏️ **Question Modification Mode**\n\n"
-                    f"Please provide your revised version of the question. You can modify:\n"
-                    f"• Question wording\n"
-                    f"• Answer content\n"
-                    f"• Question type (single/multiple choice)\n\n"
-                    f"**Current Question:** {data.get('question_data', {}).get('question_text', 'Unknown')}\n\n"
-                    f"**Please provide your modified question:**"
+                    f"✏️ **Question Text Editing**\n\n"
+                    f"**Current Question:**\n"
+                    f"```\n{current_question}\n```\n\n"
+                    f"Please provide your revised question text (copy the above and edit as needed):"
                 )
 
             elif content in ['3', 'reject', 'no', 'decline']:
@@ -1044,52 +1042,29 @@ async def handle_jam_approval_conversation(message):
 
         elif step == 'modification_preview':
             if content in ['1', 'approve', 'yes', 'save']:
-                # Save the modified question
-                try:
-                    if db is None:
-                        await message.reply("❌ **Database offline.** Cannot save modified question.")
-                        return
-
-                    original_data = data.get('question_data', {})
-                    modified_text = data.get('modified_question', '')
-
-                    question_id = db.add_trivia_question(  # type: ignore
-                        question_text=modified_text,
-                        question_type=original_data.get('question_type', 'single_answer'),
-                        correct_answer=original_data.get('correct_answer'),
-                        multiple_choice_options=original_data.get('multiple_choice_options'),
-                        is_dynamic=original_data.get('is_dynamic', False),
-                        dynamic_query_type=original_data.get('dynamic_query_type'),
-                        category=original_data.get('category', 'ai_generated_modified'),
-                        submitted_by_user_id=JAM_USER_ID,  # Mark as JAM-modified
-                    )
-
-                    if question_id:
-                        await message.reply(
-                            f"✅ **Modified Question Approved Successfully**\n\n"
-                            f"Your modified version has been saved to the database with ID #{question_id}.\n\n"
-                            f"**Final Question:** {modified_text[:100]}{'...' if len(modified_text) > 100 else ''}\n\n"
-                            f"*Mission intelligence database updated with your modifications. Question approved for deployment.*"
-                        )
-                    else:
-                        await message.reply("❌ **Failed to save modified question.** Database error occurred.")
-
-                except Exception as e:
-                    print(f"❌ Error saving modified question: {e}")
-                    await message.reply("❌ **Error saving modified question.** Database operation failed.")
-
-                # Clean up conversation
-                if user_id in jam_approval_conversations:
-                    del jam_approval_conversations[user_id]
+                # Ask if they want to edit the answer as well
+                conversation['step'] = 'answer_edit_prompt'
+                original_data = data.get('question_data', {})
+                current_answer = original_data.get('correct_answer', 'Dynamic calculation')
+                
+                await message.reply(
+                    f"📝 **Answer Editing (Optional)**\n\n"
+                    f"**Current Answer:** {current_answer}\n\n"
+                    f"Would you like to edit the answer as well?\n\n"
+                    f"**1.** ✏️ **Edit Answer** - Modify the correct answer\n"
+                    f"**2.** ⏭️ **Skip** - Keep current answer and continue\n\n"
+                    f"Please respond with **1** or **2**."
+                )
 
             elif content in ['2', 'edit', 'modify']:
                 # Return to modification mode
                 conversation['step'] = 'modification'
+                current_question = data.get('modified_question', data.get('question_data', {}).get('question_text', 'Unknown'))
                 await message.reply(
-                    f"✏️ **Question Modification Mode**\n\n"
-                    f"Please provide another revision of the question.\n\n"
-                    f"**Current Modified Version:** {data.get('modified_question', 'Unknown')}\n\n"
-                    f"**Please provide your updated question:**"
+                    f"✏️ **Question Text Editing**\n\n"
+                    f"**Current Question:**\n"
+                    f"```\n{current_question}\n```\n\n"
+                    f"Please provide your revised question text (copy the above and edit as needed):"
                 )
 
             elif content in ['3', 'cancel', 'reject']:
@@ -1113,6 +1088,99 @@ async def handle_jam_approval_conversation(message):
                     f"*Precise input required for modification protocol execution.*"
                 )
 
+        elif step == 'answer_edit_prompt':
+            if content in ['1', 'edit', 'yes']:
+                # Edit the answer
+                conversation['step'] = 'answer_modification'
+                original_data = data.get('question_data', {})
+                current_answer = original_data.get('correct_answer', 'Dynamic calculation')
+                
+                await message.reply(
+                    f"✏️ **Answer Editing**\n\n"
+                    f"**Current Answer:**\n"
+                    f"```\n{current_answer}\n```\n\n"
+                    f"Please provide the revised answer:"
+                )
+                
+            elif content in ['2', 'skip', 'no']:
+                # Skip answer editing, go to question type prompt
+                conversation['step'] = 'type_edit_prompt'
+                original_data = data.get('question_data', {})
+                current_type = original_data.get('question_type', 'single_answer')
+                
+                await message.reply(
+                    f"🔧 **Question Type Editing (Optional)**\n\n"
+                    f"**Current Type:** {current_type.replace('_', ' ').title()}\n\n"
+                    f"Would you like to change the question type?\n\n"
+                    f"**1.** 🔄 **Change Type** - Switch between single/multiple choice\n"
+                    f"**2.** ⏭️ **Finish** - Save all modifications\n\n"
+                    f"Please respond with **1** or **2**."
+                )
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid response.** Please respond with **1** (Edit Answer) or **2** (Skip).\n\n"
+                    f"*Precise input required for modification workflow.*"
+                )
+
+        elif step == 'answer_modification':
+            # Store modified answer and go to type prompt
+            data['modified_answer'] = content
+            conversation['step'] = 'type_edit_prompt'
+            
+            original_data = data.get('question_data', {})
+            current_type = original_data.get('question_type', 'single_answer')
+            
+            await message.reply(
+                f"✅ **Answer Updated**\n\n"
+                f"**New Answer:** {content}\n\n"
+                f"🔧 **Question Type Editing (Optional)**\n\n"
+                f"**Current Type:** {current_type.replace('_', ' ').title()}\n\n"
+                f"Would you like to change the question type?\n\n"
+                f"**1.** 🔄 **Change Type** - Switch between single/multiple choice\n"
+                f"**2.** ⏭️ **Finish** - Save all modifications\n\n"
+                f"Please respond with **1** or **2**."
+            )
+
+        elif step == 'type_edit_prompt':
+            if content in ['1', 'change', 'edit', 'yes']:
+                # Edit the question type
+                conversation['step'] = 'type_modification'
+                original_data = data.get('question_data', {})
+                current_type = original_data.get('question_type', 'single_answer')
+                
+                await message.reply(
+                    f"🔧 **Question Type Selection**\n\n"
+                    f"**Current Type:** {current_type.replace('_', ' ').title()}\n\n"
+                    f"**Available Types:**\n"
+                    f"**1.** 📝 **Single Answer** - One correct text answer\n"
+                    f"**2.** 🔤 **Multiple Choice** - Choose from A/B/C/D options\n\n"
+                    f"Please respond with **1** or **2**."
+                )
+                
+            elif content in ['2', 'finish', 'save', 'no']:
+                # Save all modifications
+                await save_final_modifications(message, data, user_id)
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid response.** Please respond with **1** (Change Type) or **2** (Finish).\n\n"
+                    f"*Precise input required for modification workflow.*"
+                )
+
+        elif step == 'type_modification':
+            if content in ['1', 'single', 'single answer']:
+                data['modified_type'] = 'single_answer'
+            elif content in ['2', 'multiple', 'multiple choice']:
+                data['modified_type'] = 'multiple_choice'
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid type selection.** Please respond with **1** (Single Answer) or **2** (Multiple Choice).\n\n"
+                    f"*Precise input required for type modification.*"
+                )
+                return
+
+            # Save all modifications
+            await save_final_modifications(message, data, user_id)
+
         # Update conversation state
         conversation['data'] = data
         jam_approval_conversations[user_id] = conversation
@@ -1122,6 +1190,62 @@ async def handle_jam_approval_conversation(message):
         # Clean up on error
         if user_id in jam_approval_conversations:
             del jam_approval_conversations[user_id]
+
+
+async def save_final_modifications(message, data: Dict[str, Any], user_id: int):
+    """Save all final modifications to the database"""
+    try:
+        if db is None:
+            await message.reply("❌ **Database offline.** Cannot save modified question.")
+            return
+
+        original_data = data.get('question_data', {})
+        
+        # Use modified values if available, otherwise use originals
+        final_question = data.get('modified_question', original_data.get('question_text', ''))
+        final_answer = data.get('modified_answer', original_data.get('correct_answer'))
+        final_type = data.get('modified_type', original_data.get('question_type', 'single_answer'))
+
+        question_id = db.add_trivia_question(  # type: ignore
+            question_text=final_question,
+            question_type=final_type,
+            correct_answer=final_answer,
+            multiple_choice_options=original_data.get('multiple_choice_options'),
+            is_dynamic=original_data.get('is_dynamic', False),
+            dynamic_query_type=original_data.get('dynamic_query_type'),
+            category=original_data.get('category', 'ai_generated_modified'),
+            submitted_by_user_id=JAM_USER_ID,  # Mark as JAM-modified
+        )
+
+        if question_id:
+            # Show summary of all changes
+            changes_summary = []
+            if data.get('modified_question'):
+                changes_summary.append(f"• **Question text** updated")
+            if data.get('modified_answer'):
+                changes_summary.append(f"• **Answer** updated to: {final_answer}")
+            if data.get('modified_type'):
+                changes_summary.append(f"• **Question type** changed to: {final_type.replace('_', ' ').title()}")
+            
+            changes_text = '\n'.join(changes_summary) if changes_summary else "• No modifications made"
+            
+            await message.reply(
+                f"✅ **All Modifications Saved Successfully**\n\n"
+                f"Your modified question has been saved to the database with ID #{question_id}.\n\n"
+                f"**Changes Applied:**\n{changes_text}\n\n"
+                f"**Final Question:** {final_question[:100]}{'...' if len(final_question) > 100 else ''}\n\n"
+                f"*Mission intelligence database updated with all your modifications. Question approved for deployment.*"
+            )
+        else:
+            await message.reply("❌ **Failed to save modified question.** Database error occurred.")
+
+    except Exception as e:
+        print(f"❌ Error saving final modifications: {e}")
+        await message.reply("❌ **Error saving modified question.** Database operation failed.")
+
+    # Clean up conversation
+    if user_id in jam_approval_conversations:
+        del jam_approval_conversations[user_id]
 
 
 async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:

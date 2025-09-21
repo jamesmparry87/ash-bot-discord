@@ -1441,7 +1441,7 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
         recent_categories = [q["category"] for q in question_history["last_questions"][-5:]]
         avoid_categories = list(set(recent_categories)) if recent_categories else []
         
-        content_prompt = f"""Generate a trivia question about Captain Jonesy's gaming experiences. Deliver it in your analytical style but make the content engaging and conversational.
+        content_prompt = f"""Generate a trivia question about Captain Jonesy's gaming experiences. Use your analytical voice but be CONCISE - minimal preamble, direct question delivery.
 
 AVOID these overused categories: {avoid_categories}
 
@@ -1456,18 +1456,21 @@ PREFERRED QUESTION TYPES (pick one):
 AVAILABLE GAMES: {game_context}
 Total games: {stats.get('total_games', 0)}
 
-Create a question that focuses on gaming experiences and milestones rather than dry statistics. Phrase it in your analytical style but keep the content interesting.
+CRITICAL: Keep the question CONCISE. Use your analytical voice but avoid lengthy preambles or game lists. A brief greeting like "Personnel, analysis indicates:" followed by a direct question is ideal.
+
+GOOD EXAMPLE: "Personnel, analysis indicates a question arises: What was Captain Jonesy's first completed game?"
+BAD EXAMPLE: "Personnel, I have analyzed Captain Jonesy's extensive gaming logs. Considering her engagement with titles such as [long list], the question arises: [question]"
 
 RETURN ONLY JSON:
 {{
-    "question_text": "Your analytically-phrased but engaging question here",
+    "question_text": "Your concise, direct question with minimal preamble",
     "question_type": "single_answer", 
     "correct_answer": "The answer",
     "is_dynamic": false,
     "category": "ai_generated"
 }}
 
-Focus on Captain Jonesy's gaming journey and achievements rather than statistical analysis."""
+Focus on direct questions about Captain Jonesy's gaming journey - no verbose analysis."""
 
         prompt = apply_ash_persona_to_ai_prompt(content_prompt, "trivia_generation")
 
