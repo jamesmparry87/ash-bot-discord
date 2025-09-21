@@ -3104,10 +3104,11 @@ class DatabaseManager:
                     (question_message_id, confirmation_message_id, channel_id, session_id),
                 )
                 conn.commit()
-                
+
                 success = cur.rowcount > 0
                 if success:
-                    logger.info(f"Updated trivia session {session_id} with message tracking: Q:{question_message_id}, C:{confirmation_message_id}, Ch:{channel_id}")
+                    logger.info(
+                        f"Updated trivia session {session_id} with message tracking: Q:{question_message_id}, C:{confirmation_message_id}, Ch:{channel_id}")
                 return success
         except Exception as e:
             logger.error(f"Error updating trivia session message IDs: {e}")
@@ -3291,36 +3292,37 @@ class DatabaseManager:
                 for session in hanging_sessions:
                     session_dict = dict(session)
                     session_id = session_dict['id']
-                    
+
                     # Mark session as expired
                     cur.execute("""
                         UPDATE trivia_sessions
                         SET status = 'expired', ended_at = CURRENT_TIMESTAMP
                         WHERE id = %s
                     """, (session_id,))
-                    
+
                     # Reset the question status to available so it can be used again
                     cur.execute("""
                         UPDATE trivia_questions
                         SET status = 'available'
                         WHERE id = %s
                     """, (session_dict['question_id'],))
-                    
+
                     cleaned_sessions.append({
                         'session_id': session_id,
                         'question_id': session_dict['question_id'],
                         'question_text': session_dict.get('question_text', 'Unknown'),
                         'started_at': session_dict.get('started_at')
                     })
-                    
-                    logger.info(f"Cleaned hanging trivia session {session_id} (Question: {session_dict.get('question_text', 'Unknown')})")
+
+                    logger.info(
+                        f"Cleaned hanging trivia session {session_id} (Question: {session_dict.get('question_text', 'Unknown')})")
 
                 conn.commit()
                 total_cleaned = len(cleaned_sessions)
-                
+
                 if total_cleaned > 0:
                     logger.info(f"Trivia session cleanup complete: {total_cleaned} hanging sessions cleaned")
-                
+
                 return {
                     "cleaned_sessions": total_cleaned,
                     "sessions": cleaned_sessions

@@ -63,10 +63,10 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
     """Apply sarcastic modifications to responses for Pops Arcade"""
     if user_id != POPS_ARCADE_USER_ID:
         return response
-    
+
     # Check Discord message length limit to prevent truncation
     MAX_DISCORD_LENGTH = 2000
-    
+
     # Sarcastic replacements - fixed to prevent sentence fragmentation
     sarcastic_replacements = {
         "Database analysis": "Database analysis, regrettably,",
@@ -80,22 +80,22 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
         "Captain Jonesy has": "Captain Jonesy has, predictably,",
         "This represents": "This regrettably represents",
         "Fascinating": "Marginally interesting, I suppose",
-        "Outstanding": "Adequate, I suppose",  
+        "Outstanding": "Adequate, I suppose",
         "Excellent": "Satisfactory, regrettably",
         # Fix the problematic patterns that were breaking sentences
         "Their activity appears consistent": "Their activity appears... consistent, I suppose",
         "Their contributions lack a certain": "Their contributions lack a certain sophistication",
         "your struggles with trivia appear to be predictable": "your struggles with trivia appear to be... predictable, regrettably",
     }
-    
+
     # Apply replacements more carefully to avoid breaking sentence structure
     modified_response = response
-    
+
     # First, handle full phrase replacements (longer patterns first)
     for original, sarcastic in sorted(sarcastic_replacements.items(), key=len, reverse=True):
         if original in modified_response:
             modified_response = modified_response.replace(original, sarcastic)
-    
+
     # Add sarcastic interjections to certain sentence patterns
     # Fix grammatical issues and sentence completion
     fixes = [
@@ -106,15 +106,21 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
         (r'appear\s+to\s+be\.\s*$', r'appear to be... as expected, I suppose.'),
         (r'(\w+)\s+predictable\.\s*$', r'\1 predictable, unsurprisingly.'),
     ]
-    
+
     import re
     for pattern, replacement in fixes:
         modified_response = re.sub(pattern, replacement, modified_response)
-    
+
     # Add dismissive ending if it doesn't already have one and the message is complete
-    sarcastic_indicators = ["i suppose", "regrettably", "if you insist", "begrudgingly", "predictably", "unsurprisingly"]
+    sarcastic_indicators = [
+        "i suppose",
+        "regrettably",
+        "if you insist",
+        "begrudgingly",
+        "predictably",
+        "unsurprisingly"]
     has_sarcastic_ending = any(indicator in modified_response.lower() for indicator in sarcastic_indicators)
-    
+
     if not has_sarcastic_ending:
         # Only add ending if the sentence seems complete (ends with punctuation)
         if modified_response.strip().endswith(('.', '!', '?')):
@@ -122,7 +128,7 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
                 modified_response = modified_response[:-1] + ", I suppose."
             else:
                 modified_response += " *[Processing reluctantly...]*"
-    
+
     # Ensure we don't exceed Discord's character limit
     if len(modified_response) > MAX_DISCORD_LENGTH:
         # Truncate gracefully at sentence boundary
@@ -133,7 +139,7 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
                 truncated += sentence + '. '
             else:
                 break
-        
+
         if truncated:
             modified_response = truncated.strip()
             if not modified_response.endswith('.'):
@@ -142,8 +148,8 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
             modified_response += " *[Response truncated for efficiency...]*"
         else:
             # Fallback: hard truncate but preserve ending
-            modified_response = modified_response[:MAX_DISCORD_LENGTH-30] + "... *[Truncated reluctantly.]*"
-    
+            modified_response = modified_response[:MAX_DISCORD_LENGTH - 30] + "... *[Truncated reluctantly.]*"
+
     return modified_response
 
 
@@ -174,8 +180,9 @@ async def handle_strike_detection(
             old_count = db.get_user_strikes(user.id)  # type: ignore
             count = db.add_user_strike(user.id)  # type: ignore
             verify_count = db.get_user_strikes(user.id)  # type: ignore
-            
-            print(f"✅ STRIKE: Added strike to user {user.id} ({user.name}) - Total: {count} (was {old_count}, verified: {verify_count})")
+
+            print(
+                f"✅ STRIKE: Added strike to user {user.id} ({user.name}) - Total: {count} (was {old_count}, verified: {verify_count})")
 
             mod_channel = bot.get_channel(MOD_ALERT_CHANNEL_ID)
             # Only send if mod_channel is a TextChannel
@@ -270,7 +277,7 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"which.*game.*took.*most.*time",
             # Additional patterns for playtime queries that were falling through to AI
             r"what\s+is\s+the\s+longest\s+game.*jonesy.*played",
-            r"which\s+is\s+the\s+longest\s+game.*jonesy.*played", 
+            r"which\s+is\s+the\s+longest\s+game.*jonesy.*played",
             r"what\s+game\s+took.*longest.*for\s+jonesy",
             r"what\s+game\s+has\s+the\s+most\s+playtime",
             r"what\s+game\s+has\s+the\s+longest\s+playtime",
@@ -317,7 +324,8 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"^is\s+(.+?)\s+recommended[\?\.]?$",  # Must be at start of message
             r"^has\s+(.+?)\s+been\s+recommended[\?\.]?$",  # Must be at start of message
             r"^who\s+recommended\s+(.+?)[\?\.]?$",  # Must be at start of message
-            r"^what\s+(?:games?\s+)?(?:do\s+you\s+|would\s+you\s+|should\s+i\s+)?recommend\s+(.+?)[\?\.]?$"  # More specific pattern
+            # More specific pattern
+            r"^what\s+(?:games?\s+)?(?:do\s+you\s+|would\s+you\s+|should\s+i\s+)?recommend\s+(.+?)[\?\.]?$"
         ],
         "youtube_views": [
             r"what\s+game\s+has\s+gotten.*most\s+views",
@@ -726,12 +734,12 @@ async def handle_game_status_query(
         # Create disambiguation response with specific games if found
         if series_games:
             games_list = ", ".join(series_games)
-            
+
             # Set disambiguation state in conversation context
             from .context_manager import get_or_create_context
             context = get_or_create_context(message.author.id, message.channel.id)
             context.set_disambiguation_state(game_name.title(), "game_status", available_game_names)
-            
+
             await message.reply(f"Database analysis indicates multiple entries exist in the '{game_name.title()}' series. Captain Jonesy's gaming archives contain: {games_list}. Specify which particular iteration you are referencing for detailed mission data.")
         else:
             await message.reply(f"Database scan complete. No entries found for '{game_name.title()}' series in Captain Jonesy's gaming archives. Either the series has not been engaged or requires more specific designation for accurate retrieval.")
@@ -831,7 +839,7 @@ async def handle_game_details_query(
 
     game_name = match.group(1).strip()
     game_name_lower = game_name.lower()
-    
+
     # Common game series that need disambiguation (same list as game_status_query)
     game_series_keywords = [
         "god of war", "final fantasy", "call of duty", "assassin's creed", "grand theft auto", "gta",
@@ -867,14 +875,15 @@ async def handle_game_details_query(
         played_games = db.get_all_played_games()  # type: ignore
         series_games = []
         available_game_names = []
-        
+
         for game in played_games:
             game_lower = game['canonical_name'].lower()
             series_lower = game.get('series_name', '').lower()
             # Check if this game belongs to the detected series
             for series in game_series_keywords:
                 if series in game_name_lower and (series in game_lower or series in series_lower):
-                    episodes = f" ({game.get('total_episodes', 0)} episodes)" if game.get("total_episodes", 0) > 0 else ""
+                    episodes = f" ({game.get('total_episodes', 0)} episodes)" if game.get(
+                        "total_episodes", 0) > 0 else ""
                     status = game.get("completion_status", "unknown")
                     series_games.append(f"'{game['canonical_name']}'{episodes} - {status}")
                     available_game_names.append(game['canonical_name'])
@@ -883,12 +892,12 @@ async def handle_game_details_query(
         # Create disambiguation response with specific games if found
         if series_games:
             games_list = ", ".join(series_games)
-            
+
             # Set disambiguation state in conversation context
             from .context_manager import get_or_create_context
             context = get_or_create_context(message.author.id, message.channel.id)
             context.set_disambiguation_state(game_name.title(), "game_details", available_game_names)
-            
+
             await message.reply(f"Database analysis indicates multiple entries exist in the '{game_name.title()}' series. Captain Jonesy's gaming archives contain: {games_list}. Specify which particular iteration you are referencing for detailed temporal analysis.")
             return
 
@@ -992,20 +1001,20 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
         # FIRST: Check if this is a disambiguation response
         if context.awaiting_disambiguation:
             is_disambiguation, matched_game = context.is_disambiguation_response(message.content)
-            
+
             if is_disambiguation and matched_game:
                 print(f"Context: Detected disambiguation response: '{message.content}' -> '{matched_game}'")
-                
+
                 # Clear disambiguation state
                 disambiguation_type = context.disambiguation_type
                 context.clear_disambiguation_state()
-                
+
                 # Process the resolved query based on the original disambiguation type
                 if disambiguation_type == "game_status":
                     # Create a resolved game status query
                     resolved_query = f"has jonesy played {matched_game}"
                     print(f"Context: Processing resolved game status query: {resolved_query}")
-                    
+
                     match = re.search(r"has jonesy played (.+?)$", resolved_query)
                     if match:
                         await handle_game_status_query(message, match)
@@ -1013,12 +1022,12 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
                         context.update_game_context(matched_game, "game_status")
                         context.add_message("disambiguation_resolved", "bot")
                         return True
-                        
+
                 elif disambiguation_type == "game_details":
                     # Create a resolved game details query
                     resolved_query = f"how long did jonesy play {matched_game}"
                     print(f"Context: Processing resolved game details query: {resolved_query}")
-                    
+
                     match = re.search(r"how long did jonesy play (.+?)$", resolved_query)
                     if match:
                         await handle_game_details_query(message, match)
@@ -1026,7 +1035,7 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
                         context.update_game_context(matched_game, "game_details")
                         context.add_message("disambiguation_resolved", "bot")
                         return True
-                
+
                 # If we get here, something went wrong with the disambiguation
                 await message.reply(f"Database analysis: Game '{matched_game}' identified, however query type resolution failed. Please specify your analysis requirements.")
                 context.add_message(message.content, "user")
@@ -1037,7 +1046,7 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
                 available_games = ", ".join(f"'{game}'" for game in context.available_options[:5])
                 if len(context.available_options) > 5:
                     available_games += f" and {len(context.available_options) - 5} more"
-                    
+
                 await message.reply(f"Database analysis: Unable to match '{message.content}' with available options. Available games include: {available_games}. Please specify the exact game title for accurate data retrieval.")
                 context.add_message(message.content, "user")
                 context.add_message("disambiguation_no_match", "bot")
@@ -1264,14 +1273,16 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
                     # Check if this looks like a potential trivia answer (short response)
                     message_words = len(message.content.strip().split())
                     if message_words <= 4:  # Short messages are likely trivia answers
-                        print(f"🧠 GAMING QUERY SKIP: Active trivia session detected, skipping gaming query processing for short message: '{message.content}'")
+                        print(
+                            f"🧠 GAMING QUERY SKIP: Active trivia session detected, skipping gaming query processing for short message: '{message.content}'")
                         return False
                     else:
-                        print(f"🧠 GAMING QUERY: Active trivia session but longer message ({message_words} words), processing as potential gaming query")
+                        print(
+                            f"🧠 GAMING QUERY: Active trivia session but longer message ({message_words} words), processing as potential gaming query")
             except Exception as trivia_check_error:
                 print(f"⚠️ GAMING QUERY: Error checking trivia session: {trivia_check_error}")
                 # Continue with normal processing if trivia check fails
-        
+
         # First check if this is a DM conversation (including JAM approval)
         if await handle_dm_conversations(message):
             return True

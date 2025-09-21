@@ -114,7 +114,7 @@ def reset_daily_usage():
         ai_usage_stats["daily_requests"] = 0
         ai_usage_stats["last_day_reset"] = uk_now.date()
         ai_usage_stats["last_reset_time"] = uk_now
-        
+
         # Reset quota exhaustion status and warning flags
         ai_usage_stats["quota_exhausted"] = False
         ai_usage_stats["quota_exhausted_time"] = None
@@ -271,7 +271,7 @@ def record_ai_request():
     ai_usage_stats["hourly_requests"] += 1
     ai_usage_stats["last_request_time"] = pt_now
     ai_usage_stats["consecutive_errors"] = 0
-    
+
     # Check for quota usage warnings
     check_quota_warnings()
 
@@ -296,25 +296,27 @@ def check_quota_warnings():
     """Check for quota usage warnings and send notifications if needed"""
     daily_usage = ai_usage_stats["daily_requests"]
     daily_percentage = (daily_usage / MAX_DAILY_REQUESTS) * 100
-    
+
     # Track if we've already sent warnings to avoid spam
     if not hasattr(ai_usage_stats, 'warning_80_sent'):
         ai_usage_stats['warning_80_sent'] = False
     if not hasattr(ai_usage_stats, 'warning_95_sent'):
         ai_usage_stats['warning_95_sent'] = False
-    
+
     # Send 80% warning
     if daily_percentage >= 80 and not ai_usage_stats.get('warning_80_sent', False):
         ai_usage_stats['warning_80_sent'] = True
         uk_now = datetime.now(ZoneInfo("Europe/London"))
-        print(f"⚠️ AI quota warning: {daily_usage}/{MAX_DAILY_REQUESTS} requests used ({daily_percentage:.1f}%) at {uk_now.strftime('%H:%M:%S')}")
+        print(
+            f"⚠️ AI quota warning: {daily_usage}/{MAX_DAILY_REQUESTS} requests used ({daily_percentage:.1f}%) at {uk_now.strftime('%H:%M:%S')}")
         # Note: DM notification handled by bot instance when available
-    
+
     # Send 95% warning
     if daily_percentage >= 95 and not ai_usage_stats.get('warning_95_sent', False):
         ai_usage_stats['warning_95_sent'] = True
         uk_now = datetime.now(ZoneInfo("Europe/London"))
-        print(f"🚨 AI quota critical: {daily_usage}/{MAX_DAILY_REQUESTS} requests used ({daily_percentage:.1f}%) at {uk_now.strftime('%H:%M:%S')}")
+        print(
+            f"🚨 AI quota critical: {daily_usage}/{MAX_DAILY_REQUESTS} requests used ({daily_percentage:.1f}%) at {uk_now.strftime('%H:%M:%S')}")
         # Note: DM notification handled by bot instance when available
 
 
@@ -330,34 +332,34 @@ async def send_quota_notification(bot, quota_type: str, current_usage: int, max_
     try:
         if quota_type == "warning_80":
             message = (f"⚠️ **AI Quota Warning (80%)**\n\n"
-                      f"Current usage: {current_usage}/{max_usage} requests\n"
-                      f"Backup AI will automatically engage if quota is exhausted.\n\n"
-                      f"*This is an automated notification from Ash Bot's proactive monitoring system.*")
+                       f"Current usage: {current_usage}/{max_usage} requests\n"
+                       f"Backup AI will automatically engage if quota is exhausted.\n\n"
+                       f"*This is an automated notification from Ash Bot's proactive monitoring system.*")
         elif quota_type == "warning_95":
-            message = (f"🚨 **AI Quota Critical (95%)**\n\n" 
-                      f"Current usage: {current_usage}/{max_usage} requests\n"
-                      f"Only {max_usage - current_usage} requests remaining before backup AI activation.\n\n"
-                      f"*This is an automated notification from Ash Bot's proactive monitoring system.*")
+            message = (f"🚨 **AI Quota Critical (95%)**\n\n"
+                       f"Current usage: {current_usage}/{max_usage} requests\n"
+                       f"Only {max_usage - current_usage} requests remaining before backup AI activation.\n\n"
+                       f"*This is an automated notification from Ash Bot's proactive monitoring system.*")
         elif quota_type == "exhausted":
             backup_status = "Backup AI active" if backup_ai else "No backup AI available"
             message = (f"🚫 **AI Quota Exhausted**\n\n"
-                      f"Daily limit reached: {max_usage}/{max_usage} requests\n"
-                      f"Status: {backup_status}\n"
-                      f"Reset time: 8:00 AM UK time\n\n"
-                      f"*Automated notification from Ash Bot's monitoring system.*")
+                       f"Daily limit reached: {max_usage}/{max_usage} requests\n"
+                       f"Status: {backup_status}\n"
+                       f"Reset time: 8:00 AM UK time\n\n"
+                       f"*Automated notification from Ash Bot's monitoring system.*")
         elif quota_type == "reset":
             message = (f"✅ **AI Quota Reset**\n\n"
-                      f"Daily quota has been reset to 0/{max_usage}\n"
-                      f"Primary AI ({primary_ai.title() if primary_ai else 'Unknown'}) is now available\n\n"
-                      f"*Automated notification from Ash Bot's monitoring system.*")
+                       f"Daily quota has been reset to 0/{max_usage}\n"
+                       f"Primary AI ({primary_ai.title() if primary_ai else 'Unknown'}) is now available\n\n"
+                       f"*Automated notification from Ash Bot's monitoring system.*")
         else:
             return
-        
+
         # Send to JAM only (as requested)
         success = await send_dm_notification(bot, JAM_USER_ID, message)
         if success:
             print(f"✅ Quota notification sent to JAM ({JAM_USER_ID})")
-    
+
     except Exception as e:
         print(f"❌ Error sending quota notification: {e}")
 
@@ -365,20 +367,20 @@ async def send_quota_notification(bot, quota_type: str, current_usage: int, max_
 def get_quota_reset_countdown():
     """Get time remaining until next quota reset"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    
+
     # Next reset is at 8:00 AM UK time
     reset_time_today = uk_now.replace(hour=8, minute=0, second=0, microsecond=0)
-    
+
     # If it's already past 8 AM today, next reset is tomorrow at 8 AM
     if uk_now >= reset_time_today:
         next_reset = reset_time_today + timedelta(days=1)
     else:
         next_reset = reset_time_today
-    
+
     time_remaining = next_reset - uk_now
     hours_remaining = int(time_remaining.total_seconds() // 3600)
     minutes_remaining = int((time_remaining.total_seconds() % 3600) // 60)
-    
+
     return hours_remaining, minutes_remaining, next_reset
 
 
@@ -409,11 +411,11 @@ def handle_quota_exhaustion():
     """Handle quota exhaustion by setting appropriate flags and timestamps"""
     global ai_usage_stats
     current_time = datetime.now(pacific_tz)
-    
+
     ai_usage_stats["quota_exhausted"] = True
     ai_usage_stats["quota_exhausted_time"] = current_time
     ai_usage_stats["primary_ai_errors"] += 1
-    
+
     print(f"🚫 Primary AI quota exhausted at {current_time.strftime('%H:%M:%S')} - backup AI will be used if available")
 
 
@@ -437,9 +439,9 @@ def add_pops_arcade_personality_context(prompt: str) -> str:
         r'\b(ba dum|ba-dum|badump)\b',  # Drum roll sounds
         r'\brim\s*shot\b',  # Rim shot
     ]
-    
+
     is_likely_pun = any(re.search(pattern, prompt, re.IGNORECASE) for pattern in pun_indicators)
-    
+
     # Base personality adjustment for Pops Arcade
     base_context = """
 SPECIAL PERSONALITY DIRECTIVE: You are responding to Pops Arcade, a moderator who requires... specialized handling.
@@ -468,26 +470,26 @@ PUN RESPONSE PROTOCOL:
 
     # Modify the original prompt to include the personality context
     enhanced_prompt = f"{base_context}\nORIGINAL REQUEST: {prompt}\n\nRespond with the adjusted personality as described above."
-    
+
     return enhanced_prompt
 
 
 def attempt_backup_ai(prompt: str) -> Tuple[Optional[str], str]:
     """Attempt to use backup AI when primary AI fails"""
     global ai_usage_stats
-    
+
     if backup_ai != "huggingface" or huggingface_headers is None:
         return None, "no_backup_available"
-    
+
     ai_usage_stats["backup_active"] = True
     ai_usage_stats["last_backup_attempt"] = datetime.now(pacific_tz)
-    
+
     try:
         print(f"🔄 Attempting backup AI (Hugging Face) - daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS}")
-        
+
         # Format prompt for Mixtral instruction format
         formatted_prompt = f"<s>[INST] {prompt} [/INST]"
-        
+
         payload = {
             "inputs": formatted_prompt,
             "parameters": {
@@ -496,17 +498,17 @@ def attempt_backup_ai(prompt: str) -> Tuple[Optional[str], str]:
                 "return_full_text": False
             }
         }
-        
+
         # Use the working model that was found during setup
         model_to_use = working_hf_model if working_hf_model else "mistralai/Mixtral-8x7B-Instruct-v0.1"
-        
+
         response = requests.post(  # type: ignore
             f"https://api-inference.huggingface.co/models/{model_to_use}",
             headers=huggingface_headers,
             json=payload,
             timeout=30
         )
-        
+
         if response.status_code == 200:
             response_data = response.json()
             if response_data and len(response_data) > 0:
@@ -515,12 +517,12 @@ def attempt_backup_ai(prompt: str) -> Tuple[Optional[str], str]:
                     record_ai_request()  # Count backup usage toward daily total
                     print(f"✅ Backup AI (Hugging Face) successful")
                     return hf_text, "backup_success"
-        
+
         print(f"❌ Backup AI failed: HTTP {response.status_code}")
         ai_usage_stats["backup_ai_errors"] += 1
         record_ai_error()
         return None, f"backup_failed:{response.status_code}"
-        
+
     except Exception as e:
         print(f"❌ Backup AI error: {e}")
         ai_usage_stats["backup_ai_errors"] += 1
@@ -548,13 +550,13 @@ async def call_ai_with_rate_limiting(
     can_request, reason = check_rate_limits(priority)
     if not can_request:
         print(f"⚠️ AI request blocked ({priority} priority): {reason}")
-        
+
         # If primary AI quota is exhausted, try backup AI
         if "Daily request limit reached" in reason and backup_ai and not ai_usage_stats.get("backup_active", False):
             backup_response, backup_status = attempt_backup_ai(prompt)
             if backup_response:
                 return backup_response, "backup_used"
-        
+
         return None, f"rate_limit:{reason}"
 
     # Import user alias state from utils module
@@ -605,7 +607,7 @@ async def call_ai_with_rate_limiting(
 
     try:
         response_text = None
-        
+
         # Reset backup active flag if we're trying primary AI again
         if ai_usage_stats.get("backup_active", False) and not ai_usage_stats.get("quota_exhausted", False):
             ai_usage_stats["backup_active"] = False
@@ -619,26 +621,26 @@ async def call_ai_with_rate_limiting(
                 generation_config = {
                     "max_output_tokens": 300,
                     "temperature": 0.7}
-                
+
                 # Determine timeout based on context priority
                 timeout_duration = 15.0 if context == "startup_validation" else 30.0
-                
+
                 # Create truly async wrapper using thread pool to prevent blocking
                 import asyncio
                 import concurrent.futures
-                
+
                 def sync_gemini_call():
                     """Synchronous Gemini call to run in thread pool"""
-                    return gemini_model.generate_content( # type: ignore
+                    return gemini_model.generate_content(  # type: ignore
                         prompt, generation_config=generation_config)
-                
+
                 try:
                     # Use thread pool executor to prevent blocking the event loop
                     loop = asyncio.get_event_loop()
                     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                         future = loop.run_in_executor(executor, sync_gemini_call)
                         response = await asyncio.wait_for(future, timeout=timeout_duration)
-                    
+
                     if response and hasattr(response, "text") and response.text:
                         response_text = response.text
                         record_ai_request()
@@ -647,17 +649,17 @@ async def call_ai_with_rate_limiting(
                         if ai_usage_stats.get("quota_exhausted", False):
                             ai_usage_stats["quota_exhausted"] = False
                             print("✅ Primary AI quota restored")
-                
+
                 except asyncio.TimeoutError:
                     print(f"❌ Gemini AI request timed out after {timeout_duration}s")
                     record_ai_error()
                     # Don't attempt backup for timeout - return timeout error
                     return None, f"timeout_error:{timeout_duration}s"
-                    
+
             except Exception as e:
                 error_str = str(e)
                 print(f"❌ Gemini AI error: {error_str}")
-                
+
                 # Check if this is a quota exhaustion error
                 if check_quota_exhaustion(error_str):
                     handle_quota_exhaustion()
@@ -665,7 +667,7 @@ async def call_ai_with_rate_limiting(
                     return None, "quota_exhausted_no_backup"
                 else:
                     record_ai_error()
-        
+
         # If primary AI failed or quota exhausted, try backup AI
         if not response_text:
             if backup_ai == "huggingface" and huggingface_headers is not None:
@@ -677,7 +679,7 @@ async def call_ai_with_rate_limiting(
                     return None, backup_status
             else:
                 return None, "no_ai_available"
-        
+
         return response_text, "success"
 
     except Exception as e:
@@ -762,31 +764,32 @@ def setup_ai_provider(
             global gemini_model
             module.configure(api_key=api_key)
             gemini_model = module.GenerativeModel('gemini-1.5-flash')
-            
+
             # Test with timeout to prevent hanging
             test_generation_config = {
                 "max_output_tokens": 10,
                 "temperature": 0.7
             }
-            
+
             # Add timeout wrapper for test
             import asyncio
+
             async def test_gemini():
-                return gemini_model.generate_content("Test", generation_config=test_generation_config) # type: ignore
-            
+                return gemini_model.generate_content("Test", generation_config=test_generation_config)  # type: ignore
+
             try:
                 # Run with 10 second timeout for initial test
                 test_response = asyncio.get_event_loop().run_until_complete(
                     asyncio.wait_for(test_gemini(), timeout=10.0)
                 )
-                
+
                 if test_response and hasattr(test_response, 'text') and test_response.text:
                     print(f"✅ Gemini AI test successful (with timeout protection)")
                     return True
             except asyncio.TimeoutError:
                 print(f"❌ Gemini AI test timed out after 10 seconds")
                 return False
-                
+
         elif name == "huggingface":
             # Hugging Face backup explicitly disabled to prevent hanging
             print("⚠️ Hugging Face AI disabled to prevent deployment hangs")
@@ -803,10 +806,10 @@ def robust_json_parse(response_text: str) -> Optional[Dict[str, Any]]:
     """Robustly parse JSON from AI response with multiple fallback strategies"""
     if not response_text or not response_text.strip():
         return None
-    
+
     original_text = response_text
     print(f"🔍 Raw AI response length: {len(response_text)} chars")
-    
+
     # Strategy 1: Basic cleanup and parse
     try:
         # Remove common markdown formatting
@@ -818,14 +821,14 @@ def robust_json_parse(response_text: str) -> Optional[Dict[str, Any]]:
         if cleaned.endswith("```"):
             cleaned = cleaned[:-3]
         cleaned = cleaned.strip()
-        
+
         print(f"🔍 After basic cleanup: {len(cleaned)} chars")
         result = json.loads(cleaned)
         print("✅ Strategy 1 (basic cleanup) successful")
         return result
     except json.JSONDecodeError as e:
         print(f"⚠️ Strategy 1 failed: {e}")
-    
+
     # Strategy 2: Find JSON block in response
     try:
         # Look for { ... } block
@@ -833,7 +836,7 @@ def robust_json_parse(response_text: str) -> Optional[Dict[str, Any]]:
         if start_idx == -1:
             print("⚠️ Strategy 2: No opening brace found")
             return None
-            
+
         # Find matching closing brace
         brace_count = 0
         end_idx = -1
@@ -845,11 +848,11 @@ def robust_json_parse(response_text: str) -> Optional[Dict[str, Any]]:
                 if brace_count == 0:
                     end_idx = i
                     break
-        
+
         if end_idx == -1:
             print("⚠️ Strategy 2: No matching closing brace found")
             return None
-            
+
         json_block = response_text[start_idx:end_idx + 1]
         print(f"🔍 Strategy 2 extracted JSON block: {len(json_block)} chars")
         result = json.loads(json_block)
@@ -857,13 +860,13 @@ def robust_json_parse(response_text: str) -> Optional[Dict[str, Any]]:
         return result
     except json.JSONDecodeError as e:
         print(f"⚠️ Strategy 2 failed: {e}")
-    
+
     # Strategy 3: Line-by-line reconstruction
     try:
         lines = response_text.split('\n')
         json_lines = []
         in_json = False
-        
+
         for line in lines:
             line = line.strip()
             if line.startswith('{') or ('"' in line and ':' in line):
@@ -872,7 +875,7 @@ def robust_json_parse(response_text: str) -> Optional[Dict[str, Any]]:
                 json_lines.append(line)
             if line.endswith('}') and in_json:
                 break
-        
+
         if json_lines:
             reconstructed = '\n'.join(json_lines)
             print(f"🔍 Strategy 3 reconstructed: {len(reconstructed)} chars")
@@ -881,39 +884,39 @@ def robust_json_parse(response_text: str) -> Optional[Dict[str, Any]]:
             return result
     except json.JSONDecodeError as e:
         print(f"⚠️ Strategy 3 failed: {e}")
-    
+
     # Strategy 4: Character-by-character cleaning
     try:
         # Remove all non-JSON characters before first {
         start_idx = response_text.find('{')
         if start_idx > 0:
             response_text = response_text[start_idx:]
-        
+
         # Remove all non-JSON characters after last }
         end_idx = response_text.rfind('}')
         if end_idx != -1 and end_idx < len(response_text) - 1:
             response_text = response_text[:end_idx + 1]
-        
+
         # Fix common JSON issues
         cleaned = response_text
-        
+
         # Fix single quotes to double quotes (but be careful with content)
         # Only fix quotes around keys and simple string values
         import re
         cleaned = re.sub(r"'(\w+)':", r'"\1":', cleaned)  # 'key': -> "key":
         cleaned = re.sub(r':\s*\'([^\']*?)\'', r': "\1"', cleaned)  # : 'value' -> : "value"
-        
+
         # Fix trailing commas
         cleaned = re.sub(r',\s*}', '}', cleaned)
         cleaned = re.sub(r',\s*]', ']', cleaned)
-        
+
         print(f"🔍 Strategy 4 cleaned: {len(cleaned)} chars")
         result = json.loads(cleaned)
         print("✅ Strategy 4 (character cleaning) successful")
         return result
     except json.JSONDecodeError as e:
         print(f"⚠️ Strategy 4 failed: {e}")
-    
+
     # All strategies failed
     print(f"❌ All JSON parsing strategies failed for response:")
     print(f"   First 200 chars: {original_text[:200]}...")
@@ -930,6 +933,7 @@ question_history = {
     "pattern_weights": {}
 }
 
+
 def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
     """Get diverse question templates organized by category - now with more engaging varieties!"""
     return {
@@ -944,7 +948,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
             {
                 "template": "Which RPG took Jonesy the most episodes to complete?",
                 "answer_logic": "longest_episodes_by_genre",
-                "type": "single_answer", 
+                "type": "single_answer",
                 "weight": 1.6,
                 "genre_filter": "rpg"
             },
@@ -1024,7 +1028,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
                 "weight": 1.5
             },
             {
-                "template": "Did Jonesy play {game1} before or after {game2}?", 
+                "template": "Did Jonesy play {game1} before or after {game2}?",
                 "answer_logic": "compare_play_order",
                 "type": "single_answer",
                 "weight": 1.4
@@ -1066,7 +1070,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
             {
                 "template": "Which horror game has Jonesy played?",
                 "answer_logic": "mc_genre_game",
-                "type": "multiple_choice", 
+                "type": "multiple_choice",
                 "weight": 1.7,
                 "genre_filter": "horror"
             },
@@ -1081,7 +1085,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
         "legacy_stats": [
             {
                 "template": "Which game took the longest to complete?",
-                "answer_logic": "max_playtime", 
+                "answer_logic": "max_playtime",
                 "type": "single_answer",
                 "weight": 0.2  # Very low weight - legacy/backup
             },
@@ -1094,10 +1098,11 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
         ]
     }
 
+
 def calculate_template_weights(templates: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
     """Calculate dynamic weights based on usage history and cooldowns"""
     current_time = datetime.now(pacific_tz)
-    
+
     # Apply cooldowns and usage penalties
     for category, template_list in templates.items():
         # Category cooldown check
@@ -1106,89 +1111,92 @@ def calculate_template_weights(templates: Dict[str, List[Dict[str, Any]]]) -> Di
             # Reduce weights for category in cooldown
             for template in template_list:
                 template["weight"] *= 0.3
-                
+
         # Individual template usage penalties
         for template in template_list:
             template_id = template.get("template", "")[:20]  # Use first 20 chars as ID
             usage_count = question_history["template_usage"].get(template_id, 0)
-            
+
             # Apply usage penalty (more usage = lower weight)
             if usage_count > 0:
                 penalty = max(0.2, 1.0 - (usage_count * 0.2))
                 template["weight"] *= penalty
-    
+
     return templates
+
 
 def select_best_template(games_data: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """Select the best template based on data availability and weights"""
     templates = get_question_templates()
     weighted_templates = calculate_template_weights(templates)
-    
+
     viable_templates = []
-    
+
     # Check each template for data viability
     for category, template_list in weighted_templates.items():
         for template in template_list:
             # Check if we have enough data for this template
             if is_template_viable(template, games_data):
                 viable_templates.append((template, category))
-    
+
     if not viable_templates:
         print("⚠️ No viable templates found for current data")
         return None
-    
+
     # Weight-based selection
     total_weight = sum(template["weight"] for template, _ in viable_templates)
     import random
-    
+
     if total_weight > 0:
         # Weighted random selection
         target = random.uniform(0, total_weight)
         current_weight = 0
-        
+
         for template, category in viable_templates:
             current_weight += template["weight"]
             if current_weight >= target:
                 return {**template, "category": category}
-    
+
     # Fallback to random selection
     template, category = random.choice(viable_templates)
     return {**template, "category": category}
 
+
 def is_template_viable(template: Dict[str, Any], games_data: List[Dict[str, Any]]) -> bool:
     """Check if template can be answered with available data"""
     answer_logic = template.get("answer_logic", "")
-    
+
     # Comparison templates need at least 2 games
     if answer_logic.startswith("compare_") and len(games_data) < 2:
         return False
-    
+
     # Multiple choice needs at least 3 games for good options
     if template.get("type") == "multiple_choice" and len(games_data) < 3:
         return False
-        
+
     # Episode-based questions need games with episode data
     if "episode" in answer_logic:
         if not any(game.get("total_episodes", 0) > 0 for game in games_data):
             return False
-    
+
     # Playtime questions need games with playtime data
     if "playtime" in answer_logic or "hours" in answer_logic:
         if not any(game.get("total_playtime_minutes", 0) > 0 for game in games_data):
             return False
-    
+
     # Genre questions need games with genre data
     if "genre" in answer_logic:
         if not any(game.get("genre") for game in games_data):
             return False
-            
+
     return True
+
 
 def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template: Dict[str, Any]) -> Dict[str, Any]:
     """Execute the answer logic and return question data"""
     import random
     from collections import Counter
-    
+
     if logic == "compare_episodes":
         # Pick two games with episode data
         games_with_episodes = [g for g in games_data if g.get("total_episodes", 0) > 0]
@@ -1196,22 +1204,24 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
             game1, game2 = random.sample(games_with_episodes, 2)
             winner = game1 if game1.get("total_episodes", 0) > game2.get("total_episodes", 0) else game2
             return {
-                "question_text": template["template"].format(game1=game1["canonical_name"], game2=game2["canonical_name"]),
+                "question_text": template["template"].format(
+                    game1=game1["canonical_name"],
+                    game2=game2["canonical_name"]),
                 "correct_answer": winner["canonical_name"],
-                "question_type": "single_answer"
-            }
-    
+                "question_type": "single_answer"}
+
     elif logic == "compare_playtime":
         games_with_playtime = [g for g in games_data if g.get("total_playtime_minutes", 0) > 0]
         if len(games_with_playtime) >= 2:
             game1, game2 = random.sample(games_with_playtime, 2)
             winner = game1 if game1.get("total_playtime_minutes", 0) > game2.get("total_playtime_minutes", 0) else game2
             return {
-                "question_text": template["template"].format(game1=game1["canonical_name"], game2=game2["canonical_name"]),
+                "question_text": template["template"].format(
+                    game1=game1["canonical_name"],
+                    game2=game2["canonical_name"]),
                 "correct_answer": winner["canonical_name"],
-                "question_type": "single_answer"
-            }
-    
+                "question_type": "single_answer"}
+
     elif logic == "max_episodes":
         games_with_episodes = [g for g in games_data if g.get("total_episodes", 0) > 0]
         if games_with_episodes:
@@ -1221,7 +1231,7 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
                 "correct_answer": winner["canonical_name"],
                 "question_type": "single_answer"
             }
-    
+
     elif logic == "max_playtime":
         games_with_playtime = [g for g in games_data if g.get("total_playtime_minutes", 0) > 0]
         if games_with_playtime:
@@ -1231,7 +1241,7 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
                 "correct_answer": winner["canonical_name"],
                 "question_type": "single_answer"
             }
-    
+
     elif logic == "completion_percentage":
         completed = len([g for g in games_data if g.get("completion_status") == "completed"])
         percentage = round((completed / len(games_data)) * 100) if games_data else 0
@@ -1240,7 +1250,7 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
             "correct_answer": f"{percentage}%",
             "question_type": "single_answer"
         }
-    
+
     elif logic == "most_common_genre":
         genres = [g.get("genre") for g in games_data if g.get("genre")]
         if genres:
@@ -1250,7 +1260,7 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
                 "correct_answer": most_common,
                 "question_type": "single_answer"
             }
-    
+
     elif logic == "unique_genres_count":
         genres = [g.get("genre") for g in games_data if g.get("genre")]
         unique_count = len(set(genres)) if genres else 0
@@ -1259,7 +1269,7 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
             "correct_answer": str(unique_count),
             "question_type": "single_answer"
         }
-    
+
     elif logic == "first_completed_game":
         completed_games = [g for g in games_data if g.get("completion_status") == "completed"]
         if completed_games:
@@ -1270,9 +1280,11 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
                 "correct_answer": first_completed["canonical_name"],
                 "question_type": "single_answer"
             }
-    
+
     elif logic == "shortest_completed_game":
-        completed_games = [g for g in games_data if g.get("completion_status") == "completed" and g.get("total_playtime_minutes", 0) > 0]
+        completed_games = [
+            g for g in games_data if g.get("completion_status") == "completed" and g.get(
+                "total_playtime_minutes", 0) > 0]
         if completed_games:
             shortest = min(completed_games, key=lambda x: x.get("total_playtime_minutes", 0))
             return {
@@ -1280,7 +1292,7 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
                 "correct_answer": shortest["canonical_name"],
                 "question_type": "single_answer"
             }
-    
+
     elif logic == "most_recent_completion":
         completed_games = [g for g in games_data if g.get("completion_status") == "completed"]
         if completed_games:
@@ -1291,7 +1303,7 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
                 "correct_answer": most_recent["canonical_name"],
                 "question_type": "single_answer"
             }
-    
+
     elif logic == "largest_series":
         series_counts = Counter([g.get("series_name") for g in games_data if g.get("series_name")])
         if series_counts:
@@ -1301,7 +1313,7 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
                 "correct_answer": largest_series,
                 "question_type": "single_answer"
             }
-    
+
     elif logic == "mc_longest_game":
         games_with_playtime = [g for g in games_data if g.get("total_playtime_minutes", 0) > 0]
         if len(games_with_playtime) >= 3:
@@ -1310,44 +1322,45 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
             others = [g for g in games_with_playtime if g != longest]
             choices = [longest] + random.sample(others, min(3, len(others)))
             random.shuffle(choices)
-            
+
             choice_names = [g["canonical_name"] for g in choices]
             correct_letter = chr(65 + choice_names.index(longest["canonical_name"]))  # A, B, C, D
-            
+
             return {
                 "question_text": template["template"],
                 "correct_answer": correct_letter,
                 "question_type": "multiple_choice",
                 "multiple_choice_options": choice_names
             }
-    
+
     elif logic == "mc_completed_game":
         completed_games = [g for g in games_data if g.get("completion_status") == "completed"]
         incomplete_games = [g for g in games_data if g.get("completion_status") != "completed"]
-        
+
         if len(completed_games) >= 1 and len(incomplete_games) >= 2:
             correct_game = random.choice(completed_games)
             wrong_games = random.sample(incomplete_games, min(3, len(incomplete_games)))
             choices = [correct_game] + wrong_games
             random.shuffle(choices)
-            
+
             choice_names = [g["canonical_name"] for g in choices]
             correct_letter = chr(65 + choice_names.index(correct_game["canonical_name"]))
-            
+
             return {
                 "question_text": template["template"],
                 "correct_answer": correct_letter,
                 "question_type": "multiple_choice",
                 "multiple_choice_options": choice_names
             }
-    
+
     # Fallback - return empty dict if logic couldn't execute
     return {}
+
 
 def update_question_history(question_data: Dict[str, Any], category: str):
     """Update question history to track usage and implement cooldowns"""
     current_time = datetime.now(pacific_tz)
-    
+
     # Add to recent questions list (keep last 10)
     question_history["last_questions"].append({
         "question": question_data.get("question_text", "")[:50],
@@ -1356,17 +1369,18 @@ def update_question_history(question_data: Dict[str, Any], category: str):
     })
     if len(question_history["last_questions"]) > 10:
         question_history["last_questions"].pop(0)
-    
+
     # Update template usage count
     template_id = question_data.get("question_text", "")[:20]
     question_history["template_usage"][template_id] = question_history["template_usage"].get(template_id, 0) + 1
-    
+
     # Set category cooldown if used too recently
     recent_usage = sum(1 for q in question_history["last_questions"][-3:] if q["category"] == category)
     if recent_usage >= 2:  # Used 2 times in last 3 questions
         cooldown_duration = 30 * 60  # 30 minutes
         question_history["category_cooldowns"][category] = current_time + timedelta(seconds=cooldown_duration)
         print(f"⏰ Category '{category}' on cooldown for 30 minutes due to recent usage")
+
 
 async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[str, Any]]:
     """Generate a diverse trivia question using template-based system with AI fallback"""
@@ -1381,27 +1395,27 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
 
     try:
         print(f"🧠 Generating diverse trivia question with context: {context}")
-        
+
         # Get all available games data
         all_games = db.get_all_played_games()
-        
+
         if not all_games:
             print("❌ No games data available for question generation")
             return None
-        
+
         print(f"📊 Available games data: {len(all_games)} games")
-        
+
         # Try template-based generation first (more reliable and diverse)
         try:
             selected_template = select_best_template(all_games)
-            
+
             if selected_template:
                 question_data = execute_answer_logic(
-                    selected_template["answer_logic"], 
-                    all_games, 
+                    selected_template["answer_logic"],
+                    all_games,
                     selected_template
                 )
-                
+
                 if question_data and question_data.get("question_text"):
                     # Add metadata
                     question_data.update({
@@ -1409,20 +1423,20 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
                         "category": selected_template.get("category", "template_generated"),
                         "generation_method": "template"
                     })
-                    
+
                     # Update history
                     update_question_history(question_data, selected_template.get("category", "unknown"))
-                    
+
                     print(f"✅ Template-generated question: {question_data['question_text'][:50]}...")
                     return question_data
-        
+
         except Exception as template_error:
             print(f"⚠️ Template generation failed: {template_error}")
-        
+
         # Fallback to AI generation (with improved prompt)
         stats = db.get_played_games_stats()
         sample_games = all_games[:5]  # Use first 5 games for context
-        
+
         # Create detailed game context
         game_context = ""
         if sample_games:
@@ -1440,13 +1454,13 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
         # Enhanced AI prompt with Ash's analytical persona but engaging content
         recent_categories = [q["category"] for q in question_history["last_questions"][-5:]]
         avoid_categories = list(set(recent_categories)) if recent_categories else []
-        
+
         content_prompt = f"""Generate a trivia question about Captain Jonesy's gaming experiences. Use your analytical voice but be CONCISE - minimal preamble, direct question delivery.
 
 AVOID these overused categories: {avoid_categories}
 
 PREFERRED QUESTION TYPES (pick one):
-🎮 **Genre Adventures**: "What horror game did Jonesy play most recently?" 
+🎮 **Genre Adventures**: "What horror game did Jonesy play most recently?"
 🏆 **Gaming Milestones**: "Which was Jonesy's first completed RPG?"
 📚 **Series Explorer**: "How many Resident Evil games has Jonesy played?"
 🎯 **Gaming Stories**: "What game took Jonesy the most episodes to finish?"
@@ -1464,7 +1478,7 @@ BAD EXAMPLE: "Personnel, I have analyzed Captain Jonesy's extensive gaming logs.
 RETURN ONLY JSON:
 {{
     "question_text": "Your concise, direct question with minimal preamble",
-    "question_type": "single_answer", 
+    "question_type": "single_answer",
     "correct_answer": "The answer",
     "is_dynamic": false,
     "category": "ai_generated"
@@ -1479,15 +1493,15 @@ Focus on direct questions about Captain Jonesy's gaming journey - no verbose ana
 
         if response_text:
             print(f"✅ AI fallback response received: {len(response_text)} characters")
-            
+
             # Parse AI response
             ai_question = robust_json_parse(response_text)
-            
+
             if ai_question and all(key in ai_question for key in ["question_text", "question_type", "correct_answer"]):
                 ai_question["generation_method"] = "ai_fallback"
                 print(f"✅ AI fallback question generated: {ai_question['question_text'][:50]}...")
                 return ai_question
-        
+
         print(f"❌ AI fallback failed: {status_message}")
         return None
 
@@ -1532,7 +1546,7 @@ Rewrite this as a technical briefing for moderators. Be analytical, precise, and
 Use phrases like "Analysis indicates", "System diagnostics confirm", "Operational parameters enhanced", etc.
 Keep it professional but maintain your clinical, analytical personality.
 Write 2-4 sentences maximum. Be concise but comprehensive."""
-            
+
             prompt = apply_ash_persona_to_ai_prompt(content_prompt, "mod_announcement")
 
         else:  # user channel
@@ -1549,7 +1563,7 @@ Rewrite this as a community announcement that's accessible to regular users but 
 
 Be helpful and informative, but keep subtle hints of your analytical nature.
 Write 2-4 sentences maximum. Make it engaging and user-focused."""
-            
+
             prompt = apply_ash_persona_to_ai_prompt(content_prompt, "user_announcement")
 
         # Call AI with rate limiting
@@ -1624,7 +1638,7 @@ def is_time_query(prompt: str) -> bool:
         "chronometer",
         "time check"
     ]
-    
+
     return any(keyword in prompt_lower for keyword in time_keywords)
 
 
@@ -1632,22 +1646,22 @@ def handle_time_query(user_id: int) -> str:
     """Handle time queries with proper current time"""
     from datetime import datetime
     from zoneinfo import ZoneInfo
-    
+
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    
+
     # Determine DST status for proper timezone naming
     dst_offset = uk_now.dst()
     is_bst = dst_offset is not None and dst_offset.total_seconds() > 0
     timezone_name = "BST" if is_bst else "GMT"
-    
+
     formatted_time = uk_now.strftime(f"%A, %B %d, %Y at %H:%M:%S {timezone_name}")
-    
+
     # Determine the appropriate salutation based on user
     if user_id == JONESY_USER_ID:
         salutation = "Captain Jonesy"
     else:
         salutation = "Sir Decent Jam"
-    
+
     # Return the proper time response without placeholder text
     return f"{salutation}, my internal chronometer indicates the current time is {formatted_time}. I await further instructions."
 
@@ -1658,7 +1672,7 @@ initialize_ai()
 # Export list for proper module interface
 __all__ = [
     'call_ai_with_rate_limiting',
-    'filter_ai_response', 
+    'filter_ai_response',
     'generate_ai_trivia_question',
     'create_ai_announcement_content',
     'initialize_ai',
