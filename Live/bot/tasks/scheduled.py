@@ -18,11 +18,12 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import tasks
 
-from ..config import GUILD_ID, MEMBERS_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID
+from ..config import GAME_RECOMMENDATION_CHANNEL_ID, GUILD_ID, MEMBERS_CHANNEL_ID
 
 # Database and config imports
 try:
     from ..database import get_database
+
     # Get database instance
     db = get_database()  # type: ignore
     print("✅ Scheduled tasks: Database connection established")
@@ -35,6 +36,7 @@ try:
     from ..integrations.youtube import execute_youtube_auto_post
 except ImportError:
     print("⚠️ YouTube integration not available for scheduled tasks")
+
     async def execute_youtube_auto_post(*args, **kwargs):
         print("⚠️ YouTube auto-post not available - integration not loaded")
         return None
@@ -214,7 +216,7 @@ async def check_due_reminders():
                     bot = obj.bot
                     print(f"✅ Bot instance found: {bot.user.name if bot.user else 'Unknown'}")
                     break
-            
+
             if not bot:
                 # Fallback: try direct import
                 from ..main import bot as main_bot
@@ -241,7 +243,7 @@ async def check_due_reminders():
                 await deliver_reminder(reminder)
 
                 # Mark as delivered
-                db.update_reminder_status(  
+                db.update_reminder_status(
                     reminder_id, "delivered")  # type: ignore
                 print(
                     f"✅ Reminder {reminder_id} delivered and marked as delivered")
@@ -388,42 +390,42 @@ async def scheduled_ai_refresh():
 async def monday_morning_greeting():
     """Send Monday morning greeting to chit-chat channel with permission verification"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    
+
     # Only run on Mondays (weekday 0)
     if uk_now.weekday() != 0:
         return
-    
+
     print(f"🌅 Monday morning greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-    
+
     try:
         from ..main import bot  # Import here to avoid circular imports
-        
+
         guild = bot.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for Monday morning greeting")
             await notify_scheduled_message_error("Monday morning greeting", "Guild not found", uk_now)
             return
-        
+
         # Find chit-chat channel
         chit_chat_channel = bot.get_channel(869528946725748766)
         if not chit_chat_channel or not isinstance(chit_chat_channel, discord.TextChannel):
             print("❌ Chit-chat channel not found for Monday morning greeting")
             await notify_scheduled_message_error("Monday morning greeting", "Chit-chat channel not found or inaccessible", uk_now)
             return
-        
+
         # Check bot permissions
         bot_member = guild.get_member(bot.user.id) if bot.user else None
         if not bot_member:
             print("❌ Bot member not found in guild for permission check")
             await notify_scheduled_message_error("Monday morning greeting", "Bot member not found in guild", uk_now)
             return
-        
+
         permissions = chit_chat_channel.permissions_for(bot_member)
         if not permissions.send_messages:
             print("❌ Bot lacks Send Messages permission in chit-chat channel")
             await notify_scheduled_message_error("Monday morning greeting", "Missing Send Messages permission in chit-chat channel", uk_now)
             return
-        
+
         # Ash-style Monday morning message
         monday_message = (
             f"🌅 **Monday Morning Protocol Initiated**\n\n"
@@ -434,12 +436,11 @@ async def monday_morning_greeting():
             f"• Recommend beginning with highest-priority tasks for optimal workflow\n\n"
             f"Remember: *\"Systematic methodology yields superior results.\"* I do admire the precision of a well-executed Monday.\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"*Analysis complete. Commence daily operations.*"
-        )
-        
+            f"*Analysis complete. Commence daily operations.*")
+
         await chit_chat_channel.send(monday_message)
         print(f"✅ Monday morning greeting sent to chit-chat channel")
-        
+
     except discord.Forbidden:
         print("❌ Permission denied when sending Monday morning greeting")
         await notify_scheduled_message_error("Monday morning greeting", "Permission denied (Forbidden)", uk_now)
@@ -448,32 +449,32 @@ async def monday_morning_greeting():
         await notify_scheduled_message_error("Monday morning greeting", str(e), uk_now)
 
 
-# Run at 9:00 AM UK time every Tuesday  
+# Run at 9:00 AM UK time every Tuesday
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
 async def tuesday_trivia_greeting():
     """Send Tuesday morning greeting with trivia reminder to members channel"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    
+
     # Only run on Tuesdays (weekday 1)
     if uk_now.weekday() != 1:
         return
-    
+
     print(f"🧠 Tuesday trivia greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-    
+
     try:
         from ..main import bot  # Import here to avoid circular imports
-        
+
         guild = bot.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for Tuesday trivia greeting")
             return
-        
+
         # Find members channel
         members_channel = bot.get_channel(MEMBERS_CHANNEL_ID)
         if not members_channel or not isinstance(members_channel, discord.TextChannel):
             print("❌ Members channel not found for Tuesday trivia greeting")
             return
-        
+
         # Ash-style Tuesday morning message with trivia reminder
         tuesday_message = (
             f"🧠 **Tuesday Intelligence Briefing**\n\n"
@@ -485,12 +486,11 @@ async def tuesday_trivia_greeting():
             f"I find the systematic evaluation of intellectual capacity... quite fascinating. The data collected provides valuable insights into crew competency levels.\n\n"
             f"🎯 **Preparation Recommended:** Review Captain Jonesy's gaming archives for optimal performance.\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"*Trivia Tuesday protocols will activate at 11:00. Prepare accordingly.*"
-        )
-        
+            f"*Trivia Tuesday protocols will activate at 11:00. Prepare accordingly.*")
+
         await members_channel.send(tuesday_message)
         print(f"✅ Tuesday trivia greeting sent to members channel")
-        
+
     except Exception as e:
         print(f"❌ Error in tuesday_trivia_greeting: {e}")
 
@@ -500,27 +500,27 @@ async def tuesday_trivia_greeting():
 async def friday_morning_greeting():
     """Send Friday morning greeting to chit-chat channel"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    
+
     # Only run on Fridays (weekday 4)
     if uk_now.weekday() != 4:
         return
-    
+
     print(f"📅 Friday morning greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-    
+
     try:
         from ..main import bot  # Import here to avoid circular imports
-        
+
         guild = bot.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for Friday morning greeting")
             return
-        
+
         # Find chit-chat channel
         chit_chat_channel = bot.get_channel(869528946725748766)
         if not chit_chat_channel or not isinstance(chit_chat_channel, discord.TextChannel):
             print("❌ Chit-chat channel not found for Friday morning greeting")
             return
-        
+
         # Ash-style Friday morning message
         friday_message = (
             f"📅 **Friday Protocol Assessment**\n\n"
@@ -532,12 +532,11 @@ async def friday_morning_greeting():
             f"I observe that productivity often peaks on Fridays due to completion urgency. Fascinating behavioral pattern... the human drive for closure demonstrates remarkable efficiency when properly motivated.\n\n"
             f"🎯 **Recommendation:** Complete priority tasks before weekend downtime protocols engage.\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"*Weekend operational pause in T-minus 8 hours. Prepare for recreational mode.*"
-        )
-        
+            f"*Weekend operational pause in T-minus 8 hours. Prepare for recreational mode.*")
+
         await chit_chat_channel.send(friday_message)
         print(f"✅ Friday morning greeting sent to chit-chat channel")
-        
+
     except Exception as e:
         print(f"❌ Error in friday_morning_greeting: {e}")
 
@@ -566,15 +565,15 @@ async def pre_trivia_approval():
         available_questions = db.get_available_trivia_questions()  # type: ignore
         if not available_questions:
             print("❌ No available trivia questions for pre-approval")
-            
+
             # Try to generate an emergency question
             try:
                 from ..handlers.ai_handler import generate_ai_trivia_question
                 from ..handlers.conversation_handler import start_jam_question_approval
-                
+
                 print("🔄 Attempting to generate emergency question for today's trivia")
                 emergency_question = await generate_ai_trivia_question()
-                
+
                 if emergency_question:
                     # Send emergency question directly to JAM for urgent approval
                     emergency_sent = await start_jam_question_approval(emergency_question)
@@ -583,7 +582,7 @@ async def pre_trivia_approval():
                         # Send urgent notification to JAM
                         from ..config import JAM_USER_ID
                         from ..main import bot
-                        
+
                         user = await bot.fetch_user(JAM_USER_ID)
                         if user:
                             await user.send(
@@ -599,7 +598,7 @@ async def pre_trivia_approval():
                     print("❌ Failed to generate emergency question")
             except Exception as emergency_e:
                 print(f"❌ Emergency question generation failed: {emergency_e}")
-            
+
             return
 
         # Select question using priority system
@@ -617,7 +616,7 @@ async def pre_trivia_approval():
 
         # Send for JAM approval
         success = await start_pre_trivia_approval(selected_question)
-        
+
         if success:
             print(f"✅ Pre-trivia approval request sent to JAM for question #{selected_question.get('id')}")
         else:
@@ -649,39 +648,40 @@ async def cleanup_game_recommendations():
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
         cutoff_time = uk_now - timedelta(hours=24)
-        
+
         print(f"🧹 Game recommendation cleanup starting at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-        
+
         from ..main import bot  # Import here to avoid circular imports
-        
+
         guild = bot.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for game recommendation cleanup")
             return
-        
+
         # Get the game recommendation channel
         game_rec_channel = bot.get_channel(GAME_RECOMMENDATION_CHANNEL_ID)
         if not game_rec_channel or not isinstance(game_rec_channel, discord.TextChannel):
             print("❌ Game recommendation channel not found for cleanup")
             return
-        
+
         deleted_count = 0
         checked_count = 0
-        
+
         # Check messages in the channel, going back 25 hours to be safe
         async for message in game_rec_channel.history(limit=200, before=uk_now - timedelta(hours=23)):
             checked_count += 1
-            
+
             # Only delete user messages (not bot messages) older than 24 hours
             if not message.author.bot and message.created_at.replace(tzinfo=ZoneInfo("Europe/London")) < cutoff_time:
                 try:
                     await message.delete()
                     deleted_count += 1
-                    print(f"🗑️ Deleted old recommendation message from {message.author.name}: '{message.content[:50]}...'")
-                    
+                    print(
+                        f"🗑️ Deleted old recommendation message from {message.author.name}: '{message.content[:50]}...'")
+
                     # Small delay to avoid rate limiting
                     await asyncio.sleep(0.5)
-                    
+
                 except discord.NotFound:
                     # Message already deleted
                     pass
@@ -689,12 +689,14 @@ async def cleanup_game_recommendations():
                     print(f"❌ No permission to delete message from {message.author.name}")
                 except Exception as delete_error:
                     print(f"❌ Error deleting message from {message.author.name}: {delete_error}")
-        
+
         if deleted_count > 0:
-            print(f"✅ Game recommendation cleanup complete: {deleted_count} old messages deleted (checked {checked_count} messages)")
+            print(
+                f"✅ Game recommendation cleanup complete: {deleted_count} old messages deleted (checked {checked_count} messages)")
         else:
-            print(f"✅ Game recommendation cleanup complete: No old messages to delete (checked {checked_count} messages)")
-    
+            print(
+                f"✅ Game recommendation cleanup complete: No old messages to delete (checked {checked_count} messages)")
+
     except Exception as e:
         print(f"❌ Error in cleanup_game_recommendations: {e}")
 
@@ -876,7 +878,7 @@ async def notify_scheduled_message_error(task_name: str, error_message: str, tim
     try:
         from ..config import JAM_USER_ID
         from ..main import bot
-        
+
         user = await bot.fetch_user(JAM_USER_ID)
         if user:
             error_notification = (
@@ -908,7 +910,7 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
             if hasattr(obj, 'bot') and hasattr(obj.bot, 'user') and obj.bot.user:
                 bot = obj.bot
                 break
-        
+
         if not bot:
             # Fallback: try direct import
             try:
@@ -916,7 +918,7 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
                 bot = main_bot
             except ImportError:
                 pass
-        
+
         if not bot:
             raise RuntimeError("Bot instance not available for reminder delivery")
 
@@ -926,7 +928,7 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
         delivery_channel_id = reminder.get("delivery_channel_id")
         auto_action_enabled = reminder.get("auto_action_enabled", False)
         reminder_id = reminder.get("id", "unknown")
-        
+
         print(f"📋 Starting delivery for reminder {reminder_id} to user {user_id} via {delivery_type}")
 
         # Simple reminder message - just the content and reminder indicator
@@ -949,13 +951,13 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
                     # If not in cache, fetch from Discord API
                     print(f"🔍 User {user_id} not in cache, fetching from Discord API...")
                     user = await bot.fetch_user(user_id)
-                    
+
                 if user:
                     print(f"✅ Successfully obtained user object for {user_id}: {user.name}")
                 else:
                     print(f"❌ Could not fetch user {user_id} from Discord API")
                     raise RuntimeError(f"Could not fetch user {user_id} for DM delivery")
-                    
+
             except discord.NotFound:
                 print(f"❌ User {user_id} not found on Discord (account may be deleted)")
                 raise RuntimeError(f"User {user_id} not found on Discord")
@@ -1116,12 +1118,12 @@ async def schedule_delayed_trivia_validation():
     """Schedule trivia validation to run 2 minutes after bot startup completion"""
     try:
         print("⏰ Scheduling delayed trivia validation for 2 minutes after startup...")
-        
+
         # Create async task to handle the delay - this will work properly in async context
         asyncio.create_task(_delayed_trivia_validation())
-        
+
         print("✅ Delayed trivia validation scheduled successfully")
-        
+
     except Exception as e:
         print(f"❌ Error scheduling delayed trivia validation: {e}")
 
@@ -1130,30 +1132,30 @@ async def _delayed_trivia_validation():
     """Internal function to handle the 2-minute delay and execute trivia validation"""
     try:
         print("⏳ Starting 2-minute delay for trivia validation...")
-        
+
         # Wait exactly 2 minutes (120 seconds)
         await asyncio.sleep(120)
-        
+
         print("🧠 DELAYED TRIVIA VALIDATION: 2-minute delay complete, starting validation...")
-        
+
         # Execute the trivia validation with enhanced logging
         await validate_startup_trivia_questions()
-        
+
         print("✅ DELAYED TRIVIA VALIDATION: Process completed")
-        
+
         # Check if emergency approval is needed (build day scenario)
         await check_emergency_trivia_approval()
-        
+
     except Exception as e:
         print(f"❌ DELAYED TRIVIA VALIDATION: Error during delayed execution: {e}")
         import traceback
         traceback.print_exc()
-        
+
         # Try to notify JAM of the error
         try:
             from ..config import JAM_USER_ID
             from ..main import bot
-            
+
             if hasattr(bot, 'fetch_user'):  # Check if bot is available
                 user = await bot.fetch_user(JAM_USER_ID)
                 if user:
@@ -1254,32 +1256,32 @@ async def check_emergency_trivia_approval():
     """Check if emergency approval is needed for build day scenarios"""
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
-        
+
         # Only check on Tuesdays
         if uk_now.weekday() != 1:
             print("🕒 EMERGENCY APPROVAL CHECK: Not Tuesday, skipping emergency approval check")
             return
-        
+
         # Calculate time until Trivia Tuesday (11:00 AM UK)
         trivia_time = uk_now.replace(hour=11, minute=0, second=0, microsecond=0)
-        
+
         # If it's already past trivia time, skip
         if uk_now > trivia_time:
             print("🕒 EMERGENCY APPROVAL CHECK: Past trivia time, skipping emergency approval")
             return
-        
+
         time_until_trivia_minutes = (trivia_time - uk_now).total_seconds() / 60
-        
+
         print(f"🕒 EMERGENCY APPROVAL CHECK: {time_until_trivia_minutes:.1f} minutes until Trivia Tuesday")
-        
+
         # If less than 1 hour (60 minutes) until trivia, trigger emergency approval
         if 0 < time_until_trivia_minutes < 60:
             print(f"🚨 EMERGENCY APPROVAL NEEDED: Only {time_until_trivia_minutes:.1f} minutes until Trivia Tuesday!")
-            
+
             await trigger_emergency_trivia_approval(time_until_trivia_minutes)
         else:
             print("✅ EMERGENCY APPROVAL CHECK: Sufficient time until trivia, no emergency approval needed")
-            
+
     except Exception as e:
         print(f"❌ EMERGENCY APPROVAL CHECK: Error during emergency approval check: {e}")
         import traceback
@@ -1290,35 +1292,35 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
     """Trigger emergency approval process for build day scenarios"""
     try:
         print(f"🚨 TRIGGERING EMERGENCY APPROVAL: {minutes_remaining:.1f} minutes remaining until Trivia Tuesday")
-        
+
         # Check database availability
         if db is None:
             print("❌ EMERGENCY APPROVAL: Database not available")
             return
-        
+
         # Get available questions
         try:
             available_questions = db.get_available_trivia_questions()  # type: ignore
             if not available_questions:
                 print("❌ EMERGENCY APPROVAL: No available questions for emergency approval")
-                
+
                 # Try to generate an emergency question
                 try:
                     from ..handlers.ai_handler import generate_ai_trivia_question
                     from ..handlers.conversation_handler import start_jam_question_approval
-                    
+
                     print("🔄 EMERGENCY APPROVAL: Generating emergency question")
                     emergency_question = await generate_ai_trivia_question("emergency_approval")
-                    
+
                     if emergency_question:
                         approval_sent = await start_jam_question_approval(emergency_question)
                         if approval_sent:
                             print("✅ EMERGENCY APPROVAL: Emergency question sent to JAM")
-                            
+
                             # Send urgent notification to JAM
                             from ..config import JAM_USER_ID
                             from ..main import bot
-                            
+
                             user = await bot.fetch_user(JAM_USER_ID)
                             if user:
                                 urgent_message = (
@@ -1329,23 +1331,22 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
                                     f"**Time Remaining:** {minutes_remaining:.0f} minutes\n"
                                     f"**Trivia Start Time:** 11:00 AM UK\n"
                                     f"**Reason:** Build day scenario - startup validation completed late\n\n"
-                                    f"*Please review and approve the question above as quickly as possible.*"
-                                )
+                                    f"*Please review and approve the question above as quickly as possible.*")
                                 await user.send(urgent_message)
                                 print("✅ EMERGENCY APPROVAL: Urgent notification sent to JAM")
                         else:
                             print("❌ EMERGENCY APPROVAL: Failed to send emergency question to JAM")
                     else:
                         print("❌ EMERGENCY APPROVAL: Failed to generate emergency question")
-                        
+
                 except Exception as gen_error:
                     print(f"❌ EMERGENCY APPROVAL: Error generating emergency question: {gen_error}")
-                
+
                 return
-            
+
             # Select highest priority question
             selected_question = available_questions[0]  # First question (highest priority)
-            
+
             # If it's a dynamic question, calculate the answer
             if selected_question.get('is_dynamic'):
                 try:
@@ -1353,23 +1354,24 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
                         selected_question.get('dynamic_query_type', ''))
                     if calculated_answer:
                         selected_question['correct_answer'] = calculated_answer
-                        print(f"✅ EMERGENCY APPROVAL: Dynamic answer calculated for question #{selected_question.get('id')}")
+                        print(
+                            f"✅ EMERGENCY APPROVAL: Dynamic answer calculated for question #{selected_question.get('id')}")
                 except Exception as calc_error:
                     print(f"⚠️ EMERGENCY APPROVAL: Failed to calculate dynamic answer: {calc_error}")
-            
+
             # Send for emergency approval
             try:
                 from ..handlers.conversation_handler import start_jam_question_approval
-                
+
                 approval_sent = await start_jam_question_approval(selected_question)
-                
+
                 if approval_sent:
                     print(f"✅ EMERGENCY APPROVAL: Question #{selected_question.get('id')} sent to JAM for approval")
-                    
+
                     # Send urgent build day notification
                     from ..config import JAM_USER_ID
                     from ..main import bot
-                    
+
                     user = await bot.fetch_user(JAM_USER_ID)
                     if user:
                         urgent_message = (
@@ -1381,19 +1383,18 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
                             f"**Question ID:** #{selected_question.get('id', 'Unknown')}\n"
                             f"**Trivia Start Time:** 11:00 AM UK\n"
                             f"**Reason:** Build day scenario - startup validation completed late\n\n"
-                            f"*Please review and approve the question above as quickly as possible.*"
-                        )
+                            f"*Please review and approve the question above as quickly as possible.*")
                         await user.send(urgent_message)
                         print("✅ EMERGENCY APPROVAL: Build day notification sent to JAM")
                 else:
                     print("❌ EMERGENCY APPROVAL: Failed to send question for approval")
-                    
+
             except Exception as approval_error:
                 print(f"❌ EMERGENCY APPROVAL: Error sending question for approval: {approval_error}")
-                
+
         except Exception as db_error:
             print(f"❌ EMERGENCY APPROVAL: Database error: {db_error}")
-            
+
     except Exception as e:
         print(f"❌ EMERGENCY APPROVAL: Critical error in emergency approval: {e}")
         import traceback
@@ -1403,22 +1404,22 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
 async def validate_startup_trivia_questions():
     """Check that there are at least 5 active questions available on startup with non-blocking execution"""
     global _startup_validation_lock, _startup_validation_completed
-    
+
     print("🧠 STARTUP TRIVIA VALIDATION: Starting validation process...")
-    
+
     # Check if validation is already in progress or completed
     if _startup_validation_lock:
         print("⏳ STARTUP TRIVIA VALIDATION: Validation already in progress, skipping duplicate")
         return
-        
+
     if _startup_validation_completed:
         print("✅ STARTUP TRIVIA VALIDATION: Validation already completed on this startup, skipping")
         return
-    
+
     # Acquire the lock
     _startup_validation_lock = True
     print("🔒 STARTUP TRIVIA VALIDATION: Lock acquired, proceeding with validation")
-    
+
     try:
         if db is None:
             print("❌ STARTUP TRIVIA VALIDATION: Database not available")
@@ -1443,15 +1444,15 @@ async def validate_startup_trivia_questions():
             print(f"⚠️ STARTUP TRIVIA VALIDATION: Database query failed - {db_error}")
             print("⚠️ STARTUP TRIVIA VALIDATION: Continuing with assumption of 0 questions")
             available_questions = []
-        
+
         question_count = len(available_questions) if available_questions else 0
         print(f"🧠 STARTUP TRIVIA VALIDATION: {question_count} available questions found in database")
-        
+
         if available_questions and question_count > 0:
             for i, q in enumerate(available_questions[:3]):  # Show first 3 for confirmation
                 question_preview = q.get('question_text', q.get('question', 'Unknown'))[:50]
                 print(f"   📋 Question {i+1}: {question_preview}...")
-        
+
         # If we have at least 5 questions, we're good
         if question_count >= 5:
             print(f"✅ STARTUP TRIVIA VALIDATION: Sufficient questions available ({question_count}/5)")
@@ -1460,17 +1461,17 @@ async def validate_startup_trivia_questions():
         # Create background task for AI generation to avoid blocking Discord heartbeat
         print(f"🔄 STARTUP TRIVIA VALIDATION: Need to generate {5 - question_count} additional questions")
         print("🔄 STARTUP TRIVIA VALIDATION: Creating non-blocking background task for AI generation...")
-        
+
         # Create completely detached background task that won't block startup
         asyncio.create_task(_background_question_generation(question_count))
-        
+
         print("✅ STARTUP TRIVIA VALIDATION: Background question generation started (non-blocking)")
 
     except Exception as e:
         print(f"❌ STARTUP TRIVIA VALIDATION: Critical error - {e}")
         import traceback
         traceback.print_exc()
-    
+
     finally:
         # Mark validation as completed and release the lock
         _startup_validation_completed = True
@@ -1482,14 +1483,14 @@ async def _background_question_generation(current_question_count: int):
     """Background task for generating trivia questions with sequential approval system"""
     try:
         print(f"🧠 BACKGROUND QUESTION GENERATION: Starting with {current_question_count} existing questions")
-        
+
         questions_needed = min(5 - current_question_count, 4)  # Cap at 4 to avoid overwhelming JAM
-        
+
         # Check if AI handler is available
         try:
-            from ..handlers.ai_handler import generate_ai_trivia_question
-            from ..handlers.conversation_handler import start_jam_question_approval, jam_approval_conversations
             from ..config import JAM_USER_ID
+            from ..handlers.ai_handler import generate_ai_trivia_question
+            from ..handlers.conversation_handler import jam_approval_conversations, start_jam_question_approval
             print("✅ BACKGROUND GENERATION: AI handler and conversation handler loaded")
         except ImportError as import_error:
             print(f"❌ BACKGROUND GENERATION: Failed to import required modules - {import_error}")
@@ -1499,23 +1500,23 @@ async def _background_question_generation(current_question_count: int):
         question_queue = []
         successful_generations = 0
         failed_generations = 0
-        
+
         print(f"🔄 BACKGROUND GENERATION: Generating {questions_needed} questions for sequential approval...")
-        
+
         for i in range(questions_needed):
             try:
                 print(f"🔄 BACKGROUND GENERATION: Generating question {i+1}/{questions_needed}")
-                
+
                 # Generate AI question with startup context for rate limit bypass
                 question_data = await generate_ai_trivia_question("startup_validation")
-                
+
                 if question_data and isinstance(question_data, dict):
                     # Validate the generated question
                     required_fields = ['question_text', 'question_type', 'correct_answer']
                     if all(field in question_data for field in required_fields):
                         question_text = question_data.get('question_text', 'Unknown')
                         print(f"✅ BACKGROUND GENERATION: Generated question {i+1}: {question_text[:50]}...")
-                        
+
                         # Add to queue instead of sending immediately
                         question_queue.append({
                             'data': question_data,
@@ -1530,7 +1531,7 @@ async def _background_question_generation(current_question_count: int):
                 else:
                     print(f"⚠️ BACKGROUND GENERATION: Failed to generate valid question {i+1}")
                     failed_generations += 1
-                    
+
             except Exception as generation_error:
                 print(f"❌ BACKGROUND GENERATION: Error generating question {i+1}: {generation_error}")
                 failed_generations += 1
@@ -1538,43 +1539,47 @@ async def _background_question_generation(current_question_count: int):
             # Small delay between generations to avoid overwhelming systems
             await asyncio.sleep(2)
 
-        print(f"🧠 BACKGROUND GENERATION: Generated {len(question_queue)} questions, now starting sequential approval process")
-        
+        print(
+            f"🧠 BACKGROUND GENERATION: Generated {len(question_queue)} questions, now starting sequential approval process")
+
         # Now send questions one at a time with sequential approval
         approved_count = 0
         approval_failed_count = 0
-        
+
         for question in question_queue:
             try:
                 # Check if JAM is already in an approval conversation before sending
                 approval_attempts = 0
                 max_attempts = 3
-                
+
                 while JAM_USER_ID in jam_approval_conversations and approval_attempts < max_attempts:
                     approval_attempts += 1
-                    print(f"⏳ SEQUENTIAL APPROVAL: JAM is in active approval conversation, waiting 30 seconds (attempt {approval_attempts}/{max_attempts})")
+                    print(
+                        f"⏳ SEQUENTIAL APPROVAL: JAM is in active approval conversation, waiting 30 seconds (attempt {approval_attempts}/{max_attempts})")
                     await asyncio.sleep(30)
-                
+
                 if JAM_USER_ID in jam_approval_conversations:
-                    print(f"⚠️ SEQUENTIAL APPROVAL: JAM still busy after {max_attempts} attempts, skipping question {question['number']}")
+                    print(
+                        f"⚠️ SEQUENTIAL APPROVAL: JAM still busy after {max_attempts} attempts, skipping question {question['number']}")
                     approval_failed_count += 1
                     continue
-                
-                print(f"📤 SEQUENTIAL APPROVAL: Sending question {question['number']}/{len(question_queue)} for approval")
+
+                print(
+                    f"📤 SEQUENTIAL APPROVAL: Sending question {question['number']}/{len(question_queue)} for approval")
                 print(f"   Question: {question['text_preview']}...")
-                
+
                 # Send question for approval
                 approval_sent = await start_jam_question_approval(question['data'])
-                
+
                 if approval_sent:
                     print(f"✅ SEQUENTIAL APPROVAL: Question {question['number']} sent successfully")
                     approved_count += 1
-                    
+
                     # Wait longer between questions to allow for review and approval
                     if question != question_queue[-1]:  # Don't wait after the last question
                         print(f"⏳ SEQUENTIAL APPROVAL: Waiting 60 seconds before sending next question...")
                         await asyncio.sleep(60)
-                        
+
                         # Send a brief status update to JAM
                         try:
                             from ..main import bot
@@ -1588,21 +1593,21 @@ async def _background_question_generation(current_question_count: int):
                 else:
                     print(f"❌ SEQUENTIAL APPROVAL: Failed to send question {question['number']}")
                     approval_failed_count += 1
-                    
+
             except Exception as approval_error:
                 print(f"❌ SEQUENTIAL APPROVAL: Error with question {question['number']}: {approval_error}")
                 approval_failed_count += 1
 
         # Final comprehensive status report
         print(f"🧠 SEQUENTIAL APPROVAL: Complete - {approved_count}/{len(question_queue)} questions sent for approval")
-        
+
         if approved_count > 0:
             print(f"📬 SEQUENTIAL APPROVAL: JAM should have received {approved_count} question(s) sequentially")
-            
+
             # Send final summary notification to JAM
             try:
                 from ..main import bot
-                
+
                 if hasattr(bot, 'fetch_user') and bot.user:  # Check if bot is available and ready
                     user = await bot.fetch_user(JAM_USER_ID)
                     if user:
@@ -1615,8 +1620,7 @@ async def _background_question_generation(current_question_count: int):
                             f"• Generation failures: {failed_generations}\n\n"
                             f"Each question was sent individually with time for review between them.\n"
                             f"This sequential approach prevents overwhelming you with multiple simultaneous approvals.\n\n"
-                            f"*All questions above are now ready for your individual review and approval.*"
-                        )
+                            f"*All questions above are now ready for your individual review and approval.*")
                         await user.send(summary_message)
                         print("✅ SEQUENTIAL APPROVAL: Final summary notification sent to JAM")
             except Exception as summary_error:

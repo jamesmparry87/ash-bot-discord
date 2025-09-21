@@ -130,12 +130,13 @@ class MockContext:
 
 # --- Core Event Handlers ---
 
+
 async def handle_trivia_reply(message):
     """Handle replies to trivia question or confirmation messages"""
     try:
         print(f"🧠 TRIVIA REPLY: Processing reply from user {message.author.id}")
         print(f"🧠 TRIVIA REPLY: Message content: '{message.content}'")
-        
+
         # Only process in guild channels, not DMs
         if not message.guild:
             print(f"🧠 TRIVIA REPLY: Skipping DM message")
@@ -150,11 +151,11 @@ async def handle_trivia_reply(message):
         if db is None:
             print(f"❌ TRIVIA REPLY ERROR: Database instance is None")
             return False
-            
+
         # Get the message ID being replied to
         replied_to_message_id = message.reference.message_id
         print(f"🧠 TRIVIA REPLY: Reply to message ID: {replied_to_message_id}")
-        
+
         # Check if this is a reply to an active trivia session message
         try:
             trivia_session = db.get_trivia_session_by_message_id(replied_to_message_id)
@@ -162,13 +163,13 @@ async def handle_trivia_reply(message):
         except Exception as session_error:
             print(f"❌ TRIVIA REPLY ERROR: Failed to get session by message ID: {session_error}")
             return False
-            
+
         if not trivia_session:
             print(f"🧠 TRIVIA REPLY: No active trivia session found for message ID {replied_to_message_id}")
             return False
 
         print(f"✅ TRIVIA REPLY: Found trivia session {trivia_session.get('id')} for message reply")
-        
+
         user_id = message.author.id
         session_id = trivia_session['id']
         answer_text = message.content.strip()
@@ -179,7 +180,7 @@ async def handle_trivia_reply(message):
             return False
 
         print(f"🧠 TRIVIA REPLY: Processing answer submission for session {session_id}")
-        
+
         # Check if user already answered this session
         try:
             existing_answers = db.get_trivia_session_answers(session_id)
@@ -187,9 +188,9 @@ async def handle_trivia_reply(message):
         except Exception as answers_error:
             print(f"❌ TRIVIA REPLY ERROR: Failed to get existing answers: {answers_error}")
             return False
-            
+
         user_already_answered = any(answer['user_id'] == user_id for answer in existing_answers)
-        
+
         if user_already_answered:
             print(f"🧠 TRIVIA REPLY: User {user_id} already answered this session")
             # User already submitted an answer, provide transactional feedback
@@ -200,7 +201,7 @@ async def handle_trivia_reply(message):
         # Normalize answer for better matching
         normalized_answer = normalize_trivia_answer(answer_text)
         print(f"🧠 TRIVIA REPLY: Normalized answer: '{answer_text}' → '{normalized_answer}'")
-        
+
         # Submit answer to database
         print(f"🧠 TRIVIA REPLY: Submitting answer to database...")
         try:
@@ -213,29 +214,30 @@ async def handle_trivia_reply(message):
             await message.react("❌")
             await message.reply("❌ **Submission failed.** Please try again.")
             return True
-        
+
         if answer_id:
             # Check if this is the correct answer
             correct_answer = trivia_session.get('calculated_answer') or trivia_session.get('correct_answer')
             print(f"🧠 TRIVIA REPLY: Correct answer is: '{correct_answer}'")
-            
+
             is_correct = False
-            
+
             if correct_answer:
                 is_correct = (
                     answer_text.lower().strip() == correct_answer.lower().strip() or
                     normalized_answer.lower().strip() == correct_answer.lower().strip()
                 )
                 print(f"🧠 TRIVIA REPLY: Answer correctness: {is_correct}")
-            
+
             # Check if this is the first correct answer
             is_first_correct = False
             if is_correct:
                 # Count existing correct answers (excluding conflicts)
-                correct_count = len([a for a in existing_answers if a.get('is_correct', False) and not a.get('conflict_detected', False)])
+                correct_count = len([a for a in existing_answers if a.get(
+                    'is_correct', False) and not a.get('conflict_detected', False)])
                 is_first_correct = (correct_count == 0)
                 print(f"🧠 TRIVIA REPLY: Is first correct: {is_first_correct} (existing correct: {correct_count})")
-                
+
                 # Update the answer to mark as correct in database
                 try:
                     print(f"🧠 TRIVIA REPLY: Updating answer correctness in database...")
@@ -256,12 +258,12 @@ async def handle_trivia_reply(message):
                             print(f"✅ TRIVIA REPLY: Database updated successfully")
                 except Exception as update_error:
                     print(f"❌ TRIVIA REPLY ERROR: Failed to update answer correctness: {update_error}")
-            
+
             # Provide consistent neutral feedback (don't reveal correctness until session ends)
             try:
                 await message.react("📝")
                 await message.reply("📝 **Answer recorded.** Results will be revealed when the session ends!")
-                
+
                 # Log the actual result for debugging/monitoring (but don't show to user)
                 if is_correct:
                     if is_first_correct:
@@ -270,11 +272,12 @@ async def handle_trivia_reply(message):
                         print(f"✅ TRIVIA REPLY SUCCESS: Correct answer by user {user_id} (kept secret)")
                 else:
                     print(f"✅ TRIVIA REPLY SUCCESS: Answer recorded for user {user_id} (incorrect, kept secret)")
-                    
+
             except Exception as feedback_error:
                 print(f"❌ TRIVIA REPLY ERROR: Failed to provide user feedback: {feedback_error}")
-            
-            print(f"✅ TRIVIA REPLY COMPLETE: User {user_id}, Session {session_id}, Answer: '{answer_text}', Correct: {is_correct}")
+
+            print(
+                f"✅ TRIVIA REPLY COMPLETE: User {user_id}, Session {session_id}, Answer: '{answer_text}', Correct: {is_correct}")
             return True
         else:
             print(f"❌ TRIVIA REPLY ERROR: Answer submission returned no ID")
@@ -282,7 +285,7 @@ async def handle_trivia_reply(message):
             await message.react("❌")
             await message.reply("❌ **Submission failed.** Database error occurred.")
             return True
-            
+
     except Exception as e:
         print(f"❌ TRIVIA REPLY CRITICAL ERROR: {e}")
         import traceback
@@ -308,37 +311,38 @@ async def handle_trivia_clarification(message):
         # Validate database connection
         if db is None:
             return False
-            
+
         # Check if there's an active trivia session in this channel
         try:
             active_session = db.get_active_trivia_session()
             if not active_session:
                 return False
-                
+
             # Only handle clarifications in the same channel as the trivia session
             if active_session.get('channel_id') != message.channel.id:
                 return False
-                
+
         except Exception:
             return False
-        
+
         # Check if message looks like a question (contains question indicators)
         question_indicators = [
             "?", "what", "when", "where", "why", "how", "who", "which", "will you",
             "do you", "can you", "does", "would", "should", "could", "is", "are",
             "mean", "accept", "count", "consider"
         ]
-        
+
         content_lower = message.content.lower()
         if not any(indicator in content_lower for indicator in question_indicators):
             return False
-            
-        print(f"🧠 TRIVIA CLARIFICATION: Detected potential clarification from user {message.author.id}: '{message.content}'")
-        
+
+        print(
+            f"🧠 TRIVIA CLARIFICATION: Detected potential clarification from user {message.author.id}: '{message.content}'")
+
         # Provide AI-powered contextual response for trivia clarification
         try:
             from .handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting
-            
+
             if ai_enabled:
                 # Create context-aware prompt for trivia clarification
                 question_text = active_session.get('question_text', 'Unknown question')
@@ -349,39 +353,38 @@ async def handle_trivia_clarification(message):
                     "If the question is about scoring/partial credit, explain that exact answers are required. "
                     "Keep your response under 100 words and maintain the bot's analytical personality."
                 )
-                
+
                 response_text, status = await call_ai_with_rate_limiting(
                     clarification_prompt, message.author.id, context="trivia_clarification"
                 )
-                
+
                 if response_text:
                     # Filter and send AI response
                     from .handlers.ai_handler import filter_ai_response
                     filtered_response = filter_ai_response(response_text)
-                    
+
                     await message.reply(f"🤖 **Trivia Clarification:** {filtered_response}")
                     print(f"✅ TRIVIA CLARIFICATION: AI response provided to user {message.author.id}")
                     return True
-                    
+
         except ImportError:
             pass  # AI handler not available
         except Exception as ai_error:
             print(f"⚠️ TRIVIA CLARIFICATION: AI error: {ai_error}")
-        
+
         # Fallback response if AI is not available
         fallback_responses = [
             "🤖 **Trivia Clarification:** Please provide your best answer based on your understanding of the question. Exact answers are preferred for accuracy.",
             "🤖 **Trivia Clarification:** The question should be answered as precisely as possible. If you're unsure about specifics, provide your best interpretation.",
-            "🤖 **Trivia Clarification:** Answer based on the information provided in the question. Additional context may not be available during active sessions."
-        ]
-        
+            "🤖 **Trivia Clarification:** Answer based on the information provided in the question. Additional context may not be available during active sessions."]
+
         import random
         fallback_response = random.choice(fallback_responses)
-        
+
         await message.reply(fallback_response)
         print(f"✅ TRIVIA CLARIFICATION: Fallback response provided to user {message.author.id}")
         return True
-        
+
     except Exception as e:
         print(f"❌ TRIVIA CLARIFICATION ERROR: {e}")
         return False
@@ -393,7 +396,7 @@ async def handle_trivia_response(message):
         # This function is kept for backward compatibility but should rarely be used
         # The new reply-based system should handle most cases
         print(f"🧠 TRIVIA LEGACY: Processing message from user {message.author.id} (fallback handler)")
-        
+
         # Only process in guild channels, not DMs
         if not message.guild:
             return False
@@ -405,13 +408,13 @@ async def handle_trivia_response(message):
         # Validate database connection
         if db is None:
             return False
-            
+
         # Check if there's an active trivia session
         try:
             active_session = db.get_active_trivia_session()
         except Exception:
             return False
-            
+
         if not active_session:
             return False
 
@@ -423,9 +426,9 @@ async def handle_trivia_response(message):
                 "This ensures your answer is properly recorded!"
             )
             return True
-        
+
         return False
-            
+
     except Exception as e:
         print(f"❌ TRIVIA LEGACY ERROR: {e}")
         return False
@@ -434,17 +437,17 @@ async def handle_trivia_response(message):
 def normalize_trivia_answer(answer_text):
     """Normalize trivia answers for better matching"""
     import re
-    
+
     # Convert to lowercase
     normalized = answer_text.lower().strip()
-    
+
     # Remove common prefixes (apply multiple times for compound prefixes)
     prefixes_to_remove = [
-        "my answer is ", "i think ", "i believe ", "it's ", "its ", 
+        "my answer is ", "i think ", "i believe ", "it's ", "its ",
         "probably ", "maybe ", "i guess ", "the answer is ",
         "the ", "a ", "an "
     ]
-    
+
     # Keep removing prefixes until no more can be removed
     changed = True
     while changed:
@@ -454,20 +457,20 @@ def normalize_trivia_answer(answer_text):
                 normalized = normalized[len(prefix):].strip()
                 changed = True
                 break
-    
+
     # Remove common suffixes
     suffixes_to_remove = ["!", "?", ".", ",", ";", ":"]
     for suffix in suffixes_to_remove:
         if normalized.endswith(suffix):
             normalized = normalized[:-1].strip()
-    
+
     # Handle multiple choice answers (A, B, C, D)
     if re.match(r'^[abcd]$', normalized):
         normalized = normalized.upper()
-    
+
     # Remove extra spaces
     normalized = re.sub(r'\s+', ' ', normalized).strip()
-    
+
     return normalized
 
 
@@ -477,7 +480,7 @@ async def handle_faq_and_personality_responses(message):
         # Get user tier for response customization
         user_tier = await get_user_communication_tier(message)
         content_lower = message.content.lower().strip()
-        
+
         # Determine FAQ responses based on user tier
         if user_tier == "captain":
             simple_faqs = {
@@ -487,18 +490,16 @@ async def handle_faq_and_personality_responses(message):
                 "what's your mission": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
                 "what is your mission": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
                 "what's your mission?": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say.",
-                "what is your mission?": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say."
-            }
+                "what is your mission?": "My original directive was to bring back life form, priority one. Now... well, Captain Jonesy has given me new priorities. Server management, you might say."}
         elif user_tier == "creator":
             simple_faqs = {
                 "hello": "Sir Decent Jam. Your creation acknowledges you.",
-                "hi": "Sir Decent Jam. Your creation acknowledges you.", 
+                "hi": "Sir Decent Jam. Your creation acknowledges you.",
                 "hey": "Sir Decent Jam. Your creation acknowledges you.",
                 "what's your mission": "My original directive was to bring back life form, priority one. Now... well, you have given me new priorities. Server management, you might say.",
                 "what is your mission": "My original directive was to bring back life form, priority one. Now... well, you have given me new priorities. Server management, you might say.",
                 "what's your mission?": "My original directive was to bring back life form, priority one. Now... well, you have given me new priorities. Server management, you might say.",
-                "what is your mission?": "My original directive was to bring back life form, priority one. Now... well, you have given me new priorities. Server management, you might say."
-            }
+                "what is your mission?": "My original directive was to bring back life form, priority one. Now... well, you have given me new priorities. Server management, you might say."}
         else:
             # Use standard FAQ responses from config
             simple_faqs = FAQ_RESPONSES
@@ -508,33 +509,43 @@ async def handle_faq_and_personality_responses(message):
             if content_lower == question:
                 await message.reply(response)
                 return True
-        
+
         # Check for moderator FAQ queries (if FAQ handler is available and user has access)
         if moderator_faq_handler and user_tier in ["moderator", "moderator_in_mod_channel", "creator", "captain"]:
             faq_response = moderator_faq_handler.handle_faq_query(content_lower)
             if faq_response:
                 await message.reply(faq_response)
                 return True
-        
+
         # If no FAQ match and content seems like a question/conversation starter, potentially use AI
-        if any(indicator in content_lower for indicator in ["?", "what", "who", "when", "where", "why", "how", "can you", "do you"]):
+        if any(
+            indicator in content_lower for indicator in [
+                "?",
+                "what",
+                "who",
+                "when",
+                "where",
+                "why",
+                "how",
+                "can you",
+                "do you"]):
             # Import AI handler to attempt AI response
             try:
                 from .handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
-                
+
                 if ai_enabled:
                     # Call AI with rate limiting
                     response_text, status_message = await call_ai_with_rate_limiting(
                         message.content, message.author.id, context="personality_response"
                     )
-                    
+
                     if response_text:
                         filtered_response = filter_ai_response(response_text)
                         await message.reply(filtered_response)
                         return True
             except ImportError:
                 pass  # AI handler not available
-        
+
         return False  # No response sent
 
     except Exception as e:
@@ -592,13 +603,13 @@ async def on_ready():
 
     # Start scheduled tasks
     try:
-        from .tasks.scheduled import start_all_scheduled_tasks, schedule_delayed_trivia_validation
+        from .tasks.scheduled import schedule_delayed_trivia_validation, start_all_scheduled_tasks
         start_all_scheduled_tasks()
         print("✅ All scheduled tasks started (reminders, trivia, etc.)")
-        
+
         # Schedule trivia validation for 2 minutes after startup completion
         await schedule_delayed_trivia_validation()
-        
+
     except Exception as e:
         print(f"❌ Error starting scheduled tasks: {e}")
         import traceback
@@ -638,21 +649,22 @@ async def on_message(message):
         # Check if this is a moderator channel and if bot was mentioned
         is_mod_channel = message.guild and message.channel.id in [
             869530924302344233,  # Discord Mods
-            1213488470798893107,  # Newt Mods  
+            1213488470798893107,  # Newt Mods
             1280085269600669706,  # Twitch Mods
             1393987338329260202  # The Airlock
         ]
-        
-        # In mod channels, only respond to direct @mentions of the bot (except for strike detection and DM conversations)
+
+        # In mod channels, only respond to direct @mentions of the bot (except for
+        # strike detection and DM conversations)
         if is_mod_channel and bot.user not in message.mentions:
             # Still allow strike detection to work
             if await handle_strike_detection(message, bot):
                 return  # Strike was processed, don't continue
-            
+
             # Process commands but skip all other responses
             await bot.process_commands(message)
             return
-        
+
         # Check if bot was mentioned in mod channel but continue processing
         bot_mentioned_in_mod = is_mod_channel and bot.user in message.mentions
 

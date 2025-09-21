@@ -36,7 +36,7 @@ class TriviaCommands(commands.Cog):
     def _is_natural_multiple_choice_format(self, content: str) -> bool:
         """
         Check if content is in natural multiple choice format for user-friendly question submission
-        
+
         This allows moderators to submit questions in a readable format like:
         What is the capital of France?
         A. London
@@ -44,83 +44,84 @@ class TriviaCommands(commands.Cog):
         C. Berlin
         D. Madrid
         Correct answer: B
-        
+
         Args:
             content (str): The raw input content from the user
-            
+
         Returns:
             bool: True if content matches natural multiple choice format
         """
         import re
+
         # Split content into individual lines for analysis
         lines = content.strip().split('\n')
-        
+
         # Basic validation: Need at least question + 2 choices + answer line
         if len(lines) < 4:
             return False
-        
+
         # Pattern to match choice lines: "A. option" or "A) option"
         choice_pattern = re.compile(r'^[A-D][.)]\s+.+', re.IGNORECASE)
         choice_count = 0
-        
+
         # Count how many lines match the choice pattern
         for line in lines:
             if choice_pattern.match(line.strip()):
                 choice_count += 1
-        
+
         # Look for answer indication line
         has_answer_line = any(
-            'correct answer' in line.lower() or 'answer:' in line.lower() 
+            'correct answer' in line.lower() or 'answer:' in line.lower()
             for line in lines
         )
-        
+
         # Valid if we have at least 2 choices and an answer line
         return choice_count >= 2 and has_answer_line
 
     def _parse_natural_multiple_choice(self, content: str) -> Optional[dict]:
         """Parse natural multiple choice format into structured data"""
         import re
-        
+
         lines = [line.strip() for line in content.strip().split('\n') if line.strip()]
         if not lines:
             return None
-        
+
         question_text = ""
         choices = []
         correct_answer = ""
-        
+
         # Find question (usually first line without A. B. C. pattern and not answer line)
         choice_pattern = re.compile(r'^[A-D][.)]\s+(.+)', re.IGNORECASE)
         answer_pattern = re.compile(r'(?:correct\s+answer:?\s*|answer:?\s*)([A-D])', re.IGNORECASE)
-        
+
         for line in lines:
             # Check if this is a choice line
             choice_match = choice_pattern.match(line)
             if choice_match:
                 choices.append(choice_match.group(1).strip())
                 continue
-            
+
             # Check if this is the answer line
             answer_match = answer_pattern.search(line)
             if answer_match:
                 correct_answer = answer_match.group(1).upper()
                 continue
-            
+
             # If not a choice or answer, assume it's part of the question
             if not question_text:
                 question_text = line
             else:
                 question_text += " " + line
-        
+
         # Validate we have everything we need
         if not question_text or len(choices) < 2 or not correct_answer:
             return None
-        
+
         # Validate correct answer is a valid choice letter
         choice_index = ord(correct_answer) - ord('A')
         if choice_index < 0 or choice_index >= len(choices):
             return None
-        
+
         return {
             'question': question_text.strip(),
             'choices': choices,
@@ -130,9 +131,10 @@ class TriviaCommands(commands.Cog):
     async def _generate_ai_question_fallback(self):
         """Enhanced AI question generation with fan-accessible questions"""
         try:
-            from ..handlers.ai_handler import call_ai_with_rate_limiting
             import random
-            
+
+            from ..handlers.ai_handler import call_ai_with_rate_limiting
+
             # Multiple question types for variety
             question_types = [
                 {
@@ -173,18 +175,18 @@ class TriviaCommands(commands.Cog):
                     )
                 }
             ]
-            
+
             # Randomly select a question type for variety
             selected_type = random.choice(question_types)
-            
+
             response_text, status = await call_ai_with_rate_limiting(selected_type['prompt'], JAM_USER_ID)
-            
+
             if response_text:
                 # Parse AI response with improved parsing
                 lines = response_text.strip().split('\n')
                 question_text = ""
                 answer = ""
-                
+
                 # Try to extract from formatted response first
                 for line in lines:
                     line = line.strip()
@@ -192,7 +194,7 @@ class TriviaCommands(commands.Cog):
                         question_text = line.replace("Question:", "").strip()
                     elif line.startswith("Answer:"):
                         answer = line.replace("Answer:", "").strip()
-                
+
                 # Fallback: try to parse from pipe-separated format
                 if not question_text or not answer:
                     for line in lines:
@@ -205,14 +207,14 @@ class TriviaCommands(commands.Cog):
                                     question_text = q_part.replace('Question:', '').strip()
                                 if 'Answer:' in a_part:
                                     answer = a_part.replace('Answer:', '').strip()
-                
+
                 # Basic validation
                 if question_text and answer and len(question_text) > 10 and len(answer) > 0:
                     # Clean up the question and answer
                     question_text = question_text.strip('?"')
                     if not question_text.endswith('?'):
                         question_text += '?'
-                    
+
                     return {
                         'question_text': question_text,
                         'correct_answer': answer.strip(),
@@ -223,9 +225,9 @@ class TriviaCommands(commands.Cog):
                     }
                 else:
                     logger.warning(f"AI generated invalid question format: Q='{question_text}', A='{answer}'")
-            
+
             return None
-            
+
         except Exception as e:
             logger.error(f"Error in enhanced AI generation: {e}")
             return None
@@ -239,13 +241,13 @@ class TriviaCommands(commands.Cog):
             if not await user_is_mod_by_id(ctx.author.id, self.bot):
                 await ctx.send("❌ **Access denied.** Trivia question submission requires moderator privileges.")
                 return
-            
+
             # If in DM, route to conversation handler for enhanced experience
             if ctx.guild is None:
                 from ..handlers.conversation_handler import start_trivia_conversation
                 await start_trivia_conversation(ctx)
                 return
-            
+
             if not content:
                 # Progressive disclosure help
                 help_text = (
@@ -278,12 +280,12 @@ class TriviaCommands(commands.Cog):
                 if not parsed_data:
                     await ctx.send("❌ **Invalid multiple choice format.** Expected format:\n```\nQuestion text?\nA Option 1\nB Option 2\nC Option 3\nCorrect answer: B```")
                     return
-                    
+
                 question_text = parsed_data['question']
                 answer = parsed_data['answer']
                 question_type = 'multiple'
                 choices = parsed_data['choices']
-                
+
             else:
                 # Parse traditional pipe-separated format
                 parts = content.split(' | ')
@@ -455,7 +457,7 @@ class TriviaCommands(commands.Cog):
                     # Send question embed and capture message ID
                     question_message = await ctx.send(embed=embed)
 
-                    # Send confirmation to moderator and capture message ID  
+                    # Send confirmation to moderator and capture message ID
                     confirmation_message = await ctx.send(f"✅ **Trivia session #{session_id} started** with question #{question_data['id']}.\n\n*Use `!endtrivia` when ready to reveal answers and end the session.*\n\n**Note:** Users should reply to either message above to submit answers.")
 
                     # Update session with message tracking information
@@ -466,12 +468,13 @@ class TriviaCommands(commands.Cog):
                             confirmation_message_id=confirmation_message.id,
                             channel_id=ctx.channel.id
                         )
-                        
+
                         if update_success:
-                            print(f"✅ Trivia session {session_id} updated with message tracking: Q:{question_message.id}, C:{confirmation_message.id}")
+                            print(
+                                f"✅ Trivia session {session_id} updated with message tracking: Q:{question_message.id}, C:{confirmation_message.id}")
                         else:
                             print(f"⚠️ Warning: Failed to update trivia session {session_id} with message IDs")
-                            
+
                     except Exception as msg_tracking_error:
                         print(f"❌ Error updating trivia session message tracking: {msg_tracking_error}")
                         # Continue anyway - session is still functional without message tracking
@@ -831,12 +834,12 @@ class TriviaCommands(commands.Cog):
                     if not next_question:
                         await ctx.send("❌ **No available questions for auto-selection.** Use `!addtrivia` to add questions or `!approvequestion generate` to create new ones.")
                         return
-                    
+
                     # Calculate dynamic answer if needed
                     if next_question.get('is_dynamic') and next_question.get('dynamic_query_type'):
                         calculated_answer = db.calculate_dynamic_answer(next_question['dynamic_query_type'])
                         next_question['correct_answer'] = calculated_answer
-                    
+
                     question_data = next_question
                     await ctx.send(f"🎯 **Auto-selected question #{question_data['id']} sent to JAM for approval**\n\nQuestion preview: {question_data['question_text'][:100]}{'...' if len(question_data['question_text']) > 100 else ''}")
 
@@ -848,11 +851,11 @@ class TriviaCommands(commands.Cog):
             elif target.lower() == 'generate':
                 # Generate new AI question (if available)
                 await ctx.send("🧠 **AI Question Generation**\n\nGenerating new trivia question... This may take a moment.")
-                
+
                 try:
                     # Use our internal AI generation method (no problematic imports)
                     generated_question = await self._generate_ai_question_fallback()
-                    
+
                     if generated_question:
                         question_data = generated_question
                         await ctx.send(f"✅ **Generated question sent to JAM for approval**\n\nQuestion preview: {question_data.get('question_text', 'Generated question')[:100]}{'...' if len(question_data.get('question_text', '')) > 100 else ''}")
@@ -901,7 +904,7 @@ class TriviaCommands(commands.Cog):
             if question_data:
                 try:
                     approval_success = await start_jam_question_approval(question_data)
-                    
+
                     if approval_success:
                         # Success message sent above, add context
                         await ctx.send(f"💬 **JAM will receive a DM with approval options.** They can approve, modify, or reject the question.\n\n*Approval conversation will remain active for 24 hours to accommodate late responses.*")
@@ -921,24 +924,26 @@ class TriviaCommands(commands.Cog):
     async def approval_status(self, ctx):
         """Check status of pending JAM approvals (moderators only)"""
         try:
-            from ..handlers.conversation_handler import jam_approval_conversations
             from ..config import JAM_USER_ID
-            
+            from ..handlers.conversation_handler import jam_approval_conversations
+
             if JAM_USER_ID in jam_approval_conversations:
                 conversation = jam_approval_conversations[JAM_USER_ID]
                 initiated_at = conversation.get('initiated_at')
                 last_activity = conversation.get('last_activity')
                 step = conversation.get('step', 'unknown')
-                
+
                 if initiated_at:
                     age = datetime.now(ZoneInfo("Europe/London")) - initiated_at
-                    age_text = f"{age.total_seconds() / 3600:.1f} hours" if age.total_seconds() > 3600 else f"{age.total_seconds() / 60:.0f} minutes"
+                    age_text = f"{age.total_seconds() / 3600:.1f} hours" if age.total_seconds(
+                    ) > 3600 else f"{age.total_seconds() / 60:.0f} minutes"
                 else:
                     age_text = "Unknown"
-                
+
                 question_data = conversation.get('data', {}).get('question_data', {})
-                question_preview = question_data.get('question_text', 'Unknown question')[:50] + '...' if len(question_data.get('question_text', '')) > 50 else question_data.get('question_text', 'Unknown question')
-                
+                question_preview = question_data.get('question_text', 'Unknown question')[
+                    :50] + '...' if len(question_data.get('question_text', '')) > 50 else question_data.get('question_text', 'Unknown question')
+
                 await ctx.send(
                     f"⏳ **JAM Approval Status**\n\n"
                     f"**Status:** Pending approval\n"
@@ -950,7 +955,7 @@ class TriviaCommands(commands.Cog):
                 )
             else:
                 await ctx.send("✅ **No pending approvals.** JAM does not have any active approval conversations.")
-                
+
         except ImportError:
             await ctx.send("❌ **Approval system not available.** Conversation handler not loaded.")
         except Exception as e:
@@ -958,7 +963,7 @@ class TriviaCommands(commands.Cog):
             await ctx.send("❌ System error occurred while checking approval status.")
 
     @commands.command(name="triviatest")
-    @commands.has_permissions(manage_messages=True) 
+    @commands.has_permissions(manage_messages=True)
     async def trivia_test(self, ctx):
         """Comprehensive test of reply-based trivia system including answer recording and acknowledgment (moderators only)"""
         try:
@@ -975,7 +980,8 @@ class TriviaCommands(commands.Cog):
             except Exception:
                 pass  # Continue with test even if we can't check active session
 
-            print(f"🧪 TRIVIA TEST: Starting comprehensive test initiated by {ctx.author.id} in channel {ctx.channel.id}")
+            print(
+                f"🧪 TRIVIA TEST: Starting comprehensive test initiated by {ctx.author.id} in channel {ctx.channel.id}")
 
             # Create test questions with different answer variations to test fuzzy matching
             test_questions = [
@@ -987,17 +993,17 @@ class TriviaCommands(commands.Cog):
                 },
                 {
                     'question_text': '🧪 TEST: What color combines red and yellow?',
-                    'question_type': 'single', 
+                    'question_type': 'single',
                     'correct_answer': 'Orange',
                     'test_answers': ['orange', 'Orange', 'ORANGE', 'oranje', 'blue']  # Test fuzzy matching
                 }
             ]
 
             test_results = []
-            
+
             for question_idx, test_question_data in enumerate(test_questions, 1):
                 print(f"🧪 TRIVIA TEST: Running test {question_idx}/{len(test_questions)}")
-                
+
                 # Create temporary test question in database
                 test_question_id = None
                 try:
@@ -1012,13 +1018,13 @@ class TriviaCommands(commands.Cog):
                         category='test',
                         difficulty_level=1
                     )
-                    
+
                     if not test_question_id:
                         await ctx.send(f"❌ **Test question {question_idx} creation failed.** Database error occurred.")
                         continue
-                        
+
                     print(f"🧪 TRIVIA TEST: Created temporary test question {test_question_id}")
-                    
+
                 except Exception as question_error:
                     await ctx.send(f"❌ **Test question {question_idx} creation failed:** {question_error}")
                     continue
@@ -1030,13 +1036,13 @@ class TriviaCommands(commands.Cog):
                         session_type="test",
                         calculated_answer=test_question_data['correct_answer']
                     )
-                    
+
                     if not test_session_id:
                         await ctx.send(f"❌ **Test session {question_idx} creation failed.** Database error occurred.")
                         continue
-                        
+
                     print(f"🧪 TRIVIA TEST: Created test session {test_session_id}")
-                    
+
                 except Exception as session_error:
                     await ctx.send(f"❌ **Test session {question_idx} creation failed:** {session_error}")
                     continue
@@ -1048,25 +1054,24 @@ class TriviaCommands(commands.Cog):
                     color=0xff9900,
                     timestamp=datetime.now(ZoneInfo("Europe/London"))
                 )
-                
+
                 test_embed.add_field(
                     name="🔬 **Test Purpose:**",
                     value="Testing answer recording, fuzzy matching, and acknowledgment system",
                     inline=False
                 )
-                
+
                 test_embed.add_field(
                     name="💡 **How to Test:**",
                     value=f"**Reply to this message** with '{test_question_data['correct_answer']}' to test the system!",
-                    inline=False
-                )
-                
+                    inline=False)
+
                 test_embed.add_field(
                     name="🔧 **Test Session Info:**",
                     value=f"Test Session #{test_session_id} • Expected: '{test_question_data['correct_answer']}'",
                     inline=False
                 )
-                
+
                 test_embed.set_footer(text=f"TEST by {ctx.author.display_name} • Auto-testing in progress...")
 
                 # Send test question and capture message ID
@@ -1080,28 +1085,28 @@ class TriviaCommands(commands.Cog):
                         confirmation_message_id=test_question_message.id,  # Use same message for simplicity
                         channel_id=ctx.channel.id
                     )
-                    
+
                     if not update_success:
                         print(f"⚠️ TRIVIA TEST: Failed to update test session {test_session_id} with message IDs")
-                        
+
                 except Exception as msg_tracking_error:
                     print(f"❌ TRIVIA TEST: Error updating test session message tracking: {msg_tracking_error}")
 
                 # Automatically test answer variations
                 test_variation_results = []
-                
+
                 for test_answer in test_question_data['test_answers']:
                     print(f"🧪 TRIVIA TEST: Testing answer variation: '{test_answer}'")
-                    
+
                     try:
                         # Test the answer evaluation directly
                         if hasattr(db, '_evaluate_trivia_answer'):
                             score, match_type = db._evaluate_trivia_answer(
-                                test_answer, 
+                                test_answer,
                                 test_question_data['correct_answer'],
                                 test_question_data['question_type']
                             )
-                            
+
                             # Determine result
                             if score >= 1.0:
                                 result = "✅ CORRECT"
@@ -1109,29 +1114,30 @@ class TriviaCommands(commands.Cog):
                                 result = f"🟡 PARTIAL ({int(score * 100)}%)"
                             else:
                                 result = f"❌ INCORRECT ({int(score * 100)}%)"
-                                
+
                             test_variation_results.append({
                                 'answer': test_answer,
                                 'score': score,
                                 'match_type': match_type,
                                 'result': result
                             })
-                            
-                            print(f"🧪 TRIVIA TEST: Answer '{test_answer}' → Score: {score}, Type: {match_type}, Result: {result}")
-                            
+
+                            print(
+                                f"🧪 TRIVIA TEST: Answer '{test_answer}' → Score: {score}, Type: {match_type}, Result: {result}")
+
                         else:
                             test_variation_results.append({
                                 'answer': test_answer,
                                 'error': 'Evaluation method not available'
                             })
-                            
+
                     except Exception as eval_error:
                         print(f"❌ TRIVIA TEST: Error evaluating answer '{test_answer}': {eval_error}")
                         test_variation_results.append({
                             'answer': test_answer,
                             'error': str(eval_error)
                         })
-                
+
                 # Compile test results
                 test_results.append({
                     'question_id': test_question_id,
@@ -1140,7 +1146,7 @@ class TriviaCommands(commands.Cog):
                     'correct_answer': test_question_data['correct_answer'],
                     'variations': test_variation_results
                 })
-                
+
                 # Clean up test session immediately
                 try:
                     db.complete_trivia_session(test_session_id)
@@ -1148,7 +1154,7 @@ class TriviaCommands(commands.Cog):
                     print(f"🧹 TRIVIA TEST: Cleaned up test session {test_session_id}")
                 except Exception as cleanup_error:
                     print(f"⚠️ TRIVIA TEST: Cleanup error for session {test_session_id}: {cleanup_error}")
-                
+
                 # Brief pause between tests
                 await asyncio.sleep(2)
 
@@ -1159,70 +1165,71 @@ class TriviaCommands(commands.Cog):
                 color=0x00ff00,
                 timestamp=datetime.now(ZoneInfo("Europe/London"))
             )
-            
+
             total_tests = sum(len(result['variations']) for result in test_results)
             successful_tests = 0
             partial_tests = 0
             failed_tests = 0
-            
+
             for result in test_results:
                 question_summary = f"**Q:** {result['question'][:50]}...\n**Expected:** {result['correct_answer']}\n"
-                
+
                 variation_details = []
                 for variation in result['variations']:
                     if 'error' in variation:
                         variation_details.append(f"❌ '{variation['answer']}' → ERROR: {variation['error']}")
                         failed_tests += 1
                     else:
-                        variation_details.append(f"{variation['result']} '{variation['answer']}' ({variation['match_type']})")
+                        variation_details.append(
+                            f"{variation['result']} '{variation['answer']}' ({variation['match_type']})")
                         if variation['score'] >= 1.0:
                             successful_tests += 1
                         elif variation['score'] >= 0.7:
                             partial_tests += 1
                         else:
                             failed_tests += 1
-                
+
                 question_summary += "\n".join(variation_details)
-                
+
                 report_embed.add_field(
                     name=f"Test Question #{result['question_id']}",
                     value=question_summary,
                     inline=False
                 )
-            
+
             # Add overall statistics
             accuracy = (successful_tests / total_tests * 100) if total_tests > 0 else 0
-            
+
             report_embed.add_field(
                 name="📊 **Test Statistics**",
                 value=(
                     f"**Total Tests:** {total_tests}\n"
                     f"**✅ Correct:** {successful_tests}\n"
-                    f"**🟡 Partial:** {partial_tests}\n" 
+                    f"**🟡 Partial:** {partial_tests}\n"
                     f"**❌ Failed:** {failed_tests}\n"
                     f"**🎯 Accuracy:** {accuracy:.1f}%"
                 ),
                 inline=False
             )
-            
+
             # Add system status
             system_status = []
             if hasattr(db, '_evaluate_trivia_answer'):
                 system_status.append("✅ Enhanced answer matching available")
             else:
                 system_status.append("❌ Enhanced answer matching not found")
-                
+
             if hasattr(db, 'submit_trivia_answer'):
                 system_status.append("✅ Answer submission system available")
             else:
                 system_status.append("❌ Answer submission system not found")
-                
+
             report_embed.add_field(
                 name="🔧 **System Status**",
                 value="\n".join(system_status),
                 inline=False
             )
-            
+
             # Determine overall result
             if accuracy >= 80 and failed_tests == 0:
                 report_embed.color = 0x00ff00  # Green - success
@@ -1234,7 +1241,7 @@ class TriviaCommands(commands.Cog):
             elif accuracy >= 60:
                 report_embed.color = 0xffaa00  # Orange - warning
                 report_embed.add_field(
-                    name="⚠️ **Overall Result**", 
+                    name="⚠️ **Overall Result**",
                     value="**PARTIAL SUCCESS** - System is working but may need adjustments.",
                     inline=False
                 )
@@ -1245,25 +1252,26 @@ class TriviaCommands(commands.Cog):
                     value="**TEST FAILED** - Answer recording system needs attention.",
                     inline=False
                 )
-            
-            report_embed.set_footer(text="For manual testing, use !starttrivia to create a real session and reply to test live functionality")
-            
+
+            report_embed.set_footer(
+                text="For manual testing, use !starttrivia to create a real session and reply to test live functionality")
+
             await ctx.send(embed=report_embed)
-            
+
             # Send follow-up instructions
             followup_message = (
                 "🧪 **Test Complete!** The automated test shows how the answer matching system performs.\n\n"
                 "**For Live Testing:**\n"
                 "1. Use `!starttrivia` to create a real trivia session\n"
-                "2. Reply to the trivia question with your answer\n" 
+                "2. Reply to the trivia question with your answer\n"
                 "3. Check that you get a 📝 reaction (acknowledgment)\n"
                 "4. Use `!endtrivia` to see if your answer was recorded correctly\n\n"
-                "**This verifies the complete flow:** Reply detection → Answer processing → Database recording → User acknowledgment"
-            )
-            
+                "**This verifies the complete flow:** Reply detection → Answer processing → Database recording → User acknowledgment")
+
             await ctx.send(followup_message)
-            
-            print(f"🧪 TRIVIA TEST: Comprehensive test completed - {successful_tests}/{total_tests} successful ({accuracy:.1f}%)")
+
+            print(
+                f"🧪 TRIVIA TEST: Comprehensive test completed - {successful_tests}/{total_tests} successful ({accuracy:.1f}%)")
 
         except Exception as e:
             print(f"❌ TRIVIA TEST: Critical error: {e}")
