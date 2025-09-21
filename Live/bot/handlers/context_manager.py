@@ -41,7 +41,7 @@ class ConversationContext:
         # Statistical context
         self.last_stats_context: Optional[Dict[str, Any]] = None
         self.last_series_mentioned: Optional[str] = None
-        
+
         # Disambiguation state tracking
         self.awaiting_disambiguation: bool = False
         self.disambiguation_series: Optional[str] = None
@@ -97,7 +97,7 @@ class ConversationContext:
         self.disambiguation_series = None
         self.disambiguation_type = None
         self.available_options = []
-        
+
     def is_disambiguation_response(self, content: str) -> Tuple[bool, Optional[str]]:
         """
         Check if content matches one of the available disambiguation options.
@@ -105,23 +105,23 @@ class ConversationContext:
         """
         if not self.awaiting_disambiguation or not self.available_options:
             return False, None
-            
+
         content_lower = content.lower().strip()
-        
+
         # Direct match check
         for game_option in self.available_options:
             game_lower = game_option.lower()
             # Check for exact match or if the response contains the game name
             if content_lower == game_lower or game_lower in content_lower:
                 return True, game_option
-                
+
         # Check if response is similar enough to any option (fuzzy matching)
         from difflib import SequenceMatcher
         for game_option in self.available_options:
             similarity = SequenceMatcher(None, content_lower, game_option.lower()).ratio()
             if similarity > 0.8:  # 80% similarity threshold
                 return True, game_option
-                
+
         return False, None
 
     def update_jonesy_context(self, content: str):
@@ -451,7 +451,7 @@ def should_use_context(content: str) -> bool:
         r'\b(game|play|hours|minutes|episode|complete|finish).*\bit\b',  # gaming terms near "it"
         r'\bshe\b.*\b(game|play|played|hours|minutes|episode|complete|finish)',  # "she" near gaming terms
         r'\b(game|play|played|hours|minutes|episode|complete|finish).*\bshe\b',  # gaming terms near "she"
-        r'\bher\b.*\b(game|play|played|hours|minutes|episode|complete|finish)',  # "her" near gaming terms  
+        r'\bher\b.*\b(game|play|played|hours|minutes|episode|complete|finish)',  # "her" near gaming terms
         r'\b(game|play|played|hours|minutes|episode|complete|finish).*\bher\b',  # gaming terms near "her"
         r'\bthat\s+(game|one|series)\b',
         r'\bthe\s+game\b(?!\s+(is|was|will be|take))',  # "the game" but not "the game is/was/will be/take"
@@ -460,7 +460,7 @@ def should_use_context(content: str) -> bool:
 
     # Check if any ambiguous patterns match
     has_ambiguous_pronouns = any(re.search(pattern, content_lower) for pattern in ambiguous_patterns)
-    
+
     if has_ambiguous_pronouns:
         return True
 
@@ -468,12 +468,12 @@ def should_use_context(content: str) -> bool:
     if len(content.split()) <= 8:  # Short questions that might need context
         # These patterns indicate follow-up questions that need pronoun/context resolution
         gaming_follow_up_patterns = [
-            r'^how long did (she|her)',  # "how long did she..." 
+            r'^how long did (she|her)',  # "how long did she..."
             r'^how much time did (she|her)',  # "how much time did she..."
             r'^what about her\b',  # "what about her"
             r'^tell me about (her|it)\b',  # "tell me about her/it"
             r'^did she play\b',  # "did she play" (without specifying game)
-            r'^has she played\b',  # "has she played" (without specifying game)  
+            r'^has she played\b',  # "has she played" (without specifying game)
             r'^when did she\b',  # "when did she..."
             r'^where did she\b',  # "where did she..."
             r'^how many hours did (she|her|it)\b',  # "how many hours did she/it..."

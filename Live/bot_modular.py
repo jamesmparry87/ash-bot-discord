@@ -64,7 +64,8 @@ except Exception as e:
 
 # Import the enhanced database manager with trivia methods
 try:
-    from bot.database_module import DatabaseManager as EnhancedDatabaseManager, get_database
+    from bot.database_module import DatabaseManager as EnhancedDatabaseManager
+    from bot.database_module import get_database
     db: Union[EnhancedDatabaseManager, 'DatabaseManager', None] = get_database()
     print("✅ Database manager loaded successfully")
 except ImportError as e:
@@ -251,7 +252,7 @@ except ImportError as e:
 async def initialize_modular_components():
     """
     Initialize all modular components of the bot system
-    
+
     This function handles the startup sequence for the modular Discord bot,
     loading each component with graceful fallback handling. Components include:
     - Database connection and management
@@ -259,7 +260,7 @@ async def initialize_modular_components():
     - Command modules (strikes, games, trivia, etc.)
     - Message handlers for various response types
     - Scheduled tasks (database updates, cleanup)
-    
+
     Returns:
         dict: Detailed status report containing:
             - ai_handler (bool): AI system initialization success
@@ -410,28 +411,28 @@ async def initialize_modular_components():
 
     # 5. Start Scheduled Tasks
     try:
-        from bot.tasks.scheduled import start_all_scheduled_tasks, schedule_delayed_trivia_validation
+        from bot.tasks.scheduled import schedule_delayed_trivia_validation, start_all_scheduled_tasks
         start_all_scheduled_tasks()
         print("✅ Scheduled tasks started successfully")
-        
+
         # Schedule delayed trivia validation (non-blocking for deployment safety)
         # Skip if bot/main.py is also running to prevent duplication
         try:
             # Check if we're running as the primary entry point
             import sys
-            main_module_running = any('bot.main' in str(frame) or 'bot/main.py' in str(frame) 
-                                    for frame in sys.modules.keys())
-            
+            main_module_running = any('bot.main' in str(frame) or 'bot/main.py' in str(frame)
+                                      for frame in sys.modules.keys())
+
             if not main_module_running:
                 # Schedule validation to run 2 minutes after startup (non-blocking)
                 asyncio.create_task(schedule_delayed_trivia_validation())
                 print("✅ Delayed trivia validation scheduled for 2 minutes after startup (non-blocking)")
             else:
                 print("⚠️ Skipping trivia validation - will be handled by bot/main.py to prevent duplication")
-                
+
         except Exception as validation_error:
             print(f"⚠️ Trivia validation scheduling failed: {validation_error}")
-        
+
         status_report["scheduled_tasks"] = True
 
     except Exception as e:
@@ -850,17 +851,17 @@ async def is_trivia_answer_reply(message):
         # Check if this message is a reply
         if not hasattr(message, 'reference') or not message.reference:
             return False, None
-            
+
         # Get the message being replied to
         try:
             replied_to_message = await message.channel.fetch_message(message.reference.message_id)
         except (discord.NotFound, discord.Forbidden):
             return False, None
-        
+
         # Check if we have database connection
         if db is None:
             return False, None
-            
+
         # Get active trivia session
         try:
             active_session = db.get_active_trivia_session()
@@ -868,18 +869,19 @@ async def is_trivia_answer_reply(message):
                 return False, None
         except Exception:
             return False, None
-            
+
         # Check if the replied-to message matches our tracked trivia messages
         replied_to_id = replied_to_message.id
         session_question_msg_id = active_session.get('question_message_id')
         session_confirmation_msg_id = active_session.get('confirmation_message_id')
-        
+
         if replied_to_id == session_question_msg_id or replied_to_id == session_confirmation_msg_id:
-            print(f"🧠 TRIVIA: Detected answer reply from user {message.author.id}: '{message.content}' → session {active_session['id']}")
+            print(
+                f"🧠 TRIVIA: Detected answer reply from user {message.author.id}: '{message.content}' → session {active_session['id']}")
             return True, active_session
-            
+
         return False, None
-        
+
     except Exception as e:
         print(f"❌ Error checking trivia answer reply: {e}")
         return False, None
@@ -888,17 +890,17 @@ async def is_trivia_answer_reply(message):
 def normalize_trivia_answer(answer_text: str) -> str:
     """Enhanced normalization for trivia answers with fuzzy matching support"""
     import re
-    
+
     # Start with the original text
     normalized = answer_text.strip()
-    
+
     # Remove common punctuation but preserve important chars like hyphens in compound words
     normalized = re.sub(r'[.,!?;:"\'()[\]{}]', '', normalized)
-    
+
     # Handle common game/media abbreviations and variations
     abbreviation_map = {
         'gta': 'grand theft auto',
-        'cod': 'call of duty', 
+        'cod': 'call of duty',
         'gtav': 'grand theft auto v',
         'gtaiv': 'grand theft auto iv',
         'rdr': 'red dead redemption',
@@ -919,7 +921,7 @@ def normalize_trivia_answer(answer_text: str) -> str:
         'halo': 'halo',
         'fallout': 'fallout'
     }
-    
+
     # Apply abbreviation expansions (case insensitive)
     words = normalized.lower().split()
     expanded_words = []
@@ -929,27 +931,27 @@ def normalize_trivia_answer(answer_text: str) -> str:
         else:
             expanded_words.append(word)
     normalized = ' '.join(expanded_words)
-    
+
     # Remove filler words that don't change meaning
     filler_words = ['and', 'the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by',
                     'about', 'approximately', 'roughly', 'around', 'over', 'under', 'just',
                     'exactly', 'precisely', 'nearly', 'almost', 'close to', 'more than', 'less than']
-    
+
     # Split into words and filter out filler words
     words = normalized.split()
     filtered_words = [word for word in words if word not in filler_words]
-    
+
     # Rejoin and clean up extra spaces
     normalized = ' '.join(filtered_words)
     normalized = re.sub(r'\s+', ' ', normalized).strip()
-    
+
     return normalized
 
 
 def extract_time_components(text: str) -> dict:
     """Extract time components from text for numerical matching"""
     import re
-    
+
     result = {
         'total_minutes': 0,
         'hours': 0,
@@ -957,20 +959,20 @@ def extract_time_components(text: str) -> dict:
         'has_time': False,
         'is_approximate': False
     }
-    
+
     # Check for approximation indicators
     approx_patterns = r'\b(about|approximately|roughly|around|over|under|just|nearly|almost|close to)\b'
     if re.search(approx_patterns, text.lower()):
         result['is_approximate'] = True
-    
+
     # Extract hours and minutes patterns
     time_patterns = [
-        r'(\d+)\s*hours?\s*(?:and\s*)?(\d+)\s*minutes?',  # "18 hours and 20 minutes" 
+        r'(\d+)\s*hours?\s*(?:and\s*)?(\d+)\s*minutes?',  # "18 hours and 20 minutes"
         r'(\d+)\s*h\s*(\d+)\s*m',                         # "18h 20m"
         r'(\d+):(\d+)',                                   # "18:20"
         r'(\d+)\s*hours?\s*(\d+)',                        # "18 hours 20"
     ]
-    
+
     for pattern in time_patterns:
         match = re.search(pattern, text.lower())
         if match:
@@ -979,13 +981,13 @@ def extract_time_components(text: str) -> dict:
             result['total_minutes'] = result['hours'] * 60 + result['minutes']
             result['has_time'] = True
             return result
-    
+
     # Try hours only patterns
     hours_patterns = [
         r'(\d+)\s*hours?',  # "18 hours"
         r'(\d+)\s*h\b',     # "18h"
     ]
-    
+
     for pattern in hours_patterns:
         match = re.search(pattern, text.lower())
         if match:
@@ -993,22 +995,22 @@ def extract_time_components(text: str) -> dict:
             result['total_minutes'] = result['hours'] * 60
             result['has_time'] = True
             return result
-    
-    # Try minutes only patterns  
+
+    # Try minutes only patterns
     minutes_patterns = [
         r'(\d+)\s*minutes?',  # "1200 minutes"
         r'(\d+)\s*mins?',     # "1200 mins"
         r'(\d+)\s*m\b',       # "1200m"
     ]
-    
+
     for pattern in minutes_patterns:
         match = re.search(pattern, text.lower())
         if match:
             result['minutes'] = int(match.group(1))
-            result['total_minutes'] = result['minutes'] 
+            result['total_minutes'] = result['minutes']
             result['has_time'] = True
             return result
-    
+
     return result
 
 
@@ -1017,15 +1019,15 @@ async def process_trivia_answer(message, trivia_session):
     try:
         if db is None:
             return False
-            
+
         # Extract answer text
         answer_text = message.content.strip()
-        
+
         # Enhanced normalization for fuzzy matching
         normalized_answer = normalize_trivia_answer(answer_text)
-        
+
         print(f"🧠 TRIVIA: Processing answer - Original: '{answer_text}' → Normalized: '{normalized_answer}'")
-        
+
         # Submit answer to database
         answer_id = db.submit_trivia_answer(
             session_id=trivia_session['id'],
@@ -1033,21 +1035,22 @@ async def process_trivia_answer(message, trivia_session):
             answer_text=answer_text,
             normalized_answer=normalized_answer
         )
-        
+
         if answer_id:
-            print(f"✅ TRIVIA: Submitted answer #{answer_id} from user {message.author.id} for session {trivia_session['id']}")
-            
+            print(
+                f"✅ TRIVIA: Submitted answer #{answer_id} from user {message.author.id} for session {trivia_session['id']}")
+
             # React to acknowledge the submission
             try:
                 await message.add_reaction("📝")  # Notebook emoji to show submission received
             except Exception as reaction_error:
                 print(f"⚠️ Could not add reaction to trivia answer: {reaction_error}")
-            
+
             return True
         else:
             print(f"❌ TRIVIA: Failed to submit answer from user {message.author.id}")
             return False
-            
+
     except Exception as e:
         print(f"❌ Error processing trivia answer: {e}")
         return False
@@ -1359,7 +1362,7 @@ Respond to: {content}"""
 def is_casual_conversation_not_query(content: str) -> bool:
     """Detect if a message is casual conversation/narrative rather than a query"""
     content_lower = content.lower()
-    
+
     # Patterns that indicate the message is describing past events or casual conversation
     casual_conversation_patterns = [
         r"and then",  # "and then someone recommends"
@@ -1374,7 +1377,7 @@ def is_casual_conversation_not_query(content: str) -> bool:
         r"earlier (?:someone|he|she|they)",  # "earlier they mentioned"
         r"(?:mentioned|talked about|discussed) (?:that|how|what)",  # "mentioned that..."
     ]
-    
+
     return any(re.search(pattern, content_lower) for pattern in casual_conversation_patterns)
 
 
@@ -1402,7 +1405,8 @@ def detect_implicit_game_query(content: str) -> bool:
         # More specific recommendation patterns to avoid casual conversation
         r"^is\s+.+\s+recommended\s*[\?\.]?$",  # Must be at start and end of message
         r"^who\s+recommended\s+.+[\?\.]?$",   # Must be at start and end of message
-        r"^what\s+(games?\s+)?(?:do\s+you\s+|would\s+you\s+|should\s+i\s+)?recommend", # Direct recommendation requests only
+        # Direct recommendation requests only
+        r"^what\s+(games?\s+)?(?:do\s+you\s+|would\s+you\s+|should\s+i\s+)?recommend",
         r"jonesy.*gaming\s+(history|database|archive)",
     ]
 

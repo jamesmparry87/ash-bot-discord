@@ -9,12 +9,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Add the Live directory to sys.path
-live_path = os.path.join(os.path.dirname(__file__), '..', 'Live')
+live_path = os.path.join(os.path.dirname(__file__), '..')
 if live_path not in sys.path:
     sys.path.insert(0, live_path)
 
 try:
-    from database import DatabaseManager  # type: ignore
+    from bot.database_module import DatabaseManager  # type: ignore
 except ImportError:
     # Create a proper mock DatabaseManager class for type checking
     class DatabaseManager:  # type: ignore
@@ -97,7 +97,7 @@ class TestDatabaseManager:
             db = DatabaseManager()
             assert db.database_url is None  # type: ignore
 
-    @patch('database.psycopg2.connect')
+    @patch('bot.database_module.psycopg2.connect')
     def test_get_connection_success(self, mock_connect):
         """Test successful database connection."""
         mock_connection = MagicMock()
@@ -111,7 +111,7 @@ class TestDatabaseManager:
         # Connect called during initialization and by get_connection
         assert mock_connect.call_count >= 1
 
-    @patch('database.psycopg2.connect')
+    @patch('bot.database_module.psycopg2.connect')
     def test_get_connection_failure(self, mock_connect):
         """Test database connection failure."""
         mock_connect.side_effect = Exception("Connection failed")

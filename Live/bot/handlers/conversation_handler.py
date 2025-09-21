@@ -91,7 +91,8 @@ def cleanup_jam_approval_conversations():
         # Log extended cleanup for monitoring
         user_data = jam_approval_conversations.get(user_id, {})
         conversation_age_hours = (uk_now - user_data.get("last_activity", uk_now)).total_seconds() / 3600
-        print(f"Cleaned up JAM approval conversation for user {user_id} after {conversation_age_hours:.1f} hours of inactivity")
+        print(
+            f"Cleaned up JAM approval conversation for user {user_id} after {conversation_age_hours:.1f} hours of inactivity")
         del jam_approval_conversations[user_id]
 
 
@@ -137,7 +138,7 @@ Original content from {author} ({author_context}):
 
 Rewrite this as a technical briefing for moderators. Be analytical and precise, using phrases like "Analysis indicates", "System diagnostics confirm", "Mission parameters", etc.
 Write 2-4 sentences maximum. Stay faithful to the original content while adding your clinical personality."""
-            
+
             prompt = apply_ash_persona_to_ai_prompt(content_prompt, "mod_announcement")
 
         else:  # user channel
@@ -156,7 +157,7 @@ Original content from {author} ({author_context}):
 
 Rewrite this as a community announcement that's accessible to regular users but still has your analytical undertones.
 Write 2-4 sentences maximum. Stay faithful to the original content while adding your personality."""
-            
+
             prompt = apply_ash_persona_to_ai_prompt(content_prompt, "user_announcement")
 
         # Call AI with rate limiting
@@ -886,7 +887,7 @@ async def start_trivia_conversation(ctx):
         if hasattr(obj, 'bot') and hasattr(obj.bot, 'user') and obj.bot.user:
             bot_instance = obj.bot
             break
-    
+
     if not await user_is_mod_by_id(ctx.author.id, bot_instance):
         await ctx.send(
             f"❌ **Access denied.** Trivia question submission protocols are restricted to moderators only. "
@@ -1041,7 +1042,7 @@ async def handle_jam_approval_conversation(message):
                 conversation['step'] = 'answer_edit_prompt'
                 original_data = data.get('question_data', {})
                 current_answer = original_data.get('correct_answer', 'Dynamic calculation')
-                
+
                 await message.reply(
                     f"📝 **Answer Editing (Optional)**\n\n"
                     f"**Current Answer:** {current_answer}\n\n"
@@ -1054,7 +1055,10 @@ async def handle_jam_approval_conversation(message):
             elif content in ['2', 'edit', 'modify']:
                 # Return to modification mode
                 conversation['step'] = 'modification'
-                current_question = data.get('modified_question', data.get('question_data', {}).get('question_text', 'Unknown'))
+                current_question = data.get(
+                    'modified_question', data.get(
+                        'question_data', {}).get(
+                        'question_text', 'Unknown'))
                 await message.reply(
                     f"✏️ **Question Text Editing**\n\n"
                     f"**Current Question:**\n"
@@ -1089,20 +1093,20 @@ async def handle_jam_approval_conversation(message):
                 conversation['step'] = 'answer_modification'
                 original_data = data.get('question_data', {})
                 current_answer = original_data.get('correct_answer', 'Dynamic calculation')
-                
+
                 await message.reply(
                     f"✏️ **Answer Editing**\n\n"
                     f"**Current Answer:**\n"
                     f"```\n{current_answer}\n```\n\n"
                     f"Please provide the revised answer:"
                 )
-                
+
             elif content in ['2', 'skip', 'no']:
                 # Skip answer editing, go to question type prompt
                 conversation['step'] = 'type_edit_prompt'
                 original_data = data.get('question_data', {})
                 current_type = original_data.get('question_type', 'single_answer')
-                
+
                 await message.reply(
                     f"🔧 **Question Type Editing (Optional)**\n\n"
                     f"**Current Type:** {current_type.replace('_', ' ').title()}\n\n"
@@ -1121,10 +1125,10 @@ async def handle_jam_approval_conversation(message):
             # Store modified answer and go to type prompt
             data['modified_answer'] = content
             conversation['step'] = 'type_edit_prompt'
-            
+
             original_data = data.get('question_data', {})
             current_type = original_data.get('question_type', 'single_answer')
-            
+
             await message.reply(
                 f"✅ **Answer Updated**\n\n"
                 f"**New Answer:** {content}\n\n"
@@ -1142,7 +1146,7 @@ async def handle_jam_approval_conversation(message):
                 conversation['step'] = 'type_modification'
                 original_data = data.get('question_data', {})
                 current_type = original_data.get('question_type', 'single_answer')
-                
+
                 await message.reply(
                     f"🔧 **Question Type Selection**\n\n"
                     f"**Current Type:** {current_type.replace('_', ' ').title()}\n\n"
@@ -1151,7 +1155,7 @@ async def handle_jam_approval_conversation(message):
                     f"**2.** 🔤 **Multiple Choice** - Choose from A/B/C/D options\n\n"
                     f"Please respond with **1** or **2**."
                 )
-                
+
             elif content in ['2', 'finish', 'save', 'no']:
                 # Save all modifications
                 await save_final_modifications(message, data, user_id)
@@ -1195,7 +1199,7 @@ async def save_final_modifications(message, data: Dict[str, Any], user_id: int):
             return
 
         original_data = data.get('question_data', {})
-        
+
         # Use modified values if available, otherwise use originals
         final_question = data.get('modified_question', original_data.get('question_text', ''))
         final_answer = data.get('modified_answer', original_data.get('correct_answer'))
@@ -1221,9 +1225,9 @@ async def save_final_modifications(message, data: Dict[str, Any], user_id: int):
                 changes_summary.append(f"• **Answer** updated to: {final_answer}")
             if data.get('modified_type'):
                 changes_summary.append(f"• **Question type** changed to: {final_type.replace('_', ' ').title()}")
-            
+
             changes_text = '\n'.join(changes_summary) if changes_summary else "• No modifications made"
-            
+
             await message.reply(
                 f"✅ **All Modifications Saved Successfully**\n\n"
                 f"Your modified question has been saved to the database with ID #{question_id}.\n\n"
@@ -1247,11 +1251,11 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
     """Start JAM approval workflow for a generated trivia question with enhanced reliability"""
     try:
         print(f"🚀 Starting JAM approval workflow for question: {question_data.get('question_text', 'Unknown')[:50]}...")
-        
+
         # Get bot instance with enhanced detection
         bot_instance = None
         import sys
-        
+
         # Strategy 1: Search through all modules for bot instance
         modules_copy = dict(sys.modules)  # Create a copy to avoid iteration issues
         for name, obj in modules_copy.items():
@@ -1263,7 +1267,7 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
                         break
                 except Exception:
                     continue
-        
+
         # Strategy 2: Direct import fallback
         if not bot_instance:
             try:
@@ -1275,7 +1279,7 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
                     print("⚠️ Main bot instance not ready (user not logged in)")
             except ImportError as e:
                 print(f"⚠️ Could not import bot from main: {e}")
-        
+
         if not bot_instance:
             print("❌ Could not find bot instance for JAM approval")
             return False
@@ -1333,13 +1337,12 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
             f"**Question Type:** {question_type.replace('_', ' ').title()}\n"
             f"**Category:** {category.replace('_', ' ').title()}\n"
             f"**Question:** {question_text}\n\n"
-            f"**Answer:** {correct_answer}\n\n"
-        )
+            f"**Answer:** {correct_answer}\n\n")
 
         # Add multiple choice options if applicable
         if question_data.get('multiple_choice_options') and question_data.get('question_type') == 'multiple_choice':
-            options_text = '\n'.join([f"**{chr(65+i)}.** {option}" 
-                                    for i, option in enumerate(question_data['multiple_choice_options'])])
+            options_text = '\n'.join([f"**{chr(65+i)}.** {option}"
+                                      for i, option in enumerate(question_data['multiple_choice_options'])])
             approval_msg += f"**Answer Choices:**\n{options_text}\n\n"
 
         # Add dynamic question info if applicable
@@ -1397,14 +1400,14 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
         print(f"❌ Critical error in JAM approval workflow: {e}")
         import traceback
         traceback.print_exc()
-        
+
         # Clean up conversation state on critical error
         try:
             if JAM_USER_ID in jam_approval_conversations:
                 del jam_approval_conversations[JAM_USER_ID]
-        except:
+        except BaseException:
             pass
-        
+
         return False
 
 
@@ -1440,7 +1443,7 @@ async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
 
         uk_now = datetime.now(ZoneInfo("Europe/London"))
         trivia_time = uk_now.replace(hour=11, minute=0, second=0, microsecond=0)
-        
+
         pre_approval_msg = (
             f"⏰ **TRIVIA TUESDAY - PRE-APPROVAL REQUIRED**\n\n"
             f"Trivia Tuesday begins in 1 hour ({trivia_time.strftime('%H:%M UK time')}). "
@@ -1453,8 +1456,8 @@ async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
 
         # Add multiple choice options if applicable
         if question_data.get('multiple_choice_options'):
-            options_text = '\n'.join([f"**{chr(65+i)}.** {option}" 
-                                    for i, option in enumerate(question_data['multiple_choice_options'])])
+            options_text = '\n'.join([f"**{chr(65+i)}.** {option}"
+                                      for i, option in enumerate(question_data['multiple_choice_options'])])
             pre_approval_msg += f"**Answer Choices:**\n{options_text}\n\n"
 
         pre_approval_msg += (

@@ -1982,36 +1982,63 @@ class DatabaseManager:
             'game1': {
                 'name': game1['canonical_name'],
                 'series': game1.get('series_name'),
-                'episodes': game1.get('total_episodes', 0),
-                'playtime_minutes': game1.get('total_playtime_minutes', 0),
-                'playtime_hours': round(game1.get('total_playtime_minutes', 0) / 60, 1),
+                'episodes': game1.get(
+                    'total_episodes',
+                    0),
+                'playtime_minutes': game1.get(
+                    'total_playtime_minutes',
+                    0),
+                'playtime_hours': round(
+                    game1.get(
+                        'total_playtime_minutes',
+                        0) /
+                    60,
+                    1),
                 'status': game1.get('completion_status'),
-                'genre': game1.get('genre')
-            },
+                'genre': game1.get('genre')},
             "game2": {
                 "name": game2["canonical_name"],
                 "series": game2.get("series_name"),
-                "episodes": game2.get("total_episodes", 0),
-                "playtime_minutes": game2.get("total_playtime_minutes", 0),
-                "playtime_hours": round(game2.get("total_playtime_minutes", 0) / 60, 1),
+                "episodes": game2.get(
+                    "total_episodes",
+                    0),
+                "playtime_minutes": game2.get(
+                    "total_playtime_minutes",
+                    0),
+                "playtime_hours": round(
+                    game2.get(
+                        "total_playtime_minutes",
+                        0) /
+                    60,
+                    1),
                 "status": game2.get("completion_status"),
                 "genre": game2.get("genre"),
             },
             "comparison": {
-                "episode_difference": game1.get("total_episodes", 0) - game2.get("total_episodes", 0),
-                "playtime_difference_minutes": game1.get("total_playtime_minutes", 0) - game2.get("total_playtime_minutes", 0),
+                "episode_difference": game1.get(
+                    "total_episodes",
+                    0) -
+                game2.get(
+                    "total_episodes",
+                    0),
+                "playtime_difference_minutes": game1.get(
+                    "total_playtime_minutes",
+                    0) -
+                game2.get(
+                    "total_playtime_minutes",
+                    0),
                 "longer_game": (
-                    game1["canonical_name"]
-                    if game1.get("total_playtime_minutes", 0) > game2.get("total_playtime_minutes", 0)
-                    else game2["canonical_name"]
-                ),
+                    game1["canonical_name"] if game1.get(
+                        "total_playtime_minutes",
+                        0) > game2.get(
+                        "total_playtime_minutes",
+                        0) else game2["canonical_name"]),
                 "more_episodes": (
-                    game1["canonical_name"]
-                    if game1.get("total_episodes", 0) > game2.get("total_episodes", 0)
-                    else game2["canonical_name"]
-                )
-            }
-        }
+                    game1["canonical_name"] if game1.get(
+                        "total_episodes",
+                        0) > game2.get(
+                        "total_episodes",
+                        0) else game2["canonical_name"])}}
 
     def get_ranking_context(self, game_name: str,
                             metric: str = "playtime") -> Dict[str, Any]:
@@ -2647,32 +2674,33 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 # First check if the columns exist, if not add them
                 cur.execute("""
-                    ALTER TABLE trivia_sessions 
+                    ALTER TABLE trivia_sessions
                     ADD COLUMN IF NOT EXISTS question_message_id BIGINT,
                     ADD COLUMN IF NOT EXISTS confirmation_message_id BIGINT,
                     ADD COLUMN IF NOT EXISTS channel_id BIGINT
                 """)
-                
+
                 # Update the session with message tracking info
                 cur.execute(
                     """
-                    UPDATE trivia_sessions 
-                    SET question_message_id = %s, 
-                        confirmation_message_id = %s, 
+                    UPDATE trivia_sessions
+                    SET question_message_id = %s,
+                        confirmation_message_id = %s,
                         channel_id = %s
                     WHERE id = %s
                     """,
                     (question_message_id, confirmation_message_id, channel_id, session_id)
                 )
-                
+
                 conn.commit()
                 success = cur.rowcount > 0
-                
+
                 if success:
-                    logger.info(f"Updated trivia session {session_id} with message tracking: Q:{question_message_id}, C:{confirmation_message_id}, Ch:{channel_id}")
+                    logger.info(
+                        f"Updated trivia session {session_id} with message tracking: Q:{question_message_id}, C:{confirmation_message_id}, Ch:{channel_id}")
                 else:
                     logger.warning(f"Failed to update trivia session {session_id} - session not found")
-                
+
                 return success
         except Exception as e:
             logger.error(f"Error updating trivia session messages: {e}")
@@ -2767,7 +2795,7 @@ class DatabaseManager:
 
                 # Debug output for answer matching
                 print(f"🧠 TRIVIA: Session {session_id} - Correct answer: '{correct_answer}'")
-                
+
                 # Get all answers for this session (excluding conflicts)
                 cur.execute("""
                     SELECT id, user_id, answer_text, normalized_answer, conflict_detected
@@ -2775,14 +2803,14 @@ class DatabaseManager:
                     WHERE session_id = %s
                     ORDER BY submitted_at ASC
                 """, (session_id,))
-                
+
                 all_answers = cur.fetchall()
                 print(f"🧠 TRIVIA: Found {len(all_answers)} total answers for session {session_id}")
-                
+
                 correct_answer_ids = []
                 close_answer_ids = []  # For half points
                 first_correct_answer = None
-                
+
                 # Process each answer with enhanced matching
                 for answer_row in all_answers:
                     answer_dict = dict(answer_row)
@@ -2791,34 +2819,38 @@ class DatabaseManager:
                     original_answer = answer_dict['answer_text'].strip()
                     normalized_answer = (answer_dict['normalized_answer'] or '').strip()
                     is_conflict = answer_dict['conflict_detected']
-                    
+
                     # Skip conflict answers but log them
                     if is_conflict:
-                        print(f"🚫 TRIVIA: Skipping conflict answer {answer_id} from user {user_id}: '{original_answer}'")
+                        print(
+                            f"🚫 TRIVIA: Skipping conflict answer {answer_id} from user {user_id}: '{original_answer}'")
                         continue
-                    
+
                     print(f"🔍 TRIVIA: Evaluating answer {answer_id} from user {user_id}: '{original_answer}'")
-                    
+
                     # Answer matching with multiple levels
                     score, match_type = self._evaluate_trivia_answer(
                         original_answer, correct_answer, 'single'
                     )
-                    
+
                     # Determine correctness based on score
                     is_correct = score >= 1.0
                     is_close = 0.7 <= score < 1.0
-                    
+
                     if is_correct:
                         correct_answer_ids.append(answer_id)
                         if first_correct_answer is None:
                             first_correct_answer = {'id': answer_id, 'user_id': user_id}
-                        print(f"✅ TRIVIA: Answer {answer_id} CORRECT ({match_type}, score: {score:.2f}): '{original_answer}' matches '{correct_answer}'")
+                        print(
+                            f"✅ TRIVIA: Answer {answer_id} CORRECT ({match_type}, score: {score:.2f}): '{original_answer}' matches '{correct_answer}'")
                     elif is_close:
                         close_answer_ids.append(answer_id)
-                        print(f"🔶 TRIVIA: Answer {answer_id} CLOSE ({match_type}, score: {score:.2f}): '{original_answer}' ~= '{correct_answer}'")
+                        print(
+                            f"🔶 TRIVIA: Answer {answer_id} CLOSE ({match_type}, score: {score:.2f}): '{original_answer}' ~= '{correct_answer}'")
                     else:
-                        print(f"❌ TRIVIA: Answer {answer_id} WRONG ({match_type}, score: {score:.2f}): '{original_answer}' ≠ '{correct_answer}'")
-                
+                        print(
+                            f"❌ TRIVIA: Answer {answer_id} WRONG ({match_type}, score: {score:.2f}): '{original_answer}' ≠ '{correct_answer}'")
+
                 # Update correct answers (full points)
                 if correct_answer_ids:
                     cur.execute("""
@@ -2827,15 +2859,15 @@ class DatabaseManager:
                         WHERE id = ANY(%s)
                     """, (correct_answer_ids,))
                     print(f"🎯 TRIVIA: Marked {len(correct_answer_ids)} answers as CORRECT")
-                
+
                 # Update close answers (half points) - add column if needed
                 if close_answer_ids:
                     try:
                         cur.execute("""
-                            ALTER TABLE trivia_answers 
+                            ALTER TABLE trivia_answers
                             ADD COLUMN IF NOT EXISTS is_close BOOLEAN DEFAULT FALSE
                         """)
-                        
+
                         cur.execute("""
                             UPDATE trivia_answers
                             SET is_close = TRUE
@@ -2857,7 +2889,8 @@ class DatabaseManager:
 
                     if counts:
                         counts_dict = dict(counts)
-                        total_participants = int(counts_dict["total_participants"]) if total_participants is None else total_participants
+                        total_participants = int(counts_dict["total_participants"]
+                                                 ) if total_participants is None else total_participants
                         correct_count = int(counts_dict["correct_count"]) if correct_count is None else correct_count
 
                 # Use defaults if still None
@@ -2867,7 +2900,7 @@ class DatabaseManager:
                 # Mark first correct answer
                 if first_correct_answer and not first_correct_user_id:
                     first_correct_user_id = first_correct_answer['user_id']
-                
+
                 if first_correct_user_id:
                     cur.execute("""
                         UPDATE trivia_answers
@@ -2903,7 +2936,7 @@ class DatabaseManager:
                 print(f"✅ TRIVIA: Session {session_id} completed - {correct_count}/{total_participants} correct")
                 logger.info(f"Completed trivia session {session_id}")
                 return True
-                
+
         except Exception as e:
             logger.error(f"Error completing trivia session {session_id}: {e}")
             conn.rollback()
@@ -2938,51 +2971,51 @@ class DatabaseManager:
         Returns: (score, match_type) where score is 0.0-1.0
         """
         import difflib
-        
+
         # Clean up inputs
         user_clean = user_answer.strip()
         correct_clean = correct_answer.strip()
-        
+
         # Normalize answers for better matching
         user_normalized = self._normalize_answer_for_matching(user_clean)
         correct_normalized = self._normalize_answer_for_matching(correct_clean)
-        
+
         # Level 1: Exact match (case-insensitive)
         if user_clean.lower() == correct_clean.lower():
             return 1.0, "exact_case_insensitive"
-        
+
         # Level 2: Normalized exact match
         if user_normalized.lower() == correct_normalized.lower():
             return 1.0, "normalized_exact"
-        
+
         # Level 3: Fuzzy string matching with high threshold (correct answers)
         similarity_exact = difflib.SequenceMatcher(None, user_clean.lower(), correct_clean.lower()).ratio()
         if similarity_exact >= 0.9:  # 90% similarity = correct
             return 1.0, "fuzzy_high"
-        
+
         # Level 4: Close matches (partial credit)
         if similarity_exact >= 0.7:  # 70-89% similarity = close
             return 0.8, "fuzzy_close"
-        
+
         # Level 5: Word-based matching for multi-word answers
         if len(correct_clean.split()) > 1:
             correct_words = set(word.lower() for word in correct_clean.split())
             answer_words = set(word.lower() for word in user_clean.split())
-            
+
             # Calculate word overlap
             if len(correct_words) > 0:
                 overlap_ratio = len(correct_words.intersection(answer_words)) / len(correct_words)
-                
+
                 if overlap_ratio >= 0.8:  # 80% word overlap = correct
                     return 1.0, "word_overlap_high"
                 elif overlap_ratio >= 0.6:  # 60% word overlap = close
                     return 0.75, "word_overlap_medium"
-        
+
         # Level 6: Handle numerical/time answers
         if self._contains_numbers(correct_clean) and self._contains_numbers(user_clean):
             correct_nums = self._extract_numbers(correct_clean)
             answer_nums = self._extract_numbers(user_clean)
-            
+
             # Check for numerical matches with tolerance
             for c_num in correct_nums:
                 for a_num in answer_nums:
@@ -2993,24 +3026,24 @@ class DatabaseManager:
                             return 1.0, "numerical_exact"
                         else:
                             return 0.8, "numerical_close"
-        
+
         # Level 7: Common abbreviations and variations
         if self._check_abbreviation_match(user_clean, correct_clean):
             return 1.0, "abbreviation_match"
-        
+
         # Level 8: Weak similarity for debugging
         if similarity_exact >= 0.3:
             return similarity_exact, "weak_similarity"
-        
+
         return 0.0, "no_match"
-    
+
     def _normalize_answer_for_matching(self, answer: str) -> str:
         """Normalize an answer for enhanced matching"""
         import re
-        
+
         # Remove common punctuation
         normalized = re.sub(r'[.,!?;:"\'()[\]{}]', '', answer)
-        
+
         # Handle common game abbreviations
         abbreviations = {
             'gta': 'grand theft auto',
@@ -3020,7 +3053,7 @@ class DatabaseManager:
             'tlou': 'the last of us',
             'ff': 'final fantasy'
         }
-        
+
         words = normalized.lower().split()
         expanded_words = []
         for word in words:
@@ -3028,40 +3061,40 @@ class DatabaseManager:
                 expanded_words.extend(abbreviations[word].split())
             else:
                 expanded_words.append(word)
-        
+
         # Remove filler words
         filler_words = {'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'with'}
         filtered_words = [word for word in expanded_words if word not in filler_words]
-        
+
         return ' '.join(filtered_words).strip()
-    
+
     def _contains_numbers(self, text: str) -> bool:
         """Check if text contains numbers"""
         import re
         return bool(re.search(r'\d', text))
-    
+
     def _extract_numbers(self, text: str) -> list[float]:
         """Extract numbers from text"""
         import re
         numbers = re.findall(r'\d+\.?\d*', text)
         return [float(num) for num in numbers]
-    
+
     def _check_abbreviation_match(self, answer: str, correct: str) -> bool:
         """Check for common abbreviation matches"""
         answer_lower = answer.lower().strip()
         correct_lower = correct.lower().strip()
-        
+
         # Color abbreviations
         color_abbrev = {
-            'b': 'blue', 'r': 'red', 'g': 'green', 'y': 'yellow', 
+            'b': 'blue', 'r': 'red', 'g': 'green', 'y': 'yellow',
             'w': 'white', 'bl': 'black', 'o': 'orange', 'p': 'purple'
         }
-        
+
         if answer_lower in color_abbrev and color_abbrev[answer_lower] == correct_lower:
             return True
         if correct_lower in color_abbrev and color_abbrev[correct_lower] == answer_lower:
             return True
-            
+
         return False
 
     def calculate_dynamic_answer(
@@ -3301,6 +3334,153 @@ class DatabaseManager:
             logger.error(f"Error getting trivia question statistics: {e}")
             return {}
 
+    def check_question_duplicate(self, question_text: str,
+                                 similarity_threshold: float = 0.8) -> Optional[Dict[str, Any]]:
+        """Check if a similar question already exists in the database"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                # Get all existing questions
+                cur.execute("""
+                    SELECT id, question_text, status, created_at
+                    FROM trivia_questions
+                    WHERE is_active = TRUE
+                    ORDER BY created_at DESC
+                """)
+                existing_questions = cur.fetchall()
+
+                if not existing_questions:
+                    return None
+
+                # Normalize the new question for comparison
+                new_question_normalized = self._normalize_question_text(question_text)
+
+                # Check each existing question
+                import difflib
+
+                for existing in existing_questions:
+                    existing_dict = dict(existing)
+                    existing_text = existing_dict.get('question_text', '')
+                    existing_normalized = self._normalize_question_text(existing_text)
+
+                    # Calculate similarity
+                    similarity = difflib.SequenceMatcher(
+                        None,
+                        new_question_normalized.lower(),
+                        existing_normalized.lower()
+                    ).ratio()
+
+                    if similarity >= similarity_threshold:
+                        logger.info(
+                            f"Duplicate question detected: {similarity:.2f} similarity to question #{existing_dict['id']}")
+                        return {
+                            'duplicate_id': existing_dict['id'],
+                            'duplicate_text': existing_text,
+                            'similarity_score': similarity,
+                            'status': existing_dict.get('status'),
+                            'created_at': existing_dict.get('created_at')
+                        }
+
+                return None  # No duplicate found
+
+        except Exception as e:
+            logger.error(f"Error checking for duplicate questions: {e}")
+            return None
+
+    def _normalize_question_text(self, question_text: str) -> str:
+        """Normalize question text for duplicate comparison"""
+        import re
+
+        # Remove common variations that don't change meaning
+        normalized = question_text.strip()
+
+        # Remove punctuation and extra spaces
+        normalized = re.sub(r'[^\w\s]', ' ', normalized)
+        normalized = re.sub(r'\s+', ' ', normalized)
+
+        # Remove common question words that don't affect uniqueness
+        filler_words = ['what', 'which', 'who', 'when', 'where', 'how', 'did', 'has', 'is', 'was', 'the', 'a', 'an']
+        words = normalized.lower().split()
+        filtered_words = [word for word in words if word not in filler_words]
+
+        return ' '.join(filtered_words)
+
+    def ensure_minimum_question_pool(self, minimum_count: int = 5) -> Dict[str, Any]:
+        """Ensure there are at least minimum_count available questions in the pool"""
+        conn = self.get_connection()
+        if not conn:
+            return {"error": "No database connection", "available_count": 0}
+
+        try:
+            with conn.cursor() as cur:
+                # Count current available questions
+                cur.execute("""
+                    SELECT COUNT(*) as available_count
+                    FROM trivia_questions
+                    WHERE is_active = TRUE AND status = 'available'
+                """)
+                result = cur.fetchone()
+                current_available = int(cast(RealDictRow, result)['available_count']) if result else 0
+
+                logger.info(f"Current available questions: {current_available}/{minimum_count}")
+
+                if current_available >= minimum_count:
+                    return {
+                        "status": "sufficient",
+                        "available_count": current_available,
+                        "required_count": minimum_count,
+                        "action_taken": "none"
+                    }
+
+                # Calculate how many questions we need
+                needed_count = minimum_count - current_available
+
+                # Strategy 1: Try to recycle old 'answered' questions (cooldown approach)
+                recycled_count = 0
+                cur.execute("""
+                    SELECT id, question_text, last_used_at
+                    FROM trivia_questions
+                    WHERE is_active = TRUE
+                    AND status = 'answered'
+                    AND (last_used_at IS NULL OR last_used_at < NOW() - INTERVAL '2 weeks')
+                    ORDER BY last_used_at ASC NULLS FIRST
+                    LIMIT %s
+                """, (needed_count,))
+
+                recyclable_questions = cur.fetchall()
+
+                if recyclable_questions:
+                    question_ids = [cast(RealDictRow, q)['id'] for q in recyclable_questions]
+                    cur.execute("""
+                        UPDATE trivia_questions
+                        SET status = 'available'
+                        WHERE id = ANY(%s)
+                    """, (question_ids,))
+
+                    recycled_count = cur.rowcount
+                    conn.commit()
+                    logger.info(f"Recycled {recycled_count} old questions back to available status")
+
+                # Check if we have enough now
+                remaining_needed = needed_count - recycled_count
+
+                return {
+                    "status": "pool_managed",
+                    "available_count": current_available + recycled_count,
+                    "required_count": minimum_count,
+                    "recycled_count": recycled_count,
+                    "still_needed": remaining_needed,
+                    "action_taken": f"recycled_{recycled_count}_questions"
+                }
+
+        except Exception as e:
+            logger.error(f"Error ensuring minimum question pool: {e}")
+            conn.rollback()
+            return {"error": str(e), "available_count": 0}
+
     # --- Missing Trivia Methods for Command Compatibility ---
 
     def get_trivia_question(
@@ -3366,12 +3546,13 @@ class DatabaseManager:
                 # Calculate unique participants (count unique users, not total answers)
                 non_conflict_answers = [a for a in answers if not a.get('conflict_detected', False)]
                 unique_participants = len(set(a['user_id'] for a in non_conflict_answers))
-                
-                print(f"🧠 TRIVIA: Session {session_id} - Raw answers: {len(answers)}, Non-conflict: {len(non_conflict_answers)}, Unique users: {unique_participants}")
+
+                print(
+                    f"🧠 TRIVIA: Session {session_id} - Raw answers: {len(answers)}, Non-conflict: {len(non_conflict_answers)}, Unique users: {unique_participants}")
 
                 # Complete the session with enhanced evaluation (pass None to let it calculate properly)
                 success = self.complete_trivia_session(
-                    session_id, 
+                    session_id,
                     first_correct_user_id=None,  # Let complete_trivia_session determine this
                     total_participants=unique_participants,  # Use unique count
                     correct_count=None  # Let complete_trivia_session calculate this with enhanced matching
@@ -3386,10 +3567,10 @@ class DatabaseManager:
                         WHERE ts.id = %s
                     """, (session_id,))
                     updated_session = cur.fetchone()
-                    
+
                     if updated_session:
                         updated_session_dict = dict(updated_session)
-                        
+
                         # Get first correct user info
                         cur.execute("""
                             SELECT user_id, answer_text FROM trivia_answers
@@ -3399,8 +3580,9 @@ class DatabaseManager:
                         first_correct_result = cur.fetchone()
                         first_correct_user = dict(first_correct_result) if first_correct_result else None
 
-                        correct_answer = updated_session_dict.get('calculated_answer') or updated_session_dict.get('correct_answer')
-                        
+                        correct_answer = updated_session_dict.get(
+                            'calculated_answer') or updated_session_dict.get('correct_answer')
+
                         return {
                             'session_id': session_id,
                             'question_id': updated_session_dict.get('question_id'),
@@ -3491,10 +3673,10 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 # Find active sessions that have been running for more than 2 hours
                 cur.execute("""
-                    SELECT ts.*, tq.question_text 
+                    SELECT ts.*, tq.question_text
                     FROM trivia_sessions ts
                     JOIN trivia_questions tq ON ts.question_id = tq.id
-                    WHERE ts.status = 'active' 
+                    WHERE ts.status = 'active'
                     AND ts.started_at < NOW() - INTERVAL '2 hours'
                 """)
                 hanging_sessions = cur.fetchall()
@@ -3505,18 +3687,18 @@ class DatabaseManager:
                 for session in hanging_sessions:
                     session_dict = dict(session)
                     session_id = session_dict['id']
-                    
+
                     try:
                         # Mark session as expired
                         cur.execute("""
-                            UPDATE trivia_sessions 
+                            UPDATE trivia_sessions
                             SET status = 'expired', ended_at = NOW()
                             WHERE id = %s
                         """, (session_id,))
-                        
+
                         # Don't mark the question as 'answered' for expired sessions
                         # so they can be used again
-                        
+
                         cleaned_count += 1
                         session_details.append({
                             "session_id": session_id,
@@ -3524,21 +3706,21 @@ class DatabaseManager:
                             "started_at": session_dict.get("started_at"),
                             "question_id": session_dict.get("question_id")
                         })
-                        
+
                         logger.info(f"Cleaned up hanging trivia session {session_id}")
-                        
+
                     except Exception as e:
                         logger.error(f"Error cleaning up session {session_id}: {e}")
                         continue
 
                 conn.commit()
-                
+
                 return {
                     "cleaned_sessions": cleaned_count,
                     "sessions": session_details,
                     "total_found": len(hanging_sessions)
                 }
-                
+
         except Exception as e:
             logger.error(f"Error during trivia session cleanup: {e}")
             conn.rollback()
@@ -3610,7 +3792,7 @@ class DatabaseManager:
                         # Check if table exists
                         cur.execute("""
                             SELECT EXISTS (
-                                SELECT FROM information_schema.tables 
+                                SELECT FROM information_schema.tables
                                 WHERE table_name = %s
                             )
                         """, (table_name,))
@@ -3651,7 +3833,7 @@ class DatabaseManager:
                         if needs_repair:
                             # Reset the sequence to the correct value
                             cur.execute(f"SELECT setval('{sequence_name}', %s, true)", (max_id,))
-                            
+
                             repair_info = {
                                 "table": table_name,
                                 "sequence": sequence_name,
@@ -3662,7 +3844,8 @@ class DatabaseManager:
                             }
                             repair_results["repaired_sequences"].append(repair_info)
                             repair_results["total_repaired"] += 1
-                            logger.info(f"Repaired sequence {sequence_name}: was {current_sequence_next}, now {next_sequence_value}")
+                            logger.info(
+                                f"Repaired sequence {sequence_name}: was {current_sequence_next}, now {next_sequence_value}")
                         else:
                             repair_info = {
                                 "table": table_name,
@@ -3684,7 +3867,8 @@ class DatabaseManager:
                         logger.error(f"Error repairing sequence {sequence_name}: {e}")
 
                 conn.commit()
-                logger.info(f"Database sequence repair completed: {repair_results['total_repaired']} sequences repaired")
+                logger.info(
+                    f"Database sequence repair completed: {repair_results['total_repaired']} sequences repaired")
                 return repair_results
 
         except Exception as e:
@@ -3722,13 +3906,13 @@ class DatabaseManager:
             error_str = str(e)
             if "duplicate key value violates unique constraint" in error_str and "trivia_questions_pkey" in error_str:
                 logger.warning("Detected sequence synchronization issue, attempting repair...")
-                
+
                 # Repair sequences
                 repair_result = self.repair_database_sequences()
-                
+
                 if repair_result.get("total_repaired", 0) > 0:
                     logger.info("Sequence repair completed, retrying trivia question insertion...")
-                    
+
                     # Retry the insertion after repair
                     try:
                         return self.add_trivia_question(
