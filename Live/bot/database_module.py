@@ -3334,7 +3334,8 @@ class DatabaseManager:
             logger.error(f"Error getting trivia question statistics: {e}")
             return {}
 
-    def check_question_duplicate(self, question_text: str, similarity_threshold: float = 0.8) -> Optional[Dict[str, Any]]:
+    def check_question_duplicate(self, question_text: str,
+                                 similarity_threshold: float = 0.8) -> Optional[Dict[str, Any]]:
         """Check if a similar question already exists in the database"""
         conn = self.get_connection()
         if not conn:
@@ -3359,7 +3360,7 @@ class DatabaseManager:
 
                 # Check each existing question
                 import difflib
-                
+
                 for existing in existing_questions:
                     existing_dict = dict(existing)
                     existing_text = existing_dict.get('question_text', '')
@@ -3367,13 +3368,14 @@ class DatabaseManager:
 
                     # Calculate similarity
                     similarity = difflib.SequenceMatcher(
-                        None, 
-                        new_question_normalized.lower(), 
+                        None,
+                        new_question_normalized.lower(),
                         existing_normalized.lower()
                     ).ratio()
 
                     if similarity >= similarity_threshold:
-                        logger.info(f"Duplicate question detected: {similarity:.2f} similarity to question #{existing_dict['id']}")
+                        logger.info(
+                            f"Duplicate question detected: {similarity:.2f} similarity to question #{existing_dict['id']}")
                         return {
                             'duplicate_id': existing_dict['id'],
                             'duplicate_text': existing_text,
@@ -3394,16 +3396,16 @@ class DatabaseManager:
 
         # Remove common variations that don't change meaning
         normalized = question_text.strip()
-        
+
         # Remove punctuation and extra spaces
         normalized = re.sub(r'[^\w\s]', ' ', normalized)
         normalized = re.sub(r'\s+', ' ', normalized)
-        
+
         # Remove common question words that don't affect uniqueness
         filler_words = ['what', 'which', 'who', 'when', 'where', 'how', 'did', 'has', 'is', 'was', 'the', 'a', 'an']
         words = normalized.lower().split()
         filtered_words = [word for word in words if word not in filler_words]
-        
+
         return ' '.join(filtered_words)
 
     def ensure_minimum_question_pool(self, minimum_count: int = 5) -> Dict[str, Any]:
@@ -3441,15 +3443,15 @@ class DatabaseManager:
                 cur.execute("""
                     SELECT id, question_text, last_used_at
                     FROM trivia_questions
-                    WHERE is_active = TRUE 
+                    WHERE is_active = TRUE
                     AND status = 'answered'
                     AND (last_used_at IS NULL OR last_used_at < NOW() - INTERVAL '2 weeks')
                     ORDER BY last_used_at ASC NULLS FIRST
                     LIMIT %s
                 """, (needed_count,))
-                
+
                 recyclable_questions = cur.fetchall()
-                
+
                 if recyclable_questions:
                     question_ids = [cast(RealDictRow, q)['id'] for q in recyclable_questions]
                     cur.execute("""
@@ -3457,7 +3459,7 @@ class DatabaseManager:
                         SET status = 'available'
                         WHERE id = ANY(%s)
                     """, (question_ids,))
-                    
+
                     recycled_count = cur.rowcount
                     conn.commit()
                     logger.info(f"Recycled {recycled_count} old questions back to available status")

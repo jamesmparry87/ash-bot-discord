@@ -1421,12 +1421,13 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
                     if question_data and question_data.get("question_text"):
                         # Check for duplicates before accepting this question
                         duplicate_info = db.check_question_duplicate(
-                            question_data["question_text"], 
+                            question_data["question_text"],
                             similarity_threshold=0.8
                         )
-                        
+
                         if duplicate_info:
-                            print(f"🔍 Template question duplicate detected (attempt {attempt+1}/{max_template_attempts}): {duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']}")
+                            print(
+                                f"🔍 Template question duplicate detected (attempt {attempt+1}/{max_template_attempts}): {duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']}")
                             if attempt < max_template_attempts - 1:
                                 continue  # Try generating a different template question
                         else:
@@ -1442,7 +1443,7 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
 
                             print(f"✅ Template-generated question (unique): {question_data['question_text'][:50]}...")
                             return question_data
-                            
+
             except Exception as template_error:
                 print(f"⚠️ Template generation attempt {attempt+1} failed: {template_error}")
                 if attempt == max_template_attempts - 1:
@@ -1509,20 +1510,26 @@ Focus on direct questions about Captain Jonesy's gaming journey - no verbose ana
             response_text, status_message = await call_ai_with_rate_limiting(prompt, JONESY_USER_ID, context)
 
             if response_text:
-                print(f"✅ AI fallback response received: {len(response_text)} characters (attempt {ai_attempt+1}/{max_ai_attempts})")
+                print(
+                    f"✅ AI fallback response received: {len(response_text)} characters (attempt {ai_attempt+1}/{max_ai_attempts})")
 
                 # Parse AI response
                 ai_question = robust_json_parse(response_text)
 
-                if ai_question and all(key in ai_question for key in ["question_text", "question_type", "correct_answer"]):
+                if ai_question and all(
+                    key in ai_question for key in [
+                        "question_text",
+                        "question_type",
+                        "correct_answer"]):
                     # Check for duplicates before accepting this AI question
                     duplicate_info = db.check_question_duplicate(
-                        ai_question["question_text"], 
+                        ai_question["question_text"],
                         similarity_threshold=0.8
                     )
-                    
+
                     if duplicate_info:
-                        print(f"🔍 AI question duplicate detected (attempt {ai_attempt+1}/{max_ai_attempts}): {duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']}")
+                        print(
+                            f"🔍 AI question duplicate detected (attempt {ai_attempt+1}/{max_ai_attempts}): {duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']}")
                         if ai_attempt < max_ai_attempts - 1:
                             continue  # Try generating a different AI question
                     else:

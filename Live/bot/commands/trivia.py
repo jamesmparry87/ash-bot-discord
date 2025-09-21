@@ -570,7 +570,7 @@ class TriviaCommands(commands.Cog):
                     try:
                         pool_result = db.ensure_minimum_question_pool(5)
                         logger.info(f"Question pool management after trivia: {pool_result}")
-                        
+
                         if pool_result.get('still_needed', 0) > 0:
                             logger.warning(f"Question pool needs {pool_result['still_needed']} more questions")
                     except Exception as pool_error:
