@@ -24,34 +24,34 @@ except ImportError as e:
     print(f"Warning: Could not import modules: {e}")
     # Create mock types for when imports fail
     from typing import Any
-    
+
     class MockDatabaseManager:
         def __init__(self) -> None:
             pass
-    
+
     class MockDiscord:
         class Intents:
             @staticmethod
             def default() -> Any:
                 return MagicMock()
-            
+
         class Message:
             pass
-            
+
         class Member:
             pass
-            
+
         class Embed:
             def __init__(self, **kwargs: Any) -> None:
                 pass
-    
+
     class MockCommands:
         class Bot:
             pass
-            
+
         class Context:
             pass
-    
+
     DatabaseManager = MockDatabaseManager  # type: ignore
     discord = MockDiscord()  # type: ignore
     commands = MockCommands()  # type: ignore

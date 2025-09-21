@@ -252,7 +252,7 @@ except ImportError as e:
                 game_parts = game_info.split(' - ', 1)
                 game_name = game_parts[0]
                 reason = game_parts[1] if len(game_parts) > 1 else "No reason provided"
-                
+
                 if self.db.game_exists(game_name):
                     await ctx.send(f"{game_name} already exist(s) in recommendations.")
                 else:
@@ -275,8 +275,8 @@ except ImportError as e:
         async def add_played_game_cmd(self, ctx: Any, game_info: str) -> None:
             # Mock played game addition
             if hasattr(self, 'db') and self.db:
-                self.db.add_played_game(canonical_name="Test Game", series_name="Test Series", 
-                                      release_year=2023, completion_status="completed")
+                self.db.add_played_game(canonical_name="Test Game", series_name="Test Series",
+                                        release_year=2023, completion_status="completed")
                 await ctx.send("Game has been catalogued in the played games database.")
 
         async def game_info_cmd(self, ctx: Any, identifier: str) -> None:
@@ -314,23 +314,27 @@ except ImportError as e:
         def route_query(self, query: str) -> tuple[str, Any]:
             # Implement proper query routing for tests
             query_lower = query.lower()
-            
+
             # Statistical queries
             if any(word in query_lower for word in ['most minutes', 'longest to complete', 'highest average']):
                 return ('statistical', None)
-            
+
             # Game status queries
-            if any(pattern in query_lower for pattern in ['has jonesy played', 'did captain jonesy play', 'has jonesyspacecat played']):
+            if any(
+                pattern in query_lower for pattern in [
+                    'has jonesy played',
+                    'did captain jonesy play',
+                    'has jonesyspacecat played']):
                 import re
                 match = re.search(r'(has|did).+(jonesy|captain jonesy|jonesyspacecat).+(played?|play)', query_lower)
                 return ('game_status', match)
-            
+
             # Genre queries
             if any(word in query_lower for word in ['horror games', 'rpg games']) and 'jonesy' in query_lower:
                 import re
                 match = re.search(r'what\s+(\w+)\s+games.+jonesy', query_lower)
                 return ('genre', match)
-            
+
             return ('unknown', None)
 
         def get_game_by_id_or_name(self, identifier: str) -> Any:
