@@ -47,7 +47,7 @@ jobs:
       run: |
         python3 -m pip install --upgrade pip
         pip3 install -r Live/requirements.txt
-        pip3 install -r tests/requirements-test.txt
+        pip3 install -r Live/tests/requirements-test.txt
     
     - name: Set up test environment variables
       env:
@@ -80,7 +80,7 @@ jobs:
       env:
         DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
       run: |
-        python3 -m pytest tests/test_database.py -v --tb=short --durations=10
+        python3 -m pytest Live/tests/test_database.py -v --tb=short --durations=10
     
     - name: Run command tests
       env:
@@ -89,7 +89,7 @@ jobs:
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}  # pyright: ignore
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # pyright: ignore
       run: |
-        python3 -m pytest tests/test_commands.py -v --tb=short --durations=10
+        python3 -m pytest Live/tests/test_commands.py -v --tb=short --durations=10
     
     - name: Run AI integration tests
       env:
@@ -97,7 +97,7 @@ jobs:
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}  # pyright: ignore
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # pyright: ignore
       run: |
-        python3 -m pytest tests/test_ai_integration.py -v --tb=short --durations=10
+        python3 -m pytest Live/tests/test_ai_integration.py -v --tb=short --durations=10
     
     - name: Run all tests with coverage
       env:
@@ -115,7 +115,7 @@ jobs:
         TWITCH_HISTORY_CHANNEL_ID: "123456792"
         YOUTUBE_HISTORY_CHANNEL_ID: "123456793"
       run: |
-        python3 -m pytest tests/ -v --cov=Live --cov-report=term-missing --cov-report=xml --tb=short
+        python3 -m pytest Live/tests/ -v --cov=Live --cov-report=term-missing --cov-report=xml --tb=short
     
     - name: Upload coverage to GitHub
       uses: actions/upload-artifact@v4
@@ -167,7 +167,7 @@ jobs:
     
     - name: Run Black code formatting check (non-blocking)
       run: |
-        black --check --diff Live/ tests/ || echo "⚠️  Black formatting issues detected (non-blocking) - consider running 'black Live/ tests/' locally"
+        black --check --diff Live/ Live/tests/ || echo "⚠️  Black formatting issues detected (non-blocking) - consider running 'black Live/ Live/tests/' locally"
     
     - name: Auto-fix import sorting with isort
       run: |
@@ -200,14 +200,14 @@ jobs:
         
         # Run isort to fix import order (without --check-only)
         echo "🔧 Running isort to auto-fix import ordering..."
-        isort Live/ tests/
+        isort Live/ Live/tests/
         
         # Check if there are any changes to commit
         if git diff --quiet; then
           echo "✅ No import sorting changes needed"
         else
           echo "📝 Import sorting changes detected, committing..."
-          git add Live/ tests/
+          git add Live/ Live/tests/
           git commit -m "chore: auto-fix import sorting with isort [skip ci]"
           
           # Push the changes back to the branch
@@ -237,14 +237,14 @@ jobs:
         
         # Run autopep8 to fix common PEP 8 violations automatically
         echo "🔧 Running autopep8 to auto-fix PEP 8 violations..."
-        autopep8 --in-place --aggressive --aggressive --recursive Live/ tests/
+        autopep8 --in-place --aggressive --aggressive --recursive Live/ Live/tests/
         
         # Check if there are any changes to commit
         if git diff --quiet; then
           echo "✅ No PEP 8 auto-fixes needed"
         else
           echo "📝 PEP 8 auto-fixes applied, committing..."
-          git add Live/ tests/
+          git add Live/ Live/tests/
           git commit -m "chore: auto-fix PEP 8 violations with autopep8 [skip ci]"
           
           # Push the changes back to the branch
@@ -254,7 +254,7 @@ jobs:
         
         # Run flake8 for remaining issues (non-blocking)
         echo "🔍 Running flake8 for code quality review..."
-        flake8 Live/ tests/ || echo "⚠️  Flake8 found remaining style issues (non-blocking) - review recommended"
+        flake8 Live/ Live/tests/ || echo "⚠️  Flake8 found remaining style issues (non-blocking) - review recommended"
     
     - name: Run mypy type checking
       run: |
