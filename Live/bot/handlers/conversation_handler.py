@@ -1251,7 +1251,7 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
         # Get bot instance with enhanced detection
         bot_instance = None
         import sys
-        
+
         # Strategy 1: Search through all modules for bot instance
         modules_copy = dict(sys.modules)  # Create a copy to avoid iteration issues
         for name, obj in modules_copy.items():

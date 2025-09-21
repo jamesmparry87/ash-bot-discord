@@ -18,11 +18,12 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import tasks
 
-from ..config import GUILD_ID, MEMBERS_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID
+from ..config import GAME_RECOMMENDATION_CHANNEL_ID, GUILD_ID, MEMBERS_CHANNEL_ID
 
 # Database and config imports
 try:
     from ..database import get_database
+
     # Get database instance
     db = get_database()  # type: ignore
     print("✅ Scheduled tasks: Database connection established")
@@ -1487,9 +1488,9 @@ async def _background_question_generation(current_question_count: int):
         
         # Check if AI handler is available
         try:
-            from ..handlers.ai_handler import generate_ai_trivia_question
-            from ..handlers.conversation_handler import start_jam_question_approval, jam_approval_conversations
             from ..config import JAM_USER_ID
+            from ..handlers.ai_handler import generate_ai_trivia_question
+            from ..handlers.conversation_handler import jam_approval_conversations, start_jam_question_approval
             print("✅ BACKGROUND GENERATION: AI handler and conversation handler loaded")
         except ImportError as import_error:
             print(f"❌ BACKGROUND GENERATION: Failed to import required modules - {import_error}")

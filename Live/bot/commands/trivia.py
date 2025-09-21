@@ -52,6 +52,7 @@ class TriviaCommands(commands.Cog):
             bool: True if content matches natural multiple choice format
         """
         import re
+
         # Split content into individual lines for analysis
         lines = content.strip().split('\n')
         
@@ -130,9 +131,10 @@ class TriviaCommands(commands.Cog):
     async def _generate_ai_question_fallback(self):
         """Enhanced AI question generation with fan-accessible questions"""
         try:
-            from ..handlers.ai_handler import call_ai_with_rate_limiting
             import random
-            
+
+            from ..handlers.ai_handler import call_ai_with_rate_limiting
+
             # Multiple question types for variety
             question_types = [
                 {
@@ -921,8 +923,8 @@ class TriviaCommands(commands.Cog):
     async def approval_status(self, ctx):
         """Check status of pending JAM approvals (moderators only)"""
         try:
-            from ..handlers.conversation_handler import jam_approval_conversations
             from ..config import JAM_USER_ID
+            from ..handlers.conversation_handler import jam_approval_conversations
             
             if JAM_USER_ID in jam_approval_conversations:
                 conversation = jam_approval_conversations[JAM_USER_ID]

@@ -2938,7 +2938,7 @@ class DatabaseManager:
         Returns: (score, match_type) where score is 0.0-1.0
         """
         import difflib
-        
+
         # Clean up inputs
         user_clean = user_answer.strip()
         correct_clean = correct_answer.strip()
@@ -3007,7 +3007,7 @@ class DatabaseManager:
     def _normalize_answer_for_matching(self, answer: str) -> str:
         """Normalize an answer for enhanced matching"""
         import re
-        
+
         # Remove common punctuation
         normalized = re.sub(r'[.,!?;:"\'()[\]{}]', '', answer)
         

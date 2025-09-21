@@ -426,7 +426,7 @@ def apply_ash_persona_to_ai_prompt(content_prompt: str, context_type: str = "gen
 def add_pops_arcade_personality_context(prompt: str) -> str:
     """Add special sarcastic personality context when responding to Pops Arcade"""
     import re
-    
+
     # Check if this is likely a pun or wordplay
     pun_indicators = [
         r'\b\w+\s+\w*pun\w*',  # Contains "pun"

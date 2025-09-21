@@ -64,7 +64,8 @@ except Exception as e:
 
 # Import the enhanced database manager with trivia methods
 try:
-    from bot.database_module import DatabaseManager as EnhancedDatabaseManager, get_database
+    from bot.database_module import DatabaseManager as EnhancedDatabaseManager
+    from bot.database_module import get_database
     db: Union[EnhancedDatabaseManager, 'DatabaseManager', None] = get_database()
     print("✅ Database manager loaded successfully")
 except ImportError as e:
@@ -410,7 +411,7 @@ async def initialize_modular_components():
 
     # 5. Start Scheduled Tasks
     try:
-        from bot.tasks.scheduled import start_all_scheduled_tasks, schedule_delayed_trivia_validation
+        from bot.tasks.scheduled import schedule_delayed_trivia_validation, start_all_scheduled_tasks
         start_all_scheduled_tasks()
         print("✅ Scheduled tasks started successfully")
         
@@ -888,7 +889,7 @@ async def is_trivia_answer_reply(message):
 def normalize_trivia_answer(answer_text: str) -> str:
     """Enhanced normalization for trivia answers with fuzzy matching support"""
     import re
-    
+
     # Start with the original text
     normalized = answer_text.strip()
     

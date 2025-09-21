@@ -434,7 +434,7 @@ async def handle_trivia_response(message):
 def normalize_trivia_answer(answer_text):
     """Normalize trivia answers for better matching"""
     import re
-    
+
     # Convert to lowercase
     normalized = answer_text.lower().strip()
     
@@ -592,7 +592,7 @@ async def on_ready():
 
     # Start scheduled tasks
     try:
-        from .tasks.scheduled import start_all_scheduled_tasks, schedule_delayed_trivia_validation
+        from .tasks.scheduled import schedule_delayed_trivia_validation, start_all_scheduled_tasks
         start_all_scheduled_tasks()
         print("✅ All scheduled tasks started (reminders, trivia, etc.)")
         
