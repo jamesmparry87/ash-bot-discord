@@ -3391,7 +3391,7 @@ class DatabaseManager:
     def _normalize_question_text(self, question_text: str) -> str:
         """Normalize question text for duplicate comparison"""
         import re
-        
+
         # Remove common variations that don't change meaning
         normalized = question_text.strip()
         
