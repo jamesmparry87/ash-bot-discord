@@ -167,7 +167,7 @@ jobs:
     
     - name: Run Black code formatting check (non-blocking)
       run: |
-        black --check --diff Live/ Live/tests/ || echo "⚠️  Black formatting issues detected (non-blocking) - consider running 'black Live/ Live/tests/' locally"
+        black --check --diff Live/ --exclude Live/tests/ || echo "⚠️  Black formatting issues detected (non-blocking) - consider running 'black Live/ --exclude Live/tests/' locally"
     
     - name: Auto-fix import sorting with isort
       run: |
@@ -200,14 +200,14 @@ jobs:
         
         # Run isort to fix import order (without --check-only)
         echo "🔧 Running isort to auto-fix import ordering..."
-        isort Live/ Live/tests/
+        isort Live/ --skip Live/tests/
         
         # Check if there are any changes to commit
         if git diff --quiet; then
           echo "✅ No import sorting changes needed"
         else
           echo "📝 Import sorting changes detected, committing..."
-          git add Live/ Live/tests/
+          git add Live/
           git commit -m "chore: auto-fix import sorting with isort [skip ci]"
           
           # Push the changes back to the branch
@@ -237,14 +237,14 @@ jobs:
         
         # Run autopep8 to fix common PEP 8 violations automatically
         echo "🔧 Running autopep8 to auto-fix PEP 8 violations..."
-        autopep8 --in-place --aggressive --aggressive --recursive Live/ Live/tests/
+        autopep8 --in-place --aggressive --aggressive --recursive Live/ --exclude Live/tests/
         
         # Check if there are any changes to commit
         if git diff --quiet; then
           echo "✅ No PEP 8 auto-fixes needed"
         else
           echo "📝 PEP 8 auto-fixes applied, committing..."
-          git add Live/ Live/tests/
+          git add Live/
           git commit -m "chore: auto-fix PEP 8 violations with autopep8 [skip ci]"
           
           # Push the changes back to the branch
@@ -254,7 +254,7 @@ jobs:
         
         # Run flake8 for remaining issues (non-blocking)
         echo "🔍 Running flake8 for code quality review..."
-        flake8 Live/ Live/tests/ || echo "⚠️  Flake8 found remaining style issues (non-blocking) - review recommended"
+        flake8 Live/ --exclude=Live/tests/ || echo "⚠️  Flake8 found remaining style issues (non-blocking) - review recommended"
     
     - name: Run mypy type checking
       run: |
