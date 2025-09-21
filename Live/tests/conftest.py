@@ -17,19 +17,45 @@ if live_path not in sys.path:
 # Import our modules after path setup
 try:
     import discord
-    from database import DatabaseManager  # type: ignore
     from discord.ext import commands
+    from database import DatabaseManager
+    IMPORTS_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Could not import modules: {e}")
     # Create mock types for when imports fail
-    DatabaseManager = type('DatabaseManager', (), {})  # type: ignore
-    discord = MagicMock()  # type: ignore
-    commands = MagicMock()  # type: ignore
-    discord.Intents = MagicMock
-    discord.Message = MagicMock
-    discord.Member = MagicMock
-    commands.Bot = MagicMock
-    commands.Context = MagicMock
+    from typing import Any
+    
+    class MockDatabaseManager:
+        def __init__(self) -> None:
+            pass
+    
+    class MockDiscord:
+        class Intents:
+            @staticmethod
+            def default() -> Any:
+                return MagicMock()
+            
+        class Message:
+            pass
+            
+        class Member:
+            pass
+            
+        class Embed:
+            def __init__(self, **kwargs: Any) -> None:
+                pass
+    
+    class MockCommands:
+        class Bot:
+            pass
+            
+        class Context:
+            pass
+    
+    DatabaseManager = MockDatabaseManager  # type: ignore
+    discord = MockDiscord()  # type: ignore
+    commands = MockCommands()  # type: ignore
+    IMPORTS_AVAILABLE = False
 
 # Test environment variables
 TEST_ENV_VARS = {
@@ -63,8 +89,13 @@ def mock_db() -> MagicMock:
     """Create a mock database manager for testing."""
     db = MagicMock(spec=DatabaseManager)
 
-    # Mock connection methods
-    db.get_connection.return_value = MagicMock()
+    # Mock connection methods - this was causing the AttributeError
+    mock_connection = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_cursor.__exit__ = MagicMock(return_value=None)
+    mock_connection.cursor.return_value = mock_cursor
+    db.get_connection.return_value = mock_connection
     db.init_database.return_value = None
 
     # Mock user strikes methods
@@ -94,6 +125,10 @@ def mock_db() -> MagicMock:
     # Mock config methods
     db.get_config_value.return_value = None
     db.set_config_value.return_value = None
+
+    # Mock trivia methods
+    db.get_active_trivia_session.return_value = None
+    db.submit_trivia_answer.return_value = 1
 
     return db
 
