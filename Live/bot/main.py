@@ -611,7 +611,7 @@ async def on_ready():
 
         # Initialize bot instance for scheduled tasks
         initialize_bot_instance(bot)
-        
+
         start_all_scheduled_tasks()
         print("✅ All scheduled tasks started (reminders, trivia, etc.)")
 
