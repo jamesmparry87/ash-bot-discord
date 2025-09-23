@@ -603,8 +603,12 @@ async def on_ready():
 
     # Start scheduled tasks
     try:
-        from .tasks.scheduled import initialize_bot_instance, schedule_delayed_trivia_validation, start_all_scheduled_tasks
-        
+        from .tasks.scheduled import (
+            initialize_bot_instance,
+            schedule_delayed_trivia_validation,
+            start_all_scheduled_tasks,
+        )
+
         # Initialize bot instance for scheduled tasks
         initialize_bot_instance(bot)
         
