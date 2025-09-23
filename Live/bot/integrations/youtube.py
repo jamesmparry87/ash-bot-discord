@@ -386,7 +386,12 @@ async def execute_youtube_auto_post(
         reminder: Dict[str, Any], auto_action_data: Dict[str, Any]) -> None:
     """Execute automatic YouTube post to youtube-uploads channel"""
     try:
-        from ..main import bot  # Import here to avoid circular imports
+        # Import the global bot instance from scheduled tasks
+        from ..tasks.scheduled import _bot_instance
+
+        if not _bot_instance:
+            print("❌ Bot instance not available for YouTube auto-post")
+            return
 
         youtube_url = auto_action_data.get("youtube_url")
         custom_message = auto_action_data.get("custom_message", "")
@@ -398,7 +403,7 @@ async def execute_youtube_auto_post(
 
         # Find youtube-uploads channel
         youtube_channel = None
-        for guild in bot.guilds:
+        for guild in _bot_instance.guilds:
             for channel in guild.text_channels:
                 if channel.name == "youtube-uploads":
                     youtube_channel = channel
@@ -415,7 +420,7 @@ async def execute_youtube_auto_post(
 
             # Send notification to user
             if user_id:
-                user = bot.get_user(int(user_id))
+                user = _bot_instance.get_user(int(user_id))
                 if user:
                     notification = f"⚡ **Auto-action executed successfully.** Your YouTube link has been posted to the youtube-uploads channel as scheduled. Mission parameters fulfilled."
                     await user.send(notification)

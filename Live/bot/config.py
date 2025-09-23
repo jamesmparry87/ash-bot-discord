@@ -7,7 +7,7 @@ import os
 
 # Discord Configuration
 TOKEN = os.getenv('DISCORD_TOKEN')
-GUILD_ID = 869525857562161182
+GUILD_ID = 869525857562161182 # Captain Jonesy's Discord Server ID
 JONESY_USER_ID = 651329927895056384
 JAM_USER_ID = 337833732901961729
 POPS_ARCADE_USER_ID = 371536135580549122  # Moderator Pops Arcade - special sarcastic responses
