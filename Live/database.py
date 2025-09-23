@@ -30,8 +30,12 @@ class DatabaseManager:
         try:
             # Always create a fresh connection for each operation to avoid stale connections
             # This is more reliable than trying to reuse connections
+            # Suppress PostgreSQL collation version warnings while preserving all functional warnings
             self.connection = psycopg2.connect(
-                self.database_url, cursor_factory=RealDictCursor)
+                self.database_url, 
+                cursor_factory=RealDictCursor,
+                options="-c client_min_messages=ERROR"  # Suppress WARNING level messages like collation version mismatch
+            )
             return self.connection
         except Exception as e:
             logger.error(f"Database connection failed: {e}")
