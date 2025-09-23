@@ -1,7 +1,8 @@
+import json
 import logging
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import psycopg2
 from psycopg2.extras import RealDictCursor, RealDictRow
@@ -265,6 +266,33 @@ class DatabaseManager:
                     DROP COLUMN IF EXISTS franchise_name
                 """)
 
+                # Create trivia_approval_sessions table for persistent approval system
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS trivia_approval_sessions (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        session_type VARCHAR(50) NOT NULL DEFAULT 'question_approval',
+                        conversation_step VARCHAR(50) NOT NULL,
+                        question_data JSONB NOT NULL,
+                        conversation_data JSONB DEFAULT '{}',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        expires_at TIMESTAMP,
+                        status VARCHAR(20) DEFAULT 'active',
+                        bot_restart_count INTEGER DEFAULT 0
+                    )
+                """)
+
+                # Create index for faster lookups
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_trivia_approval_user_status
+                    ON trivia_approval_sessions(user_id, status)
+                """)
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_trivia_approval_expires
+                    ON trivia_approval_sessions(expires_at, status)
+                """)
+
                 # Create index for faster searches
                 cur.execute("""
                     CREATE INDEX IF NOT EXISTS idx_played_games_canonical_name
@@ -293,7 +321,11 @@ class DatabaseManager:
                     "SELECT strike_count FROM strikes WHERE user_id = %s", (user_id,))
                 result = cur.fetchone()
                 if result:
-                    return int(cast(RealDictRow, result)['strike_count'])
+                    # Handle both RealDictCursor (dict-like) and regular cursor (tuple-like)
+                    try:
+                        return int(result['strike_count'])  # type: ignore
+                    except (TypeError, KeyError):
+                        return int(result[0])  # type: ignore  # Fallback to index access
                 return 0
         except Exception as e:
             logger.error(f"Error getting strikes for user {user_id}: {e}")
@@ -2965,7 +2997,7 @@ class DatabaseManager:
             logger.error(f"Error getting trivia session answers: {e}")
             return []
 
-    def _evaluate_trivia_answer(self, user_answer: str, correct_answer: str, question_type: str) -> tuple[float, str]:
+    def _evaluate_trivia_answer(self, user_answer: str, correct_answer: str, question_type: str) -> Tuple[float, str]:
         """
         Evaluate a trivia answer with enhanced fuzzy matching.
         Returns: (score, match_type) where score is 0.0-1.0
@@ -3742,6 +3774,230 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error logging announcement: {e}")
             return False
+
+    # --- Persistent Trivia Approval System ---
+
+    def create_approval_session(
+            self,
+            user_id: int,
+            session_type: str,
+            conversation_step: str,
+            question_data: Dict[str, Any],
+            conversation_data: Optional[Dict[str, Any]] = None,
+            timeout_minutes: int = 180  # 3 hours default
+    ) -> Optional[int]:
+        """Create a new persistent approval session"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                from datetime import datetime, timedelta
+                from zoneinfo import ZoneInfo
+
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+                expires_at = uk_now + timedelta(minutes=timeout_minutes)
+
+                cur.execute("""
+                    INSERT INTO trivia_approval_sessions (
+                        user_id, session_type, conversation_step, question_data,
+                        conversation_data, created_at, last_activity, expires_at, status
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'active')
+                    RETURNING id
+                """, (
+                    user_id, session_type, conversation_step,
+                    json.dumps(question_data),
+                    json.dumps(conversation_data or {}),
+                    uk_now, uk_now, expires_at
+                ))
+
+                result = cur.fetchone()
+                conn.commit()
+
+                if result:
+                    session_id = int(result[0])  # Fix type issue - use index access
+                    logger.info(f"Created persistent approval session {session_id} for user {user_id}")
+                    return session_id
+                return None
+
+        except Exception as e:
+            logger.error(f"Error creating approval session: {e}")
+            conn.rollback()
+            return None
+
+    def get_approval_session(self, user_id: int, session_type: str = 'question_approval') -> Optional[Dict[str, Any]]:
+        """Get active approval session for user"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT * FROM trivia_approval_sessions
+                    WHERE user_id = %s
+                    AND session_type = %s
+                    AND status = 'active'
+                    AND expires_at > CURRENT_TIMESTAMP
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """, (user_id, session_type))
+
+                result = cur.fetchone()
+                if result:
+                    session_dict = dict(result)
+                    # Parse JSON fields
+                    session_dict['question_data'] = json.loads(session_dict['question_data'])
+                    session_dict['conversation_data'] = json.loads(session_dict['conversation_data'])
+                    return session_dict
+
+                return None
+
+        except Exception as e:
+            logger.error(f"Error getting approval session for user {user_id}: {e}")
+            return None
+
+    def update_approval_session(
+            self,
+            session_id: int,
+            conversation_step: Optional[str] = None,
+            question_data: Optional[Dict[str, Any]] = None,
+            conversation_data: Optional[Dict[str, Any]] = None,
+            increment_restart_count: bool = False
+    ) -> bool:
+        """Update approval session data and activity"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
+
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+
+                # Build update query dynamically
+                set_clauses = ["last_activity = %s"]
+                params = [uk_now]
+
+                if conversation_step is not None:
+                    set_clauses.append("conversation_step = %s")
+                    params.append(conversation_step)  # type: ignore
+
+                if question_data is not None:
+                    set_clauses.append("question_data = %s")
+                    params.append(json.dumps(question_data))  # type: ignore
+
+                if conversation_data is not None:
+                    set_clauses.append("conversation_data = %s")
+                    params.append(json.dumps(conversation_data))  # type: ignore
+
+                if increment_restart_count:
+                    set_clauses.append("bot_restart_count = bot_restart_count + 1")
+
+                params.append(session_id)  # type: ignore
+
+                query = f"""
+                    UPDATE trivia_approval_sessions
+                    SET {', '.join(set_clauses)}
+                    WHERE id = %s AND status = 'active'
+                """
+
+                cur.execute(query, params)
+                conn.commit()
+
+                success = cur.rowcount > 0
+                if success:
+                    logger.info(f"Updated approval session {session_id}")
+                return success
+
+        except Exception as e:
+            logger.error(f"Error updating approval session {session_id}: {e}")
+            conn.rollback()
+            return False
+
+    def complete_approval_session(self, session_id: int, status: str = 'completed') -> bool:
+        """Mark approval session as completed or cancelled"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE trivia_approval_sessions
+                    SET status = %s, last_activity = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, (status, session_id))
+
+                conn.commit()
+                success = cur.rowcount > 0
+                if success:
+                    logger.info(f"Completed approval session {session_id} with status: {status}")
+                return success
+
+        except Exception as e:
+            logger.error(f"Error completing approval session {session_id}: {e}")
+            conn.rollback()
+            return False
+
+    def get_all_active_approval_sessions(self) -> List[Dict[str, Any]]:
+        """Get all active approval sessions (for restoration on startup)"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT * FROM trivia_approval_sessions
+                    WHERE status = 'active'
+                    AND expires_at > CURRENT_TIMESTAMP
+                    ORDER BY created_at ASC
+                """)
+
+                results = cur.fetchall()
+                sessions = []
+                for row in results:
+                    session_dict = dict(row)
+                    # Parse JSON fields
+                    session_dict['question_data'] = json.loads(session_dict['question_data'])
+                    session_dict['conversation_data'] = json.loads(session_dict['conversation_data'])
+                    sessions.append(session_dict)
+
+                return sessions
+
+        except Exception as e:
+            logger.error(f"Error getting active approval sessions: {e}")
+            return []
+
+    def cleanup_expired_approval_sessions(self) -> int:
+        """Clean up expired approval sessions"""
+        conn = self.get_connection()
+        if not conn:
+            return 0
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE trivia_approval_sessions
+                    SET status = 'expired'
+                    WHERE status = 'active'
+                    AND expires_at <= CURRENT_TIMESTAMP
+                """)
+
+                conn.commit()
+                expired_count = cur.rowcount
+                if expired_count > 0:
+                    logger.info(f"Cleaned up {expired_count} expired approval sessions")
+                return expired_count
+
+        except Exception as e:
+            logger.error(f"Error cleaning up expired approval sessions: {e}")
+            conn.rollback()
+            return 0
 
     # --- Missing Import/Enhancement Systems ---
 

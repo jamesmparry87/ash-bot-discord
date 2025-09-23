@@ -745,12 +745,12 @@ def filter_ai_response(response_text: str) -> str:
     return result
 
 
-def setup_ai_provider(
+async def setup_ai_provider_async(
         name: str,
         api_key: Optional[str],
         module: Optional[Any],
         is_available: bool) -> bool:
-    """Initialize and test an AI provider (Gemini only - Hugging Face disabled)."""
+    """Async initialize and test an AI provider (Gemini only - Hugging Face disabled)."""
     if not api_key:
         print(
             f"⚠️ {name.upper()}_API_KEY not found - {name.title()} features disabled")
@@ -765,29 +765,38 @@ def setup_ai_provider(
             module.configure(api_key=api_key)
             gemini_model = module.GenerativeModel('gemini-1.5-flash')
 
-            # Test with timeout to prevent hanging
+            # Test with timeout to prevent hanging - using proper async/await
             test_generation_config = {
                 "max_output_tokens": 10,
                 "temperature": 0.7
             }
 
-            # Add timeout wrapper for test
+            # Async test function using thread executor to avoid blocking
             import asyncio
+            import concurrent.futures
 
-            async def test_gemini():
+            def sync_test_gemini():
+                """Synchronous test for thread execution"""
                 return gemini_model.generate_content("Test", generation_config=test_generation_config)  # type: ignore
 
             try:
-                # Run with 10 second timeout for initial test
-                test_response = asyncio.get_event_loop().run_until_complete(
-                    asyncio.wait_for(test_gemini(), timeout=10.0)
-                )
+                # Use thread pool to run sync Gemini call without blocking event loop
+                loop = asyncio.get_event_loop()
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = loop.run_in_executor(executor, sync_test_gemini)
+                    test_response = await asyncio.wait_for(future, timeout=10.0)
 
                 if test_response and hasattr(test_response, 'text') and test_response.text:
-                    print(f"✅ Gemini AI test successful (with timeout protection)")
+                    print(f"✅ Gemini AI test successful (async with timeout protection)")
                     return True
+                else:
+                    print(f"⚠️ Gemini AI test response was empty or invalid")
+                    return False
             except asyncio.TimeoutError:
                 print(f"❌ Gemini AI test timed out after 10 seconds")
+                return False
+            except Exception as test_error:
+                print(f"❌ Gemini AI test failed: {test_error}")
                 return False
 
         elif name == "huggingface":
@@ -796,6 +805,38 @@ def setup_ai_provider(
             return False
 
         print(f"⚠️ {name.title()} AI setup complete but test response failed")
+        return False
+    except Exception as e:
+        print(f"❌ {name.title()} AI configuration failed: {e}")
+        return False
+
+
+def setup_ai_provider(
+        name: str,
+        api_key: Optional[str],
+        module: Optional[Any],
+        is_available: bool) -> bool:
+    """Synchronous wrapper for AI provider setup - used during module import."""
+    try:
+        # For module import time, just do basic setup without testing
+        # Full async testing will happen during initialize_ai_async()
+        if not api_key:
+            print(f"⚠️ {name.upper()}_API_KEY not found - {name.title()} features disabled")
+            return False
+        if not is_available or module is None:
+            print(f"⚠️ {name} module not available - {name.title()} features disabled")
+            return False
+
+        if name == "gemini":
+            global gemini_model
+            module.configure(api_key=api_key)
+            gemini_model = module.GenerativeModel('gemini-1.5-flash')
+            print(f"✅ Gemini AI configured (testing deferred to async initialization)")
+            return True
+        elif name == "huggingface":
+            print("⚠️ Hugging Face AI disabled to prevent deployment hangs")
+            return False
+
         return False
     except Exception as e:
         print(f"❌ {name.title()} AI configuration failed: {e}")
@@ -1621,11 +1662,54 @@ Write 2-4 sentences maximum. Make it engaging and user-focused."""
         return user_content  # Fallback to original content
 
 
-def initialize_ai():
-    """Initialize AI providers and set global status"""
+async def initialize_ai_async():
+    """Async initialize AI providers with proper testing and set global status"""
     global ai_enabled, ai_status_message, primary_ai, backup_ai
 
-    # Setup AI providers
+    print("🤖 Starting async AI initialization...")
+
+    try:
+        # Setup AI providers with async testing
+        gemini_ok = await setup_ai_provider_async(
+            "gemini", GEMINI_API_KEY, genai, GENAI_AVAILABLE)
+        huggingface_ok = await setup_ai_provider_async(
+            "huggingface", HUGGINGFACE_API_KEY, requests, HUGGINGFACE_AVAILABLE)
+
+        if gemini_ok:
+            primary_ai = "gemini"
+            print("✅ Gemini AI configured and tested successfully - set as primary AI")
+            if huggingface_ok:
+                backup_ai = "huggingface"
+                print("✅ Hugging Face AI configured successfully - set as backup AI")
+        elif huggingface_ok:
+            primary_ai = "huggingface"
+            print("✅ Hugging Face AI configured successfully - set as primary AI")
+
+        # Set AI status
+        if primary_ai:
+            ai_enabled = True
+            if backup_ai:
+                ai_status_message = f"Online ({primary_ai.title()} + {backup_ai.title()} backup)"
+            else:
+                ai_status_message = f"Online ({primary_ai.title()} only)"
+            print(f"✅ AI initialization complete: {ai_status_message}")
+        else:
+            ai_status_message = "No AI available"
+            print("❌ No AI systems available - all AI features disabled")
+
+    except Exception as e:
+        print(f"❌ Error during async AI initialization: {e}")
+        ai_enabled = False
+        ai_status_message = "AI initialization failed"
+
+
+def initialize_ai():
+    """Synchronous initialize AI providers - for backward compatibility"""
+    global ai_enabled, ai_status_message, primary_ai, backup_ai
+
+    print("🤖 Starting synchronous AI initialization (basic setup only)...")
+
+    # Setup AI providers without testing (testing done in async version)
     gemini_ok = setup_ai_provider(
         "gemini", GEMINI_API_KEY, genai, GENAI_AVAILABLE)
     huggingface_ok = setup_ai_provider(
@@ -1633,22 +1717,24 @@ def initialize_ai():
 
     if gemini_ok:
         primary_ai = "gemini"
-        print("✅ Gemini AI configured successfully - set as primary AI")
+        print("✅ Gemini AI configured (testing deferred)")
         if huggingface_ok:
             backup_ai = "huggingface"
-            print("✅ Hugging Face AI configured successfully - set as backup AI")
+            print("✅ Hugging Face AI configured - set as backup AI")
     elif huggingface_ok:
         primary_ai = "huggingface"
-        print("✅ Hugging Face AI configured successfully - set as primary AI")
+        print("✅ Hugging Face AI configured - set as primary AI")
 
-    # Set AI status
+    # Set basic AI status (will be updated by async init if called)
     if primary_ai:
         ai_enabled = True
         if backup_ai:
-            ai_status_message = f"Online ({primary_ai.title()} + {backup_ai.title()} backup)"
+            ai_status_message = f"Configured ({primary_ai.title()} + {backup_ai.title()} backup) - testing pending"
         else:
-            ai_status_message = f"Online ({primary_ai.title()} only)"
+            ai_status_message = f"Configured ({primary_ai.title()} only) - testing pending"
+        print(f"🔧 Basic AI setup complete: {ai_status_message}")
     else:
+        ai_enabled = False
         ai_status_message = "No AI available"
         print("❌ No AI systems available - all AI features disabled")
 
@@ -1707,6 +1793,35 @@ def handle_time_query(user_id: int) -> str:
 # Initialize AI on module import
 initialize_ai()
 
+# Deployment Safety: Add graceful degradation for missing dependencies
+
+
+def safe_initialize_ai():
+    """Safe AI initialization that won't crash on missing dependencies"""
+    try:
+        initialize_ai()
+        return True
+    except Exception as e:
+        print(f"⚠️ Safe AI initialization caught error: {e}")
+        global ai_enabled, ai_status_message
+        ai_enabled = False
+        ai_status_message = "AI initialization failed (safe mode)"
+        return False
+
+
+async def safe_initialize_ai_async():
+    """Safe async AI initialization that won't crash on missing dependencies"""
+    try:
+        await initialize_ai_async()
+        return True
+    except Exception as e:
+        print(f"⚠️ Safe async AI initialization caught error: {e}")
+        global ai_enabled, ai_status_message
+        ai_enabled = False
+        ai_status_message = "Async AI initialization failed (safe mode)"
+        return False
+
+
 # Export list for proper module interface
 __all__ = [
     'call_ai_with_rate_limiting',
@@ -1714,6 +1829,9 @@ __all__ = [
     'generate_ai_trivia_question',
     'create_ai_announcement_content',
     'initialize_ai',
+    'initialize_ai_async',
+    'safe_initialize_ai',
+    'safe_initialize_ai_async',
     'get_ai_status',
     'reset_daily_usage',
     'ai_enabled',

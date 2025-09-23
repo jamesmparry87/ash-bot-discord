@@ -41,12 +41,20 @@ except ImportError:
         print("⚠️ YouTube auto-post not available - integration not loaded")
         return None
 
-# Global state for trivia
+# Global state for trivia and bot instance
 active_trivia_sessions = {}
+_bot_instance = None  # Store the bot instance globally
 
 # Startup validation lock to prevent multiple concurrent validations
 _startup_validation_lock = False
 _startup_validation_completed = False
+
+
+def initialize_bot_instance(bot):
+    """Initialize the bot instance for scheduled tasks"""
+    global _bot_instance
+    _bot_instance = bot
+    print(f"✅ Scheduled tasks: Bot instance initialized ({bot.user.name if bot.user else 'Unknown'})")
 
 
 @tasks.loop(time=time(12, 0))  # Run at 12:00 PM (midday) every day
@@ -59,9 +67,11 @@ async def scheduled_games_update():
     print("🔄 Starting scheduled games update (Sunday midday)")
 
     try:
-        from ..main import bot  # Import here to avoid circular imports
+        if not _bot_instance:
+            print("❌ Bot instance not available for scheduled games update")
+            return
 
-        guild = bot.get_guild(GUILD_ID)
+        guild = _bot_instance.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for scheduled update")
             return
@@ -98,9 +108,11 @@ async def scheduled_midnight_restart():
         f"🔄 Midnight Pacific Time restart initiated at {pt_now.strftime('%Y-%m-%d %H:%M:%S PT')}")
 
     try:
-        from ..main import bot  # Import here to avoid circular imports
+        if not _bot_instance:
+            print("❌ Bot instance not available for scheduled midnight restart")
+            return
 
-        guild = bot.get_guild(GUILD_ID)
+        guild = _bot_instance.get_guild(GUILD_ID)
         if guild:
             # Find mod channel
             mod_channel = None
@@ -115,7 +127,7 @@ async def scheduled_midnight_restart():
                 )
 
         # Graceful shutdown
-        await bot.close()
+        await _bot_instance.close()
 
     except Exception as e:
         print(f"❌ Error in scheduled_midnight_restart: {e}")
@@ -218,11 +230,10 @@ async def check_due_reminders():
                     break
 
             if not bot:
-                # Fallback: try direct import
-                from ..main import bot as main_bot
-                if main_bot and hasattr(main_bot, 'user') and main_bot.user:
-                    bot = main_bot
-                    print(f"✅ Bot instance imported: {bot.user.name if bot.user else 'Unknown'}")
+                # Fallback: use global bot instance
+                bot = _bot_instance
+                if bot and hasattr(bot, 'user') and bot.user:
+                    print(f"✅ Bot instance from global: {bot.user.name if bot.user else 'Unknown'}")
                 else:
                     print("❌ Bot instance not available for reminder delivery")
                     return
@@ -349,9 +360,12 @@ async def scheduled_ai_refresh():
             # Try to notify JAM that AI is back online after quota issues
             try:
                 from ..config import JAM_USER_ID
-                from ..main import bot
 
-                user = await bot.fetch_user(JAM_USER_ID)
+                if not _bot_instance:
+                    print("⚠️ Bot instance not available for AI refresh notification")
+                    return
+
+                user = await _bot_instance.fetch_user(JAM_USER_ID)
                 if user:
                     await user.send(
                         f"🤖 **AI Module Refresh Complete**\n"
@@ -371,9 +385,12 @@ async def scheduled_ai_refresh():
         # Try to notify JAM of refresh failure
         try:
             from ..config import JAM_USER_ID
-            from ..main import bot
 
-            user = await bot.fetch_user(JAM_USER_ID)
+            if not _bot_instance:
+                print("⚠️ Bot instance not available for AI refresh error notification")
+                return
+
+            user = await _bot_instance.fetch_user(JAM_USER_ID)
             if user:
                 await user.send(
                     f"⚠️ **AI Module Refresh Failed**\n"
@@ -398,23 +415,26 @@ async def monday_morning_greeting():
     print(f"🌅 Monday morning greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
 
     try:
-        from ..main import bot  # Import here to avoid circular imports
+        if not _bot_instance:
+            print("❌ Bot instance not available for Monday morning greeting")
+            await notify_scheduled_message_error("Monday morning greeting", "Bot instance not available", uk_now)
+            return
 
-        guild = bot.get_guild(GUILD_ID)
+        guild = _bot_instance.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for Monday morning greeting")
             await notify_scheduled_message_error("Monday morning greeting", "Guild not found", uk_now)
             return
 
         # Find chit-chat channel
-        chit_chat_channel = bot.get_channel(869528946725748766)
+        chit_chat_channel = _bot_instance.get_channel(869528946725748766)
         if not chit_chat_channel or not isinstance(chit_chat_channel, discord.TextChannel):
             print("❌ Chit-chat channel not found for Monday morning greeting")
             await notify_scheduled_message_error("Monday morning greeting", "Chit-chat channel not found or inaccessible", uk_now)
             return
 
         # Check bot permissions
-        bot_member = guild.get_member(bot.user.id) if bot.user else None
+        bot_member = guild.get_member(_bot_instance.user.id) if _bot_instance.user else None
         if not bot_member:
             print("❌ Bot member not found in guild for permission check")
             await notify_scheduled_message_error("Monday morning greeting", "Bot member not found in guild", uk_now)
@@ -462,15 +482,17 @@ async def tuesday_trivia_greeting():
     print(f"🧠 Tuesday trivia greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
 
     try:
-        from ..main import bot  # Import here to avoid circular imports
+        if not _bot_instance:
+            print("❌ Bot instance not available for Tuesday trivia greeting")
+            return
 
-        guild = bot.get_guild(GUILD_ID)
+        guild = _bot_instance.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for Tuesday trivia greeting")
             return
 
         # Find members channel
-        members_channel = bot.get_channel(MEMBERS_CHANNEL_ID)
+        members_channel = _bot_instance.get_channel(MEMBERS_CHANNEL_ID)
         if not members_channel or not isinstance(members_channel, discord.TextChannel):
             print("❌ Members channel not found for Tuesday trivia greeting")
             return
@@ -508,15 +530,17 @@ async def friday_morning_greeting():
     print(f"📅 Friday morning greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
 
     try:
-        from ..main import bot  # Import here to avoid circular imports
+        if not _bot_instance:
+            print("❌ Bot instance not available for Friday morning greeting")
+            return
 
-        guild = bot.get_guild(GUILD_ID)
+        guild = _bot_instance.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for Friday morning greeting")
             return
 
         # Find chit-chat channel
-        chit_chat_channel = bot.get_channel(869528946725748766)
+        chit_chat_channel = _bot_instance.get_channel(869528946725748766)
         if not chit_chat_channel or not isinstance(chit_chat_channel, discord.TextChannel):
             print("❌ Chit-chat channel not found for Friday morning greeting")
             return
@@ -581,9 +605,12 @@ async def pre_trivia_approval():
                         print("✅ Emergency question sent to JAM for approval")
                         # Send urgent notification to JAM
                         from ..config import JAM_USER_ID
-                        from ..main import bot
 
-                        user = await bot.fetch_user(JAM_USER_ID)
+                        if not _bot_instance:
+                            print("⚠️ Bot instance not available for emergency trivia notification")
+                            return
+
+                        user = await _bot_instance.fetch_user(JAM_USER_ID)
                         if user:
                             await user.send(
                                 f"🚨 **URGENT: Emergency Trivia Question Generated**\n\n"
@@ -627,9 +654,12 @@ async def pre_trivia_approval():
         # Try to notify JAM of the error
         try:
             from ..config import JAM_USER_ID
-            from ..main import bot
 
-            user = await bot.fetch_user(JAM_USER_ID)
+            if not _bot_instance:
+                print("⚠️ Bot instance not available for pre-trivia error notification")
+                return
+
+            user = await _bot_instance.fetch_user(JAM_USER_ID)
             if user:
                 await user.send(
                     f"⚠️ **Pre-Trivia Approval Error**\n\n"
@@ -651,18 +681,46 @@ async def cleanup_game_recommendations():
 
         print(f"🧹 Game recommendation cleanup starting at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
 
-        from ..main import bot  # Import here to avoid circular imports
+        # Improved bot instance checking with multiple fallback methods
+        bot_instance = None
 
-        guild = bot.get_guild(GUILD_ID)
+        # Method 1: Use global _bot_instance if available
+        if _bot_instance and hasattr(_bot_instance, 'user') and _bot_instance.user:
+            bot_instance = _bot_instance
+            print("✅ Using global bot instance for cleanup")
+        else:
+            # Method 2: Try to find bot instance from imported modules
+            print("🔍 Global bot instance not available, searching modules...")
+            import sys
+            for module_name, module in sys.modules.items():
+                if hasattr(module, 'bot') and hasattr(module.bot, 'user') and module.bot.user:
+                    bot_instance = module.bot
+                    print(f"✅ Found bot instance in module: {module_name}")
+                    break
+
+            if not bot_instance:
+                print("⚠️ Bot instance not available for game recommendation cleanup - will retry next hour")
+                print("💡 This is normal during bot startup or if scheduled tasks start before bot is ready")
+                return
+
+        guild = bot_instance.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for game recommendation cleanup")
             return
 
         # Get the game recommendation channel
-        game_rec_channel = bot.get_channel(GAME_RECOMMENDATION_CHANNEL_ID)
+        game_rec_channel = bot_instance.get_channel(GAME_RECOMMENDATION_CHANNEL_ID)
         if not game_rec_channel or not isinstance(game_rec_channel, discord.TextChannel):
             print("❌ Game recommendation channel not found for cleanup")
             return
+
+        # Check bot permissions in the channel
+        bot_member = guild.get_member(bot_instance.user.id) if bot_instance.user else None
+        if bot_member:
+            permissions = game_rec_channel.permissions_for(bot_member)
+            if not permissions.manage_messages:
+                print("⚠️ Bot lacks 'Manage Messages' permission for game recommendation cleanup")
+                return
 
         deleted_count = 0
         checked_count = 0
@@ -699,6 +757,8 @@ async def cleanup_game_recommendations():
 
     except Exception as e:
         print(f"❌ Error in cleanup_game_recommendations: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # Run at 11:00 AM UK time every Tuesday
@@ -716,9 +776,12 @@ async def trivia_tuesday():
 
     try:
         from ..handlers.ai_handler import generate_ai_trivia_question
-        from ..main import bot  # Import here to avoid circular imports
 
-        guild = bot.get_guild(GUILD_ID)
+        if not _bot_instance:
+            print("❌ Bot instance not available for Trivia Tuesday")
+            return
+
+        guild = _bot_instance.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for Trivia Tuesday")
             return
@@ -785,8 +848,11 @@ async def trivia_tuesday():
         print(f"❌ Error in trivia_tuesday task: {e}")
         # Try to send error to mod channel
         try:
-            from ..main import bot
-            guild = bot.get_guild(GUILD_ID)
+            if not _bot_instance:
+                print("⚠️ Bot instance not available for Trivia Tuesday error notification")
+                return
+
+            guild = _bot_instance.get_guild(GUILD_ID)
             if guild:
                 mod_channel = None
                 for channel in guild.text_channels:
@@ -815,7 +881,9 @@ async def schedule_trivia_answer_reveal(
 async def reveal_trivia_answer(session_id: int):
     """Reveal the answer for a trivia session"""
     try:
-        from ..main import bot
+        if not _bot_instance:
+            print("❌ Bot instance not available for trivia answer reveal")
+            return
 
         if session_id not in active_trivia_sessions:
             return
@@ -824,7 +892,7 @@ async def reveal_trivia_answer(session_id: int):
         question_data = session_data['question_data']
         channel_id = session_data['channel_id']
 
-        channel = bot.get_channel(channel_id)
+        channel = _bot_instance.get_channel(channel_id)
         if not channel or not isinstance(channel, discord.TextChannel):
             return
 
@@ -877,9 +945,12 @@ async def notify_scheduled_message_error(task_name: str, error_message: str, tim
     """Notify JAM of scheduled message errors"""
     try:
         from ..config import JAM_USER_ID
-        from ..main import bot
 
-        user = await bot.fetch_user(JAM_USER_ID)
+        if not _bot_instance:
+            print("❌ Bot instance not available for scheduled message error notification")
+            return
+
+        user = await _bot_instance.fetch_user(JAM_USER_ID)
         if user:
             error_notification = (
                 f"⚠️ **Scheduled Message Error**\n\n"
@@ -912,12 +983,8 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
                 break
 
         if not bot:
-            # Fallback: try direct import
-            try:
-                from ..main import bot as main_bot
-                bot = main_bot
-            except ImportError:
-                pass
+            # Fallback: use global bot instance
+            bot = _bot_instance
 
         if not bot:
             raise RuntimeError("Bot instance not available for reminder delivery")
@@ -1011,7 +1078,9 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
 async def execute_auto_action(reminder: Dict[str, Any]) -> None:
     """Execute the auto-action for a reminder"""
     try:
-        from ..main import bot
+        if not _bot_instance:
+            print("❌ Bot instance not available for auto-action execution")
+            return
 
         auto_action_type = reminder.get("auto_action_type")
         auto_action_data = reminder.get("auto_action_data", {})
@@ -1031,7 +1100,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         # channel after reminder delivery
         if delivery_channel_id:
             try:
-                channel = bot.get_channel(delivery_channel_id)
+                channel = _bot_instance.get_channel(delivery_channel_id)
                 if channel and isinstance(channel, discord.TextChannel):
                     # Check messages since reminder delivery for mod
                     # intervention
@@ -1053,7 +1122,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
                     f"⚠️ Could not check for moderator intervention: {check_e}")
 
         # Get the guild and member
-        guild = bot.get_guild(GUILD_ID)
+        guild = _bot_instance.get_guild(GUILD_ID)
         if not guild:
             print(f"❌ Could not find guild for auto-action")
             return
@@ -1098,7 +1167,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         # Log the auto-action in the channel where the reminder was set
         if delivery_channel_id:
             try:
-                channel = bot.get_channel(delivery_channel_id)
+                channel = _bot_instance.get_channel(delivery_channel_id)
                 if channel and isinstance(channel, discord.TextChannel):
                     log_message = f"⚡ **Auto-action executed:** {member.mention} has been {action_result}.\n**Reason:** {reason}\n**Reminder ID:** {reminder['id']}"
                     await channel.send(log_message)
@@ -1154,21 +1223,23 @@ async def _delayed_trivia_validation():
         # Try to notify JAM of the error
         try:
             from ..config import JAM_USER_ID
-            from ..main import bot
 
-            if hasattr(bot, 'fetch_user'):  # Check if bot is available
-                user = await bot.fetch_user(JAM_USER_ID)
-                if user:
-                    error_message = (
-                        f"❌ **Delayed Trivia Validation Failed**\n\n"
-                        f"The 2-minute delayed trivia validation encountered an error:\n"
-                        f"```\n{str(e)}\n```\n\n"
-                        f"**Impact:** Trivia Tuesday may not have enough questions available.\n"
-                        f"**Action Required:** Manual trivia question submission may be needed.\n\n"
-                        f"*Please check the bot logs for detailed error information.*"
-                    )
-                    await user.send(error_message)
-                    print("✅ DELAYED TRIVIA VALIDATION: Error notification sent to JAM")
+            if not _bot_instance:
+                print("❌ Bot instance not available for delayed trivia validation error notification")
+                return
+
+            user = await _bot_instance.fetch_user(JAM_USER_ID)
+            if user:
+                error_message = (
+                    f"❌ **Delayed Trivia Validation Failed**\n\n"
+                    f"The 2-minute delayed trivia validation encountered an error:\n"
+                    f"```\n{str(e)}\n```\n\n"
+                    f"**Impact:** Trivia Tuesday may not have enough questions available.\n"
+                    f"**Action Required:** Manual trivia question submission may be needed.\n\n"
+                    f"*Please check the bot logs for detailed error information.*"
+                )
+                await user.send(error_message)
+                print("✅ DELAYED TRIVIA VALIDATION: Error notification sent to JAM")
         except Exception:
             print("❌ DELAYED TRIVIA VALIDATION: Failed to send error notification to JAM")
 
@@ -1176,50 +1247,50 @@ async def _delayed_trivia_validation():
 def start_all_scheduled_tasks():
     """Start all scheduled tasks"""
     try:
-        if not scheduled_games_update.is_running():
-            scheduled_games_update.start()
+        if not scheduled_games_update.is_running():  # type: ignore
+            scheduled_games_update.start()  # type: ignore
             print("✅ Scheduled games update task started (Sunday midday)")
 
-        if not scheduled_midnight_restart.is_running():
-            scheduled_midnight_restart.start()
+        if not scheduled_midnight_restart.is_running():  # type: ignore
+            scheduled_midnight_restart.start()  # type: ignore
             print("✅ Scheduled midnight restart task started (00:00 PT daily)")
 
         # Start reminder background tasks
-        if not check_due_reminders.is_running():
-            check_due_reminders.start()
+        if not check_due_reminders.is_running():  # type: ignore
+            check_due_reminders.start()  # type: ignore
             print("✅ Reminder checking task started (every minute)")
 
-        if not check_auto_actions.is_running():
-            check_auto_actions.start()
+        if not check_auto_actions.is_running():  # type: ignore
+            check_auto_actions.start()  # type: ignore
             print("✅ Auto-action checking task started (every minute)")
 
-        if not trivia_tuesday.is_running():
-            trivia_tuesday.start()
+        if not trivia_tuesday.is_running():  # type: ignore
+            trivia_tuesday.start()  # type: ignore
             print("✅ Trivia Tuesday task started (11:00 AM UK time, Tuesdays)")
 
-        if not scheduled_ai_refresh.is_running():
-            scheduled_ai_refresh.start()
+        if not scheduled_ai_refresh.is_running():  # type: ignore
+            scheduled_ai_refresh.start()  # type: ignore
             print("✅ AI module refresh task started (8:05 AM UK time daily)")
 
         # Start greeting tasks
-        if not monday_morning_greeting.is_running():
-            monday_morning_greeting.start()
+        if not monday_morning_greeting.is_running():  # type: ignore
+            monday_morning_greeting.start()  # type: ignore
             print("✅ Monday morning greeting task started (9:00 AM UK time, Mondays)")
 
-        if not tuesday_trivia_greeting.is_running():
-            tuesday_trivia_greeting.start()
+        if not tuesday_trivia_greeting.is_running():  # type: ignore
+            tuesday_trivia_greeting.start()  # type: ignore
             print("✅ Tuesday trivia greeting task started (9:00 AM UK time, Tuesdays)")
 
-        if not friday_morning_greeting.is_running():
-            friday_morning_greeting.start()
+        if not friday_morning_greeting.is_running():  # type: ignore
+            friday_morning_greeting.start()  # type: ignore
             print("✅ Friday morning greeting task started (9:00 AM UK time, Fridays)")
 
-        if not pre_trivia_approval.is_running():
-            pre_trivia_approval.start()
+        if not pre_trivia_approval.is_running():  # type: ignore
+            pre_trivia_approval.start()  # type: ignore
             print("✅ Pre-trivia approval task started (10:00 AM UK time, Tuesdays)")
 
-        if not cleanup_game_recommendations.is_running():
-            cleanup_game_recommendations.start()
+        if not cleanup_game_recommendations.is_running():  # type: ignore
+            cleanup_game_recommendations.start()  # type: ignore
             print("✅ Game recommendation cleanup task started (every hour)")
 
     except Exception as e:
@@ -1319,9 +1390,12 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
 
                             # Send urgent notification to JAM
                             from ..config import JAM_USER_ID
-                            from ..main import bot
 
-                            user = await bot.fetch_user(JAM_USER_ID)
+                            if not _bot_instance:
+                                print("❌ Bot instance not available for emergency approval notification")
+                                return
+
+                            user = await _bot_instance.fetch_user(JAM_USER_ID)
                             if user:
                                 urgent_message = (
                                     f"🚨 **URGENT: BUILD DAY EMERGENCY APPROVAL**\n\n"
@@ -1370,9 +1444,12 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
 
                     # Send urgent build day notification
                     from ..config import JAM_USER_ID
-                    from ..main import bot
 
-                    user = await bot.fetch_user(JAM_USER_ID)
+                    if not _bot_instance:
+                        print("❌ Bot instance not available for emergency build day notification")
+                        return
+
+                    user = await _bot_instance.fetch_user(JAM_USER_ID)
                     if user:
                         urgent_message = (
                             f"🚨 **URGENT: BUILD DAY EMERGENCY APPROVAL**\n\n"
@@ -1582,8 +1659,11 @@ async def _background_question_generation(current_question_count: int):
 
                         # Send a brief status update to JAM
                         try:
-                            from ..main import bot
-                            user = await bot.fetch_user(JAM_USER_ID)
+                            if not _bot_instance:
+                                print("⚠️ Bot instance not available for sequential approval status update")
+                                continue
+
+                            user = await _bot_instance.fetch_user(JAM_USER_ID)
                             if user and question['number'] < len(question_queue):
                                 remaining = len(question_queue) - question['number']
                                 await user.send(f"📋 **Sequential Approval Status**: {remaining} more question(s) pending review after this one.")
@@ -1606,10 +1686,12 @@ async def _background_question_generation(current_question_count: int):
 
             # Send final summary notification to JAM
             try:
-                from ..main import bot
+                if not _bot_instance:
+                    print("⚠️ Bot instance not available for final summary notification")
+                    return
 
-                if hasattr(bot, 'fetch_user') and bot.user:  # Check if bot is available and ready
-                    user = await bot.fetch_user(JAM_USER_ID)
+                if hasattr(_bot_instance, 'fetch_user') and _bot_instance.user:  # Check if bot is available and ready
+                    user = await _bot_instance.fetch_user(JAM_USER_ID)
                     if user:
                         summary_message = (
                             f"🧠 **Sequential Question Approval Complete**\n\n"

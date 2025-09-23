@@ -603,7 +603,15 @@ async def on_ready():
 
     # Start scheduled tasks
     try:
-        from .tasks.scheduled import schedule_delayed_trivia_validation, start_all_scheduled_tasks
+        from .tasks.scheduled import (
+            initialize_bot_instance,
+            schedule_delayed_trivia_validation,
+            start_all_scheduled_tasks,
+        )
+
+        # Initialize bot instance for scheduled tasks
+        initialize_bot_instance(bot)
+
         start_all_scheduled_tasks()
         print("✅ All scheduled tasks started (reminders, trivia, etc.)")
 
@@ -615,13 +623,42 @@ async def on_ready():
         import traceback
         traceback.print_exc()
 
-    # Initialize AI handlers (if available)
+    # Initialize AI handlers (if available) - use safe async initialization for deployment reliability
     try:
-        from .handlers.ai_handler import initialize_ai
-        initialize_ai()
-        print("✅ AI handler initialized")
+        from .handlers.ai_handler import safe_initialize_ai_async
+        success = await safe_initialize_ai_async()
+        if success:
+            print("✅ AI handler initialized with safe async testing")
+        else:
+            print("⚠️ AI handler async initialization failed, trying sync fallback")
+            # Fallback to safe synchronous initialization
+            try:
+                from .handlers.ai_handler import safe_initialize_ai
+                sync_success = safe_initialize_ai()
+                if sync_success:
+                    print("✅ AI handler initialized with safe sync fallback")
+                else:
+                    print("⚠️ AI handler initialization failed - operating in safe mode")
+            except Exception as sync_e:
+                print(f"⚠️ AI handler sync fallback failed: {sync_e} - continuing without AI")
     except Exception as e:
-        print(f"⚠️ AI handler initialization skipped: {e}")
+        print(f"⚠️ Critical AI handler error: {e} - continuing without AI features")
+
+    # Restore persistent approval sessions (deployment-safe trivia approval)
+    try:
+        from .handlers.conversation_handler import restore_active_approval_sessions
+        restoration_result = await restore_active_approval_sessions(bot)
+        if restoration_result.get("success", False):
+            restored_count = restoration_result.get("restored_sessions", 0)
+            if restored_count > 0:
+                print(f"✅ Successfully restored {restored_count} approval session(s) with user notifications")
+            else:
+                print("✅ No approval sessions needed restoration")
+        else:
+            error_msg = restoration_result.get("error", "Unknown error")
+            print(f"⚠️ Approval session restoration failed: {error_msg}")
+    except Exception as e:
+        print(f"⚠️ Error restoring approval sessions: {e} - continuing without restoration")
 
 
 @bot.event
@@ -964,6 +1001,97 @@ async def ash_status(ctx):
 
     except Exception as e:
         await ctx.send(f"❌ **System diagnostic error:** {str(e)}")
+
+# --- Persistent Approval Session Restoration ---
+
+
+async def restore_persistent_approval_sessions():
+    """Restore active approval sessions from database after bot restart"""
+    try:
+        # Get all active approval sessions from database
+        active_sessions = db.get_all_active_approval_sessions()
+
+        if not active_sessions:
+            print("✅ No active approval sessions to restore")
+            return
+
+        print(f"🔄 Restoring {len(active_sessions)} active approval sessions...")
+
+        restored_count = 0
+        for session in active_sessions:
+            try:
+                user_id = session['user_id']
+                session_id = session['id']
+                restart_count = session.get('bot_restart_count', 0)
+
+                # Update restart count in database
+                db.update_approval_session(session_id, increment_restart_count=True)
+
+                # Only restore JAM approval sessions for now
+                if user_id == JAM_USER_ID and session['session_type'] == 'question_approval':
+                    # Import conversation handler
+                    # Restore conversation state to memory
+                    from datetime import datetime
+                    from zoneinfo import ZoneInfo
+
+                    from .handlers.conversation_handler import jam_approval_conversations
+
+                    uk_now = datetime.now(ZoneInfo("Europe/London"))
+                    jam_approval_conversations[user_id] = {
+                        'step': session['conversation_step'],
+                        'data': session['conversation_data'].copy(),
+                        'last_activity': uk_now,
+                        'initiated_at': session['created_at'],
+                        'session_id': session_id,  # Track database session
+                        'restart_count': restart_count + 1
+                    }
+
+                    # Add question data to conversation data
+                    jam_approval_conversations[user_id]['data']['question_data'] = session['question_data']
+
+                    # Send restoration message to JAM
+                    try:
+                        jam_user = await bot.fetch_user(JAM_USER_ID)
+                        if jam_user:
+                            question_text = session['question_data'].get('question_text', 'Unknown question')
+
+                            restoration_msg = (
+                                f"🔄 **APPROVAL SESSION RESTORED**\n\n"
+                                f"Your trivia question approval session has been restored after a system restart.\n\n"
+                                f"**Restart #{restart_count + 1}** - Session continues seamlessly\n\n"
+                                f"**Question:** {question_text[:100]}{'...' if len(question_text) > 100 else ''}\n\n"
+                                f"📚 **Available Actions:**\n"
+                                f"**1.** ✅ **Approve** - Add this question to the database as-is\n"
+                                f"**2.** ✏️ **Modify** - Edit the question before approving\n"
+                                f"**3.** ❌ **Reject** - Discard this question and generate an alternative\n\n"
+                                f"*Your approval session was safely preserved during the system update.*"
+                            )
+
+                            await jam_user.send(restoration_msg)
+                            print(f"✅ Restored JAM approval session {session_id} and notified user")
+                            restored_count += 1
+                        else:
+                            print(f"⚠️ Could not fetch JAM user to notify about session {session_id} restoration")
+                    except Exception as notify_error:
+                        print(f"⚠️ Could not notify JAM about session {session_id} restoration: {notify_error}")
+                        # Still count as restored since the session is in memory
+                        restored_count += 1
+                else:
+                    print(f"⚠️ Unsupported session type for restoration: {session['session_type']} for user {user_id}")
+
+            except Exception as session_error:
+                print(f"❌ Error restoring session {session.get('id', 'unknown')}: {session_error}")
+                continue
+
+        if restored_count > 0:
+            print(f"✅ Successfully restored {restored_count}/{len(active_sessions)} approval sessions")
+        else:
+            print("⚠️ No approval sessions were successfully restored")
+
+    except Exception as e:
+        print(f"❌ Error during approval session restoration: {e}")
+        import traceback
+        traceback.print_exc()
 
 # --- Cleanup Functions ---
 
