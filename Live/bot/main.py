@@ -1029,11 +1029,11 @@ async def restore_persistent_approval_sessions():
                 # Only restore JAM approval sessions for now
                 if user_id == JAM_USER_ID and session['session_type'] == 'question_approval':
                     # Import conversation handler
-                    from .handlers.conversation_handler import jam_approval_conversations
-                    
                     # Restore conversation state to memory
                     from datetime import datetime
                     from zoneinfo import ZoneInfo
+
+                    from .handlers.conversation_handler import jam_approval_conversations
                     
                     uk_now = datetime.now(ZoneInfo("Europe/London"))
                     jam_approval_conversations[user_id] = {
