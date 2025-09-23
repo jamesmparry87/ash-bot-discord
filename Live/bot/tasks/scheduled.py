@@ -681,20 +681,46 @@ async def cleanup_game_recommendations():
 
         print(f"🧹 Game recommendation cleanup starting at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
 
-        if not _bot_instance:
-            print("❌ Bot instance not available for game recommendation cleanup")
-            return
+        # Improved bot instance checking with multiple fallback methods
+        bot_instance = None
+        
+        # Method 1: Use global _bot_instance if available
+        if _bot_instance and hasattr(_bot_instance, 'user') and _bot_instance.user:
+            bot_instance = _bot_instance
+            print("✅ Using global bot instance for cleanup")
+        else:
+            # Method 2: Try to find bot instance from imported modules
+            print("🔍 Global bot instance not available, searching modules...")
+            import sys
+            for module_name, module in sys.modules.items():
+                if hasattr(module, 'bot') and hasattr(module.bot, 'user') and module.bot.user:
+                    bot_instance = module.bot
+                    print(f"✅ Found bot instance in module: {module_name}")
+                    break
+            
+            if not bot_instance:
+                print("⚠️ Bot instance not available for game recommendation cleanup - will retry next hour")
+                print("💡 This is normal during bot startup or if scheduled tasks start before bot is ready")
+                return
 
-        guild = _bot_instance.get_guild(GUILD_ID)
+        guild = bot_instance.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for game recommendation cleanup")
             return
 
         # Get the game recommendation channel
-        game_rec_channel = _bot_instance.get_channel(GAME_RECOMMENDATION_CHANNEL_ID)
+        game_rec_channel = bot_instance.get_channel(GAME_RECOMMENDATION_CHANNEL_ID)
         if not game_rec_channel or not isinstance(game_rec_channel, discord.TextChannel):
             print("❌ Game recommendation channel not found for cleanup")
             return
+
+        # Check bot permissions in the channel
+        bot_member = guild.get_member(bot_instance.user.id) if bot_instance.user else None
+        if bot_member:
+            permissions = game_rec_channel.permissions_for(bot_member)
+            if not permissions.manage_messages:
+                print("⚠️ Bot lacks 'Manage Messages' permission for game recommendation cleanup")
+                return
 
         deleted_count = 0
         checked_count = 0
@@ -731,6 +757,8 @@ async def cleanup_game_recommendations():
 
     except Exception as e:
         print(f"❌ Error in cleanup_game_recommendations: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # Run at 11:00 AM UK time every Tuesday
@@ -1219,50 +1247,50 @@ async def _delayed_trivia_validation():
 def start_all_scheduled_tasks():
     """Start all scheduled tasks"""
     try:
-        if not scheduled_games_update.is_running():
-            scheduled_games_update.start()
+        if not scheduled_games_update.is_running():  # type: ignore
+            scheduled_games_update.start()  # type: ignore
             print("✅ Scheduled games update task started (Sunday midday)")
 
-        if not scheduled_midnight_restart.is_running():
-            scheduled_midnight_restart.start()
+        if not scheduled_midnight_restart.is_running():  # type: ignore
+            scheduled_midnight_restart.start()  # type: ignore
             print("✅ Scheduled midnight restart task started (00:00 PT daily)")
 
         # Start reminder background tasks
-        if not check_due_reminders.is_running():
-            check_due_reminders.start()
+        if not check_due_reminders.is_running():  # type: ignore
+            check_due_reminders.start()  # type: ignore
             print("✅ Reminder checking task started (every minute)")
 
-        if not check_auto_actions.is_running():
-            check_auto_actions.start()
+        if not check_auto_actions.is_running():  # type: ignore
+            check_auto_actions.start()  # type: ignore
             print("✅ Auto-action checking task started (every minute)")
 
-        if not trivia_tuesday.is_running():
-            trivia_tuesday.start()
+        if not trivia_tuesday.is_running():  # type: ignore
+            trivia_tuesday.start()  # type: ignore
             print("✅ Trivia Tuesday task started (11:00 AM UK time, Tuesdays)")
 
-        if not scheduled_ai_refresh.is_running():
-            scheduled_ai_refresh.start()
+        if not scheduled_ai_refresh.is_running():  # type: ignore
+            scheduled_ai_refresh.start()  # type: ignore
             print("✅ AI module refresh task started (8:05 AM UK time daily)")
 
         # Start greeting tasks
-        if not monday_morning_greeting.is_running():
-            monday_morning_greeting.start()
+        if not monday_morning_greeting.is_running():  # type: ignore
+            monday_morning_greeting.start()  # type: ignore
             print("✅ Monday morning greeting task started (9:00 AM UK time, Mondays)")
 
-        if not tuesday_trivia_greeting.is_running():
-            tuesday_trivia_greeting.start()
+        if not tuesday_trivia_greeting.is_running():  # type: ignore
+            tuesday_trivia_greeting.start()  # type: ignore
             print("✅ Tuesday trivia greeting task started (9:00 AM UK time, Tuesdays)")
 
-        if not friday_morning_greeting.is_running():
-            friday_morning_greeting.start()
+        if not friday_morning_greeting.is_running():  # type: ignore
+            friday_morning_greeting.start()  # type: ignore
             print("✅ Friday morning greeting task started (9:00 AM UK time, Fridays)")
 
-        if not pre_trivia_approval.is_running():
-            pre_trivia_approval.start()
+        if not pre_trivia_approval.is_running():  # type: ignore
+            pre_trivia_approval.start()  # type: ignore
             print("✅ Pre-trivia approval task started (10:00 AM UK time, Tuesdays)")
 
-        if not cleanup_game_recommendations.is_running():
-            cleanup_game_recommendations.start()
+        if not cleanup_game_recommendations.is_running():  # type: ignore
+            cleanup_game_recommendations.start()  # type: ignore
             print("✅ Game recommendation cleanup task started (every hour)")
 
     except Exception as e:
