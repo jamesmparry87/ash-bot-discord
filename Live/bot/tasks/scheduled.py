@@ -748,7 +748,7 @@ async def trivia_tuesday():
 
     try:
         from ..handlers.ai_handler import generate_ai_trivia_question
-        
+
         if not _bot_instance:
             print("❌ Bot instance not available for Trivia Tuesday")
             return
