@@ -32,7 +32,7 @@ class DatabaseManager:
             # This is more reliable than trying to reuse connections
             # Suppress PostgreSQL collation version warnings while preserving all functional warnings
             self.connection = psycopg2.connect(
-                self.database_url, 
+                self.database_url,
                 cursor_factory=RealDictCursor,
                 options="-c client_min_messages=ERROR"  # Suppress WARNING level messages like collation version mismatch
             )
