@@ -1794,6 +1794,8 @@ def handle_time_query(user_id: int) -> str:
 initialize_ai()
 
 # Deployment Safety: Add graceful degradation for missing dependencies
+
+
 def safe_initialize_ai():
     """Safe AI initialization that won't crash on missing dependencies"""
     try:

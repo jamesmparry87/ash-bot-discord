@@ -3776,7 +3776,7 @@ class DatabaseManager:
             return False
 
     # --- Persistent Trivia Approval System ---
-    
+
     def create_approval_session(
             self,
             user_id: int,
@@ -3795,10 +3795,10 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 from datetime import datetime, timedelta
                 from zoneinfo import ZoneInfo
-                
+
                 uk_now = datetime.now(ZoneInfo("Europe/London"))
                 expires_at = uk_now + timedelta(minutes=timeout_minutes)
-                
+
                 cur.execute("""
                     INSERT INTO trivia_approval_sessions (
                         user_id, session_type, conversation_step, question_data,
@@ -3811,16 +3811,16 @@ class DatabaseManager:
                     json.dumps(conversation_data or {}),
                     uk_now, uk_now, expires_at
                 ))
-                
+
                 result = cur.fetchone()
                 conn.commit()
-                
+
                 if result:
                     session_id = int(result[0])  # Fix type issue - use index access
                     logger.info(f"Created persistent approval session {session_id} for user {user_id}")
                     return session_id
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error creating approval session: {e}")
             conn.rollback()
@@ -3843,7 +3843,7 @@ class DatabaseManager:
                     ORDER BY created_at DESC
                     LIMIT 1
                 """, (user_id, session_type))
-                
+
                 result = cur.fetchone()
                 if result:
                     session_dict = dict(result)
@@ -3851,9 +3851,9 @@ class DatabaseManager:
                     session_dict['question_data'] = json.loads(session_dict['question_data'])
                     session_dict['conversation_data'] = json.loads(session_dict['conversation_data'])
                     return session_dict
-                    
+
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error getting approval session for user {user_id}: {e}")
             return None
@@ -3875,44 +3875,44 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 from datetime import datetime
                 from zoneinfo import ZoneInfo
-                
+
                 uk_now = datetime.now(ZoneInfo("Europe/London"))
-                
+
                 # Build update query dynamically
                 set_clauses = ["last_activity = %s"]
                 params = [uk_now]
-                
+
                 if conversation_step is not None:
                     set_clauses.append("conversation_step = %s")
-                    params.append(conversation_step) # type: ignore
-                
+                    params.append(conversation_step)  # type: ignore
+
                 if question_data is not None:
                     set_clauses.append("question_data = %s")
-                    params.append(json.dumps(question_data)) # type: ignore
-                
+                    params.append(json.dumps(question_data))  # type: ignore
+
                 if conversation_data is not None:
                     set_clauses.append("conversation_data = %s")
-                    params.append(json.dumps(conversation_data)) #type: ignore
+                    params.append(json.dumps(conversation_data))  # type: ignore
 
                 if increment_restart_count:
                     set_clauses.append("bot_restart_count = bot_restart_count + 1")
-                
-                params.append(session_id) # type: ignore
-                
+
+                params.append(session_id)  # type: ignore
+
                 query = f"""
                     UPDATE trivia_approval_sessions
                     SET {', '.join(set_clauses)}
                     WHERE id = %s AND status = 'active'
                 """
-                
+
                 cur.execute(query, params)
                 conn.commit()
-                
+
                 success = cur.rowcount > 0
                 if success:
                     logger.info(f"Updated approval session {session_id}")
                 return success
-                
+
         except Exception as e:
             logger.error(f"Error updating approval session {session_id}: {e}")
             conn.rollback()
@@ -3931,13 +3931,13 @@ class DatabaseManager:
                     SET status = %s, last_activity = CURRENT_TIMESTAMP
                     WHERE id = %s
                 """, (status, session_id))
-                
+
                 conn.commit()
                 success = cur.rowcount > 0
                 if success:
                     logger.info(f"Completed approval session {session_id} with status: {status}")
                 return success
-                
+
         except Exception as e:
             logger.error(f"Error completing approval session {session_id}: {e}")
             conn.rollback()
@@ -3957,7 +3957,7 @@ class DatabaseManager:
                     AND expires_at > CURRENT_TIMESTAMP
                     ORDER BY created_at ASC
                 """)
-                
+
                 results = cur.fetchall()
                 sessions = []
                 for row in results:
@@ -3966,9 +3966,9 @@ class DatabaseManager:
                     session_dict['question_data'] = json.loads(session_dict['question_data'])
                     session_dict['conversation_data'] = json.loads(session_dict['conversation_data'])
                     sessions.append(session_dict)
-                    
+
                 return sessions
-                
+
         except Exception as e:
             logger.error(f"Error getting active approval sessions: {e}")
             return []
@@ -3987,13 +3987,13 @@ class DatabaseManager:
                     WHERE status = 'active'
                     AND expires_at <= CURRENT_TIMESTAMP
                 """)
-                
+
                 conn.commit()
                 expired_count = cur.rowcount
                 if expired_count > 0:
                     logger.info(f"Cleaned up {expired_count} expired approval sessions")
                 return expired_count
-                
+
         except Exception as e:
             logger.error(f"Error cleaning up expired approval sessions: {e}")
             conn.rollback()

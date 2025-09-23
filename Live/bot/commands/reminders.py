@@ -359,19 +359,19 @@ class RemindersCommands(commands.Cog):
 
             # Parse delay time using existing logic from the reminder system
             uk_now = datetime.now(ZoneInfo("Europe/London"))
-            
+
             # Parse time format (e.g., 2m, 30s, 1h, etc.)
             import re
             time_pattern = r'(\d+)([smhd])'
             time_match = re.match(time_pattern, delay.lower().strip())
-            
+
             if not time_match:
                 await ctx.send("❌ **Invalid time format.** Use formats like `2m`, `30s`, `1h`, `5m`\n\n**Examples:**\n• `!testreminder 2m` - Test in 2 minutes\n• `!testreminder 30s` - Test in 30 seconds\n• `!testreminder 5m` - Test in 5 minutes")
                 return
-            
+
             amount = int(time_match.group(1))
             unit = time_match.group(2)
-            
+
             # Convert to seconds
             if unit == 's':
                 total_seconds = amount
@@ -384,7 +384,7 @@ class RemindersCommands(commands.Cog):
             else:
                 await ctx.send("❌ **Invalid time unit.** Supported: `s` (seconds), `m` (minutes), `h` (hours), `d` (days)")
                 return
-            
+
             # Reasonable limits for testing
             if total_seconds < 10:
                 await ctx.send("❌ **Test delay too short.** Minimum delay is 10 seconds for system reliability.")
@@ -392,17 +392,17 @@ class RemindersCommands(commands.Cog):
             elif total_seconds > 3600:  # 1 hour max
                 await ctx.send("❌ **Test delay too long.** Maximum delay is 1 hour for testing purposes.")
                 return
-            
+
             scheduled_time = uk_now + timedelta(seconds=total_seconds)
-            
+
             # Get Newt Mods channel (target channel for test)
             newt_mods_channel_id = 1213488470798893107  # From MODERATOR_CHANNEL_IDS
             target_channel = self.bot.get_channel(newt_mods_channel_id)
-            
+
             if not target_channel:
                 await ctx.send("❌ **Target channel not found.** Cannot access Newt Mods channel for testing.")
                 return
-            
+
             # Check bot permissions in target channel
             bot_member = ctx.guild.get_member(self.bot.user.id) if self.bot.user else None
             if bot_member:
@@ -410,7 +410,7 @@ class RemindersCommands(commands.Cog):
                 if not permissions.send_messages:
                     await ctx.send("❌ **Permission denied.** Bot lacks send message permission in Newt Mods channel.")
                     return
-            
+
             # Format delay for display
             if unit == 's':
                 delay_display = f"{amount} second{'s' if amount != 1 else ''}"
@@ -420,7 +420,7 @@ class RemindersCommands(commands.Cog):
                 delay_display = f"{amount} hour{'s' if amount != 1 else ''}"
             else:
                 delay_display = f"{amount} day{'s' if amount != 1 else ''}"
-            
+
             # Send immediate confirmation
             confirmation_msg = (
                 f"🧪 **SCHEDULED MESSAGE TEST INITIATED**\n\n"
@@ -433,14 +433,20 @@ class RemindersCommands(commands.Cog):
                 f"Delivery confirmation will appear in {target_channel.mention} at the specified time.\n\n"
                 f"*Test message deployment in T-minus {delay_display}. Monitoring protocols engaged.*"
             )
-            
+
             await ctx.send(confirmation_msg)
-            
+
             # Schedule the actual test message
-            asyncio.create_task(self._deliver_test_message(target_channel, uk_now, scheduled_time, delay_display, ctx.author.display_name))
-            
+            asyncio.create_task(
+                self._deliver_test_message(
+                    target_channel,
+                    uk_now,
+                    scheduled_time,
+                    delay_display,
+                    ctx.author.display_name))
+
             print(f"✅ Test reminder scheduled by {ctx.author.display_name} for {delay_display} from now")
-            
+
         except Exception as e:
             print(f"❌ Error in testreminder command: {e}")
             await ctx.send("❌ System error occurred while scheduling test message.")
@@ -455,14 +461,14 @@ class RemindersCommands(commands.Cog):
             # Calculate actual delay time
             uk_now = datetime.now(ZoneInfo("Europe/London"))
             delay_seconds = (scheduled_time - uk_now).total_seconds()
-            
+
             if delay_seconds > 0:
                 # Wait for the scheduled time
                 await asyncio.sleep(delay_seconds)
-            
+
             # Get the actual delivery time
             delivery_time = datetime.now(ZoneInfo("Europe/London"))
-            
+
             # Create Ash-style test message
             test_message = (
                 f"🧪 **SCHEDULED MESSAGE SYSTEM TEST COMPLETE**\n\n"
@@ -477,13 +483,12 @@ class RemindersCommands(commands.Cog):
                 f"**System Status:** All scheduling subroutines functioning correctly. "
                 f"Monday morning messages, Friday messages, and other automated protocols should operate as expected.\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"*Test complete. Scheduled messaging infrastructure validated.*"
-            )
-            
+                f"*Test complete. Scheduled messaging infrastructure validated.*")
+
             # Send the test message
             await channel.send(test_message)
             print(f"✅ Test message delivered successfully to {channel.name} by {initiator_name}")
-            
+
         except Exception as e:
             print(f"❌ Error delivering test message: {e}")
             # Try to send error message to the channel

@@ -683,7 +683,7 @@ async def cleanup_game_recommendations():
 
         # Improved bot instance checking with multiple fallback methods
         bot_instance = None
-        
+
         # Method 1: Use global _bot_instance if available
         if _bot_instance and hasattr(_bot_instance, 'user') and _bot_instance.user:
             bot_instance = _bot_instance
@@ -697,7 +697,7 @@ async def cleanup_game_recommendations():
                     bot_instance = module.bot
                     print(f"✅ Found bot instance in module: {module_name}")
                     break
-            
+
             if not bot_instance:
                 print("⚠️ Bot instance not available for game recommendation cleanup - will retry next hour")
                 print("💡 This is normal during bot startup or if scheduled tasks start before bot is ready")

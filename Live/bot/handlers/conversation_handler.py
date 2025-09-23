@@ -1250,7 +1250,8 @@ async def save_final_modifications(message, data: Dict[str, Any], user_id: int):
 async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
     """Start JAM approval workflow for a generated trivia question with persistent storage"""
     try:
-        print(f"🚀 Starting persistent JAM approval workflow for question: {question_data.get('question_text', 'Unknown')[:50]}...")
+        print(
+            f"🚀 Starting persistent JAM approval workflow for question: {question_data.get('question_text', 'Unknown')[:50]}...")
 
         # Get bot instance with enhanced detection
         bot_instance = None
@@ -1301,11 +1302,11 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
                 question_data=question_data,
                 timeout_minutes=3  # 3 minutes timeout as requested
             )
-            
+
             if not session_id:
                 print("❌ Failed to create persistent approval session")
                 return False
-                
+
             print(f"✅ Created persistent approval session {session_id}")
         except Exception as db_e:
             print(f"⚠️ Database session creation failed, using memory fallback: {db_e}")
@@ -1505,7 +1506,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
     """
     try:
         print("🔄 STARTUP: Restoring active approval sessions...")
-        
+
         # Clean up expired sessions first
         try:
             expired_count = db.cleanup_expired_approval_sessions()
@@ -1538,7 +1539,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                             break
                     except Exception:
                         continue
-            
+
             if not bot_instance:
                 print("❌ Could not find bot instance for session restoration")
                 return {"error": "No bot instance available", "restored_sessions": 0}
@@ -1561,7 +1562,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
 
                 # Only restore JAM approval sessions for now
                 if user_id == JAM_USER_ID and session['session_type'] == 'question_approval':
-                    
+
                     # Increment restart count in database to track deployment impacts
                     try:
                         db.update_approval_session(session_id, increment_restart_count=True)
@@ -1591,13 +1592,13 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                             # Calculate how long the session has been active
                             session_age = uk_now - created_at
                             age_minutes = int(session_age.total_seconds() / 60)
-                            
+
                             # Create appropriate reminder message based on conversation step
                             if conversation_step == 'approval':
                                 # Standard approval reminder
                                 question_text = question_data.get('question_text', 'Unknown question')
                                 correct_answer = question_data.get('correct_answer', 'Dynamic calculation')
-                                
+
                                 reminder_msg = (
                                     f"🔄 **APPROVAL SESSION RESTORED** (Bot Restart #{new_restart_count})\n\n"
                                     f"I've detected an active trivia question approval that was interrupted by a deployment restart. "
@@ -1610,9 +1611,8 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                                     f"**2.** ✏️ **Modify** - Edit the question before approving\n"
                                     f"**3.** ❌ **Reject** - Discard this question and generate an alternative\n\n"
                                     f"Please respond with **1**, **2**, or **3**.\n\n"
-                                    f"*Persistent approval system maintained through deployment restarts.*"
-                                )
-                            
+                                    f"*Persistent approval system maintained through deployment restarts.*")
+
                             elif conversation_step in ['modification', 'modification_preview', 'answer_edit_prompt', 'answer_modification', 'type_edit_prompt', 'type_modification']:
                                 # In-progress modification reminder
                                 reminder_msg = (
@@ -1627,12 +1627,11 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                                     f"**2.** ✏️ **Modify Again** - Restart the modification process\n"
                                     f"**3.** ❌ **Reject** - Discard this question entirely\n\n"
                                     f"Please respond with **1**, **2**, or **3**.\n\n"
-                                    f"*Persistent modification system maintained through deployment restarts.*"
-                                )
-                                
+                                    f"*Persistent modification system maintained through deployment restarts.*")
+
                                 # Reset to approval step for simplicity after restart
                                 jam_approval_conversations[user_id]['step'] = 'approval'
-                            
+
                             else:
                                 # Unknown step, reset to approval
                                 reminder_msg = (
@@ -1644,15 +1643,14 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                                     f"**1.** ✅ **Approve** - Accept the pending question\n"
                                     f"**2.** ✏️ **Modify** - Edit the question before approving\n"
                                     f"**3.** ❌ **Reject** - Discard this question\n\n"
-                                    f"Please respond with **1**, **2**, or **3**."
-                                )
-                                
+                                    f"Please respond with **1**, **2**, or **3**.")
+
                                 jam_approval_conversations[user_id]['step'] = 'approval'
 
                             # Send the reminder message
                             await jam_user.send(reminder_msg)
                             print(f"✅ Sent restoration reminder to JAM for session {session_id}")
-                            
+
                             restored_count += 1
                             restoration_results.append({
                                 "session_id": session_id,
@@ -1662,7 +1660,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                                 "restart_count": new_restart_count,
                                 "status": "restored_and_reminded"
                             })
-                            
+
                         else:
                             print(f"❌ Could not fetch JAM user for session {session_id}")
                             restoration_results.append({
@@ -1670,7 +1668,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                                 "user_id": user_id,
                                 "status": "failed_to_fetch_user"
                             })
-                            
+
                     except Exception as user_e:
                         print(f"❌ Error sending reminder to JAM for session {session_id}: {user_e}")
                         restoration_results.append({
@@ -1679,7 +1677,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                             "status": "failed_to_send_reminder",
                             "error": str(user_e)
                         })
-                        
+
                 else:
                     print(f"⚠️ Skipping non-JAM approval session {session_id} (user: {user_id})")
                     restoration_results.append({
@@ -1698,7 +1696,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                 continue
 
         print(f"🎯 Session restoration complete: {restored_count}/{len(active_sessions)} sessions restored")
-        
+
         return {
             "restored_sessions": restored_count,
             "total_sessions_found": len(active_sessions),
@@ -1722,7 +1720,7 @@ async def get_restoration_status() -> Dict[str, Any]:
     try:
         # Get database sessions
         db_sessions = db.get_all_active_approval_sessions()
-        
+
         # Get memory sessions
         memory_sessions = []
         for user_id, conversation in jam_approval_conversations.items():
@@ -1733,14 +1731,15 @@ async def get_restoration_status() -> Dict[str, Any]:
                 "session_id": conversation.get('session_id'),
                 "restart_count": conversation.get('restart_count', 0)
             })
-        
-        return {
-            "database_sessions": len(db_sessions),
-            "memory_sessions": len(memory_sessions),
-            "db_sessions_detail": [{"id": s['id'], "user_id": s['user_id'], "step": s['conversation_step'], "created_at": s['created_at']} for s in db_sessions],
-            "memory_sessions_detail": memory_sessions,
-            "sync_status": "synced" if len(db_sessions) == len(memory_sessions) else "out_of_sync"
-        }
-        
+
+        return {"database_sessions": len(db_sessions),
+                "memory_sessions": len(memory_sessions),
+                "db_sessions_detail": [{"id": s['id'],
+                                        "user_id": s['user_id'],
+                                        "step": s['conversation_step'],
+                                        "created_at": s['created_at']} for s in db_sessions],
+                "memory_sessions_detail": memory_sessions,
+                "sync_status": "synced" if len(db_sessions) == len(memory_sessions) else "out_of_sync"}
+
     except Exception as e:
         return {"error": str(e)}

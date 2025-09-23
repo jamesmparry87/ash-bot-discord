@@ -1004,28 +1004,29 @@ async def ash_status(ctx):
 
 # --- Persistent Approval Session Restoration ---
 
+
 async def restore_persistent_approval_sessions():
     """Restore active approval sessions from database after bot restart"""
     try:
         # Get all active approval sessions from database
         active_sessions = db.get_all_active_approval_sessions()
-        
+
         if not active_sessions:
             print("✅ No active approval sessions to restore")
             return
-        
+
         print(f"🔄 Restoring {len(active_sessions)} active approval sessions...")
-        
+
         restored_count = 0
         for session in active_sessions:
             try:
                 user_id = session['user_id']
                 session_id = session['id']
                 restart_count = session.get('bot_restart_count', 0)
-                
+
                 # Update restart count in database
                 db.update_approval_session(session_id, increment_restart_count=True)
-                
+
                 # Only restore JAM approval sessions for now
                 if user_id == JAM_USER_ID and session['session_type'] == 'question_approval':
                     # Import conversation handler
@@ -1034,7 +1035,7 @@ async def restore_persistent_approval_sessions():
                     from zoneinfo import ZoneInfo
 
                     from .handlers.conversation_handler import jam_approval_conversations
-                    
+
                     uk_now = datetime.now(ZoneInfo("Europe/London"))
                     jam_approval_conversations[user_id] = {
                         'step': session['conversation_step'],
@@ -1044,16 +1045,16 @@ async def restore_persistent_approval_sessions():
                         'session_id': session_id,  # Track database session
                         'restart_count': restart_count + 1
                     }
-                    
+
                     # Add question data to conversation data
                     jam_approval_conversations[user_id]['data']['question_data'] = session['question_data']
-                    
+
                     # Send restoration message to JAM
                     try:
                         jam_user = await bot.fetch_user(JAM_USER_ID)
                         if jam_user:
                             question_text = session['question_data'].get('question_text', 'Unknown question')
-                            
+
                             restoration_msg = (
                                 f"🔄 **APPROVAL SESSION RESTORED**\n\n"
                                 f"Your trivia question approval session has been restored after a system restart.\n\n"
@@ -1065,7 +1066,7 @@ async def restore_persistent_approval_sessions():
                                 f"**3.** ❌ **Reject** - Discard this question and generate an alternative\n\n"
                                 f"*Your approval session was safely preserved during the system update.*"
                             )
-                            
+
                             await jam_user.send(restoration_msg)
                             print(f"✅ Restored JAM approval session {session_id} and notified user")
                             restored_count += 1
@@ -1077,16 +1078,16 @@ async def restore_persistent_approval_sessions():
                         restored_count += 1
                 else:
                     print(f"⚠️ Unsupported session type for restoration: {session['session_type']} for user {user_id}")
-                    
+
             except Exception as session_error:
                 print(f"❌ Error restoring session {session.get('id', 'unknown')}: {session_error}")
                 continue
-        
+
         if restored_count > 0:
             print(f"✅ Successfully restored {restored_count}/{len(active_sessions)} approval sessions")
         else:
             print("⚠️ No approval sessions were successfully restored")
-    
+
     except Exception as e:
         print(f"❌ Error during approval session restoration: {e}")
         import traceback
