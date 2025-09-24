@@ -54,24 +54,24 @@ _startup_validation_completed = False
 def initialize_bot_instance(bot):
     """Initialize the bot instance for scheduled tasks with validation"""
     global _bot_instance, _bot_ready
-    
+
     try:
         # Validate bot is properly logged in
         if not bot or not hasattr(bot, 'user') or not bot.user:
             print("⚠️ Bot instance initialization failed: Bot not logged in")
             return False
-            
+
         _bot_instance = bot
         _bot_ready = True
-        
+
         print(f"✅ Scheduled tasks: Bot instance initialized and ready ({bot.user.name}#{bot.user.discriminator})")
         print(f"✅ Bot ID: {bot.user.id}, Guilds: {len(bot.guilds) if bot.guilds else 0}")
-        
+
         # Test bot permissions in key channels
         asyncio.create_task(_validate_bot_permissions())
-        
+
         return True
-        
+
     except Exception as e:
         print(f"❌ Bot instance initialization failed: {e}")
         _bot_ready = False
@@ -84,32 +84,32 @@ async def _validate_bot_permissions():
         if not _bot_instance or not _bot_ready:
             print("⚠️ Cannot validate permissions - bot not ready")
             return
-            
+
         guild = _bot_instance.get_guild(GUILD_ID)
         if not guild:
             print(f"⚠️ Cannot find guild {GUILD_ID} for permission validation")
             return
-            
+
         bot_member = guild.get_member(_bot_instance.user.id)
         if not bot_member:
             print("⚠️ Bot member not found in guild for permission validation")
             return
-            
+
         # Check key channels
         channels_to_check = {
             'chit-chat': CHIT_CHAT_CHANNEL_ID,
             'members': MEMBERS_CHANNEL_ID,
             'game-recommendations': GAME_RECOMMENDATION_CHANNEL_ID
         }
-        
+
         permission_issues = []
-        
+
         for channel_name, channel_id in channels_to_check.items():
             try:
                 channel = _bot_instance.get_channel(channel_id)
                 if channel and isinstance(channel, discord.TextChannel):
                     perms = channel.permissions_for(bot_member)
-                    
+
                     missing_perms = []
                     if not perms.send_messages:
                         missing_perms.append('Send Messages')
@@ -117,24 +117,24 @@ async def _validate_bot_permissions():
                         missing_perms.append('Read Messages')
                     if channel_name == 'game-recommendations' and not perms.manage_messages:
                         missing_perms.append('Manage Messages')
-                        
+
                     if missing_perms:
                         permission_issues.append(f"{channel_name}: {', '.join(missing_perms)}")
                     else:
                         print(f"✅ Permissions OK for #{channel_name}")
                 else:
                     permission_issues.append(f"{channel_name}: Channel not accessible")
-                    
+
             except Exception as channel_error:
                 permission_issues.append(f"{channel_name}: Error checking permissions - {channel_error}")
-                
+
         if permission_issues:
             print("⚠️ Permission issues detected:")
             for issue in permission_issues:
                 print(f"   • {issue}")
         else:
             print("✅ All scheduled task permissions validated")
-            
+
     except Exception as e:
         print(f"❌ Error validating bot permissions: {e}")
 
@@ -142,15 +142,15 @@ async def _validate_bot_permissions():
 def get_bot_instance():
     """Get bot instance with multiple fallback methods and validation"""
     global _bot_instance, _bot_ready
-    
+
     # Method 1: Use validated global instance
     if _bot_instance and _bot_ready and hasattr(_bot_instance, 'user') and _bot_instance.user:
         return _bot_instance
-        
+
     # Method 2: Search through modules (fallback)
     print("🔍 Global bot instance not available, searching modules...")
     import sys
-    
+
     for name, obj in sys.modules.items():
         if hasattr(obj, 'bot') and hasattr(obj.bot, 'user'):
             try:
@@ -162,7 +162,7 @@ def get_bot_instance():
                     return obj.bot
             except Exception:
                 continue
-                
+
     # Method 3: Search for any bot instance (last resort)
     for name, obj in sys.modules.items():
         if hasattr(obj, 'bot') and hasattr(obj.bot, 'user'):
@@ -172,7 +172,7 @@ def get_bot_instance():
                     return obj.bot
             except Exception:
                 continue
-                
+
     print("❌ No bot instance found in any module")
     return None
 
@@ -182,16 +182,16 @@ async def safe_send_message(channel, content, mention_user_id=None):
     if not channel:
         print("❌ Cannot send message: Channel is None")
         return False
-        
+
     try:
         # Add user mention if specified
         if mention_user_id:
             content = f"<@{mention_user_id}> {content}"
-            
+
         message = await channel.send(content)
         print(f"✅ Message sent successfully to #{channel.name}")
         return True
-        
+
     except discord.Forbidden:
         print(f"❌ Permission denied sending message to #{channel.name}")
         return False
@@ -937,7 +937,7 @@ async def trivia_tuesday():
 
         # Find members channel using multiple methods
         members_channel = None
-        
+
         # Method 1: Try direct channel ID lookup
         members_channel = bot.get_channel(MEMBERS_CHANNEL_ID)
         if members_channel and isinstance(members_channel, discord.TextChannel):
@@ -985,7 +985,7 @@ async def trivia_tuesday():
         # Post trivia message using safe method
         try:
             trivia_post = await members_channel.send(trivia_message)
-            
+
             # Store trivia session data
             session_id = trivia_post.id
             active_trivia_sessions[session_id] = {
@@ -1003,7 +1003,7 @@ async def trivia_tuesday():
                     uk_now + timedelta(hours=1)))
 
             print(f"✅ Trivia Tuesday question posted in {members_channel.name}")
-            
+
         except discord.Forbidden:
             print("❌ Permission denied when posting Trivia Tuesday question")
             await notify_scheduled_message_error("Trivia Tuesday", "Permission denied when posting question", uk_now)
@@ -1447,7 +1447,7 @@ def get_scheduled_tasks_status():
     """Get current status of all scheduled tasks"""
     try:
         task_statuses = []
-        
+
         tasks_to_check = [
             (scheduled_games_update, "Games Update"),
             (scheduled_midnight_restart, "Midnight Restart"),
@@ -1461,7 +1461,7 @@ def get_scheduled_tasks_status():
             (pre_trivia_approval, "Pre-trivia Approval"),
             (cleanup_game_recommendations, "Cleanup Tasks")
         ]
-        
+
         for task, name in tasks_to_check:
             try:
                 is_running = task.is_running()  # type: ignore
@@ -1477,7 +1477,7 @@ def get_scheduled_tasks_status():
                     'running': False,
                     'error': str(e)
                 })
-        
+
         # Bot instance status
         bot = get_bot_instance()
         bot_status = {
@@ -1486,13 +1486,13 @@ def get_scheduled_tasks_status():
             'user': f"{bot.user.name}#{bot.user.discriminator}" if bot and bot.user else 'Unknown',
             'guilds': len(bot.guilds) if bot else 0
         }
-        
+
         return {
             'tasks': task_statuses,
             'bot_instance': bot_status,
             'global_bot_ready': _bot_ready
         }
-        
+
     except Exception as e:
         return {'error': str(e)}
 
