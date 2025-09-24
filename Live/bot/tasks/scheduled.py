@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import tasks
 
-from ..config import GAME_RECOMMENDATION_CHANNEL_ID, GUILD_ID, MEMBERS_CHANNEL_ID
+from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID, GUILD_ID, MEMBERS_CHANNEL_ID
 
 # Database and config imports
 try:
@@ -44,6 +44,7 @@ except ImportError:
 # Global state for trivia and bot instance
 active_trivia_sessions = {}
 _bot_instance = None  # Store the bot instance globally
+_bot_ready = False  # Track if bot is fully ready
 
 # Startup validation lock to prevent multiple concurrent validations
 _startup_validation_lock = False
@@ -51,10 +52,155 @@ _startup_validation_completed = False
 
 
 def initialize_bot_instance(bot):
-    """Initialize the bot instance for scheduled tasks"""
-    global _bot_instance
-    _bot_instance = bot
-    print(f"✅ Scheduled tasks: Bot instance initialized ({bot.user.name if bot.user else 'Unknown'})")
+    """Initialize the bot instance for scheduled tasks with validation"""
+    global _bot_instance, _bot_ready
+    
+    try:
+        # Validate bot is properly logged in
+        if not bot or not hasattr(bot, 'user') or not bot.user:
+            print("⚠️ Bot instance initialization failed: Bot not logged in")
+            return False
+            
+        _bot_instance = bot
+        _bot_ready = True
+        
+        print(f"✅ Scheduled tasks: Bot instance initialized and ready ({bot.user.name}#{bot.user.discriminator})")
+        print(f"✅ Bot ID: {bot.user.id}, Guilds: {len(bot.guilds) if bot.guilds else 0}")
+        
+        # Test bot permissions in key channels
+        asyncio.create_task(_validate_bot_permissions())
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Bot instance initialization failed: {e}")
+        _bot_ready = False
+        return False
+
+
+async def _validate_bot_permissions():
+    """Validate bot permissions in key channels"""
+    try:
+        if not _bot_instance or not _bot_ready:
+            print("⚠️ Cannot validate permissions - bot not ready")
+            return
+            
+        guild = _bot_instance.get_guild(GUILD_ID)
+        if not guild:
+            print(f"⚠️ Cannot find guild {GUILD_ID} for permission validation")
+            return
+            
+        bot_member = guild.get_member(_bot_instance.user.id)
+        if not bot_member:
+            print("⚠️ Bot member not found in guild for permission validation")
+            return
+            
+        # Check key channels
+        channels_to_check = {
+            'chit-chat': CHIT_CHAT_CHANNEL_ID,
+            'members': MEMBERS_CHANNEL_ID,
+            'game-recommendations': GAME_RECOMMENDATION_CHANNEL_ID
+        }
+        
+        permission_issues = []
+        
+        for channel_name, channel_id in channels_to_check.items():
+            try:
+                channel = _bot_instance.get_channel(channel_id)
+                if channel and isinstance(channel, discord.TextChannel):
+                    perms = channel.permissions_for(bot_member)
+                    
+                    missing_perms = []
+                    if not perms.send_messages:
+                        missing_perms.append('Send Messages')
+                    if not perms.read_messages:
+                        missing_perms.append('Read Messages')
+                    if channel_name == 'game-recommendations' and not perms.manage_messages:
+                        missing_perms.append('Manage Messages')
+                        
+                    if missing_perms:
+                        permission_issues.append(f"{channel_name}: {', '.join(missing_perms)}")
+                    else:
+                        print(f"✅ Permissions OK for #{channel_name}")
+                else:
+                    permission_issues.append(f"{channel_name}: Channel not accessible")
+                    
+            except Exception as channel_error:
+                permission_issues.append(f"{channel_name}: Error checking permissions - {channel_error}")
+                
+        if permission_issues:
+            print("⚠️ Permission issues detected:")
+            for issue in permission_issues:
+                print(f"   • {issue}")
+        else:
+            print("✅ All scheduled task permissions validated")
+            
+    except Exception as e:
+        print(f"❌ Error validating bot permissions: {e}")
+
+
+def get_bot_instance():
+    """Get bot instance with multiple fallback methods and validation"""
+    global _bot_instance, _bot_ready
+    
+    # Method 1: Use validated global instance
+    if _bot_instance and _bot_ready and hasattr(_bot_instance, 'user') and _bot_instance.user:
+        return _bot_instance
+        
+    # Method 2: Search through modules (fallback)
+    print("🔍 Global bot instance not available, searching modules...")
+    import sys
+    
+    for name, obj in sys.modules.items():
+        if hasattr(obj, 'bot') and hasattr(obj.bot, 'user'):
+            try:
+                if obj.bot.user and obj.bot.is_ready():
+                    print(f"✅ Found ready bot instance in module: {name}")
+                    # Update global reference
+                    _bot_instance = obj.bot
+                    _bot_ready = True
+                    return obj.bot
+            except Exception:
+                continue
+                
+    # Method 3: Search for any bot instance (last resort)
+    for name, obj in sys.modules.items():
+        if hasattr(obj, 'bot') and hasattr(obj.bot, 'user'):
+            try:
+                if obj.bot.user:  # Just check if logged in, not necessarily ready
+                    print(f"⚠️ Found bot instance in module: {name} (may not be fully ready)")
+                    return obj.bot
+            except Exception:
+                continue
+                
+    print("❌ No bot instance found in any module")
+    return None
+
+
+async def safe_send_message(channel, content, mention_user_id=None):
+    """Safely send a message with error handling and retries"""
+    if not channel:
+        print("❌ Cannot send message: Channel is None")
+        return False
+        
+    try:
+        # Add user mention if specified
+        if mention_user_id:
+            content = f"<@{mention_user_id}> {content}"
+            
+        message = await channel.send(content)
+        print(f"✅ Message sent successfully to #{channel.name}")
+        return True
+        
+    except discord.Forbidden:
+        print(f"❌ Permission denied sending message to #{channel.name}")
+        return False
+    except discord.HTTPException as e:
+        print(f"❌ HTTP error sending message to #{channel.name}: {e}")
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error sending message to #{channel.name}: {e}")
+        return False
 
 
 @tasks.loop(time=time(12, 0))  # Run at 12:00 PM (midday) every day
@@ -427,7 +573,7 @@ async def monday_morning_greeting():
             return
 
         # Find chit-chat channel
-        chit_chat_channel = _bot_instance.get_channel(869528946725748766)
+        chit_chat_channel = _bot_instance.get_channel(CHIT_CHAT_CHANNEL_ID)
         if not chit_chat_channel or not isinstance(chit_chat_channel, discord.TextChannel):
             print("❌ Chit-chat channel not found for Monday morning greeting")
             await notify_scheduled_message_error("Monday morning greeting", "Chit-chat channel not found or inaccessible", uk_now)
@@ -540,7 +686,7 @@ async def friday_morning_greeting():
             return
 
         # Find chit-chat channel
-        chit_chat_channel = _bot_instance.get_channel(869528946725748766)
+        chit_chat_channel = _bot_instance.get_channel(CHIT_CHAT_CHANNEL_ID)
         if not chit_chat_channel or not isinstance(chit_chat_channel, discord.TextChannel):
             print("❌ Chit-chat channel not found for Friday morning greeting")
             return
@@ -764,43 +910,56 @@ async def cleanup_game_recommendations():
 # Run at 11:00 AM UK time every Tuesday
 @tasks.loop(time=time(11, 0, tzinfo=ZoneInfo("Europe/London")))
 async def trivia_tuesday():
-    """Post Trivia Tuesday question every Tuesday at 11am UK time"""
+    """Post Trivia Tuesday question every Tuesday at 11am UK time with enhanced reliability"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
 
     # Only run on Tuesdays (weekday 1)
     if uk_now.weekday() != 1:
         return
 
-    print(
-        f"🧠 Trivia Tuesday task triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+    print(f"🧠 Trivia Tuesday task triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
 
     try:
         from ..handlers.ai_handler import generate_ai_trivia_question
 
-        if not _bot_instance:
+        # Get bot instance using improved method
+        bot = get_bot_instance()
+        if not bot:
             print("❌ Bot instance not available for Trivia Tuesday")
+            await notify_scheduled_message_error("Trivia Tuesday", "Bot instance not available", uk_now)
             return
 
-        guild = _bot_instance.get_guild(GUILD_ID)
+        guild = bot.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for Trivia Tuesday")
+            await notify_scheduled_message_error("Trivia Tuesday", "Guild not found", uk_now)
             return
 
-        # Find members channel
+        # Find members channel using multiple methods
         members_channel = None
-        for channel in guild.text_channels:
-            if channel.name in ["senior-officers-area", "members", "general"]:
-                members_channel = channel
-                break
+        
+        # Method 1: Try direct channel ID lookup
+        members_channel = bot.get_channel(MEMBERS_CHANNEL_ID)
+        if members_channel and isinstance(members_channel, discord.TextChannel):
+            print(f"✅ Found members channel by ID: {members_channel.name}")
+        else:
+            # Method 2: Search by name
+            for channel in guild.text_channels:
+                if channel.name in ["senior-officers-area", "members", "general"]:
+                    members_channel = channel
+                    print(f"✅ Found members channel by name: {members_channel.name}")
+                    break
 
         if not members_channel:
             print("❌ Members channel not found for Trivia Tuesday")
+            await notify_scheduled_message_error("Trivia Tuesday", "Members channel not found", uk_now)
             return
 
         # Generate trivia question using AI
         question_data = await generate_ai_trivia_question()
         if not question_data:
             print("❌ Failed to generate trivia question")
+            await notify_scheduled_message_error("Trivia Tuesday", "Failed to generate trivia question", uk_now)
             return
 
         # Format question
@@ -823,47 +982,38 @@ async def trivia_tuesday():
             f"⏰ **Intelligence Deadline:** 60 minutes from deployment.\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-        # Post trivia message
-        trivia_post = await members_channel.send(trivia_message)
+        # Post trivia message using safe method
+        try:
+            trivia_post = await members_channel.send(trivia_message)
+            
+            # Store trivia session data
+            session_id = trivia_post.id
+            active_trivia_sessions[session_id] = {
+                'question_data': question_data,
+                'channel_id': members_channel.id,
+                'start_time': uk_now,
+                'participants': {},
+                'status': 'active'
+            }
 
-        # Store trivia session data
-        session_id = trivia_post.id
-        active_trivia_sessions[session_id] = {
-            'question_data': question_data,
-            'channel_id': members_channel.id,
-            'start_time': uk_now,
-            'participants': {},
-            'status': 'active'
-        }
+            # Schedule answer reveal for 1 hour later
+            asyncio.create_task(
+                schedule_trivia_answer_reveal(
+                    session_id,
+                    uk_now + timedelta(hours=1)))
 
-        # Schedule answer reveal for 1 hour later
-        asyncio.create_task(
-            schedule_trivia_answer_reveal(
-                session_id,
-                uk_now + timedelta(hours=1)))
-
-        print(f"✅ Trivia Tuesday question posted in {members_channel.name}")
+            print(f"✅ Trivia Tuesday question posted in {members_channel.name}")
+            
+        except discord.Forbidden:
+            print("❌ Permission denied when posting Trivia Tuesday question")
+            await notify_scheduled_message_error("Trivia Tuesday", "Permission denied when posting question", uk_now)
+        except Exception as post_error:
+            print(f"❌ Error posting Trivia Tuesday question: {post_error}")
+            await notify_scheduled_message_error("Trivia Tuesday", f"Error posting question: {post_error}", uk_now)
 
     except Exception as e:
         print(f"❌ Error in trivia_tuesday task: {e}")
-        # Try to send error to mod channel
-        try:
-            if not _bot_instance:
-                print("⚠️ Bot instance not available for Trivia Tuesday error notification")
-                return
-
-            guild = _bot_instance.get_guild(GUILD_ID)
-            if guild:
-                mod_channel = None
-                for channel in guild.text_channels:
-                    if channel.name in ["mod-chat", "moderator-chat", "mod"]:
-                        mod_channel = channel
-                        break
-                if mod_channel:
-                    await mod_channel.send(
-                        f"❌ **Trivia Tuesday Error:** Failed to post question - {str(e)}")
-        except Exception:
-            pass
+        await notify_scheduled_message_error("Trivia Tuesday", str(e), uk_now)
 
 
 async def schedule_trivia_answer_reveal(
@@ -1245,56 +1395,106 @@ async def _delayed_trivia_validation():
 
 
 def start_all_scheduled_tasks():
-    """Start all scheduled tasks"""
+    """Start all scheduled tasks with enhanced monitoring"""
     try:
-        if not scheduled_games_update.is_running():  # type: ignore
-            scheduled_games_update.start()  # type: ignore
-            print("✅ Scheduled games update task started (Sunday midday)")
+        tasks_started = 0
+        tasks_failed = 0
 
-        if not scheduled_midnight_restart.is_running():  # type: ignore
-            scheduled_midnight_restart.start()  # type: ignore
-            print("✅ Scheduled midnight restart task started (00:00 PT daily)")
+        # Try to start each task individually with error handling
+        tasks_to_start = [
+            (scheduled_games_update, "Scheduled games update task (Sunday midday)"),
+            (scheduled_midnight_restart, "Scheduled midnight restart task (00:00 PT daily)"),
+            (check_due_reminders, "Reminder checking task (every minute)"),
+            (check_auto_actions, "Auto-action checking task (every minute)"),
+            (trivia_tuesday, "Trivia Tuesday task (11:00 AM UK time, Tuesdays)"),
+            (scheduled_ai_refresh, "AI module refresh task (8:05 AM UK time daily)"),
+            (monday_morning_greeting, "Monday morning greeting task (9:00 AM UK time, Mondays)"),
+            (tuesday_trivia_greeting, "Tuesday trivia greeting task (9:00 AM UK time, Tuesdays)"),
+            (friday_morning_greeting, "Friday morning greeting task (9:00 AM UK time, Fridays)"),
+            (pre_trivia_approval, "Pre-trivia approval task (10:00 AM UK time, Tuesdays)"),
+            (cleanup_game_recommendations, "Game recommendation cleanup task (every hour)")
+        ]
 
-        # Start reminder background tasks
-        if not check_due_reminders.is_running():  # type: ignore
-            check_due_reminders.start()  # type: ignore
-            print("✅ Reminder checking task started (every minute)")
+        for task, description in tasks_to_start:
+            try:
+                if not task.is_running():  # type: ignore
+                    task.start()  # type: ignore
+                    print(f"✅ {description}")
+                    tasks_started += 1
+                else:
+                    print(f"⚠️ {description} already running")
+            except Exception as task_error:
+                print(f"❌ Failed to start {description}: {task_error}")
+                tasks_failed += 1
 
-        if not check_auto_actions.is_running():  # type: ignore
-            check_auto_actions.start()  # type: ignore
-            print("✅ Auto-action checking task started (every minute)")
+        print(f"📊 Scheduled tasks startup summary: {tasks_started} started, {tasks_failed} failed")
 
-        if not trivia_tuesday.is_running():  # type: ignore
-            trivia_tuesday.start()  # type: ignore
-            print("✅ Trivia Tuesday task started (11:00 AM UK time, Tuesdays)")
-
-        if not scheduled_ai_refresh.is_running():  # type: ignore
-            scheduled_ai_refresh.start()  # type: ignore
-            print("✅ AI module refresh task started (8:05 AM UK time daily)")
-
-        # Start greeting tasks
-        if not monday_morning_greeting.is_running():  # type: ignore
-            monday_morning_greeting.start()  # type: ignore
-            print("✅ Monday morning greeting task started (9:00 AM UK time, Mondays)")
-
-        if not tuesday_trivia_greeting.is_running():  # type: ignore
-            tuesday_trivia_greeting.start()  # type: ignore
-            print("✅ Tuesday trivia greeting task started (9:00 AM UK time, Tuesdays)")
-
-        if not friday_morning_greeting.is_running():  # type: ignore
-            friday_morning_greeting.start()  # type: ignore
-            print("✅ Friday morning greeting task started (9:00 AM UK time, Fridays)")
-
-        if not pre_trivia_approval.is_running():  # type: ignore
-            pre_trivia_approval.start()  # type: ignore
-            print("✅ Pre-trivia approval task started (10:00 AM UK time, Tuesdays)")
-
-        if not cleanup_game_recommendations.is_running():  # type: ignore
-            cleanup_game_recommendations.start()  # type: ignore
-            print("✅ Game recommendation cleanup task started (every hour)")
+        # Validate bot instance after starting tasks
+        bot = get_bot_instance()
+        if bot:
+            print(f"✅ Bot instance validation: {bot.user.name}#{bot.user.discriminator} (ID: {bot.user.id})")
+            print(f"✅ Bot ready status: {bot.is_ready()}")
+        else:
+            print("⚠️ Bot instance not available immediately after task startup")
 
     except Exception as e:
-        print(f"❌ Error starting scheduled tasks: {e}")
+        print(f"❌ Critical error starting scheduled tasks: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def get_scheduled_tasks_status():
+    """Get current status of all scheduled tasks"""
+    try:
+        task_statuses = []
+        
+        tasks_to_check = [
+            (scheduled_games_update, "Games Update"),
+            (scheduled_midnight_restart, "Midnight Restart"),
+            (check_due_reminders, "Reminder Check"),
+            (check_auto_actions, "Auto Actions"),
+            (trivia_tuesday, "Trivia Tuesday"),
+            (scheduled_ai_refresh, "AI Refresh"),
+            (monday_morning_greeting, "Monday Greeting"),
+            (tuesday_trivia_greeting, "Tuesday Greeting"),
+            (friday_morning_greeting, "Friday Greeting"),
+            (pre_trivia_approval, "Pre-trivia Approval"),
+            (cleanup_game_recommendations, "Cleanup Tasks")
+        ]
+        
+        for task, name in tasks_to_check:
+            try:
+                is_running = task.is_running()  # type: ignore
+                next_run = getattr(task, 'next_iteration', None)
+                task_statuses.append({
+                    'name': name,
+                    'running': is_running,
+                    'next_run': str(next_run) if next_run else 'Unknown'
+                })
+            except Exception as e:
+                task_statuses.append({
+                    'name': name,
+                    'running': False,
+                    'error': str(e)
+                })
+        
+        # Bot instance status
+        bot = get_bot_instance()
+        bot_status = {
+            'available': bot is not None,
+            'ready': bot.is_ready() if bot else False,
+            'user': f"{bot.user.name}#{bot.user.discriminator}" if bot and bot.user else 'Unknown',
+            'guilds': len(bot.guilds) if bot else 0
+        }
+        
+        return {
+            'tasks': task_statuses,
+            'bot_instance': bot_status,
+            'global_bot_ready': _bot_ready
+        }
+        
+    except Exception as e:
+        return {'error': str(e)}
 
 
 def stop_all_scheduled_tasks():
