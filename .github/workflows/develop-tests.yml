@@ -114,7 +114,7 @@ jobs:
         MOD_ALERT_CHANNEL_ID: "123456791"
         TWITCH_HISTORY_CHANNEL_ID: "123456792"
         YOUTUBE_HISTORY_CHANNEL_ID: "123456793"
-        PYTHONPATH: .
+        PYTHONPATH: Live
       run: |
         python3 -m pytest Live/tests/ -v --cov=Live --cov-report=term-missing --cov-report=xml --tb=short
     
