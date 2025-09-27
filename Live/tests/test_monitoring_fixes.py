@@ -11,10 +11,11 @@ import os
 # Add the current directory to Python path so we can import bot modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+
 def is_casual_conversation_not_query(content: str) -> bool:
     """Detect if a message is casual conversation/narrative rather than a query"""
     content_lower = content.lower()
-    
+
     # Patterns that indicate the message is describing past events or casual conversation
     casual_conversation_patterns = [
         r"and then",  # "and then someone recommends"
@@ -29,8 +30,9 @@ def is_casual_conversation_not_query(content: str) -> bool:
         r"earlier (?:someone|he|she|they)",  # "earlier they mentioned"
         r"(?:mentioned|talked about|discussed) (?:that|how|what)",  # "mentioned that..."
     ]
-    
+
     return any(re.search(pattern, content_lower) for pattern in casual_conversation_patterns)
+
 
 def detect_implicit_game_query_fixed(content: str) -> bool:
     """Fixed version - Detect if a message is likely a game-related query even without explicit bot mention"""
@@ -56,11 +58,13 @@ def detect_implicit_game_query_fixed(content: str) -> bool:
         # More specific recommendation patterns to avoid casual conversation
         r"^is\s+.+\s+recommended\s*[\?\.]?$",  # Must be at start and end of message
         r"^who\s+recommended\s+.+[\?\.]?$",   # Must be at start and end of message
-        r"^what\s+(games?\s+)?(?:do\s+you\s+|would\s+you\s+|should\s+i\s+)?recommend", # Direct recommendation requests only
+        # Direct recommendation requests only
+        r"^what\s+(games?\s+)?(?:do\s+you\s+|would\s+you\s+|should\s+i\s+)?recommend",
         r"jonesy.*gaming\s+(history|database|archive)",
     ]
 
     return any(re.search(pattern, content_lower) for pattern in game_query_patterns)
+
 
 def detect_implicit_game_query_old(content: str) -> bool:
     """Old version with overly broad patterns - for comparison"""
@@ -87,29 +91,32 @@ def detect_implicit_game_query_old(content: str) -> bool:
 
     return any(re.search(pattern, content_lower) for pattern in game_query_patterns)
 
+
 def test_recommendation_patterns_fixed(content: str) -> tuple:
     """Test the fixed recommendation patterns"""
     lower_content = content.lower()
-    
+
     # Fixed recommendation patterns from message handler
     recommendation_patterns = [
         r"^is\s+(.+?)\s+recommended[\?\.]?$",  # Must be at start of message
         r"^has\s+(.+?)\s+been\s+recommended[\?\.]?$",  # Must be at start of message
         r"^who\s+recommended\s+(.+?)[\?\.]?$",  # Must be at start of message
-        r"^what\s+(?:games?\s+)?(?:do\s+you\s+|would\s+you\s+|should\s+i\s+)?recommend\s+(.+?)[\?\.]?$"  # More specific pattern
+        # More specific pattern
+        r"^what\s+(?:games?\s+)?(?:do\s+you\s+|would\s+you\s+|should\s+i\s+)?recommend\s+(.+?)[\?\.]?$"
     ]
-    
+
     for pattern in recommendation_patterns:
         match = re.search(pattern, lower_content)
         if match:
             return True, match.group(1) if match.groups() else "matched"
-    
+
     return False, None
+
 
 def test_recommendation_patterns_old(content: str) -> tuple:
     """Test the old recommendation patterns that caused issues"""
     lower_content = content.lower()
-    
+
     # Old overly broad patterns
     recommendation_patterns = [
         r"is\s+(.+?)\s+recommended[\?\.]?$",
@@ -117,19 +124,20 @@ def test_recommendation_patterns_old(content: str) -> tuple:
         r"who\s+recommended\s+(.+?)[\?\.]?$",
         r"what.*recommend.*(.+?)[\?\.]?$"  # This was the problematic one
     ]
-    
+
     for pattern in recommendation_patterns:
         match = re.search(pattern, lower_content)
         if match:
             return True, match.group(1) if match.groups() else "matched"
-    
+
     return False, None
+
 
 def run_tests():
     """Run comprehensive tests to verify the fixes"""
     print("🧪 Testing Ash Bot Monitoring Fixes")
     print("=" * 50)
-    
+
     # Test cases - these should NOT trigger the bot (false positives from before)
     false_positive_cases = [
         "And the fact that Jam says, remember what games Jonesy likes to play. And then someone recommends Portal 1+2",
@@ -143,7 +151,7 @@ def run_tests():
         "and then they mentioned Portal",
         "earlier someone suggested Halo"
     ]
-    
+
     # Test cases - these SHOULD trigger the bot (legitimate queries)
     true_positive_cases = [
         "Has Jonesy played Portal?",
@@ -156,81 +164,85 @@ def run_tests():
         "What games would you recommend?",
         "Should I recommend Halo?"
     ]
-    
+
     print("\n🚫 Testing FALSE POSITIVE cases (should NOT trigger):")
     print("-" * 30)
-    
+
     false_positive_count_old = 0
     false_positive_count_fixed = 0
-    
+
     for i, case in enumerate(false_positive_cases, 1):
         old_result = detect_implicit_game_query_old(case)
         fixed_result = detect_implicit_game_query_fixed(case)
-        
+
         old_rec_match, old_rec_extract = test_recommendation_patterns_old(case)
         fixed_rec_match, fixed_rec_extract = test_recommendation_patterns_fixed(case)
-        
+
         if old_result:
             false_positive_count_old += 1
         if fixed_result:
             false_positive_count_fixed += 1
-            
+
         status_old = "❌ TRIGGERED" if old_result else "✅ ignored"
         status_fixed = "❌ TRIGGERED" if fixed_result else "✅ ignored"
-        
+
         print(f"{i:2d}. '{case[:50]}{'...' if len(case) > 50 else ''}'")
         print(f"    Old:   {status_old}")
         print(f"    Fixed: {status_fixed}")
-        
+
         if old_rec_match:
             print(f"    Old Rec Pattern: ❌ MATCHED (extracted: '{old_rec_extract}')")
         if fixed_rec_match:
             print(f"    Fixed Rec Pattern: ❌ MATCHED (extracted: '{fixed_rec_extract}')")
         print()
-    
+
     print("\n✅ Testing TRUE POSITIVE cases (should trigger):")
     print("-" * 30)
-    
+
     true_positive_count_old = 0
     true_positive_count_fixed = 0
-    
+
     for i, case in enumerate(true_positive_cases, 1):
         old_result = detect_implicit_game_query_old(case)
         fixed_result = detect_implicit_game_query_fixed(case)
-        
+
         if old_result:
             true_positive_count_old += 1
         if fixed_result:
             true_positive_count_fixed += 1
-            
+
         status_old = "✅ triggered" if old_result else "❌ IGNORED"
         status_fixed = "✅ triggered" if fixed_result else "❌ IGNORED"
-        
+
         print(f"{i:2d}. '{case}'")
         print(f"    Old:   {status_old}")
         print(f"    Fixed: {status_fixed}")
         print()
-    
+
     print("\n📊 SUMMARY:")
     print("=" * 30)
     print(f"False Positives (should be 0):")
     print(f"  Old version:   {false_positive_count_old}/{len(false_positive_cases)} ❌")
-    print(f"  Fixed version: {false_positive_count_fixed}/{len(false_positive_cases)} {'✅' if false_positive_count_fixed == 0 else '❌'}")
+    print(
+        f"  Fixed version: {false_positive_count_fixed}/{len(false_positive_cases)} {'✅' if false_positive_count_fixed == 0 else '❌'}")
     print()
     print(f"True Positives (should be {len(true_positive_cases)}):")
-    print(f"  Old version:   {true_positive_count_old}/{len(true_positive_cases)} {'✅' if true_positive_count_old == len(true_positive_cases) else '❌'}")
+    print(
+        f"  Old version:   {true_positive_count_old}/{len(true_positive_cases)} {'✅' if true_positive_count_old == len(true_positive_cases) else '❌'}")
     print(f"  Fixed version: {true_positive_count_fixed}/{len(true_positive_cases)} {'✅' if true_positive_count_fixed == len(true_positive_cases) else '❌'}")
     print()
-    
+
     # Overall assessment
-    old_score = (len(true_positive_cases) - false_positive_count_old + true_positive_count_old) / (len(false_positive_cases) + len(true_positive_cases)) * 100
-    fixed_score = (len(true_positive_cases) - false_positive_count_fixed + true_positive_count_fixed) / (len(false_positive_cases) + len(true_positive_cases)) * 100
-    
+    old_score = (len(true_positive_cases) - false_positive_count_old + true_positive_count_old) / \
+        (len(false_positive_cases) + len(true_positive_cases)) * 100
+    fixed_score = (len(true_positive_cases) - false_positive_count_fixed + true_positive_count_fixed) / \
+        (len(false_positive_cases) + len(true_positive_cases)) * 100
+
     print(f"Overall Accuracy:")
     print(f"  Old version:   {old_score:.1f}%")
     print(f"  Fixed version: {fixed_score:.1f}%")
     print()
-    
+
     if false_positive_count_fixed == 0 and true_positive_count_fixed == len(true_positive_cases):
         print("🎉 SUCCESS: All fixes working correctly!")
         print("   • No false positives on casual conversation")
@@ -241,8 +253,9 @@ def run_tests():
             print(f"   • {false_positive_count_fixed} false positives still occurring")
         if true_positive_count_fixed < len(true_positive_cases):
             print(f"   • {len(true_positive_cases) - true_positive_count_fixed} legitimate queries not detected")
-    
+
     print("\n" + "=" * 50)
+
 
 if __name__ == "__main__":
     run_tests()

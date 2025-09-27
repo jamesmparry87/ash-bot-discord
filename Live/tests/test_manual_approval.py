@@ -10,28 +10,29 @@ import os
 # Add project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+
 async def test_manual_approval_system():
     """Test the manual approval command system"""
     print("🧠 Testing Manual Approval System")
     print("=" * 50)
-    
+
     try:
         from bot.database_module import get_database
-        
+
         db = get_database()
-        
+
         print("✅ Database connection established")
-        
+
         # Test database methods used by approval system
         print("\n🔍 Testing required database methods...")
-        
+
         required_methods = [
             'get_next_trivia_question',
-            'get_trivia_question_by_id', 
+            'get_trivia_question_by_id',
             'calculate_dynamic_answer',
             'add_trivia_question'
         ]
-        
+
         method_status = {}
         for method in required_methods:
             if hasattr(db, method):
@@ -40,7 +41,7 @@ async def test_manual_approval_system():
             else:
                 method_status[method] = "❌ Missing"
                 print(f"   ❌ {method}: Missing")
-        
+
         # Test conversation handler imports
         print("\n🔗 Testing conversation handler integration...")
         try:
@@ -48,13 +49,13 @@ async def test_manual_approval_system():
             print("   ✅ start_jam_question_approval: Available")
         except ImportError as e:
             print(f"   ❌ start_jam_question_approval: Missing - {e}")
-        
+
         try:
             from bot.handlers.conversation_handler import jam_approval_conversations
             print("   ✅ jam_approval_conversations: Available")
         except ImportError as e:
             print(f"   ❌ jam_approval_conversations: Missing - {e}")
-        
+
         # Test AI handler integration
         print("\n🤖 Testing AI handler integration...")
         try:
@@ -62,10 +63,10 @@ async def test_manual_approval_system():
             print(f"   ✅ AI system status: {'Enabled' if ai_enabled else 'Disabled'}")
         except ImportError as e:
             print(f"   ❌ AI handler: Not available - {e}")
-        
+
         # Test question database operations
         print("\n📊 Testing question database operations...")
-        
+
         try:
             # Test getting next question (auto-selection)
             if hasattr(db, 'get_next_trivia_question'):
@@ -79,7 +80,7 @@ async def test_manual_approval_system():
                 print("   ❌ Auto-selection: Method not available")
         except Exception as e:
             print(f"   ❌ Auto-selection error: {e}")
-        
+
         try:
             # Test getting available questions
             if hasattr(db, 'get_available_trivia_questions'):
@@ -92,10 +93,10 @@ async def test_manual_approval_system():
                 print("   ❌ Question listing: No available methods")
         except Exception as e:
             print(f"   ❌ Question listing error: {e}")
-        
+
         # Test question statistics
         print("\n📈 Testing trivia question statistics...")
-        
+
         try:
             if hasattr(db, 'get_trivia_question_statistics'):
                 stats = db.get_trivia_question_statistics()
@@ -107,27 +108,27 @@ async def test_manual_approval_system():
                 print("   ⚠️ Question statistics: Method not available")
         except Exception as e:
             print(f"   ❌ Statistics error: {e}")
-        
+
         print(f"\n{'=' * 50}")
-        
+
         # Summary
         missing_methods = [method for method, status in method_status.items() if "Missing" in status]
-        
+
         if missing_methods:
             print(f"⚠️ Manual approval system has some limitations:")
             for method in missing_methods:
                 print(f"   • {method} method needs implementation")
         else:
             print("✅ All required database methods are available")
-        
+
         print(f"\n🎯 Manual Approval Commands:")
         print(f"   • !approvequestion <id> - Send specific question for approval")
         print(f"   • !approvequestion auto - Send auto-selected question")
         print(f"   • !approvequestion generate - Generate and send AI question")
         print(f"   • !approvestatus - Check pending approval status")
-        
+
         print(f"\n✅ Manual approval system testing complete")
-        
+
     except Exception as e:
         print(f"❌ Test failed with error: {e}")
         import traceback

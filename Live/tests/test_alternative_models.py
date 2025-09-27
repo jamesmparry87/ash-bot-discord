@@ -7,21 +7,22 @@ import os
 import requests
 import json
 
+
 def test_alternative_models():
     """Test publicly available models via HuggingFace Inference API"""
     print("🧪 Testing Alternative HuggingFace Models")
     print("=" * 50)
-    
+
     api_key = os.getenv('HUGGINGFACE_API_KEY')
     if not api_key:
         print("❌ HUGGINGFACE_API_KEY not found!")
         return False
-    
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    
+
     # Test publicly available models
     test_models = [
         {
@@ -31,7 +32,7 @@ def test_alternative_models():
         },
         {
             "name": "Facebook BlenderBot Small",
-            "model": "facebook/blenderbot_small-90M", 
+            "model": "facebook/blenderbot_small-90M",
             "prompt": "Hello, can you help me?"
         },
         {
@@ -45,13 +46,13 @@ def test_alternative_models():
             "prompt": "The weather today is"
         }
     ]
-    
+
     successful_models = []
-    
+
     for model_info in test_models:
         print(f"\n🔬 Testing: {model_info['name']}")
         print(f"   Model: {model_info['model']}")
-        
+
         url = f"https://api-inference.huggingface.co/models/{model_info['model']}"
         payload = {
             "inputs": model_info['prompt'],
@@ -61,11 +62,11 @@ def test_alternative_models():
                 "return_full_text": False
             }
         }
-        
+
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=30)
             print(f"   Status: {response.status_code}")
-            
+
             if response.status_code == 200:
                 try:
                     data = response.json()
@@ -79,13 +80,13 @@ def test_alternative_models():
                     print(f"   ⚠️ Non-JSON response: {response.text[:60]}...")
             else:
                 print(f"   ❌ Error: {response.text[:100]}")
-                
+
         except Exception as e:
             print(f"   ❌ Exception: {e}")
-    
+
     print(f"\n" + "=" * 50)
     print(f"📊 Results: {len(successful_models)}/{len(test_models)} models working")
-    
+
     if successful_models:
         print("\n✅ Working Models for Bot Integration:")
         for model in successful_models:
@@ -95,9 +96,10 @@ def test_alternative_models():
         print("\n❌ No models working - check API permissions")
         return False
 
+
 if __name__ == "__main__":
     success = test_alternative_models()
-    
+
     if success:
         print(f"\n🎯 Recommendation:")
         print(f"   Update your bot to use one of the working models above")

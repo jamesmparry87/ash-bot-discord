@@ -6,6 +6,7 @@ Analysis of trivia response interference from gaming query patterns
 import re
 from typing import Match, Optional, Tuple
 
+
 def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
     """Copy of the route_query function from message_handler.py for testing"""
     lower_content = content.lower()
@@ -28,7 +29,7 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"which.*game.*took.*most.*time",
             # Additional patterns for playtime queries that were falling through to AI
             r"what\s+is\s+the\s+longest\s+game.*jonesy.*played",
-            r"which\s+is\s+the\s+longest\s+game.*jonesy.*played", 
+            r"which\s+is\s+the\s+longest\s+game.*jonesy.*played",
             r"what\s+game\s+took.*longest.*for\s+jonesy",
             r"what\s+game\s+has\s+the\s+most\s+playtime",
             r"what\s+game\s+has\s+the\s+longest\s+playtime",
@@ -75,7 +76,8 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"^is\s+(.+?)\s+recommended[\?\.]?$",  # Must be at start of message
             r"^has\s+(.+?)\s+been\s+recommended[\?\.]?$",  # Must be at start of message
             r"^who\s+recommended\s+(.+?)[\?\.]?$",  # Must be at start of message
-            r"^what\s+(?:games?\s+)?(?:do\s+you\s+|would\s+you\s+|should\s+i\s+)?recommend\s+(.+?)[\?\.]?$"  # More specific pattern
+            # More specific pattern
+            r"^what\s+(?:games?\s+)?(?:do\s+you\s+|would\s+you\s+|should\s+i\s+)?recommend\s+(.+?)[\?\.]?$"
         ],
         "youtube_views": [
             r"what\s+game\s+has\s+gotten.*most\s+views",
@@ -100,11 +102,12 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
 
     return "unknown", None
 
+
 def test_trivia_answer_interference():
     """Test if typical trivia answers get incorrectly matched by gaming query patterns"""
     print("🔍 Trivia Answer Interference Analysis")
     print("=" * 50)
-    
+
     # Common trivia answers that might get falsely matched
     trivia_answers = [
         "God of War",
@@ -127,11 +130,11 @@ def test_trivia_answer_interference():
         "RPG",  # Genre answer
         "Horror",  # Genre answer
     ]
-    
+
     print(f"\n📝 Testing {len(trivia_answers)} common trivia answers...")
-    
+
     false_positives = []
-    
+
     for answer in trivia_answers:
         query_type, match = route_query(answer)
         if query_type != "unknown":
@@ -143,24 +146,25 @@ def test_trivia_answer_interference():
             print(f"❌ FALSE POSITIVE: '{answer}' matched as '{query_type}' query")
         else:
             print(f"✅ '{answer}' - no false match")
-    
+
     print(f"\n📊 Results:")
     print(f"   Total answers tested: {len(trivia_answers)}")
     print(f"   False positives: {len(false_positives)}")
     print(f"   Accuracy: {((len(trivia_answers) - len(false_positives)) / len(trivia_answers)) * 100:.1f}%")
-    
+
     if false_positives:
         print(f"\n⚠️ PROBLEMATIC PATTERNS:")
         for fp in false_positives:
             print(f"   • '{fp['answer']}' → {fp['matched_type']} (pattern: {fp.get('matched_pattern', 'unknown')})")
-    
+
     return len(false_positives) == 0
+
 
 def test_legitimate_gaming_queries():
     """Test that legitimate gaming queries still work correctly"""
     print(f"\n🎮 Testing Legitimate Gaming Queries")
     print("=" * 40)
-    
+
     legitimate_queries = [
         ("Has Jonesy played God of War?", "game_status"),
         ("What horror games has Jonesy played?", "genre"),
@@ -170,7 +174,7 @@ def test_legitimate_gaming_queries():
         ("Is Cyberpunk recommended?", "recommendation"),
         ("What game has the most views?", "youtube_views"),
     ]
-    
+
     all_correct = True
     for query, expected_type in legitimate_queries:
         query_type, match = route_query(query)
@@ -179,14 +183,15 @@ def test_legitimate_gaming_queries():
         else:
             print(f"❌ '{query}' → {query_type} (expected: {expected_type})")
             all_correct = False
-    
+
     return all_correct
+
 
 def analyze_problematic_patterns():
     """Analyze which patterns are too broad and causing false positives"""
     print(f"\n🔍 Pattern Analysis")
     print("=" * 25)
-    
+
     # Most problematic patterns identified
     problematic_patterns = [
         # These patterns are too broad and match simple game names
@@ -195,20 +200,21 @@ def analyze_problematic_patterns():
         (r"what.*game.*most.*playtime", "statistical", "Too broad - matches isolated words"),
         (r"what.*longest.*game.*jonesy.*played", "statistical", "Too broad - matches isolated words"),
     ]
-    
+
     print("🚨 IDENTIFIED PROBLEMATIC PATTERNS:")
     for pattern, query_type, issue in problematic_patterns:
         print(f"   • {query_type}: {pattern}")
         print(f"     Issue: {issue}")
         print()
-    
+
     return problematic_patterns
+
 
 def recommend_solutions():
     """Recommend solutions to fix the interference"""
     print("💡 RECOMMENDED SOLUTIONS:")
     print("=" * 30)
-    
+
     solutions = [
         "1. Make gaming query patterns more specific",
         "   - Require question words (what, which, how, etc.)",
@@ -228,38 +234,40 @@ def recommend_solutions():
         "   - Check if message is a short answer (1-3 words)",
         "   - Skip gaming processing for likely trivia answers"
     ]
-    
+
     for solution in solutions:
         print(solution)
+
 
 def main():
     """Run the trivia interference analysis"""
     print("🧪 Trivia Response Interference Analysis")
     print("=" * 60)
-    
+
     # Test for false positives
     no_false_positives = test_trivia_answer_interference()
-    
+
     # Test legitimate queries still work
     legitimate_queries_work = test_legitimate_gaming_queries()
-    
+
     # Analyze problematic patterns
     problematic_patterns = analyze_problematic_patterns()
-    
+
     # Provide solutions
     recommend_solutions()
-    
+
     print("\n" + "=" * 60)
     print("📊 ANALYSIS SUMMARY:")
     print(f"   • False positives detected: {'No' if no_false_positives else 'Yes'}")
     print(f"   • Legitimate queries work: {'Yes' if legitimate_queries_work else 'No'}")
     print(f"   • Problematic patterns found: {len(problematic_patterns)}")
-    
+
     if not no_false_positives:
         print(f"\n⚠️ CONCLUSION: Gaming query patterns are too broad and will")
         print(f"   interfere with trivia answers. Patterns need to be made more specific.")
     else:
         print(f"\n✅ CONCLUSION: No interference detected from gaming query patterns.")
+
 
 if __name__ == "__main__":
     main()
