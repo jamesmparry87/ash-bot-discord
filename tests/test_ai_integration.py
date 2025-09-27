@@ -6,7 +6,9 @@ import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest  # type: ignore
+import pytest
+
+from tests.test_commands import mock_discord_message  # type: ignore
 
 # Add the Live directory to sys.path
 live_path = os.path.join(os.path.dirname(__file__), '..', 'Live')
@@ -62,36 +64,36 @@ class TestAIResponseFiltering:
         sentence_count = len([s for s in filtered.split('.') if s.strip()])
         assert sentence_count <= 4
 
-@pytest.mark.asyncio
-async def test_ai_response_generation(self, mock_discord_message):
-    """Test basic AI response generation."""
-    # Mock bot user and setup
-    mock_bot_user = MagicMock()
-    mock_bot_user.id = 12345
-    mock_discord_message.mentions = [mock_bot_user]
-    mock_discord_message.content = f"<@{mock_bot_user.id}> What is your purpose?"
-    mock_discord_message.author.id = 123456789
+        @pytest.mark.asyncio
+        async def test_ai_response_generation(self, mock_discord_message):
+            """Test basic AI response generation."""
+            # Mock bot user and setup
+            mock_bot_user = MagicMock()
+            mock_bot_user.id = 12345
+            mock_discord_message.mentions = [mock_bot_user]
+            mock_discord_message.content = f"<@{mock_bot_user.id}> What is your purpose?"
+            mock_discord_message.author.id = 123456789
 
-    # Mock AI response
-    mock_response = MagicMock()
-    mock_response.text = "I am Science Officer Ash. My purpose is to assist."
+            # Mock AI response
+            mock_response = MagicMock()
+            mock_response.text = "I am Science Officer Ash. My purpose is to assist."
 
-    with patch('bot_modular.bot') as mock_bot:
-        mock_bot.user = mock_bot_user
+            with patch('bot_modular.bot') as mock_bot:
+                mock_bot.user = mock_bot_user
 
-        # Mock the ai_handler module functions
-        with patch("bot.handlers.ai_handler.ai_enabled", True):
-            with patch("bot_modular.BOT_PERSONA", {"enabled": True, "personality": "Test persona"}):
-                with patch("bot.handlers.ai_handler.primary_ai", "gemini"):
-                    with patch("bot.handlers.ai_handler.backup_ai", "huggingface"):
-                        with patch("bot.handlers.ai_handler.gemini_model") as mock_gemini:
-                            mock_gemini.generate_content.return_value = mock_response
+                # Mock the ai_handler module functions
+                with patch("bot.handlers.ai_handler.ai_enabled", True):
+                    with patch("bot_modular.BOT_PERSONA", {"enabled": True, "personality": "Test persona"}):
+                        with patch("bot.handlers.ai_handler.primary_ai", "gemini"):
+                            with patch("bot.handlers.ai_handler.backup_ai", "huggingface"):
+                                with patch("bot.handlers.ai_handler.gemini_model") as mock_gemini:
+                                    mock_gemini.generate_content.return_value = mock_response
 
-                            with patch("bot_modular.bot.process_commands", new=AsyncMock()):
-                                await bot_modular.on_message(mock_discord_message)
+                                    with patch("bot_modular.bot.process_commands", new=AsyncMock()):
+                                        await bot_modular.on_message(mock_discord_message)
 
-                                # Verify response was sent
-                                mock_discord_message.reply.assert_called_once()
+                                        # Verify response was sent
+                                        mock_discord_message.reply.assert_called_once()
 
 if __name__ == '__main__':
     pytest.main([__file__])
