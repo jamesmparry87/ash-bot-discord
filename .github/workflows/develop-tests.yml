@@ -89,7 +89,7 @@ jobs:
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}  # pyright: ignore
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # pyright: ignore
       run: |
-        python3 -m pytest Live/tests/test_commands.py -v --tb=short --durations=10
+        python3 -m pytest tests/test_commands.py -v --tb=short --durations=10
     
     - name: Run AI integration tests
       env:
