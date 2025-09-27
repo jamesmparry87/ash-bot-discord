@@ -763,7 +763,7 @@ async def setup_ai_provider_async(
         if name == "gemini":
             global gemini_model
             module.configure(api_key=api_key)
-            gemini_model = module.GenerativeModel('gemini-1.5-flash')
+            gemini_model = module.GenerativeModel('gemini-2.0-flash')
 
             # Test with timeout to prevent hanging - using proper async/await
             test_generation_config = {
@@ -830,7 +830,7 @@ def setup_ai_provider(
         if name == "gemini":
             global gemini_model
             module.configure(api_key=api_key)
-            gemini_model = module.GenerativeModel('gemini-1.5-flash')
+            gemini_model = module.GenerativeModel('gemini-2.0-flash')
             print(f"✅ Gemini AI configured (testing deferred to async initialization)")
             return True
         elif name == "huggingface":
