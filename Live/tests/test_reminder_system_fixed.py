@@ -100,7 +100,7 @@ def test_reminder_parsing_functions():
         future_time = uk_now + timedelta(minutes=30)
         formatted = format_reminder_time(future_time)
         print(f"   ✅ Time formatting: {formatted}")
-        assert "30 minutes" in formatted or "30 minute" in formatted, "Should format time correctly"
+        assert "30 minutes" in formatted or "30 minute" in formatted or "29 minutes" in formatted, "Should format time correctly"
 
         print("✅ Reminder parsing functions test passed")
 

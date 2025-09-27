@@ -2365,7 +2365,7 @@ class DatabaseManager:
             logger.error(f"Error getting reminder by ID {reminder_id}: {e}")
             return None
 
-    def cancel_reminder(self, reminder_id: int) -> bool:
+    async def cancel_reminder(self, reminder_id: int) -> bool:
         """Cancel a reminder by ID (admin version - no user restriction)"""
         conn = self.get_connection()
         if not conn:
