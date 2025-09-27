@@ -315,7 +315,7 @@ jobs:
       run: |
         required_files=(
           "Live/requirements.txt"
-          "Live/ash_bot_fallback.py"
+          "Live/bot_modular.py"
           "Live/database.py"
           "Live/Procfile"
         )
