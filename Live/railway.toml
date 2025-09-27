@@ -4,5 +4,5 @@ builder = "nixpacks"
 [deploy]
 startCommand = "python bot_modular.py"
 healthcheckTimeout = 300
-restartPolicyType = "ON_FAILURE"
+restartPolicyType = "ALWAYS"
 restartPolicyMaxRetries = 10
