@@ -736,7 +736,7 @@ async def on_message(message):
 
                     fake_content = f"!remind {content}"
                     print(f"⚙️  Natural language reminder transformed to: '{fake_content}'")
-                    
+
                     # Temporarily modify the message to process the fake command
                     original_content = message.content
                     message.content = fake_content

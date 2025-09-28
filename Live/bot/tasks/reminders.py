@@ -26,11 +26,11 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
         if channel_match:
             print("⚙️ Channel or Role reminder intent detected.")
             target_type = 'channel'
-            mention_target = channel_match.group(2) # Captures 'everyone', 'here', or the full role mention '<@&...>'
-            
+            mention_target = channel_match.group(2)  # Captures 'everyone', 'here', or the full role mention '<@&...>'
+
             # Clean the content string by removing the trigger phrase
             content = content.replace(channel_match.group(0), '').strip()
-        
+
         # Comprehensive time patterns ordered from most specific to most general
         time_patterns = [
             # 1. All 12-hour patterns first (highest priority, most specific due to am/pm)
