@@ -1411,13 +1411,11 @@ def detect_natural_language_command(content: str) -> bool:
     # Natural language command patterns - these should be processed as commands, not FAQ
     command_patterns = [
         # Reminder commands
+        r"remind\s+(?:<@!?\d+>|me|everyone|here|<@&\d+>)\s+",
         r"set\s+(?:a\s+)?remind(?:er)?\s+for",
-        r"remind\s+me\s+(?:in|at|to)",
         r"create\s+(?:a\s+)?remind(?:er)?\s+for",
         r"schedule\s+(?:a\s+)?remind(?:er)?\s+for",
         r"set\s+(?:a\s+)?timer\s+for",
-        r"remind\s+(?:me\s+)?in\s+\d+",
-        r"reminder\s+(?:in|for)\s+\d+",
 
         # Game recommendation commands (natural language alternatives)
         r"(?:add|suggest|recommend)\s+(?:the\s+)?game",
@@ -1427,8 +1425,10 @@ def detect_natural_language_command(content: str) -> bool:
         # Other potential natural language commands
         r"show\s+(?:me\s+)?(?:my\s+)?reminders?",
         r"list\s+(?:my\s+)?reminders?",
-        r"cancel\s+(?:my\s+)?reminder",
-        r"delete\s+(?:my\s+)?reminder",
+        r"cancel\s+(?:my\s+)?reminders?",
+        r"delete\s+(?:my\s+)?reminders?",
+        r"clear\s+(?:my\s+)?reminders?",
+        r"what\s+are\s+(?:my\s+)?reminders?",
     ]
 
     return any(re.search(pattern, content_lower) for pattern in command_patterns)
