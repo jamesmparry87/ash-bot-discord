@@ -17,7 +17,20 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
     try:
         # Comprehensive time patterns ordered from most specific to most general
         time_patterns = [
-            # Duration patterns (highest priority)
+            # 1. All 12-hour patterns first (highest priority, most specific due to am/pm)
+            (r'\b(?:at|for|on)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', 'time_12h'),
+            (r'\b(?:at|for|on)\s+(\d{1,2})\.(\d{2})\s*(am|pm)\b', 'time_dot_12h'),
+            # Catches times like "7pm" without a preposition
+            (r'\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', 'time_12h_simple'),
+
+            # 2. Broader and safer 24-hour patterns
+            # The preposition `at` is now optional. The hour is validated (0-23).
+            # A negative lookahead `(?!\s*am|pm)` is added to prevent it from
+            # incorrectly matching a 12-hour time like "8:00" in "8:00 am".
+            (r'\b(?:at\s+)?([01]?\d|2[0-3])(?::(\d{2}))\b(?!\s*am|pm)', 'time_24h'),
+            (r'\b(?:at\s+)?([01]?\d|2[0-3])\.(\d{2})\b(?!\s*am|pm)', 'time_dot_24h'),
+            
+            # Duration patterns (next highest priority)
             (r'\b(?:in\s+)?(\d+)\s*(?:minute|min)(?:\'?s)?\s*(?:time)?\b', 'minutes_from_now'),
             (r'\b(?:in\s+)?(\d+)\s*(?:m)\b', 'minutes_from_now_short'),
             (r'\b(?:in\s+)?(\d+)\s*(?:hour|hr)(?:s)?\s*(?:time)?\b', 'hours_from_now'),
@@ -34,19 +47,6 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             (
                 r'\bnext\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b',
                 'next_weekday_time'),
-
-            # 1. All 12-hour patterns first (most specific due to am/pm)
-            (r'\b(?:at|for|on)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', 'time_12h'),
-            (r'\b(?:at|for|on)\s+(\d{1,2})\.(\d{2})\s*(am|pm)\b', 'time_dot_12h'),
-            # Catches times like "7pm" without a preposition
-            (r'\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', 'time_12h_simple'),
-
-            # 2. Broader and safer 24-hour patterns
-            # The preposition `at` is now optional. The hour is validated (0-23).
-            # A negative lookahead `(?!\s*am|pm)` is added to prevent it from
-            # incorrectly matching a 12-hour time like "8:00" in "8:00 am".
-            (r'\b(?:at\s+)?([01]?\d|2[0-3])(?::(\d{2}))\b(?!\s*am|pm)', 'time_24h'),
-            (r'\b(?:at\s+)?([01]?\d|2[0-3])\.(\d{2})\b(?!\s*am|pm)', 'time_dot_24h'),
 
             # Tomorrow patterns
             (r'\btomorrow\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b', 'tomorrow_time'),
