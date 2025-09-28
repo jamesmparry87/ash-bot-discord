@@ -15,9 +15,38 @@ from ..integrations.youtube import extract_youtube_urls, has_youtube_content
 def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
     """Parse natural language reminder requests"""
     try:
+        target_type = 'user'
+        mention_target = None
+        original_content = content
+
+        # New pattern now detects 'everyone', 'here', or a role mention like <@&12345>
+        channel_remind_pattern = r'(remind\s+)?(everyone|here|<@&\d+>)\s+(?:in\s+this\s+channel)?'
+        channel_match = re.search(channel_remind_pattern, content, re.IGNORECASE)
+
+        if channel_match:
+            print("⚙️ Channel or Role reminder intent detected.")
+            target_type = 'channel'
+            mention_target = channel_match.group(2)  # Captures 'everyone', 'here', or the full role mention '<@&...>'
+
+            # Clean the content string by removing the trigger phrase
+            content = content.replace(channel_match.group(0), '').strip()
+
         # Comprehensive time patterns ordered from most specific to most general
         time_patterns = [
-            # Duration patterns (highest priority)
+            # 1. All 12-hour patterns first (highest priority, most specific due to am/pm)
+            (r'\b(?:at|for|on)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', 'time_12h'),
+            (r'\b(?:at|for|on)\s+(\d{1,2})\.(\d{2})\s*(am|pm)\b', 'time_dot_12h'),
+            # Catches times like "7pm" without a preposition
+            (r'\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', 'time_12h_simple'),
+
+            # 2. Broader and safer 24-hour patterns
+            # The preposition `at` is now optional. The hour is validated (0-23).
+            # A negative lookahead `(?!\s*am|pm)` is added to prevent it from
+            # incorrectly matching a 12-hour time like "8:00" in "8:00 am".
+            (r'\b(?:at\s+)?([01]?\d|2[0-3])(?::(\d{2}))\b(?!\s*am|pm)', 'time_24h'),
+            (r'\b(?:at\s+)?([01]?\d|2[0-3])\.(\d{2})\b(?!\s*am|pm)', 'time_dot_24h'),
+
+            # Duration patterns (next highest priority)
             (r'\b(?:in\s+)?(\d+)\s*(?:minute|min)(?:\'?s)?\s*(?:time)?\b', 'minutes_from_now'),
             (r'\b(?:in\s+)?(\d+)\s*(?:m)\b', 'minutes_from_now_short'),
             (r'\b(?:in\s+)?(\d+)\s*(?:hour|hr)(?:s)?\s*(?:time)?\b', 'hours_from_now'),
@@ -34,15 +63,6 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             (
                 r'\bnext\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b',
                 'next_weekday_time'),
-
-            # Simple time patterns with clearer matching
-            (r'\b(?:at|for|on)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', 'time_12h'),
-            (r'\b(?:at|for|on)\s+(\d{1,2})\.(\d{2})\s*(am|pm)\b', 'time_dot_12h'),
-            (r'\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b', 'time_12h_simple'),
-
-            # 24-hour format times
-            (r'\bat\s+(\d{1,2})(?::(\d{2}))?\b', 'time_24h'),
-            (r'\bat\s+(\d{1,2})\.(\d{2})\b', 'time_dot_24h'),
 
             # Tomorrow patterns
             (r'\btomorrow\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b', 'tomorrow_time'),
@@ -295,6 +315,8 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             "scheduled_time": scheduled_time,
             "success": bool(reminder_text.strip()),
             "confidence": "high" if matched_pattern else "low",
+            "target_type": target_type,
+            "mention_target": mention_target
         }
     except Exception as e:
         print(f"❌ Error parsing natural reminder: {e}")
