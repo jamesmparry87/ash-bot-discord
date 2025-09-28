@@ -47,7 +47,7 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             # incorrectly matching a 12-hour time like "8:00" in "8:00 am".
             (r'\b(?:at\s+)?([01]?\d|2[0-3])(?::(\d{2}))\b(?!\s*am|pm)', 'time_24h'),
             (r'\b(?:at\s+)?([01]?\d|2[0-3])\.(\d{2})\b(?!\s*am|pm)', 'time_dot_24h'),
-        
+
             # Tomorrow patterns
             (r'\btomorrow\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b', 'tomorrow_time'),
             (r'\btomorrow\b', 'tomorrow'),

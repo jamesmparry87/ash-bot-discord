@@ -748,14 +748,14 @@ async def on_message(message):
                         fake_content = f"!remind {message.author.mention} {content}"
 
                     print(f"⚙️  Natural language reminder transformed to: '{fake_content}'")
-                    
+
                     # Temporarily modify the message to process the fake command
                     original_content = message.content
                     message.content = fake_content
                     await bot.process_commands(message)
-                    message.content = original_content # Restore original content
+                    message.content = original_content  # Restore original content
                     return
-                
+
             # PRIORITY 3: Use the unified context-aware gaming query processor
             if await message_handler_functions['process_gaming_query_with_context'](message):
                 return
