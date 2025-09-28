@@ -733,22 +733,10 @@ async def on_message(message):
                 is_reminder = "remind" in content_lower or "timer" in content_lower
 
                 if is_reminder:
-                    fake_content = ""
-                    # Check if the message mentions anyone other than the bot itself
-                    mentioned_users = [user for user in message.mentions if user != bot.user]
 
-                    if mentioned_users:
-                        # A user was mentioned, so format the command to target them
-                        target_user = mentioned_users[0]
-                        # Remove the user mention from the content to create a clean message
-                        cleaned_content = re.sub(r'<@!?\d+>', '', content).strip()
-                        fake_content = f"!remind {target_user.mention} {cleaned_content}"
-                    else:
-                        # No other user mentioned, so set the reminder for the author
-                        fake_content = f"!remind {message.author.mention} {content}"
-
+                    fake_content = f"!remind {content}"
                     print(f"⚙️  Natural language reminder transformed to: '{fake_content}'")
-
+                    
                     # Temporarily modify the message to process the fake command
                     original_content = message.content
                     message.content = fake_content

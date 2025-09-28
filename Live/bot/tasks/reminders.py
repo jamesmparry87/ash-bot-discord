@@ -15,6 +15,22 @@ from ..integrations.youtube import extract_youtube_urls, has_youtube_content
 def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
     """Parse natural language reminder requests"""
     try:
+        target_type = 'user'
+        mention_target = None
+        original_content = content
+
+        # New pattern now detects 'everyone', 'here', or a role mention like <@&12345>
+        channel_remind_pattern = r'(remind\s+)?(everyone|here|<@&\d+>)\s+(?:in\s+this\s+channel)?'
+        channel_match = re.search(channel_remind_pattern, content, re.IGNORECASE)
+
+        if channel_match:
+            print("⚙️ Channel or Role reminder intent detected.")
+            target_type = 'channel'
+            mention_target = channel_match.group(2) # Captures 'everyone', 'here', or the full role mention '<@&...>'
+            
+            # Clean the content string by removing the trigger phrase
+            content = content.replace(channel_match.group(0), '').strip()
+        
         # Comprehensive time patterns ordered from most specific to most general
         time_patterns = [
             # 1. All 12-hour patterns first (highest priority, most specific due to am/pm)
@@ -299,6 +315,8 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             "scheduled_time": scheduled_time,
             "success": bool(reminder_text.strip()),
             "confidence": "high" if matched_pattern else "low",
+            "target_type": target_type,
+            "mention_target": mention_target
         }
     except Exception as e:
         print(f"❌ Error parsing natural reminder: {e}")
