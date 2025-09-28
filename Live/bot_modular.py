@@ -728,32 +728,34 @@ async def on_message(message):
             # PRIORITY 2: Check for natural language commands
             if detect_natural_language_command(content):
                 print(f"🔧 Natural language command detected: {content[:50]}... - processing as command")
-
-                # For natural language commands, we need to construct a proper command
-                # The reminder command supports natural language parsing
                 content_lower = content.lower().strip()
 
-                # Handle reminder patterns
-                if any(re.search(pattern, content_lower) for pattern in [
-                    r"set\s+(?:a\s+)?remind(?:er)?\s+for",
-                    r"remind\s+me\s+(?:in|at|to)",
-                    r"create\s+(?:a\s+)?remind(?:er)?\s+for",
-                    r"schedule\s+(?:a\s+)?remind(?:er)?\s+for",
-                    r"set\s+(?:a\s+)?timer\s+for",
-                    r"remind\s+(?:me\s+)?in\s+\d+",
-                    r"reminder\s+(?:in|for)\s+\d+"
-                ]):
-                    # Create a fake message with !remind command for processing
-                    fake_content = f"!remind {content}"
+                is_reminder = "remind" in content_lower or "timer" in content_lower
+
+                if is_reminder:
+                    fake_content = ""
+                    # Check if the message mentions anyone other than the bot itself
+                    mentioned_users = [user for user in message.mentions if user != bot.user]
+
+                    if mentioned_users:
+                        # A user was mentioned, so format the command to target them
+                        target_user = mentioned_users[0]
+                        # Remove the user mention from the content to create a clean message
+                        cleaned_content = re.sub(r'<@!?\d+>', '', content).strip()
+                        fake_content = f"!remind {target_user.mention} {cleaned_content}"
+                    else:
+                        # No other user mentioned, so set the reminder for the author
+                        fake_content = f"!remind {message.author.mention} {content}"
+
+                    print(f"⚙️  Natural language reminder transformed to: '{fake_content}'")
+                    
+                    # Temporarily modify the message to process the fake command
                     original_content = message.content
                     message.content = fake_content
                     await bot.process_commands(message)
-                    message.content = original_content  # Restore original content
+                    message.content = original_content # Restore original content
                     return
-
-                # Handle other natural language commands here as needed
-                # For now, fall through to normal processing for other patterns
-
+                
             # PRIORITY 3: Use the unified context-aware gaming query processor
             if await message_handler_functions['process_gaming_query_with_context'](message):
                 return
