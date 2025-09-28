@@ -29,7 +29,7 @@ def parse_natural_reminder(content: str, user_id: int) -> Dict[str, Any]:
             # incorrectly matching a 12-hour time like "8:00" in "8:00 am".
             (r'\b(?:at\s+)?([01]?\d|2[0-3])(?::(\d{2}))\b(?!\s*am|pm)', 'time_24h'),
             (r'\b(?:at\s+)?([01]?\d|2[0-3])\.(\d{2})\b(?!\s*am|pm)', 'time_dot_24h'),
-            
+
             # Duration patterns (next highest priority)
             (r'\b(?:in\s+)?(\d+)\s*(?:minute|min)(?:\'?s)?\s*(?:time)?\b', 'minutes_from_now'),
             (r'\b(?:in\s+)?(\d+)\s*(?:m)\b', 'minutes_from_now_short'),
