@@ -60,22 +60,22 @@ def _detect_bot_environment():
     Returns True if live bot, False if staging bot, None if undetermined.
     """
     global _is_live_bot
-    
+
     if _is_live_bot is not None:
         return _is_live_bot  # Use cached result
-    
+
     try:
         bot = get_bot_instance()
         if not bot or not bot.user:
             print("⚠️ ENVIRONMENT DETECTION: Bot instance not available")
             return None
-            
+
         bot_id = bot.user.id
-        
+
         # Known bot IDs - update these with your actual bot IDs
         LIVE_BOT_ID = 1162034693115748462  # Replace with actual live bot ID
         STAGING_BOT_ID = None  # Replace with actual staging bot ID if you have one
-        
+
         if bot_id == LIVE_BOT_ID:
             _is_live_bot = True
             print(f"✅ ENVIRONMENT DETECTION: Live bot detected (ID: {bot_id})")
@@ -101,7 +101,7 @@ def _detect_bot_environment():
                 _is_live_bot = True
                 print(f"⚠️ ENVIRONMENT DETECTION: Unknown bot ID {bot_id}, defaulting to live bot")
                 return True
-                
+
     except Exception as e:
         print(f"❌ ENVIRONMENT DETECTION: Error detecting environment - {e}")
         # Default to live for safety

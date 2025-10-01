@@ -68,6 +68,7 @@ def _get_bot_instance():
         print(f"❌ Error in _get_bot_instance: {e}")
         return None
 
+
 # Global conversation state management
 # user_id: {'step': str, 'data': dict, 'last_activity': datetime}
 announcement_conversations: Dict[int, Dict[str, Any]] = {}
@@ -1295,7 +1296,7 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
 
         # Get bot instance using centralized access function
         bot_instance = _get_bot_instance()
-        
+
         if not bot_instance:
             print("❌ Could not find bot instance for JAM approval")
             return False
