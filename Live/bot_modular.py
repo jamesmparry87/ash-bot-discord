@@ -228,23 +228,29 @@ try:
     from bot.handlers.conversation_handler import (
         announcement_conversations,
         cleanup_announcement_conversations,
+        cleanup_jam_approval_conversations,
         cleanup_mod_trivia_conversations,
         handle_announcement_conversation,
+        handle_jam_approval_conversation,
         handle_mod_trivia_conversation,
+        jam_approval_conversations,
         mod_trivia_conversations,
         start_announcement_conversation,
         start_trivia_conversation,
     )
-    print("✅ Conversation handlers imported successfully")
+    print("✅ Conversation handlers imported successfully (including JAM approval)")
 except ImportError as e:
     print(f"⚠️ Conversation handlers not available: {e}")
     # Set fallback empty dictionaries
     announcement_conversations = {}
     mod_trivia_conversations = {}
+    jam_approval_conversations = {}
     handle_announcement_conversation = None
     handle_mod_trivia_conversation = None
+    handle_jam_approval_conversation = None
     def cleanup_announcement_conversations(): return None
     def cleanup_mod_trivia_conversations(): return None
+    def cleanup_jam_approval_conversations(): return None
     start_announcement_conversation = None
     start_trivia_conversation = None
 
@@ -652,6 +658,7 @@ async def on_message(message):
             # Clean up expired conversations
             cleanup_announcement_conversations()
             cleanup_mod_trivia_conversations()
+            cleanup_jam_approval_conversations()
 
             # Handle announcement conversation flow in DMs
             if message.author.id in announcement_conversations and handle_announcement_conversation is not None:
@@ -665,6 +672,13 @@ async def on_message(message):
                 print(
                     f"🔄 Processing mod trivia conversation for user {message.author.id}")
                 await handle_mod_trivia_conversation(message)
+                return
+
+            # Handle JAM approval conversation flow in DMs (CRITICAL: This was missing!)
+            if message.author.id in jam_approval_conversations and handle_jam_approval_conversation is not None:
+                print(
+                    f"🔄 Processing JAM approval conversation for user {message.author.id}")
+                await handle_jam_approval_conversation(message)
                 return
 
         except Exception as e:

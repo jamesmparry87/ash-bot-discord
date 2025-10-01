@@ -50,6 +50,85 @@ _bot_ready = False  # Track if bot is fully ready
 _startup_validation_lock = False
 _startup_validation_completed = False
 
+# Environment detection for staging vs live bot
+_is_live_bot = None  # Cache the environment detection
+
+
+def _detect_bot_environment():
+    """
+    Detect if this is the live bot or staging bot.
+    Returns True if live bot, False if staging bot, None if undetermined.
+    """
+    global _is_live_bot
+    
+    if _is_live_bot is not None:
+        return _is_live_bot  # Use cached result
+    
+    try:
+        bot = get_bot_instance()
+        if not bot or not bot.user:
+            print("⚠️ ENVIRONMENT DETECTION: Bot instance not available")
+            return None
+            
+        bot_id = bot.user.id
+        
+        # Known bot IDs - update these with your actual bot IDs
+        LIVE_BOT_ID = 1162034693115748462  # Replace with actual live bot ID
+        STAGING_BOT_ID = None  # Replace with actual staging bot ID if you have one
+        
+        if bot_id == LIVE_BOT_ID:
+            _is_live_bot = True
+            print(f"✅ ENVIRONMENT DETECTION: Live bot detected (ID: {bot_id})")
+            return True
+        elif STAGING_BOT_ID and bot_id == STAGING_BOT_ID:
+            _is_live_bot = False
+            print(f"✅ ENVIRONMENT DETECTION: Staging bot detected (ID: {bot_id})")
+            return False
+        else:
+            # Fallback: check environment variables
+            import os
+            env_type = os.getenv('BOT_ENVIRONMENT', '').lower()
+            if env_type == 'production':
+                _is_live_bot = True
+                print(f"✅ ENVIRONMENT DETECTION: Live bot detected via environment variable (ID: {bot_id})")
+                return True
+            elif env_type == 'staging':
+                _is_live_bot = False
+                print(f"✅ ENVIRONMENT DETECTION: Staging bot detected via environment variable (ID: {bot_id})")
+                return False
+            else:
+                # Default: assume live for safety (better to have trivia than not)
+                _is_live_bot = True
+                print(f"⚠️ ENVIRONMENT DETECTION: Unknown bot ID {bot_id}, defaulting to live bot")
+                return True
+                
+    except Exception as e:
+        print(f"❌ ENVIRONMENT DETECTION: Error detecting environment - {e}")
+        # Default to live for safety
+        _is_live_bot = True
+        return True
+
+
+def _should_run_scheduled_trivia():
+    """
+    Check if scheduled trivia tasks should run (only on live bot).
+    """
+    try:
+        is_live = _detect_bot_environment()
+        if is_live is None:
+            print("⚠️ TRIVIA SCHEDULING: Environment detection failed, allowing trivia to run")
+            return True
+        elif is_live:
+            print("✅ TRIVIA SCHEDULING: Live bot confirmed, trivia tasks enabled")
+            return True
+        else:
+            print("⚠️ TRIVIA SCHEDULING: Staging bot detected, trivia tasks disabled")
+            return False
+    except Exception as e:
+        print(f"❌ TRIVIA SCHEDULING: Error checking environment - {e}")
+        # Default to allowing trivia for safety
+        return True
+
 
 def initialize_bot_instance(bot):
     """Initialize the bot instance for scheduled tasks with validation"""
@@ -721,6 +800,11 @@ async def pre_trivia_approval():
     if uk_now.weekday() != 1:
         return
 
+    # Check if this is the live bot - only live bot should run trivia
+    if not _should_run_scheduled_trivia():
+        print(f"⚠️ Pre-trivia approval skipped - staging bot detected at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+        return
+
     print(f"🧠 Pre-trivia approval task triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
 
     try:
@@ -915,6 +999,11 @@ async def trivia_tuesday():
 
     # Only run on Tuesdays (weekday 1)
     if uk_now.weekday() != 1:
+        return
+
+    # Check if this is the live bot - only live bot should run trivia
+    if not _should_run_scheduled_trivia():
+        print(f"⚠️ Trivia Tuesday skipped - staging bot detected at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
         return
 
     print(f"🧠 Trivia Tuesday task triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")

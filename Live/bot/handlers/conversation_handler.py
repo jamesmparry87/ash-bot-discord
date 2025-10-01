@@ -28,6 +28,46 @@ from .ai_handler import ai_enabled, apply_ash_persona_to_ai_prompt, call_ai_with
 # Get database instance
 db = get_database()  # type: ignore
 
+
+def _get_bot_instance():
+    """
+    Centralized bot instance access for conversation handlers.
+    Tries multiple strategies to find the active bot instance.
+    """
+    try:
+        # Strategy 1: Import directly from bot_modular (most reliable)
+        try:
+            import sys
+            if 'bot_modular' in sys.modules:
+                bot_modular = sys.modules['bot_modular']
+                if hasattr(bot_modular, 'bot') and hasattr(bot_modular.bot, 'user'):
+                    if bot_modular.bot.user:
+                        print("✅ Found bot instance from bot_modular")
+                        return bot_modular.bot
+        except Exception as e:
+            print(f"⚠️ Strategy 1 failed: {e}")
+
+        # Strategy 2: Search through all modules (fallback)
+        try:
+            import sys
+            for name, obj in sys.modules.items():
+                if hasattr(obj, 'bot') and hasattr(obj.bot, 'user'):
+                    try:
+                        if obj.bot.user:  # Check if bot is logged in
+                            print(f"✅ Found bot instance in module: {name}")
+                            return obj.bot
+                    except Exception:
+                        continue
+        except Exception as e:
+            print(f"⚠️ Strategy 2 failed: {e}")
+
+        print("❌ Could not find bot instance")
+        return None
+
+    except Exception as e:
+        print(f"❌ Error in _get_bot_instance: {e}")
+        return None
+
 # Global conversation state management
 # user_id: {'step': str, 'data': dict, 'last_activity': datetime}
 announcement_conversations: Dict[int, Dict[str, Any]] = {}
@@ -1253,34 +1293,9 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
         print(
             f"🚀 Starting persistent JAM approval workflow for question: {question_data.get('question_text', 'Unknown')[:50]}...")
 
-        # Get bot instance with enhanced detection
-        bot_instance = None
-        import sys
-
-        # Strategy 1: Search through all modules for bot instance
-        modules_copy = dict(sys.modules)  # Create a copy to avoid iteration issues
-        for name, obj in modules_copy.items():
-            if hasattr(obj, 'bot') and hasattr(obj.bot, 'user'):
-                try:
-                    if obj.bot.user:  # Check if bot is actually logged in
-                        bot_instance = obj.bot
-                        print(f"✅ Found bot instance in module: {name}")
-                        break
-                except Exception:
-                    continue
-
-        # Strategy 2: Direct import fallback
-        if not bot_instance:
-            try:
-                from ..main import bot as main_bot
-                if main_bot and hasattr(main_bot, 'user') and main_bot.user:
-                    bot_instance = main_bot
-                    print("✅ Bot instance imported from main module")
-                else:
-                    print("⚠️ Main bot instance not ready (user not logged in)")
-            except ImportError as e:
-                print(f"⚠️ Could not import bot from main: {e}")
-
+        # Get bot instance using centralized access function
+        bot_instance = _get_bot_instance()
+        
         if not bot_instance:
             print("❌ Could not find bot instance for JAM approval")
             return False
