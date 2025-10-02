@@ -422,20 +422,10 @@ async def initialize_modular_components():
         print("✅ Scheduled tasks started successfully")
 
         # Schedule delayed trivia validation (non-blocking for deployment safety)
-        # Skip if bot/main.py is also running to prevent duplication
         try:
-            # Check if we're running as the primary entry point
-            import sys
-            main_module_running = any('bot.main' in str(frame) or 'bot/main.py' in str(frame)
-                                      for frame in sys.modules.keys())
-
-            if not main_module_running:
-                # Schedule validation to run 2 minutes after startup (non-blocking)
-                asyncio.create_task(schedule_delayed_trivia_validation())
-                print("✅ Delayed trivia validation scheduled for 2 minutes after startup (non-blocking)")
-            else:
-                print("⚠️ Skipping trivia validation - will be handled by bot/main.py to prevent duplication")
-
+            # Schedule validation to run 2 minutes after startup (non-blocking)
+            asyncio.create_task(schedule_delayed_trivia_validation())
+            print("✅ Delayed trivia validation scheduled for 2 minutes after startup (non-blocking)")
         except Exception as validation_error:
             print(f"⚠️ Trivia validation scheduling failed: {validation_error}")
 

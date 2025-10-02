@@ -16,12 +16,25 @@ from typing import Any, Dict, List, Match, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
 
+# Initialize NLTK components
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
     print("Downloading NLTK 'punkt' model... (This will only happen once)")
     nltk.download('punkt', quiet=True)
+
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    print("Downloading NLTK 'stopwords' corpus... (This will only happen once)")
+    nltk.download('stopwords', quiet=True)
+
+# Constants for response handling
+MAX_DISCORD_LENGTH = 2000
+TRUNCATION_BUFFER = 80  # Buffer for truncation message
 
 import discord
 from discord.ext import commands
@@ -65,6 +78,98 @@ from .context_manager import (
 
 # Get database instance
 db: DatabaseManager = get_database()
+
+
+def smart_truncate_response(response: str, max_length: int = MAX_DISCORD_LENGTH, 
+                          truncation_suffix: str = " *[Response truncated for message limits...]*") -> str:
+    """
+    Intelligently truncate a response using NLTK sentence tokenization.
+    Preserves sentence boundaries to avoid cutting off mid-sentence.
+    """
+    if len(response) <= max_length:
+        return response
+
+    # Calculate available space after accounting for truncation message
+    available_length = max_length - len(truncation_suffix)
+    
+    if available_length <= 0:
+        return truncation_suffix[:max_length]
+
+    try:
+        # Use NLTK to split into sentences
+        sentences = nltk.sent_tokenize(response)
+        
+        truncated_response = ""
+        kept_sentences = []
+        
+        for sentence in sentences:
+            # Check if adding the next sentence would exceed the limit
+            potential_length = len(truncated_response) + len(sentence)
+            if potential_length > available_length:
+                break
+            
+            kept_sentences.append(sentence)
+            truncated_response = " ".join(kept_sentences)
+        
+        if not kept_sentences:
+            # If even the first sentence is too long, do a hard truncation
+            return response[:available_length].rstrip() + "..."
+        
+        return truncated_response + truncation_suffix
+    
+    except Exception as e:
+        print(f"Error in smart truncation: {e}")
+        # Fall back to simple truncation
+        return response[:available_length].rstrip() + "..."
+
+
+def enhance_query_parsing(query: str) -> Dict[str, Any]:
+    """
+    Use NLTK to enhance query understanding with tokenization and linguistic analysis.
+    Returns enhanced query information for better pattern matching.
+    """
+    try:
+        # Tokenize the query
+        tokens = word_tokenize(query.lower())
+        
+        # Get stopwords for English
+        stop_words = set(stopwords.words('english'))
+        
+        # Filter out stopwords to focus on key terms
+        key_tokens = [token for token in tokens if token not in stop_words and token.isalpha()]
+        
+        # Identify potential game-related keywords
+        gaming_keywords = {
+            'game', 'games', 'played', 'play', 'playing', 'series', 'franchise',
+            'episode', 'episodes', 'hour', 'hours', 'time', 'playtime', 'complete',
+            'completed', 'finish', 'finished', 'jonesy', 'captain', 'longest',
+            'shortest', 'most', 'genre', 'rpg', 'action', 'adventure', 'strategy'
+        }
+        
+        gaming_terms = [token for token in key_tokens if token in gaming_keywords]
+        non_gaming_terms = [token for token in key_tokens if token not in gaming_keywords]
+        
+        return {
+            'original_query': query,
+            'all_tokens': tokens,
+            'key_tokens': key_tokens,
+            'gaming_terms': gaming_terms,
+            'potential_game_names': non_gaming_terms,
+            'token_count': len(tokens),
+            'key_token_count': len(key_tokens)
+        }
+    
+    except Exception as e:
+        print(f"Error in enhanced query parsing: {e}")
+        return {
+            'original_query': query,
+            'all_tokens': [],
+            'key_tokens': [],
+            'gaming_terms': [],
+            'potential_game_names': [],
+            'token_count': 0,
+            'key_token_count': 0
+        }
 
 
 def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
@@ -262,8 +367,15 @@ async def handle_pineapple_pizza_enforcement(message: discord.Message) -> bool:
 
 
 def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
-    """Route a query to the appropriate handler based on patterns."""
+    """Route a query to the appropriate handler based on patterns with enhanced NLTK analysis."""
     lower_content = content.lower()
+    
+    # Use enhanced query parsing for better understanding
+    query_analysis = enhance_query_parsing(content)
+    
+    # Log enhanced analysis for debugging (can be removed in production)
+    if query_analysis['key_token_count'] > 2:  # Only log substantial queries
+        print(f"Enhanced query analysis: {query_analysis['gaming_terms']} | potential games: {query_analysis['potential_game_names']}")
 
     # Define query patterns and their types
     query_patterns = {
@@ -391,8 +503,9 @@ async def handle_statistical_query(
                     else:
                         response += "I could examine her complete gaming franchise analysis or compare series engagement patterns if you require additional mission data."
 
-                    # Apply sarcastic modifications for Pops Arcade
+                    # Apply sarcastic modifications for Pops Arcade and smart truncation
                     response = apply_pops_arcade_sarcasm(response, message.author.id)
+                    response = smart_truncate_response(response)
                     await message.reply(response)
                 else:
                     response = "Database analysis complete. Insufficient playtime data available for series ranking. Mission parameters require more comprehensive temporal logging."
