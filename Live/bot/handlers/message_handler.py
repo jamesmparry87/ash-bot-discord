@@ -9,29 +9,18 @@ Handles the main message processing logic for the Discord bot, including:
 - FAQ responses and user tier detection
 """
 
-from .context_manager import (
-    cleanup_expired_contexts,
-    detect_follow_up_intent,
-    detect_jonesy_context,
-    get_or_create_context,
-    resolve_context_references,
-    should_use_context,
-)
-from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
-from ..utils.permissions import (
-    cleanup_expired_aliases,
-    get_member_conversation_count,
-    get_today_date_str,
-    get_user_communication_tier,
-    increment_member_conversation_count,
-    member_conversation_counts,
-    should_limit_member_conversation,
-    update_alias_activity,
-    user_alias_state,
-    user_is_mod,
-    user_is_mod_by_id,
-)
-from ..database_module import DatabaseManager, get_database
+import difflib
+import re
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Match, Optional, Tuple
+from zoneinfo import ZoneInfo
+
+import discord
+import nltk
+from discord.ext import commands
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+
 from ..config import (
     BOT_PERSONA,
     BUSY_MESSAGE,
@@ -45,17 +34,29 @@ from ..config import (
     POPS_ARCADE_USER_ID,
     VIOLATION_CHANNEL_ID,
 )
-from discord.ext import commands
-import discord
-import difflib
-import re
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Match, Optional, Tuple
-from zoneinfo import ZoneInfo
-
-import nltk
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
+from ..database_module import DatabaseManager, get_database
+from ..utils.permissions import (
+    cleanup_expired_aliases,
+    get_member_conversation_count,
+    get_today_date_str,
+    get_user_communication_tier,
+    increment_member_conversation_count,
+    member_conversation_counts,
+    should_limit_member_conversation,
+    update_alias_activity,
+    user_alias_state,
+    user_is_mod,
+    user_is_mod_by_id,
+)
+from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+from .context_manager import (
+    cleanup_expired_contexts,
+    detect_follow_up_intent,
+    detect_jonesy_context,
+    get_or_create_context,
+    resolve_context_references,
+    should_use_context,
+)
 
 # Initialize NLTK components
 try:
@@ -1221,7 +1222,7 @@ async def attempt_youtube_api_analysis(game_name: Optional[str] = None, query_ty
         
         # Try to import and use YouTube integration
         try:
-            from ..integrations.youtube import get_youtube_analytics_for_game, get_most_viewed_game_overall
+            from ..integrations.youtube import get_most_viewed_game_overall, get_youtube_analytics_for_game
             
             if game_name:
                 # Get analytics for specific game

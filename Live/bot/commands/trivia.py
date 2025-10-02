@@ -132,12 +132,13 @@ class TriviaCommands(commands.Cog):
         """Generate trivia questions powered by real YouTube analytics data"""
         try:
             import random
+
             from ..handlers.ai_handler import call_ai_with_rate_limiting
 
             # Try to get YouTube data
             try:
                 from ..integrations.youtube import get_most_viewed_game_overall, get_youtube_analytics_for_game
-                
+
                 # First, try to get overall most viewed data
                 overall_data = await get_most_viewed_game_overall()
                 
@@ -286,7 +287,7 @@ class TriviaCommands(commands.Cog):
         """Generate AI question enhanced with real YouTube data"""
         try:
             from ..handlers.ai_handler import call_ai_with_rate_limiting
-            
+
             # Create data-rich prompt for AI
             prompt = (
                 f"Generate a trivia question about Captain Jonesy's YouTube gaming content using this REAL data:\n\n"

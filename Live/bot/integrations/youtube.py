@@ -775,6 +775,7 @@ async def find_game_playlist(session, channel_id: str, game_name: str, api_key: 
 def clean_game_name_for_matching(name: str) -> str:
     """Clean game name for better matching."""
     import re
+
     # Remove common patterns
     cleaned = re.sub(r'\s*-\s*(episode|part|ep)\s*\d+.*$', '', name)
     cleaned = re.sub(r'\s*\(\d{4}\)', '', cleaned)  # Remove year
