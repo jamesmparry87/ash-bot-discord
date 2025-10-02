@@ -3637,7 +3637,8 @@ class DatabaseManager:
                         correct_count = updated_session_dict.get('correct_answers_count', 0)
                         accuracy_rate = (correct_count / total_count) if total_count > 0 else 0
 
-                        # Determine if bonus round should be triggered (Ash is "annoyed" that challenge was insufficient)
+                        # Determine if bonus round should be triggered (Ash is "annoyed" that
+                        # challenge was insufficient)
                         bonus_round_triggered = accuracy_rate > 0.5 and total_count >= 2  # At least 2 participants and >50% correct
 
                         return {

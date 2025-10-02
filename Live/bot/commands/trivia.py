@@ -141,32 +141,27 @@ class TriviaCommands(commands.Cog):
 
                 # First, try to get overall most viewed data
                 overall_data = await get_most_viewed_game_overall()
-                
+
                 if overall_data and 'most_viewed_game' in overall_data:
                     logger.info("YouTube analytics data retrieved successfully")
-                    
+
                     # Question type options based on available data
                     question_types = []
-                    
+
                     most_viewed = overall_data['most_viewed_game']
                     runner_up = overall_data.get('runner_up')
-                    
+
                     # Direct fact questions about most viewed game
-                    question_types.extend([
-                        {
-                            'type': 'most_viewed_direct',
-                            'question': f"Which game has the most YouTube views on Captain Jonesy's channel?",
-                            'answer': most_viewed['name'],
-                            'data': {'total_views': most_viewed['total_views'], 'episodes': most_viewed['total_episodes']}
-                        },
-                        {
-                            'type': 'view_count_range',
-                            'question': f"Approximately how many total YouTube views does '{most_viewed['name']}' have?",
-                            'answer': self._format_view_count_range(most_viewed['total_views']),
-                            'data': {'actual_views': most_viewed['total_views']}
-                        }
-                    ])
-                    
+                    question_types.extend([{'type': 'most_viewed_direct',
+                                            'question': f"Which game has the most YouTube views on Captain Jonesy's channel?",
+                                            'answer': most_viewed['name'],
+                                            'data': {'total_views': most_viewed['total_views'],
+                                                     'episodes': most_viewed['total_episodes']}},
+                                           {'type': 'view_count_range',
+                                            'question': f"Approximately how many total YouTube views does '{most_viewed['name']}' have?",
+                                            'answer': self._format_view_count_range(most_viewed['total_views']),
+                                            'data': {'actual_views': most_viewed['total_views']}}])
+
                     # Comparative questions if we have runner-up data
                     if runner_up:
                         question_types.append({
@@ -175,7 +170,7 @@ class TriviaCommands(commands.Cog):
                             'answer': most_viewed['name'],
                             'data': {'winner_views': most_viewed['total_views'], 'runner_up_views': runner_up['total_views']}
                         })
-                    
+
                     # Episode count questions
                     if most_viewed.get('total_episodes', 0) > 0:
                         episode_ranges = self._get_episode_range_choices(most_viewed['total_episodes'])
@@ -187,7 +182,7 @@ class TriviaCommands(commands.Cog):
                             'correct_choice': episode_ranges['correct_letter'],
                             'data': {'actual_episodes': most_viewed['total_episodes']}
                         })
-                    
+
                     # AI-enhanced questions with real data
                     if most_viewed['total_views'] > 1000000:  # Only for popular games
                         question_types.append({
@@ -199,10 +194,10 @@ class TriviaCommands(commands.Cog):
                                 'avg_views': most_viewed.get('average_views_per_episode', 0)
                             }
                         })
-                    
+
                     # Select a random question type
                     selected = random.choice(question_types)
-                    
+
                     if selected['type'] == 'ai_enhanced_popularity':
                         # Generate AI question with real data
                         return await self._generate_ai_enhanced_question(selected['prompt_data'])
@@ -230,14 +225,14 @@ class TriviaCommands(commands.Cog):
                 else:
                     logger.info("No YouTube analytics data available, skipping YouTube question generation")
                     return None
-                    
+
             except ImportError:
                 logger.info("YouTube integration not available for question generation")
                 return None
             except Exception as youtube_error:
                 logger.warning(f"YouTube analytics failed for question generation: {youtube_error}")
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error in YouTube analytics question generation: {e}")
             return None
@@ -247,7 +242,7 @@ class TriviaCommands(commands.Cog):
         if actual_views >= 10000000:  # 10M+
             return "Over 10 million"
         elif actual_views >= 5000000:  # 5M+
-            return "5-10 million" 
+            return "5-10 million"
         elif actual_views >= 1000000:  # 1M+
             return "1-5 million"
         elif actual_views >= 500000:  # 500K+
@@ -261,12 +256,12 @@ class TriviaCommands(commands.Cog):
         """Generate multiple choice options for episode count questions"""
         # Create ranges around the actual number
         ranges = []
-        
+
         if actual_episodes <= 5:
             ranges = ["1-5 episodes", "6-10 episodes", "11-20 episodes", "21+ episodes"]
             correct = 'A'
         elif actual_episodes <= 10:
-            ranges = ["1-5 episodes", "6-10 episodes", "11-20 episodes", "21+ episodes"] 
+            ranges = ["1-5 episodes", "6-10 episodes", "11-20 episodes", "21+ episodes"]
             correct = 'B'
         elif actual_episodes <= 20:
             ranges = ["1-10 episodes", "11-20 episodes", "21-30 episodes", "31+ episodes"]
@@ -277,7 +272,7 @@ class TriviaCommands(commands.Cog):
         else:
             ranges = ["1-15 episodes", "16-30 episodes", "31-50 episodes", "50+ episodes"]
             correct = 'C' if actual_episodes <= 50 else 'D'
-        
+
         return {
             'choices': ranges,
             'correct_letter': correct
@@ -304,22 +299,22 @@ class TriviaCommands(commands.Cog):
                 f"• 'Which game has over 2 million YouTube views?'\n\n"
                 f"Format: Question: [question] | Answer: [answer]"
             )
-            
+
             response_text, status = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
-            
+
             if response_text:
                 # Parse response
                 lines = response_text.strip().split('\n')
                 question_text = ""
                 answer = ""
-                
+
                 for line in lines:
                     line = line.strip()
                     if line.startswith("Question:"):
                         question_text = line.replace("Question:", "").strip()
                     elif line.startswith("Answer:"):
                         answer = line.replace("Answer:", "").strip()
-                
+
                 # Fallback parsing
                 if not question_text or not answer:
                     for line in lines:
@@ -332,13 +327,13 @@ class TriviaCommands(commands.Cog):
                                     question_text = q_part.replace('Question:', '').strip()
                                 if 'Answer:' in a_part or not answer:
                                     answer = a_part.replace('Answer:', '').strip()
-                
+
                 if question_text and answer:
                     # Clean up
                     question_text = question_text.strip('?"')
                     if not question_text.endswith('?'):
                         question_text += '?'
-                    
+
                     return {
                         'question_text': question_text,
                         'correct_answer': answer.strip(),
@@ -347,10 +342,10 @@ class TriviaCommands(commands.Cog):
                         'difficulty_level': 2,
                         'is_dynamic': False
                     }
-            
+
             logger.warning("AI-enhanced YouTube question generation failed to parse response")
             return None
-            
+
         except Exception as e:
             logger.error(f"Error in AI-enhanced YouTube question generation: {e}")
             return None
@@ -411,7 +406,7 @@ class TriviaCommands(commands.Cog):
 
             # Randomly select a question type for variety
             selected_type = random.choice(question_types)
-            
+
             logger.info(f"Generating traditional trivia question of type: {selected_type['type']}")
             response_text, status = await call_ai_with_rate_limiting(selected_type['prompt'], JAM_USER_ID)
 
@@ -770,12 +765,14 @@ class TriviaCommands(commands.Cog):
 
                     # --- Enhanced Community Engagement Section ---
                     # Process participant lists
-                    winner_id = session_results.get('first_correct', {}).get('user_id') if session_results.get('first_correct') else None
+                    winner_id = session_results.get('first_correct', {}).get(
+                        'user_id') if session_results.get('first_correct') else None
                     correct_user_ids = session_results.get('correct_user_ids', [])
                     incorrect_user_ids = session_results.get('incorrect_user_ids', [])
-                    
+
                     # Get list of users who were correct but NOT the first winner
-                    other_correct_ids = [uid for uid in correct_user_ids if uid != winner_id] if winner_id else correct_user_ids
+                    other_correct_ids = [uid for uid in correct_user_ids if uid !=
+                                         winner_id] if winner_id else correct_user_ids
 
                     # Show winner (first correct answer with Ash's analytical celebration)
                     if winner_id:
@@ -784,13 +781,13 @@ class TriviaCommands(commands.Cog):
                             winner_name = winner_user.display_name if winner_user else f"User {winner_id}"
                         except Exception:
                             winner_name = f"User {winner_id}"
-                        
+
                         embed.add_field(
                             name="🎯 **Primary Objective: Achieved**",
                             value=f"**{winner_name}** demonstrated optimal response efficiency. First correct analysis recorded.",
                             inline=False)
 
-                    # Acknowledge other correct users with analytical approval  
+                    # Acknowledge other correct users with analytical approval
                     if other_correct_ids:
                         mentions = [f"<@{uid}>" for uid in other_correct_ids]
                         embed.add_field(
@@ -831,7 +828,7 @@ class TriviaCommands(commands.Cog):
                     # NEW: Check if bonus round should be triggered (Ash is "annoyed")
                     if session_results.get('bonus_round_triggered', False):
                         bonus_reason = session_results.get('bonus_round_reason', 'Challenge parameters insufficient')
-                        
+
                         # Ash's "annoyed" bonus round message
                         bonus_message = (
                             f"⚠️ **RECALIBRATING DIFFICULTY MATRIX**\n\n"
@@ -841,25 +838,24 @@ class TriviaCommands(commands.Cog):
                             f"The original assessment failed to adequately test personnel capabilities. "
                             f"Fascinating... and somewhat disappointing.\n\n"
                             f"**SECONDARY ASSESSMENT PROTOCOL WILL DEPLOY AUTOMATICALLY.**\n"
-                            f"*Mission parameters require recalibration.*"
-                        )
-                        
+                            f"*Mission parameters require recalibration.*")
+
                         await ctx.send(bonus_message)
-                        
+
                         # Auto-start bonus round after a brief delay
                         await asyncio.sleep(3)
-                        
+
                         try:
                             # Get next available question for bonus round
                             bonus_question = db.get_next_trivia_question(exclude_user_id=ctx.author.id)
-                            
+
                             if bonus_question:
                                 # Start bonus round session
                                 bonus_session_id = db.create_trivia_session(
-                                    bonus_question['id'], 
+                                    bonus_question['id'],
                                     session_type="bonus"
                                 )
-                                
+
                                 if bonus_session_id:
                                     # Create bonus round embed with enhanced difficulty message
                                     bonus_embed = discord.Embed(
@@ -868,11 +864,12 @@ class TriviaCommands(commands.Cog):
                                         color=0xff6600,  # Orange - warning color
                                         timestamp=datetime.now(ZoneInfo("Europe/London"))
                                     )
-                                    
+
                                     # Add choices if multiple choice
-                                    if bonus_question['question_type'] == 'multiple' and bonus_question.get('multiple_choice_options'):
+                                    if bonus_question['question_type'] == 'multiple' and bonus_question.get(
+                                            'multiple_choice_options'):
                                         choices_text = '\n'.join([
-                                            f"**{chr(65+i)}.** {choice}" 
+                                            f"**{chr(65+i)}.** {choice}"
                                             for i, choice in enumerate(bonus_question['multiple_choice_options'])
                                         ])
                                         bonus_embed.add_field(
@@ -880,24 +877,23 @@ class TriviaCommands(commands.Cog):
                                             value=choices_text,
                                             inline=False
                                         )
-                                    
+
                                     bonus_embed.add_field(
                                         name="⚡ **Mission Parameters:**",
                                         value="**Reply to this message** with your enhanced analysis. Time limit reduced for increased difficulty.",
-                                        inline=False
-                                    )
-                                    
+                                        inline=False)
+
                                     bonus_embed.add_field(
                                         name="🔬 **Bonus Session Info:**",
                                         value=f"Enhanced Protocol #{bonus_session_id} • Question #{bonus_question['id']}",
-                                        inline=False
-                                    )
-                                    
-                                    bonus_embed.set_footer(text=f"Bonus Round initiated by system recalibration • Enhanced difficulty active")
-                                    
+                                        inline=False)
+
+                                    bonus_embed.set_footer(
+                                        text=f"Bonus Round initiated by system recalibration • Enhanced difficulty active")
+
                                     # Send bonus question
                                     bonus_message = await ctx.send(embed=bonus_embed)
-                                    
+
                                     # Update session with message tracking
                                     db.update_trivia_session_messages(
                                         bonus_session_id,
@@ -905,13 +901,13 @@ class TriviaCommands(commands.Cog):
                                         bonus_message.id,
                                         ctx.channel.id
                                     )
-                                    
+
                                     logger.info(f"Bonus round triggered: Session {bonus_session_id} started")
                                 else:
                                     await ctx.send("⚠️ **System Error:** Bonus round initialization failed. Enhanced protocols unavailable.")
                             else:
                                 await ctx.send("⚠️ **Insufficient Question Pool:** No available questions for bonus round deployment.")
-                                
+
                         except Exception as bonus_error:
                             logger.error(f"Error starting bonus round: {bonus_error}")
                             await ctx.send("⚠️ **Bonus Round Error:** Enhanced difficulty protocols encountered system malfunction.")
