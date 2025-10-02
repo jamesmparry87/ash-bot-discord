@@ -3832,18 +3832,18 @@ class DatabaseManager:
             logger.error(f"❌ Error creating approval session - Exception type: {type(e).__name__}")
             logger.error(f"❌ Error creating approval session - Message: {str(e)}")
             logger.error(f"❌ Error creating approval session - User ID: {user_id}, Session type: {session_type}")
-            
+
             # Check if this is a sequence synchronization issue
             error_str = str(e).lower()
             if "duplicate key value violates unique constraint" in error_str and "pkey" in error_str:
                 logger.error("🔧 DETECTED: Primary key constraint violation - likely sequence synchronization issue")
                 logger.info("🔄 Attempting automatic sequence repair...")
-                
+
                 # Attempt sequence repair
                 repair_result = self.repair_database_sequences()
                 if repair_result.get("total_repaired", 0) > 0:
                     logger.info(f"✅ Repaired {repair_result['total_repaired']} sequences, retrying session creation...")
-                    
+
                     # Retry the creation after repair with new connection and cursor
                     try:
                         with conn.cursor() as retry_cur:
@@ -3859,13 +3859,14 @@ class DatabaseManager:
                                 json.dumps(conversation_data or {}),
                                 uk_now, uk_now, expires_at
                             ))
-                            
+
                             retry_result = retry_cur.fetchone()
                             conn.commit()
-                            
+
                             if retry_result:
                                 session_id = int(retry_result[0])
-                                logger.info(f"✅ Successfully created approval session {session_id} after sequence repair")
+                                logger.info(
+                                    f"✅ Successfully created approval session {session_id} after sequence repair")
                                 return session_id
                             else:
                                 logger.error("❌ Retry after sequence repair also failed")
@@ -3873,7 +3874,7 @@ class DatabaseManager:
                         logger.error(f"❌ Retry after sequence repair failed: {retry_error}")
                 else:
                     logger.error("❌ Sequence repair found no issues to fix")
-            
+
             conn.rollback()
             return None
 

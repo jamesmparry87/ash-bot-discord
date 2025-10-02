@@ -1320,7 +1320,7 @@ class TriviaCommands(commands.Cog):
                         if approval_sent:
                             successful_generations += 1
                             logger.info(f"Generated and sent question {i+1}/{count} for approval")
-                            
+
                             # Brief delay between questions to avoid overwhelming
                             if i < count - 1:
                                 await asyncio.sleep(3)
@@ -1338,16 +1338,16 @@ class TriviaCommands(commands.Cog):
             # Send summary
             if successful_generations > 0:
                 await ctx.send(f"✅ **Question Generation Complete**\n\n"
-                             f"Successfully generated and sent {successful_generations}/{count} questions to JAM for approval.\n"
-                             f"Failed: {failed_generations}\n\n"
-                             f"*JAM should receive individual DMs for each question requiring approval.*")
+                               f"Successfully generated and sent {successful_generations}/{count} questions to JAM for approval.\n"
+                               f"Failed: {failed_generations}\n\n"
+                               f"*JAM should receive individual DMs for each question requiring approval.*")
             else:
                 await ctx.send(f"❌ **Question Generation Failed**\n\n"
-                             f"Unable to generate any questions. This could be due to:\n"
-                             f"• AI rate limiting\n"
-                             f"• Database approval session creation issues\n"
-                             f"• Network connectivity problems\n\n"
-                             f"*Check the logs for detailed error information.*")
+                               f"Unable to generate any questions. This could be due to:\n"
+                               f"• AI rate limiting\n"
+                               f"• Database approval session creation issues\n"
+                               f"• Network connectivity problems\n\n"
+                               f"*Check the logs for detailed error information.*")
 
         except Exception as e:
             logger.error(f"Error in manual question generation: {e}")
@@ -1390,9 +1390,9 @@ class TriviaCommands(commands.Cog):
 
             # Status breakdown
             status_counts = stats.get('status_counts', {})
-            status_text = "\n".join([f"**{status.title()}:** {count}" 
-                                   for status, count in status_counts.items()])
-            
+            status_text = "\n".join([f"**{status.title()}:** {count}"
+                                     for status, count in status_counts.items()])
+
             embed.add_field(
                 name="📋 **Status Breakdown**",
                 value=status_text or "No data available",
@@ -1401,9 +1401,9 @@ class TriviaCommands(commands.Cog):
 
             # Source breakdown
             source_counts = stats.get('source_counts', {})
-            source_text = "\n".join([f"**{source.replace('_', ' ').title()}:** {count}" 
-                                   for source, count in source_counts.items()])
-            
+            source_text = "\n".join([f"**{source.replace('_', ' ').title()}:** {count}"
+                                     for source, count in source_counts.items()])
+
             embed.add_field(
                 name="🔄 **Question Sources**",
                 value=source_text or "No data available",
@@ -1424,8 +1424,7 @@ class TriviaCommands(commands.Cog):
                 embed.add_field(
                     name="💡 **Recommendations**",
                     value=f"• Generate {needed} more questions with `!generatequestions {needed}`\n• Reset old questions with `!resettrivia`\n• Add manual questions with `!addtrivia`",
-                    inline=False
-                )
+                    inline=False)
 
             embed.set_footer(text="Use !generatequestions <count> to create new questions")
 

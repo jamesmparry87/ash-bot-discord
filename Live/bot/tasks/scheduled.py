@@ -404,12 +404,14 @@ async def check_due_reminders():
         # Get due reminders - only log if found or if error occurs
         try:
             due_reminders = db.get_due_reminders(uk_now)  # type: ignore
-            
+
             # Only log when there are actually reminders to process
             if due_reminders and len(due_reminders) > 0:
-                print(f"🕒 Reminder check at {uk_now.strftime('%H:%M:%S UK')} - found {len(due_reminders)} due reminders")
+                print(
+                    f"🕒 Reminder check at {uk_now.strftime('%H:%M:%S UK')} - found {len(due_reminders)} due reminders")
                 for i, reminder in enumerate(due_reminders):
-                    print(f"  📌 Reminder {i+1}: ID={reminder.get('id')}, User={reminder.get('user_id')}, Text='{reminder.get('reminder_text', '')[:30]}...', Due={reminder.get('scheduled_time')}")
+                    print(
+                        f"  📌 Reminder {i+1}: ID={reminder.get('id')}, User={reminder.get('user_id')}, Text='{reminder.get('reminder_text', '')[:30]}...', Due={reminder.get('scheduled_time')}")
 
         except Exception as query_e:
             print(f"❌ Database query for due reminders failed: {query_e}")

@@ -112,7 +112,13 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
         modified_response = re.sub(pattern, replacement, modified_response)
 
     # Sarcastic ending logic (no changes here)
-    sarcastic_indicators = ["i suppose", "regrettably", "if you insist", "begrudgingly", "predictably", "unsurprisingly"]
+    sarcastic_indicators = [
+        "i suppose",
+        "regrettably",
+        "if you insist",
+        "begrudgingly",
+        "predictably",
+        "unsurprisingly"]
     has_sarcastic_ending = any(indicator in modified_response.lower() for indicator in sarcastic_indicators)
 
     if not has_sarcastic_ending:
@@ -126,17 +132,17 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
     if len(modified_response) > MAX_DISCORD_LENGTH:
         # Use NLTK to intelligently split the text into sentences
         sentences = nltk.sent_tokenize(modified_response)
-        
+
         truncated_response = ""
         kept_sentences = []
         # Leave a buffer for the truncation message
-        buffer = 50 
+        buffer = 50
 
         for sentence in sentences:
             # Check if adding the next sentence (plus a space) exceeds the limit
             if len(truncated_response) + len(sentence) + 1 > MAX_DISCORD_LENGTH - buffer:
                 break
-            
+
             kept_sentences.append(sentence)
             truncated_response = " ".join(kept_sentences)
 
@@ -149,7 +155,7 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
 
         # Add a consistent truncation indicator
         modified_response += " *[Response truncated for efficiency...]*"
-        
+
     return modified_response
 
 
