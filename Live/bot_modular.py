@@ -796,13 +796,6 @@ async def on_ready():
     await send_deployment_success_dm(status_report)
 
     print(f"\n🎉 Ash Bot modular architecture fully operational!")
-    print(f"🔗 Deployment fixes active:")
-    print(f"   • Tiered rate limiting (High: 1s, Medium: 2s, Low: 3s)")
-    print(f"   • Progressive penalty system (30s → 60s → 120s → 300s)")
-    print(f"   • Robust database imports with fallback strategies")
-    print(f"   • Enhanced reminder delivery debugging")
-    print(f"   • Complete alias debugging system for testing")
-    print(f"   • Enhanced !ashstatus with AI diagnostics")
 
 
 @bot.event

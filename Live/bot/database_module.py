@@ -3789,15 +3789,20 @@ class DatabaseManager:
         """Create a new persistent approval session"""
         conn = self.get_connection()
         if not conn:
+            logger.error("Failed to create approval session: No database connection")
             return None
+
+        # Define variables outside try block to avoid scoping issues
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        expires_at = uk_now + timedelta(minutes=timeout_minutes)
 
         try:
             with conn.cursor() as cur:
-                from datetime import datetime, timedelta
-                from zoneinfo import ZoneInfo
-
-                uk_now = datetime.now(ZoneInfo("Europe/London"))
-                expires_at = uk_now + timedelta(minutes=timeout_minutes)
+                # Enhanced logging for debugging
+                logger.info(f"Creating approval session for user {user_id}, type: {session_type}")
 
                 cur.execute("""
                     INSERT INTO trivia_approval_sessions (
@@ -3817,12 +3822,58 @@ class DatabaseManager:
 
                 if result:
                     session_id = int(result[0])  # Fix type issue - use index access
-                    logger.info(f"Created persistent approval session {session_id} for user {user_id}")
+                    logger.info(f"✅ Successfully created persistent approval session {session_id} for user {user_id}")
                     return session_id
-                return None
+                else:
+                    logger.error(f"❌ Failed to create approval session: INSERT returned no result")
+                    return None
 
         except Exception as e:
-            logger.error(f"Error creating approval session: {e}")
+            logger.error(f"❌ Error creating approval session - Exception type: {type(e).__name__}")
+            logger.error(f"❌ Error creating approval session - Message: {str(e)}")
+            logger.error(f"❌ Error creating approval session - User ID: {user_id}, Session type: {session_type}")
+            
+            # Check if this is a sequence synchronization issue
+            error_str = str(e).lower()
+            if "duplicate key value violates unique constraint" in error_str and "pkey" in error_str:
+                logger.error("🔧 DETECTED: Primary key constraint violation - likely sequence synchronization issue")
+                logger.info("🔄 Attempting automatic sequence repair...")
+                
+                # Attempt sequence repair
+                repair_result = self.repair_database_sequences()
+                if repair_result.get("total_repaired", 0) > 0:
+                    logger.info(f"✅ Repaired {repair_result['total_repaired']} sequences, retrying session creation...")
+                    
+                    # Retry the creation after repair with new connection and cursor
+                    try:
+                        with conn.cursor() as retry_cur:
+                            retry_cur.execute("""
+                                INSERT INTO trivia_approval_sessions (
+                                    user_id, session_type, conversation_step, question_data,
+                                    conversation_data, created_at, last_activity, expires_at, status
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'active')
+                                RETURNING id
+                            """, (
+                                user_id, session_type, conversation_step,
+                                json.dumps(question_data),
+                                json.dumps(conversation_data or {}),
+                                uk_now, uk_now, expires_at
+                            ))
+                            
+                            retry_result = retry_cur.fetchone()
+                            conn.commit()
+                            
+                            if retry_result:
+                                session_id = int(retry_result[0])
+                                logger.info(f"✅ Successfully created approval session {session_id} after sequence repair")
+                                return session_id
+                            else:
+                                logger.error("❌ Retry after sequence repair also failed")
+                    except Exception as retry_error:
+                        logger.error(f"❌ Retry after sequence repair failed: {retry_error}")
+                else:
+                    logger.error("❌ Sequence repair found no issues to fix")
+            
             conn.rollback()
             return None
 

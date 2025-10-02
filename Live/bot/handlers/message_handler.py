@@ -15,6 +15,14 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Match, Optional, Tuple
 from zoneinfo import ZoneInfo
 
+import nltk
+
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    print("Downloading NLTK 'punkt' model... (This will only happen once)")
+    nltk.download('punkt', quiet=True)
+
 import discord
 from discord.ext import commands
 
@@ -60,14 +68,14 @@ db: DatabaseManager = get_database()
 
 
 def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
-    """Apply sarcastic modifications to responses for Pops Arcade"""
+    """Apply sarcastic modifications to responses for Pops Arcade (Robust Version)"""
+    # NOTE: Assuming POPS_ARCADE_USER_ID is defined elsewhere, e.g., POPS_ARCADE_USER_ID = 123456789
     if user_id != POPS_ARCADE_USER_ID:
         return response
 
-    # Check Discord message length limit to prevent truncation
     MAX_DISCORD_LENGTH = 2000
 
-    # Sarcastic replacements - fixed to prevent sentence fragmentation
+    # Sarcastic replacements (no changes here)
     sarcastic_replacements = {
         "Database analysis": "Database analysis, regrettably,",
         "Affirmative": "I suppose that's... affirmative",
@@ -82,74 +90,66 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
         "Fascinating": "Marginally interesting, I suppose",
         "Outstanding": "Adequate, I suppose",
         "Excellent": "Satisfactory, regrettably",
-        # Fix the problematic patterns that were breaking sentences
         "Their activity appears consistent": "Their activity appears... consistent, I suppose",
         "Their contributions lack a certain": "Their contributions lack a certain sophistication",
         "your struggles with trivia appear to be predictable": "your struggles with trivia appear to be... predictable, regrettably",
     }
 
-    # Apply replacements more carefully to avoid breaking sentence structure
     modified_response = response
-
-    # First, handle full phrase replacements (longer patterns first)
     for original, sarcastic in sorted(sarcastic_replacements.items(), key=len, reverse=True):
         if original in modified_response:
             modified_response = modified_response.replace(original, sarcastic)
 
-    # Add sarcastic interjections to certain sentence patterns
-    # Fix grammatical issues and sentence completion
+    # Regex fixes (no changes here)
     fixes = [
-        # Fix incomplete sentences that end abruptly
         (r'(\w+)\s+appears\.\s*$', r'\1 appears... adequate, I suppose.'),
         (r'(\w+)\s+consistent\.\s*$', r'\1 consistent, regrettably.'),
         (r'lack\s+a\s+certain\.\s*$', r'lack a certain... sophistication, predictably.'),
         (r'appear\s+to\s+be\.\s*$', r'appear to be... as expected, I suppose.'),
         (r'(\w+)\s+predictable\.\s*$', r'\1 predictable, unsurprisingly.'),
     ]
-
-    import re
     for pattern, replacement in fixes:
         modified_response = re.sub(pattern, replacement, modified_response)
 
-    # Add dismissive ending if it doesn't already have one and the message is complete
-    sarcastic_indicators = [
-        "i suppose",
-        "regrettably",
-        "if you insist",
-        "begrudgingly",
-        "predictably",
-        "unsurprisingly"]
+    # Sarcastic ending logic (no changes here)
+    sarcastic_indicators = ["i suppose", "regrettably", "if you insist", "begrudgingly", "predictably", "unsurprisingly"]
     has_sarcastic_ending = any(indicator in modified_response.lower() for indicator in sarcastic_indicators)
 
     if not has_sarcastic_ending:
-        # Only add ending if the sentence seems complete (ends with punctuation)
         if modified_response.strip().endswith(('.', '!', '?')):
             if modified_response.endswith("."):
                 modified_response = modified_response[:-1] + ", I suppose."
             else:
                 modified_response += " *[Processing reluctantly...]*"
 
-    # Ensure we don't exceed Discord's character limit
+    # --- ROBUST TRUNCATION LOGIC (UPDATED) ---
     if len(modified_response) > MAX_DISCORD_LENGTH:
-        # Truncate gracefully at sentence boundary
-        sentences = modified_response.split('. ')
-        truncated = ""
+        # Use NLTK to intelligently split the text into sentences
+        sentences = nltk.sent_tokenize(modified_response)
+        
+        truncated_response = ""
+        kept_sentences = []
+        # Leave a buffer for the truncation message
+        buffer = 50 
+
         for sentence in sentences:
-            if len(truncated + sentence + '. ') <= MAX_DISCORD_LENGTH - 50:  # Leave buffer
-                truncated += sentence + '. '
-            else:
+            # Check if adding the next sentence (plus a space) exceeds the limit
+            if len(truncated_response) + len(sentence) + 1 > MAX_DISCORD_LENGTH - buffer:
                 break
+            
+            kept_sentences.append(sentence)
+            truncated_response = " ".join(kept_sentences)
 
-        if truncated:
-            modified_response = truncated.strip()
-            if not modified_response.endswith('.'):
-                modified_response += "."
-            # Add truncation indicator
-            modified_response += " *[Response truncated for efficiency...]*"
+        if not kept_sentences:
+            # This happens if the very first sentence is already too long.
+            # In this case, we have to perform a hard truncate on that sentence.
+            modified_response = sentences[0][:MAX_DISCORD_LENGTH - buffer] + "..."
         else:
-            # Fallback: hard truncate but preserve ending
-            modified_response = modified_response[:MAX_DISCORD_LENGTH - 30] + "... *[Truncated reluctantly.]*"
+            modified_response = truncated_response
 
+        # Add a consistent truncation indicator
+        modified_response += " *[Response truncated for efficiency...]*"
+        
     return modified_response
 
 

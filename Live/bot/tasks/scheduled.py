@@ -360,59 +360,40 @@ async def scheduled_midnight_restart():
 
 @tasks.loop(minutes=1)  # Check reminders every minute
 async def check_due_reminders():
-    """Check for due reminders and deliver them with enhanced debugging"""
+    """Check for due reminders and deliver them"""
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
 
-        print(
-            f"🕒 Reminder check running at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-
-        # Enhanced database diagnostics
+        # Enhanced database diagnostics - only log issues or when processing reminders
         if not db:
             print("❌ Database instance (db) is None - reminder system disabled")
             return
-
-        print(f"✅ Database instance available: {type(db).__name__}")
 
         if not db:
             print("❌ Database instance not available - reminder system disabled")
             return
 
-        # Check if database is configured
+        # Check database connection - only log errors
         try:
-            if hasattr(
-                db,
-                'get_connection') and callable(
-                getattr(
-                    db,
-                    'get_connection')):
+            if hasattr(db, 'get_connection') and callable(getattr(db, 'get_connection')):
                 conn = db.get_connection()
                 if not conn:
-                    print(
-                        "❌ No database connection available - reminder system disabled")
+                    print("❌ No database connection available - reminder system disabled")
                     return
-                print("✅ Database connection available")
             else:
                 print("❌ Database get_connection method not available")
                 return
         except Exception as db_check_e:
-            print(
-                f"❌ Database check failed - reminder system disabled: {db_check_e}")
+            print(f"❌ Database check failed - reminder system disabled: {db_check_e}")
             return
 
-        # Test database connection with detailed logging
+        # Test database connection - only log errors
         try:
-            if hasattr(
-                db,
-                'get_connection') and callable(
-                getattr(
-                    db,
-                    'get_connection')):
+            if hasattr(db, 'get_connection') and callable(getattr(db, 'get_connection')):
                 conn = db.get_connection()  # type: ignore
                 if not conn:
                     print("❌ Database connection failed in reminder check")
                     return
-                print("✅ Database connection successful")
             else:
                 print("❌ Database get_connection method not available")
                 return
@@ -420,16 +401,15 @@ async def check_due_reminders():
             print(f"❌ Database connection error: {conn_e}")
             return
 
-        # Get due reminders with detailed logging
+        # Get due reminders - only log if found or if error occurs
         try:
             due_reminders = db.get_due_reminders(uk_now)  # type: ignore
-            print(
-                f"📋 Database query successful - found {len(due_reminders) if due_reminders else 0} due reminders")
-
-            if due_reminders:
+            
+            # Only log when there are actually reminders to process
+            if due_reminders and len(due_reminders) > 0:
+                print(f"🕒 Reminder check at {uk_now.strftime('%H:%M:%S UK')} - found {len(due_reminders)} due reminders")
                 for i, reminder in enumerate(due_reminders):
-                    print(
-                        f"  📌 Reminder {i+1}: ID={reminder.get('id')}, User={reminder.get('user_id')}, Text='{reminder.get('reminder_text', '')[:30]}...', Due={reminder.get('scheduled_time')}")
+                    print(f"  📌 Reminder {i+1}: ID={reminder.get('id')}, User={reminder.get('user_id')}, Text='{reminder.get('reminder_text', '')[:30]}...', Due={reminder.get('scheduled_time')}")
 
         except Exception as query_e:
             print(f"❌ Database query for due reminders failed: {query_e}")
@@ -438,10 +418,10 @@ async def check_due_reminders():
             return
 
         if not due_reminders:
-            print("📋 No due reminders to process")
+            # Silent return when no reminders - no logging needed
             return
 
-        print(f"🔔 Processing {len(due_reminders)} due reminders")
+        print(f" Processing {len(due_reminders)} due reminders")
 
         # Get bot instance more reliably
         bot = None

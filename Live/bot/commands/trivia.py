@@ -1287,6 +1287,154 @@ class TriviaCommands(commands.Cog):
             print(f"❌ TRIVIA TEST: Critical error: {e}")
             await ctx.send(f"❌ **Comprehensive trivia test failed:** {str(e)}")
 
+    @commands.command(name="generatequestions")
+    @commands.has_permissions(manage_messages=True)
+    async def generate_questions_manually(self, ctx, count: int = 1):
+        """Manually generate trivia questions for testing and approval (moderators only)"""
+        try:
+            if db is None:
+                await ctx.send("❌ **Database offline.** Cannot generate questions without database connection.")
+                return
+
+            # Limit to reasonable number
+            if count < 1 or count > 5:
+                await ctx.send("❌ **Invalid count.** Please specify 1-5 questions to generate.")
+                return
+
+            await ctx.send(f"🧠 **Manual Question Generation**\n\nGenerating {count} trivia question(s) for your approval... This may take a moment.")
+
+            from ..handlers.conversation_handler import start_jam_question_approval
+
+            successful_generations = 0
+            failed_generations = 0
+
+            for i in range(count):
+                try:
+                    # Use our internal AI generation method
+                    question_data = await self._generate_ai_question_fallback()
+
+                    if question_data:
+                        # Send each question for approval
+                        approval_sent = await start_jam_question_approval(question_data)
+
+                        if approval_sent:
+                            successful_generations += 1
+                            logger.info(f"Generated and sent question {i+1}/{count} for approval")
+                            
+                            # Brief delay between questions to avoid overwhelming
+                            if i < count - 1:
+                                await asyncio.sleep(3)
+                        else:
+                            failed_generations += 1
+                            logger.warning(f"Failed to send question {i+1}/{count} for approval")
+                    else:
+                        failed_generations += 1
+                        logger.warning(f"Failed to generate question {i+1}/{count}")
+
+                except Exception as gen_error:
+                    failed_generations += 1
+                    logger.error(f"Error generating question {i+1}/{count}: {gen_error}")
+
+            # Send summary
+            if successful_generations > 0:
+                await ctx.send(f"✅ **Question Generation Complete**\n\n"
+                             f"Successfully generated and sent {successful_generations}/{count} questions to JAM for approval.\n"
+                             f"Failed: {failed_generations}\n\n"
+                             f"*JAM should receive individual DMs for each question requiring approval.*")
+            else:
+                await ctx.send(f"❌ **Question Generation Failed**\n\n"
+                             f"Unable to generate any questions. This could be due to:\n"
+                             f"• AI rate limiting\n"
+                             f"• Database approval session creation issues\n"
+                             f"• Network connectivity problems\n\n"
+                             f"*Check the logs for detailed error information.*")
+
+        except Exception as e:
+            logger.error(f"Error in manual question generation: {e}")
+            await ctx.send(f"❌ **Manual generation failed:** {str(e)}")
+
+    @commands.command(name="triviapoolstatus")
+    @commands.has_permissions(manage_messages=True)
+    async def trivia_pool_status(self, ctx):
+        """Check the current trivia question pool status (moderators only)"""
+        try:
+            if db is None:
+                await ctx.send("❌ **Database offline.** Cannot check question pool status.")
+                return
+
+            # Get question statistics
+            stats = db.get_trivia_question_statistics()
+
+            if not stats:
+                await ctx.send("❌ **Unable to retrieve question pool statistics.** Database error occurred.")
+                return
+
+            # Check minimum pool requirement
+            available_count = stats.get('available_questions', 0)
+            minimum_required = 5
+            pool_health = "✅ Healthy" if available_count >= minimum_required else f"⚠️ Below minimum ({minimum_required})"
+
+            # Create status embed
+            embed = discord.Embed(
+                title="📊 **Trivia Question Pool Status**",
+                color=0x00ff00 if available_count >= minimum_required else 0xffaa00,
+                timestamp=datetime.now(ZoneInfo("Europe/London"))
+            )
+
+            # Pool overview
+            embed.add_field(
+                name="🎯 **Pool Health**",
+                value=f"{pool_health}\n**Available:** {available_count}\n**Minimum Required:** {minimum_required}",
+                inline=True
+            )
+
+            # Status breakdown
+            status_counts = stats.get('status_counts', {})
+            status_text = "\n".join([f"**{status.title()}:** {count}" 
+                                   for status, count in status_counts.items()])
+            
+            embed.add_field(
+                name="📋 **Status Breakdown**",
+                value=status_text or "No data available",
+                inline=True
+            )
+
+            # Source breakdown
+            source_counts = stats.get('source_counts', {})
+            source_text = "\n".join([f"**{source.replace('_', ' ').title()}:** {count}" 
+                                   for source, count in source_counts.items()])
+            
+            embed.add_field(
+                name="🔄 **Question Sources**",
+                value=source_text or "No data available",
+                inline=True
+            )
+
+            # Total summary
+            total_questions = stats.get('total_questions', 0)
+            embed.add_field(
+                name="📈 **Summary**",
+                value=f"**Total Questions:** {total_questions}\n**Pool Status:** {pool_health}",
+                inline=False
+            )
+
+            # Add recommendations if pool is low
+            if available_count < minimum_required:
+                needed = minimum_required - available_count
+                embed.add_field(
+                    name="💡 **Recommendations**",
+                    value=f"• Generate {needed} more questions with `!generatequestions {needed}`\n• Reset old questions with `!resettrivia`\n• Add manual questions with `!addtrivia`",
+                    inline=False
+                )
+
+            embed.set_footer(text="Use !generatequestions <count> to create new questions")
+
+            await ctx.send(embed=embed)
+
+        except Exception as e:
+            logger.error(f"Error checking trivia pool status: {e}")
+            await ctx.send(f"❌ **Pool status check failed:** {str(e)}")
+
 
 async def setup(bot):
     """Load the trivia cog"""
