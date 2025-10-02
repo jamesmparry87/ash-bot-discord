@@ -9,6 +9,44 @@ Handles the main message processing logic for the Discord bot, including:
 - FAQ responses and user tier detection
 """
 
+from .context_manager import (
+    cleanup_expired_contexts,
+    detect_follow_up_intent,
+    detect_jonesy_context,
+    get_or_create_context,
+    resolve_context_references,
+    should_use_context,
+)
+from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+from ..utils.permissions import (
+    cleanup_expired_aliases,
+    get_member_conversation_count,
+    get_today_date_str,
+    get_user_communication_tier,
+    increment_member_conversation_count,
+    member_conversation_counts,
+    should_limit_member_conversation,
+    update_alias_activity,
+    user_alias_state,
+    user_is_mod,
+    user_is_mod_by_id,
+)
+from ..database_module import DatabaseManager, get_database
+from ..config import (
+    BOT_PERSONA,
+    BUSY_MESSAGE,
+    ERROR_MESSAGE,
+    FAQ_RESPONSES,
+    JAM_USER_ID,
+    JONESY_USER_ID,
+    MEMBER_ROLE_IDS,
+    MEMBERS_CHANNEL_ID,
+    MOD_ALERT_CHANNEL_ID,
+    POPS_ARCADE_USER_ID,
+    VIOLATION_CHANNEL_ID,
+)
+from discord.ext import commands
+import discord
 import difflib
 import re
 from datetime import datetime, timedelta
@@ -36,52 +74,13 @@ except LookupError:
 MAX_DISCORD_LENGTH = 2000
 TRUNCATION_BUFFER = 80  # Buffer for truncation message
 
-import discord
-from discord.ext import commands
-
-from ..config import (
-    BOT_PERSONA,
-    BUSY_MESSAGE,
-    ERROR_MESSAGE,
-    FAQ_RESPONSES,
-    JAM_USER_ID,
-    JONESY_USER_ID,
-    MEMBER_ROLE_IDS,
-    MEMBERS_CHANNEL_ID,
-    MOD_ALERT_CHANNEL_ID,
-    POPS_ARCADE_USER_ID,
-    VIOLATION_CHANNEL_ID,
-)
-from ..database_module import DatabaseManager, get_database
-from ..utils.permissions import (
-    cleanup_expired_aliases,
-    get_member_conversation_count,
-    get_today_date_str,
-    get_user_communication_tier,
-    increment_member_conversation_count,
-    member_conversation_counts,
-    should_limit_member_conversation,
-    update_alias_activity,
-    user_alias_state,
-    user_is_mod,
-    user_is_mod_by_id,
-)
-from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
-from .context_manager import (
-    cleanup_expired_contexts,
-    detect_follow_up_intent,
-    detect_jonesy_context,
-    get_or_create_context,
-    resolve_context_references,
-    should_use_context,
-)
 
 # Get database instance
 db: DatabaseManager = get_database()
 
 
-def smart_truncate_response(response: str, max_length: int = MAX_DISCORD_LENGTH, 
-                          truncation_suffix: str = " *[Response truncated for message limits...]*") -> str:
+def smart_truncate_response(response: str, max_length: int = MAX_DISCORD_LENGTH,
+                            truncation_suffix: str = " *[Response truncated for message limits...]*") -> str:
     """
     Intelligently truncate a response using NLTK sentence tokenization.
     Preserves sentence boundaries to avoid cutting off mid-sentence.
@@ -91,32 +90,32 @@ def smart_truncate_response(response: str, max_length: int = MAX_DISCORD_LENGTH,
 
     # Calculate available space after accounting for truncation message
     available_length = max_length - len(truncation_suffix)
-    
+
     if available_length <= 0:
         return truncation_suffix[:max_length]
 
     try:
         # Use NLTK to split into sentences
         sentences = nltk.sent_tokenize(response)
-        
+
         truncated_response = ""
         kept_sentences = []
-        
+
         for sentence in sentences:
             # Check if adding the next sentence would exceed the limit
             potential_length = len(truncated_response) + len(sentence)
             if potential_length > available_length:
                 break
-            
+
             kept_sentences.append(sentence)
             truncated_response = " ".join(kept_sentences)
-        
+
         if not kept_sentences:
             # If even the first sentence is too long, do a hard truncation
             return response[:available_length].rstrip() + "..."
-        
+
         return truncated_response + truncation_suffix
-    
+
     except Exception as e:
         print(f"Error in smart truncation: {e}")
         # Fall back to simple truncation
@@ -131,13 +130,13 @@ def enhance_query_parsing(query: str) -> Dict[str, Any]:
     try:
         # Tokenize the query
         tokens = word_tokenize(query.lower())
-        
+
         # Get stopwords for English
         stop_words = set(stopwords.words('english'))
-        
+
         # Filter out stopwords to focus on key terms
         key_tokens = [token for token in tokens if token not in stop_words and token.isalpha()]
-        
+
         # Identify potential game-related keywords
         gaming_keywords = {
             'game', 'games', 'played', 'play', 'playing', 'series', 'franchise',
@@ -145,10 +144,10 @@ def enhance_query_parsing(query: str) -> Dict[str, Any]:
             'completed', 'finish', 'finished', 'jonesy', 'captain', 'longest',
             'shortest', 'most', 'genre', 'rpg', 'action', 'adventure', 'strategy'
         }
-        
+
         gaming_terms = [token for token in key_tokens if token in gaming_keywords]
         non_gaming_terms = [token for token in key_tokens if token not in gaming_keywords]
-        
+
         return {
             'original_query': query,
             'all_tokens': tokens,
@@ -158,7 +157,7 @@ def enhance_query_parsing(query: str) -> Dict[str, Any]:
             'token_count': len(tokens),
             'key_token_count': len(key_tokens)
         }
-    
+
     except Exception as e:
         print(f"Error in enhanced query parsing: {e}")
         return {
@@ -369,13 +368,14 @@ async def handle_pineapple_pizza_enforcement(message: discord.Message) -> bool:
 def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
     """Route a query to the appropriate handler based on patterns with enhanced NLTK analysis."""
     lower_content = content.lower()
-    
+
     # Use enhanced query parsing for better understanding
     query_analysis = enhance_query_parsing(content)
-    
+
     # Log enhanced analysis for debugging (can be removed in production)
     if query_analysis['key_token_count'] > 2:  # Only log substantial queries
-        print(f"Enhanced query analysis: {query_analysis['gaming_terms']} | potential games: {query_analysis['potential_game_names']}")
+        print(
+            f"Enhanced query analysis: {query_analysis['gaming_terms']} | potential games: {query_analysis['potential_game_names']}")
 
     # Define query patterns and their types
     query_patterns = {
