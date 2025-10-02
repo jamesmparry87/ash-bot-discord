@@ -1101,8 +1101,247 @@ async def handle_recommendation_query(
 
 
 async def handle_youtube_views_query(message: discord.Message) -> None:
-    """Handle YouTube view count queries - prevents AI fabrication by providing proper response."""
-    await message.reply("Database analysis: YouTube view count metrics require external API integration to prevent data fabrication. This functionality is not currently available - I cannot access YouTube Analytics data to determine which games have received the most views. Mission parameters require YouTube API implementation for accurate viewership analysis.")
+    """Handle YouTube view count queries with intelligent database analysis and API fallback."""
+    try:
+        # Check if database is available
+        if db is None:
+            await message.reply("Database analysis systems offline. YouTube view analytics unavailable.")
+            return
+
+        # Try YouTube API integration if available
+        youtube_data = await attempt_youtube_api_analysis(None, "general")
+        
+        if youtube_data:
+            # Use real YouTube API data if available
+            most_viewed_game = youtube_data['most_viewed_game']
+            total_views = most_viewed_game['total_views']
+            total_episodes = most_viewed_game['total_episodes']
+            game_name = most_viewed_game['name']
+            
+            response = f"YouTube analytics complete. '{game_name}' demonstrates maximum viewer engagement with {total_views:,} total views across {total_episodes} episodes"
+            
+            # Add average views per episode if available
+            if most_viewed_game.get('average_views_per_episode'):
+                avg_views = most_viewed_game['average_views_per_episode']
+                response += f" (average: {avg_views:,} views per episode)"
+            
+            response += ". "
+            
+            # Add runner-up information if available
+            if youtube_data.get('runner_up'):
+                runner_up = youtube_data['runner_up']
+                response += f"Secondary analysis indicates '{runner_up['name']}' follows with {runner_up['total_views']:,} views. "
+            
+            # Add Ash-style conversation guidance for enhanced analytics
+            response += f"\n\n**Mission Parameters - Enhanced Analytics Available:**\n"
+            response += f"• *'Which {game_name} episode got the most views?'*\n"
+            response += f"• *'What's the least viewed episode of {game_name}?'*\n"
+            response += f"• *'Show me view breakdown for {game_name} episodes'*\n"
+            response += f"• *'How many total views did [specific game] get?'*\n\n"
+            response += f"I can provide precise YouTube analytics for any game series in Captain Jonesy's archives. Real-time data acquisition protocols are fully operational."
+            
+            # Apply personality modifications and send
+            response = apply_pops_arcade_sarcasm(response, message.author.id)
+            response = smart_truncate_response(response)
+            await message.reply(response)
+            
+            # Update context for conversational follow-ups
+            context = get_or_create_context(message.author.id, message.channel.id)
+            context.add_message(message.content, "user")
+            context.update_game_context(game_name, "youtube_views")
+            context.add_message("youtube_analysis_complete", "bot")
+            
+        else:
+            # Fall back to database popularity analysis
+            popularity_data = await analyze_database_popularity()
+            
+            if popularity_data:
+                top_game = popularity_data['most_popular']
+                popularity_score = popularity_data['popularity_score']
+                
+                response = f"Database analysis: While YouTube view count data requires API integration, popularity metrics indicate '{top_game['canonical_name']}' demonstrates highest engagement indicators"
+                
+                # Add specific metrics that contribute to popularity score
+                metrics = []
+                if top_game.get('total_playtime_minutes', 0) > 0:
+                    hours = round(top_game['total_playtime_minutes'] / 60, 1)
+                    metrics.append(f"{hours} hours playtime")
+                if top_game.get('total_episodes', 0) > 0:
+                    metrics.append(f"{top_game['total_episodes']} episodes")
+                if top_game.get('completion_status') == 'completed':
+                    metrics.append("completed series")
+                
+                if metrics:
+                    response += f" with {', '.join(metrics)}. "
+                else:
+                    response += ". "
+                
+                response += f"Popularity confidence: {popularity_score:.1%}."
+                
+                # Add Ash-style conversation guidance for database fallback
+                game_name = top_game['canonical_name']
+                response += f"\n\n**Mission Parameters - Precise Analytics Available:**\n"
+                response += f"• *'Which {game_name} episode got the most views?'*\n"
+                response += f"• *'What's the least viewed episode of {game_name}?'*\n"
+                response += f"• *'How many total views did {game_name} get?'*\n"
+                response += f"• *'Show me view breakdown for [specific game] episodes'*\n\n"
+                response += f"For precise YouTube view counts, specify individual game series. Real-time data acquisition protocols will provide exact viewership analytics from Captain Jonesy's archives."
+                
+                # Apply personality and context handling
+                response = apply_pops_arcade_sarcasm(response, message.author.id)
+                response = smart_truncate_response(response)
+                await message.reply(response)
+                
+                # Update context for follow-ups
+                context = get_or_create_context(message.author.id, message.channel.id)
+                context.add_message(message.content, "user")
+                context.update_game_context(top_game['canonical_name'], "popularity_analysis")
+                context.add_message("popularity_analysis_complete", "bot")
+                
+            else:
+                # Graceful fallback when no data available
+                response = "Database analysis: Insufficient engagement data available for popularity ranking. YouTube view count metrics require external API integration for accurate viewership analysis. Mission parameters suggest enhancing data collection protocols."
+                response = apply_pops_arcade_sarcasm(response, message.author.id)
+                await message.reply(response)
+    
+    except Exception as e:
+        print(f"Error in YouTube views query: {e}")
+        await message.reply("Database analysis encountered an anomaly during popularity assessment. YouTube analytics systems require recalibration.")
+
+
+async def attempt_youtube_api_analysis(game_name: Optional[str] = None, query_type: str = "general") -> Optional[Dict[str, Any]]:
+    """Attempt to use YouTube API for real view count data with intelligent context awareness."""
+    try:
+        import os
+        youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+        
+        if not youtube_api_key:
+            print("⚠️ YouTube API key not configured, falling back to database analysis")
+            return None
+        
+        # Try to import and use YouTube integration
+        try:
+            from ..integrations.youtube import get_youtube_analytics_for_game, get_most_viewed_game_overall
+            
+            if game_name:
+                # Get analytics for specific game
+                print(f"🔄 Attempting YouTube API analysis for game: '{game_name}', query type: {query_type}")
+                youtube_data = await get_youtube_analytics_for_game(game_name, query_type)
+                
+                if youtube_data and 'error' not in youtube_data:
+                    print(f"✅ YouTube API analysis successful for '{game_name}'")
+                    return youtube_data
+                else:
+                    print(f"⚠️ YouTube API returned no valid data for '{game_name}', falling back to database analysis")
+                    return None
+            else:
+                # General query - use new overall analytics function
+                print("🔄 General YouTube query requested, attempting overall YouTube analytics")
+                youtube_data = await get_most_viewed_game_overall()
+                
+                if youtube_data and 'error' not in youtube_data:
+                    print(f"✅ Overall YouTube API analysis successful")
+                    return youtube_data
+                else:
+                    print("⚠️ Overall YouTube API failed, falling back to database analysis")
+                    return None
+                
+        except ImportError as import_error:
+            print(f"⚠️ YouTube integration import failed: {import_error}, falling back to database analysis")
+            return None
+        except Exception as api_error:
+            print(f"⚠️ YouTube API error: {api_error}, falling back to database analysis")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error in YouTube API attempt: {e}")
+        return None
+
+
+async def analyze_database_popularity() -> Optional[Dict[str, Any]]:
+    """Analyze database metrics to estimate game popularity as proxy for YouTube views."""
+    try:
+        if not db:
+            return None
+        
+        print("🔄 Analyzing database metrics for popularity estimation...")
+        
+        # Get all played games with metrics
+        all_games = db.get_all_played_games()
+        if not all_games:
+            return None
+        
+        # Calculate popularity scores based on multiple factors
+        scored_games = []
+        
+        for game in all_games:
+            popularity_score = 0.0
+            factors = []
+            
+            # Factor 1: Episode count (more episodes = more viewer engagement potential)
+            episodes = game.get('total_episodes', 0)
+            if episodes > 0:
+                episode_score = min(episodes / 50.0, 1.0)  # Normalize to max of 1.0
+                popularity_score += episode_score * 0.4  # 40% weight
+                factors.append(f"episodes: {episode_score:.2f}")
+            
+            # Factor 2: Playtime (longer playtime = more content = more views)
+            playtime_minutes = game.get('total_playtime_minutes', 0)
+            if playtime_minutes > 0:
+                # Normalize playtime score (assume 2000 minutes is very high)
+                playtime_score = min(playtime_minutes / 2000.0, 1.0)
+                popularity_score += playtime_score * 0.3  # 30% weight
+                factors.append(f"playtime: {playtime_score:.2f}")
+            
+            # Factor 3: Completion status (completed series often more popular)
+            if game.get('completion_status') == 'completed':
+                popularity_score += 0.2  # 20% bonus
+                factors.append("completed: +0.2")
+            elif game.get('completion_status') == 'ongoing':
+                popularity_score += 0.1  # 10% bonus
+                factors.append("ongoing: +0.1")
+            
+            # Factor 4: Series popularity (some franchises naturally more popular)
+            series_name = game.get('series_name', '').lower()
+            popular_series = [
+                'god of war', 'final fantasy', 'assassin\'s creed', 'call of duty',
+                'grand theft auto', 'gta', 'the elder scrolls', 'fallout',
+                'resident evil', 'silent hill', 'mass effect', 'dragon age'
+            ]
+            
+            if any(popular in series_name for popular in popular_series):
+                popularity_score += 0.1  # 10% bonus
+                factors.append("popular series: +0.1")
+            
+            # Only include games with some scoring factors
+            if popularity_score > 0:
+                scored_games.append({
+                    'game': game,
+                    'popularity_score': popularity_score,
+                    'factors': factors
+                })
+        
+        if not scored_games:
+            return None
+        
+        # Sort by popularity score
+        scored_games.sort(key=lambda x: x['popularity_score'], reverse=True)
+        
+        top_game_data = scored_games[0]
+        
+        print(f"✅ Database popularity analysis: '{top_game_data['game']['canonical_name']}' scored {top_game_data['popularity_score']:.3f}")
+        print(f"   Factors: {', '.join(top_game_data['factors'])}")
+        
+        return {
+            'most_popular': top_game_data['game'],
+            'popularity_score': top_game_data['popularity_score'],
+            'ranking_factors': top_game_data['factors'],
+            'total_analyzed': len(scored_games)
+        }
+        
+    except Exception as e:
+        print(f"❌ Error analyzing database popularity: {e}")
+        return None
 
 
 async def handle_context_aware_query(message: discord.Message) -> bool:

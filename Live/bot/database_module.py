@@ -3551,7 +3551,7 @@ class DatabaseManager:
 
     def end_trivia_session(self, session_id: int,
                            ended_by: int) -> Optional[Dict[str, Any]]:
-        """End trivia session and return results"""
+        """End trivia session and return enhanced results with participant lists"""
         conn = self.get_connection()
         if not conn:
             return None
@@ -3612,17 +3612,49 @@ class DatabaseManager:
                         first_correct_result = cur.fetchone()
                         first_correct_user = dict(first_correct_result) if first_correct_result else None
 
+                        # NEW: Get lists of all correct and incorrect users (excluding conflicts)
+                        cur.execute("""
+                            SELECT DISTINCT user_id FROM trivia_answers
+                            WHERE session_id = %s AND is_correct = TRUE AND conflict_detected = FALSE
+                            ORDER BY user_id
+                        """, (session_id,))
+                        correct_users_results = cur.fetchall()
+                        correct_user_ids = [dict(row)['user_id'] for row in correct_users_results]
+
+                        cur.execute("""
+                            SELECT DISTINCT user_id FROM trivia_answers
+                            WHERE session_id = %s AND (is_correct = FALSE OR is_correct IS NULL) AND conflict_detected = FALSE
+                            ORDER BY user_id
+                        """, (session_id,))
+                        incorrect_users_results = cur.fetchall()
+                        incorrect_user_ids = [dict(row)['user_id'] for row in incorrect_users_results]
+
                         correct_answer = updated_session_dict.get(
                             'calculated_answer') or updated_session_dict.get('correct_answer')
+
+                        # Calculate accuracy rate for bonus round consideration
+                        total_count = updated_session_dict.get('total_participants', unique_participants)
+                        correct_count = updated_session_dict.get('correct_answers_count', 0)
+                        accuracy_rate = (correct_count / total_count) if total_count > 0 else 0
+
+                        # Determine if bonus round should be triggered (Ash is "annoyed" that challenge was insufficient)
+                        bonus_round_triggered = accuracy_rate > 0.5 and total_count >= 2  # At least 2 participants and >50% correct
 
                         return {
                             'session_id': session_id,
                             'question_id': updated_session_dict.get('question_id'),
                             'question': updated_session_dict.get('question_text'),
                             'correct_answer': correct_answer,
-                            'total_participants': updated_session_dict.get('total_participants', unique_participants),
-                            'correct_answers': updated_session_dict.get('correct_answers_count', 0),
-                            'first_correct': first_correct_user
+                            'total_participants': total_count,
+                            'correct_answers': correct_count,
+                            'accuracy_rate': accuracy_rate,
+                            'first_correct': first_correct_user,
+                            # Enhanced data for community engagement
+                            'correct_user_ids': correct_user_ids,
+                            'incorrect_user_ids': incorrect_user_ids,
+                            # NEW: Bonus round system
+                            'bonus_round_triggered': bonus_round_triggered,
+                            'bonus_round_reason': f"Challenge parameters insufficient - {accuracy_rate:.1%} success rate exceeds acceptable failure thresholds" if bonus_round_triggered else None
                         }
 
                 return None
