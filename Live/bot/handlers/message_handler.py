@@ -58,18 +58,34 @@ from .context_manager import (
     should_use_context,
 )
 
-# Initialize NLTK components
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    print("Downloading NLTK 'punkt' model... (This will only happen once)")
-    nltk.download('punkt', quiet=True)
+# Initialize NLTK components with robust error handling
+def initialize_nltk_resources():
+    """Initialize NLTK resources with comprehensive error handling for deployment."""
+    resources_to_download = [
+        ('tokenizers/punkt', 'punkt'),
+        ('tokenizers/punkt_tab', 'punkt_tab'),
+        ('corpora/stopwords', 'stopwords'),
+    ]
+    
+    for resource_path, resource_name in resources_to_download:
+        try:
+            nltk.data.find(resource_path)
+            print(f"✅ NLTK resource '{resource_name}' found")
+        except LookupError:
+            try:
+                print(f"📥 Downloading NLTK '{resource_name}' resource...")
+                nltk.download(resource_name, quiet=True)
+                print(f"✅ NLTK resource '{resource_name}' downloaded successfully")
+            except Exception as download_error:
+                print(f"⚠️ Failed to download NLTK '{resource_name}': {download_error}")
+                print(f"   Bot will continue with degraded NLP functionality")
 
+# Initialize NLTK resources on module load
 try:
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    print("Downloading NLTK 'stopwords' corpus... (This will only happen once)")
-    nltk.download('stopwords', quiet=True)
+    initialize_nltk_resources()
+except Exception as nltk_init_error:
+    print(f"❌ NLTK initialization error: {nltk_init_error}")
+    print("   Bot will continue with degraded NLP functionality")
 
 # Constants for response handling
 MAX_DISCORD_LENGTH = 2000
@@ -456,7 +472,12 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"most\s+viewed\s+game",
             r"highest\s+viewed\s+game",
             r"what\s+game\s+got.*most\s+views",
-            r"which\s+game\s+got.*most\s+views"
+            r"which\s+game\s+got.*most\s+views",
+            # Add patterns for video-specific queries
+            r"what.*most\s+viewed\s+video",
+            r"which.*most\s+viewed\s+video",
+            r"what.*highest\s+viewed\s+video",
+            r"most\s+viewed\s+video"
         ]
     }
 
