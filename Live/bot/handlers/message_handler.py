@@ -489,7 +489,25 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"what.*most\s+viewed\s+video",
             r"which.*most\s+viewed\s+video",
             r"what.*highest\s+viewed\s+video",
-            r"most\s+viewed\s+video"
+            r"most\s+viewed\s+video",
+            # Add patterns for "most popular" queries (popularity = views)
+            r"what.*most\s+popular\s+game",
+            r"which.*most\s+popular\s+game",
+            r"what.*jonesy.*most\s+popular",
+            r"most\s+popular\s+game",
+            r"what.*jonesy.*popular.*game",
+            r"which.*game.*most\s+popular",
+            # Add patterns for "most watched" queries
+            r"what.*most\s+watched\s+game",
+            r"which.*most\s+watched\s+game",
+            r"what.*jonesy.*most\s+watched",
+            r"most\s+watched\s+game",
+            r"what.*jonesy.*watched.*game",
+            r"which.*game.*most\s+watched",
+            # Add additional "most viewed" variants
+            r"what.*jonesy.*most\s+viewed",
+            r"which.*jonesy.*most\s+viewed",
+            r"what.*game.*most\s+viewed"
         ]
     }
 
@@ -620,8 +638,9 @@ async def handle_statistical_query(
 
         elif ("longest" in lower_content and "complete" in lower_content) or \
              ("longest" in lower_content and "game" in lower_content) or \
-             ("most" in lower_content and ("hours" in lower_content or "playtime" in lower_content)):
-            # Handle longest playtime/completion games - unified handler for all playtime queries
+             ("most" in lower_content and ("hours" in lower_content or "playtime" in lower_content)) or \
+             ("most" in lower_content and "game" in lower_content and any(word in lower_content for word in ["played", "play", "playing"])):
+            # Handle longest playtime/completion games - unified handler for all playtime queries including "most played"
             completion_stats = db.get_longest_completion_games()  # type: ignore
             if completion_stats:
                 top_game = completion_stats[0]
