@@ -640,7 +640,8 @@ async def handle_statistical_query(
              ("longest" in lower_content and "game" in lower_content) or \
              ("most" in lower_content and ("hours" in lower_content or "playtime" in lower_content)) or \
              ("most" in lower_content and "game" in lower_content and any(word in lower_content for word in ["played", "play", "playing"])):
-            # Handle longest playtime/completion games - unified handler for all playtime queries including "most played"
+            # Handle longest playtime/completion games - unified handler for all
+            # playtime queries including "most played"
             completion_stats = db.get_longest_completion_games()  # type: ignore
             if completion_stats:
                 top_game = completion_stats[0]
