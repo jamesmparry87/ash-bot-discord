@@ -661,7 +661,8 @@ async def get_most_viewed_game_overall(channel_id: str = "UCPoUxLHeTnE9SUDAkqfJz
                     } if most_viewed_episode else None
                 }
 
-                print(f"✅ Overall YouTube analytics complete: '{most_viewed['canonical_name']}' with {most_viewed['total_views']:,} total views")
+                print(
+                    f"✅ Overall YouTube analytics complete: '{most_viewed['canonical_name']}' with {most_viewed['total_views']:,} total views")
                 print(f"📊 DEBUG - Result structure: {result}")
                 print(f"📊 DEBUG - Most viewed game name: {result['most_viewed_game']['name']}")
                 print(f"📊 DEBUG - Total views: {result['most_viewed_game']['total_views']}")

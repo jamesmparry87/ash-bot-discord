@@ -67,7 +67,7 @@ def initialize_nltk_resources():
         ('tokenizers/punkt_tab', 'punkt_tab'),
         ('corpora/stopwords', 'stopwords'),
     ]
-    
+
     for resource_path, resource_name in resources_to_download:
         try:
             nltk.data.find(resource_path)
@@ -80,6 +80,7 @@ def initialize_nltk_resources():
             except Exception as download_error:
                 print(f"⚠️ Failed to download NLTK '{resource_name}': {download_error}")
                 print(f"   Bot will continue with degraded NLP functionality")
+
 
 # Initialize NLTK resources on module load
 try:
