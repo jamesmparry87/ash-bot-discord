@@ -422,7 +422,15 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"what.*longest.*game.*jonesy.*played",
             r"what.*game.*longest.*playtime",
             r"which.*game.*longest.*hours",
-            r"what.*game.*most.*hours"
+            r"what.*game.*most.*hours",
+            # Patterns for "most played" queries
+            r"what.*most\s+played\s+game",
+            r"which.*most\s+played\s+game",
+            r"what.*jonesy.*most\s+played",
+            r"which.*jonesy.*most\s+played",
+            r"most\s+played\s+game",
+            r"what.*jonesy.*played.*most",
+            r"which.*game.*jonesy.*played.*most"
         ],
         "genre": [
             r"what\s+(.*?)\s+games\s+has\s+jonesy\s+played",
