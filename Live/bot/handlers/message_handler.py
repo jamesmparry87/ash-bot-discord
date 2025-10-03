@@ -395,7 +395,7 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
     if query_analysis['key_token_count'] > 2:  # Only log substantial queries
         print(
             f"Enhanced query analysis: {query_analysis['gaming_terms']} | potential games: {query_analysis['potential_game_names']}")
-    
+
     print(f"🔍 ROUTE_QUERY: Processing query: '{content[:100]}...'")
 
     # Define query patterns and their types
@@ -508,7 +508,7 @@ async def handle_statistical_query(
         content: str) -> None:
     """Handle statistical queries about games and series."""
     print(f"🔍 HANDLE_STATISTICAL_QUERY: Called with content: '{content[:100]}...'")
-    
+
     # Check if database is available
     if db is None:
         print(f"❌ HANDLE_STATISTICAL_QUERY: Database is None!")
