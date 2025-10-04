@@ -241,13 +241,14 @@ async def format_announcement_content(
         formatted = (
             f"🤖 **Ash Bot System Update** - *Technical Briefing*\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"**📡 Mission Update from {author}** (*{author_title}*)\n\n"
+            f"**📡 System Update Report - Ash Bot Intelligence Analysis**\n"
+            f"*Technical Update Provided by: {author} ({author_title})*\n\n"
             f"{content}\n\n"
         )
 
         # Add creator notes section for mod channel if provided
         if creator_notes and creator_notes.strip():
-            formatted += f"**📝 Technical Notes from {author}:**\n" f"*{creator_notes.strip()}*\n\n"
+            formatted += f"**📝 Direct Note from {author}:**\n" f"*{creator_notes.strip()}*\n\n"
 
         formatted += (f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                       f"**📊 System Status:** All core functions operational\n"
@@ -260,13 +261,14 @@ async def format_announcement_content(
         formatted = (
             f"🎉 **Exciting Bot Updates!**\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"Hey everyone! {author} here with some cool new features:\n\n"
+            f"**📡 Update Report from Ash Bot**\n"
+            f"*Based on technical specifications from {author} ({author_title})*\n\n"
             f"{content}\n\n"
         )
 
         # Add creator notes section for user channel if provided
         if creator_notes and creator_notes.strip():
-            formatted += f"**💭 A note from {author}:**\n" f"*{creator_notes.strip()}*\n\n"
+            formatted += f"**💭 A personal note from {author}:**\n" f"*{creator_notes.strip()}*\n\n"
 
         formatted += (f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                       f"**🕒 Posted:** {timestamp}\n"
@@ -451,6 +453,10 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
         elif step == 'preview':
             # Handle preview actions
             if content in ['1', 'post', 'deploy', 'send']:
+                # Clean up conversation BEFORE posting to ensure it ends properly
+                if user_id in announcement_conversations:
+                    del announcement_conversations[user_id]
+                
                 # Post regular announcement
                 success = await post_announcement(data, user_id)
 
@@ -462,6 +468,7 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                         f"✅ **Announcement Deployed Successfully**\n\n"
                         f"Your update has been transmitted to the {channel_name} channel with proper formatting "
                         f"and presentation protocols. Mission briefing complete.\n\n"
+                        f"**This conversation has ended.** Use `!announceupdate` to create a new announcement.\n\n"
                         f"*Efficient communication maintained. All personnel notified.*"
                     )
                 else:
@@ -469,12 +476,9 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                         f"❌ **Deployment Failed**\n\n"
                         f"System malfunction detected during announcement transmission. Unable to complete "
                         f"briefing protocol.\n\n"
+                        f"**This conversation has ended.** Use `!announceupdate` to try again.\n\n"
                         f"*Please retry or contact system administrator for technical support.*"
                     )
-
-                # Clean up conversation
-                if user_id in announcement_conversations:
-                    del announcement_conversations[user_id]
 
             elif content in ['2', 'edit', 'revise']:
                 # Return to content input
@@ -506,17 +510,18 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                 )
 
             elif content in ['4', 'cancel', 'abort']:
+                # Clean up conversation BEFORE cancelling to ensure it ends properly
+                if user_id in announcement_conversations:
+                    del announcement_conversations[user_id]
+                
                 # Cancel the announcement
                 await message.reply(
                     f"❌ **Announcement Protocol Cancelled**\n\n"
                     f"Mission briefing sequence has been terminated. No content has been deployed. "
                     f"All temporary data has been expunged from system memory.\n\n"
+                    f"**This conversation has ended.** Use `!announceupdate` to create a new announcement.\n\n"
                     f"*Mission parameters reset. Standing by for new directives.*"
                 )
-
-                # Clean up conversation
-                if user_id in announcement_conversations:
-                    del announcement_conversations[user_id]
             else:
                 await message.reply(
                     f"⚠️ **Invalid command.** Please respond with **1** (Post), **2** (Edit), **3** (Creator Notes), or **4** (Cancel).\n\n"
