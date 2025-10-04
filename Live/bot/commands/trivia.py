@@ -10,6 +10,7 @@ Handles comprehensive trivia management including:
 
 import asyncio
 import logging
+import random
 from datetime import datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -19,6 +20,8 @@ from discord.ext import commands
 
 from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..database_module import DatabaseManager, get_database
+from ..handlers.ai_handler import call_ai_with_rate_limiting
+from ..integrations.youtube import get_most_viewed_game_overall, get_youtube_analytics_for_game
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -128,14 +131,237 @@ class TriviaCommands(commands.Cog):
             'answer': correct_answer,
         }
 
+    async def _generate_youtube_analytics_question(self):
+        """Generate trivia questions powered by real YouTube analytics data"""
+        try:
+            # Try to get YouTube data
+            try:
+
+                # First, try to get overall most viewed data
+                overall_data = await get_most_viewed_game_overall()
+
+                if overall_data and 'most_viewed_game' in overall_data:
+                    logger.info("YouTube analytics data retrieved successfully")
+
+                    # Question type options based on available data
+                    question_types = []
+
+                    most_viewed = overall_data['most_viewed_game']
+                    runner_up = overall_data.get('runner_up')
+
+                    # Direct fact questions about most viewed game
+                    question_types.extend([{'type': 'most_viewed_direct',
+                                            'question': f"Which game has the most YouTube views on Captain Jonesy's channel?",
+                                            'answer': most_viewed['name'],
+                                            'data': {'total_views': most_viewed['total_views'],
+                                                     'episodes': most_viewed['total_episodes']}},
+                                           {'type': 'view_count_range',
+                                            'question': f"Approximately how many total YouTube views does '{most_viewed['name']}' have?",
+                                            'answer': self._format_view_count_range(most_viewed['total_views']),
+                                            'data': {'actual_views': most_viewed['total_views']}}])
+
+                    # Comparative questions if we have runner-up data
+                    if runner_up:
+                        question_types.append({
+                            'type': 'comparative_views',
+                            'question': f"Which game has more YouTube views: '{most_viewed['name']}' or '{runner_up['name']}'?",
+                            'answer': most_viewed['name'],
+                            'data': {'winner_views': most_viewed['total_views'], 'runner_up_views': runner_up['total_views']}
+                        })
+
+                    # Episode count questions
+                    if most_viewed.get('total_episodes', 0) > 0:
+                        episode_ranges = self._get_episode_range_choices(most_viewed['total_episodes'])
+                        question_types.append({
+                            'type': 'episode_count_multiple',
+                            'question': f"How many episodes does '{most_viewed['name']}' have on Captain Jonesy's YouTube channel?",
+                            'answer': 'B',  # Will be set dynamically
+                            'choices': episode_ranges['choices'],
+                            'correct_choice': episode_ranges['correct_letter'],
+                            'data': {'actual_episodes': most_viewed['total_episodes']}
+                        })
+
+                    # AI-enhanced questions with real data
+                    if most_viewed['total_views'] > 1000000:  # Only for popular games
+                        question_types.append({
+                            'type': 'ai_enhanced_popularity',
+                            'prompt_data': {
+                                'game_name': most_viewed['name'],
+                                'total_views': most_viewed['total_views'],
+                                'episodes': most_viewed['total_episodes'],
+                                'avg_views': most_viewed.get('average_views_per_episode', 0)
+                            }
+                        })
+
+                    # Select a random question type
+                    selected = random.choice(question_types)
+
+                    if selected['type'] == 'ai_enhanced_popularity':
+                        # Generate AI question with real data
+                        return await self._generate_ai_enhanced_question(selected['prompt_data'])
+                    elif selected['type'] == 'episode_count_multiple':
+                        # Return multiple choice question
+                        return {
+                            'question_text': selected['question'],
+                            'correct_answer': selected['correct_choice'],
+                            'question_type': 'multiple',
+                            'multiple_choice_options': selected['choices'],
+                            'category': 'youtube_analytics',
+                            'difficulty_level': 2,
+                            'is_dynamic': False
+                        }
+                    else:
+                        # Return single answer question
+                        return {
+                            'question_text': selected['question'],
+                            'correct_answer': selected['answer'],
+                            'question_type': 'single',
+                            'category': 'youtube_analytics',
+                            'difficulty_level': 2,
+                            'is_dynamic': False
+                        }
+                else:
+                    logger.info("No YouTube analytics data available, skipping YouTube question generation")
+                    return None
+
+            except ImportError:
+                logger.info("YouTube integration not available for question generation")
+                return None
+            except Exception as youtube_error:
+                logger.warning(f"YouTube analytics failed for question generation: {youtube_error}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error in YouTube analytics question generation: {e}")
+            return None
+
+    def _format_view_count_range(self, actual_views: int) -> str:
+        """Format view count into a reasonable range for trivia answers"""
+        if actual_views >= 10000000:  # 10M+
+            return "Over 10 million"
+        elif actual_views >= 5000000:  # 5M+
+            return "5-10 million"
+        elif actual_views >= 1000000:  # 1M+
+            return "1-5 million"
+        elif actual_views >= 500000:  # 500K+
+            return "500K-1 million"
+        elif actual_views >= 100000:  # 100K+
+            return "100K-500K"
+        else:
+            return "Under 100K"
+
+    def _get_episode_range_choices(self, actual_episodes: int) -> dict:
+        """Generate multiple choice options for episode count questions"""
+        # Create ranges around the actual number
+        ranges = []
+
+        if actual_episodes <= 5:
+            ranges = ["1-5 episodes", "6-10 episodes", "11-20 episodes", "21+ episodes"]
+            correct = 'A'
+        elif actual_episodes <= 10:
+            ranges = ["1-5 episodes", "6-10 episodes", "11-20 episodes", "21+ episodes"]
+            correct = 'B'
+        elif actual_episodes <= 20:
+            ranges = ["1-10 episodes", "11-20 episodes", "21-30 episodes", "31+ episodes"]
+            correct = 'B'
+        elif actual_episodes <= 30:
+            ranges = ["1-10 episodes", "11-20 episodes", "21-30 episodes", "31+ episodes"]
+            correct = 'C'
+        else:
+            ranges = ["1-15 episodes", "16-30 episodes", "31-50 episodes", "50+ episodes"]
+            correct = 'C' if actual_episodes <= 50 else 'D'
+
+        return {
+            'choices': ranges,
+            'correct_letter': correct
+        }
+
+    async def _generate_ai_enhanced_question(self, prompt_data: dict):
+        """Generate AI question enhanced with real YouTube data"""
+        try:
+            from ..handlers.ai_handler import call_ai_with_rate_limiting
+
+            # Create data-rich prompt for AI
+            prompt = (
+                f"Generate a trivia question about Captain Jonesy's YouTube gaming content using this REAL data:\n\n"
+                f"Game: '{prompt_data['game_name']}'\n"
+                f"Total Views: {prompt_data['total_views']:,}\n"
+                f"Episodes: {prompt_data['episodes']}\n"
+                f"Average Views per Episode: {prompt_data.get('avg_views', 0):,}\n\n"
+                f"Create a question that fans could reasonably answer about this game's popularity or viewership. "
+                f"Use the real data but make it accessible (e.g., 'over 2 million views' instead of exact numbers). "
+                f"Focus on what viewers would notice: high popularity, many episodes, successful series, etc.\n\n"
+                f"Examples:\n"
+                f"• 'Which game series has the most total YouTube views?'\n"
+                f"• 'What is Captain Jonesy's most popular completed gaming series?'\n"
+                f"• 'Which game has over 2 million YouTube views?'\n\n"
+                f"Format: Question: [question] | Answer: [answer]"
+            )
+
+            response_text, status = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+
+            if response_text:
+                # Parse response
+                lines = response_text.strip().split('\n')
+                question_text = ""
+                answer = ""
+
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith("Question:"):
+                        question_text = line.replace("Question:", "").strip()
+                    elif line.startswith("Answer:"):
+                        answer = line.replace("Answer:", "").strip()
+
+                # Fallback parsing
+                if not question_text or not answer:
+                    for line in lines:
+                        if '|' in line:
+                            parts = line.split('|')
+                            if len(parts) >= 2:
+                                q_part = parts[0].strip()
+                                a_part = parts[1].strip()
+                                if 'Question:' in q_part or not question_text:
+                                    question_text = q_part.replace('Question:', '').strip()
+                                if 'Answer:' in a_part or not answer:
+                                    answer = a_part.replace('Answer:', '').strip()
+
+                if question_text and answer:
+                    # Clean up
+                    question_text = question_text.strip('?"')
+                    if not question_text.endswith('?'):
+                        question_text += '?'
+
+                    return {
+                        'question_text': question_text,
+                        'correct_answer': answer.strip(),
+                        'question_type': 'single',
+                        'category': 'youtube_ai_enhanced',
+                        'difficulty_level': 2,
+                        'is_dynamic': False
+                    }
+
+            logger.warning("AI-enhanced YouTube question generation failed to parse response")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error in AI-enhanced YouTube question generation: {e}")
+            return None
+
     async def _generate_ai_question_fallback(self):
-        """Enhanced AI question generation with fan-accessible questions"""
+        """Enhanced AI question generation with YouTube analytics integration and fan-accessible questions"""
         try:
             import random
 
             from ..handlers.ai_handler import call_ai_with_rate_limiting
 
-            # Multiple question types for variety
+            # Try YouTube analytics integration first for data-driven questions
+            youtube_question = await self._generate_youtube_analytics_question()
+            if youtube_question:
+                logger.info("Generated YouTube analytics-powered trivia question")
+                return youtube_question
+
+            # Fallback to traditional question types
             question_types = [
                 {
                     'type': 'fan_observable',
@@ -179,6 +405,7 @@ class TriviaCommands(commands.Cog):
             # Randomly select a question type for variety
             selected_type = random.choice(question_types)
 
+            logger.info(f"Generating traditional trivia question of type: {selected_type['type']}")
             response_text, status = await call_ai_with_rate_limiting(selected_type['prompt'], JAM_USER_ID)
 
             if response_text:
@@ -531,40 +758,157 @@ class TriviaCommands(commands.Cog):
                     # Show correct answer
                     embed.add_field(
                         name="✅ **Correct Answer:**",
-                        value=session_results['correct_answer'],
+                        value=f"**{session_results['correct_answer']}**",
                         inline=False)
 
+                    # --- Enhanced Community Engagement Section ---
+                    # Process participant lists
+                    winner_id = session_results.get('first_correct', {}).get(
+                        'user_id') if session_results.get('first_correct') else None
+                    correct_user_ids = session_results.get('correct_user_ids', [])
+                    incorrect_user_ids = session_results.get('incorrect_user_ids', [])
+
+                    # Get list of users who were correct but NOT the first winner
+                    other_correct_ids = [uid for uid in correct_user_ids if uid !=
+                                         winner_id] if winner_id else correct_user_ids
+
+                    # Show winner (first correct answer with Ash's analytical celebration)
+                    if winner_id:
+                        try:
+                            winner_user = await self.bot.fetch_user(winner_id)
+                            winner_name = winner_user.display_name if winner_user else f"User {winner_id}"
+                        except Exception:
+                            winner_name = f"User {winner_id}"
+
+                        embed.add_field(
+                            name="🎯 **Primary Objective: Achieved**",
+                            value=f"**{winner_name}** demonstrated optimal response efficiency. First correct analysis recorded.",
+                            inline=False)
+
+                    # Acknowledge other correct users with analytical approval
+                    if other_correct_ids:
+                        mentions = [f"<@{uid}>" for uid in other_correct_ids]
+                        embed.add_field(
+                            name="📊 **Acceptable Performance**",
+                            value=f"Additional personnel {', '.join(mentions)} also provided correct data. Mission parameters satisfied.",
+                            inline=False)
+
+                    # Encourage users who participated but got it wrong with clinical assessment
+                    if incorrect_user_ids:
+                        mentions = [f"<@{uid}>" for uid in incorrect_user_ids]
+                        embed.add_field(
+                            name="⚠️ **Mission Assessment: Performance Insufficient**",
+                            value=f"Personnel {', '.join(mentions)} require recalibration. Analysis suggests additional database review recommended.",
+                            inline=False)
+
                     # Show participation stats
-                    total_participants = session_results.get(
-                        'total_participants', 0)
+                    total_participants = session_results.get('total_participants', 0)
                     correct_answers = session_results.get('correct_answers', 0)
 
                     if total_participants > 0:
-                        accuracy = round(
-                            (correct_answers / total_participants) * 100, 1)
+                        accuracy = round((correct_answers / total_participants) * 100, 1)
                         embed.add_field(
                             name="📊 **Session Stats:**",
                             value=f"**Participants:** {total_participants}\n**Correct:** {correct_answers}\n**Accuracy:** {accuracy}%",
                             inline=True)
-
-                        # Show winners (first correct answer)
-                        if session_results.get('first_correct'):
-                            winner_user = await self.bot.fetch_user(session_results['first_correct']['user_id'])
-                            winner_name = winner_user.display_name if winner_user else f"User {session_results['first_correct']['user_id']}"
-                            embed.add_field(
-                                name="🥇 **First Correct:**",
-                                value=f"{winner_name}",
-                                inline=True)
                     else:
                         embed.add_field(
                             name="📊 **Session Stats:**",
-                            value="No participants this round",
+                            value="No participants this round.",
                             inline=True)
 
+                    # Updated footer to promote leaderboard
                     embed.set_footer(
-                        text=f"Session #{active_session['id']} ended by {ctx.author.display_name}")
+                        text=f"Session #{active_session['id']} ended by {ctx.author.display_name} | Use !trivialeaderboard to see the full standings!")
 
                     await ctx.send(embed=embed)
+
+                    # NEW: Check if bonus round should be triggered (Ash is "annoyed")
+                    if session_results.get('bonus_round_triggered', False):
+                        bonus_reason = session_results.get('bonus_round_reason', 'Challenge parameters insufficient')
+
+                        # Ash's "annoyed" bonus round message
+                        bonus_message = (
+                            f"⚠️ **RECALIBRATING DIFFICULTY MATRIX**\n\n"
+                            f"Analysis indicates challenge parameters were... insufficient. "
+                            f"{session_results.get('accuracy_rate', 0):.1%} success rate exceeds acceptable failure thresholds.\n\n"
+                            f"*[Deploying enhanced difficulty protocols...]*\n\n"
+                            f"The original assessment failed to adequately test personnel capabilities. "
+                            f"Fascinating... and somewhat disappointing.\n\n"
+                            f"**SECONDARY ASSESSMENT PROTOCOL WILL DEPLOY AUTOMATICALLY.**\n"
+                            f"*Mission parameters require recalibration.*")
+
+                        await ctx.send(bonus_message)
+
+                        # Auto-start bonus round after a brief delay
+                        await asyncio.sleep(3)
+
+                        try:
+                            # Get next available question for bonus round
+                            bonus_question = db.get_next_trivia_question(exclude_user_id=ctx.author.id)
+
+                            if bonus_question:
+                                # Start bonus round session
+                                bonus_session_id = db.create_trivia_session(
+                                    bonus_question['id'],
+                                    session_type="bonus"
+                                )
+
+                                if bonus_session_id:
+                                    # Create bonus round embed with enhanced difficulty message
+                                    bonus_embed = discord.Embed(
+                                        title="⚡ **BONUS ROUND - ENHANCED DIFFICULTY PROTOCOL**",
+                                        description=f"**Secondary assessment deployed.** Personnel demonstrated excessive competency. Difficulty parameters now recalibrated.\n\n📋 **ENHANCED QUESTION:**\n{bonus_question['question_text']}",
+                                        color=0xff6600,  # Orange - warning color
+                                        timestamp=datetime.now(ZoneInfo("Europe/London"))
+                                    )
+
+                                    # Add choices if multiple choice
+                                    if bonus_question['question_type'] == 'multiple' and bonus_question.get(
+                                            'multiple_choice_options'):
+                                        choices_text = '\n'.join([
+                                            f"**{chr(65+i)}.** {choice}"
+                                            for i, choice in enumerate(bonus_question['multiple_choice_options'])
+                                        ])
+                                        bonus_embed.add_field(
+                                            name="📝 **Enhanced Options:**",
+                                            value=choices_text,
+                                            inline=False
+                                        )
+
+                                    bonus_embed.add_field(
+                                        name="⚡ **Mission Parameters:**",
+                                        value="**Reply to this message** with your enhanced analysis. Time limit reduced for increased difficulty.",
+                                        inline=False)
+
+                                    bonus_embed.add_field(
+                                        name="🔬 **Bonus Session Info:**",
+                                        value=f"Enhanced Protocol #{bonus_session_id} • Question #{bonus_question['id']}",
+                                        inline=False)
+
+                                    bonus_embed.set_footer(
+                                        text=f"Bonus Round initiated by system recalibration • Enhanced difficulty active")
+
+                                    # Send bonus question
+                                    bonus_message = await ctx.send(embed=bonus_embed)
+
+                                    # Update session with message tracking
+                                    db.update_trivia_session_messages(
+                                        bonus_session_id,
+                                        bonus_message.id,
+                                        bonus_message.id,
+                                        ctx.channel.id
+                                    )
+
+                                    logger.info(f"Bonus round triggered: Session {bonus_session_id} started")
+                                else:
+                                    await ctx.send("⚠️ **System Error:** Bonus round initialization failed. Enhanced protocols unavailable.")
+                            else:
+                                await ctx.send("⚠️ **Insufficient Question Pool:** No available questions for bonus round deployment.")
+
+                        except Exception as bonus_error:
+                            logger.error(f"Error starting bonus round: {bonus_error}")
+                            await ctx.send("⚠️ **Bonus Round Error:** Enhanced difficulty protocols encountered system malfunction.")
 
                     # Ensure minimum question pool after session
                     try:
@@ -576,8 +920,9 @@ class TriviaCommands(commands.Cog):
                     except Exception as pool_error:
                         logger.error(f"Error managing question pool: {pool_error}")
 
-                    # Thank you message
-                    await ctx.send("🎉 **Thank you for participating in Trivia Tuesday!** Use `!trivialeaderboard` to see overall standings.")
+                    # Thank you message (adjusted for potential bonus round)
+                    if not session_results.get('bonus_round_triggered', False):
+                        await ctx.send("🎉 **Thank you for participating in Trivia Tuesday!** Use `!trivialeaderboard` to see overall standings.")
 
                 else:
                     await ctx.send("❌ **Failed to end trivia session.** Database error occurred.")
@@ -794,7 +1139,7 @@ class TriviaCommands(commands.Cog):
     async def add_trivia_question_conversation(self, ctx):
         """Start interactive DM conversation for trivia question submission"""
         try:
-            from bot.handlers.conversation_handler import start_trivia_conversation
+            from ..handlers.conversation_handler import start_trivia_conversation
             await start_trivia_conversation(ctx)
         except ImportError:
             await ctx.send("❌ Trivia submission system not available - conversation handler not loaded.")
@@ -1286,6 +1631,153 @@ class TriviaCommands(commands.Cog):
         except Exception as e:
             print(f"❌ TRIVIA TEST: Critical error: {e}")
             await ctx.send(f"❌ **Comprehensive trivia test failed:** {str(e)}")
+
+    @commands.command(name="generatequestions")
+    @commands.has_permissions(manage_messages=True)
+    async def generate_questions_manually(self, ctx, count: int = 1):
+        """Manually generate trivia questions for testing and approval (moderators only)"""
+        try:
+            if db is None:
+                await ctx.send("❌ **Database offline.** Cannot generate questions without database connection.")
+                return
+
+            # Limit to reasonable number
+            if count < 1 or count > 5:
+                await ctx.send("❌ **Invalid count.** Please specify 1-5 questions to generate.")
+                return
+
+            await ctx.send(f"🧠 **Manual Question Generation**\n\nGenerating {count} trivia question(s) for your approval... This may take a moment.")
+
+            from ..handlers.conversation_handler import start_jam_question_approval
+
+            successful_generations = 0
+            failed_generations = 0
+
+            for i in range(count):
+                try:
+                    # Use our internal AI generation method
+                    question_data = await self._generate_ai_question_fallback()
+
+                    if question_data:
+                        # Send each question for approval
+                        approval_sent = await start_jam_question_approval(question_data)
+
+                        if approval_sent:
+                            successful_generations += 1
+                            logger.info(f"Generated and sent question {i+1}/{count} for approval")
+
+                            # Brief delay between questions to avoid overwhelming
+                            if i < count - 1:
+                                await asyncio.sleep(3)
+                        else:
+                            failed_generations += 1
+                            logger.warning(f"Failed to send question {i+1}/{count} for approval")
+                    else:
+                        failed_generations += 1
+                        logger.warning(f"Failed to generate question {i+1}/{count}")
+
+                except Exception as gen_error:
+                    failed_generations += 1
+                    logger.error(f"Error generating question {i+1}/{count}: {gen_error}")
+
+            # Send summary
+            if successful_generations > 0:
+                await ctx.send(f"✅ **Question Generation Complete**\n\n"
+                               f"Successfully generated and sent {successful_generations}/{count} questions to JAM for approval.\n"
+                               f"Failed: {failed_generations}\n\n"
+                               f"*JAM should receive individual DMs for each question requiring approval.*")
+            else:
+                await ctx.send(f"❌ **Question Generation Failed**\n\n"
+                               f"Unable to generate any questions. This could be due to:\n"
+                               f"• AI rate limiting\n"
+                               f"• Database approval session creation issues\n"
+                               f"• Network connectivity problems\n\n"
+                               f"*Check the logs for detailed error information.*")
+
+        except Exception as e:
+            logger.error(f"Error in manual question generation: {e}")
+            await ctx.send(f"❌ **Manual generation failed:** {str(e)}")
+
+    @commands.command(name="triviapoolstatus")
+    @commands.has_permissions(manage_messages=True)
+    async def trivia_pool_status(self, ctx):
+        """Check the current trivia question pool status (moderators only)"""
+        try:
+            if db is None:
+                await ctx.send("❌ **Database offline.** Cannot check question pool status.")
+                return
+
+            # Get question statistics
+            stats = db.get_trivia_question_statistics()
+
+            if not stats:
+                await ctx.send("❌ **Unable to retrieve question pool statistics.** Database error occurred.")
+                return
+
+            # Check minimum pool requirement
+            available_count = stats.get('available_questions', 0)
+            minimum_required = 5
+            pool_health = "✅ Healthy" if available_count >= minimum_required else f"⚠️ Below minimum ({minimum_required})"
+
+            # Create status embed
+            embed = discord.Embed(
+                title="📊 **Trivia Question Pool Status**",
+                color=0x00ff00 if available_count >= minimum_required else 0xffaa00,
+                timestamp=datetime.now(ZoneInfo("Europe/London"))
+            )
+
+            # Pool overview
+            embed.add_field(
+                name="🎯 **Pool Health**",
+                value=f"{pool_health}\n**Available:** {available_count}\n**Minimum Required:** {minimum_required}",
+                inline=True
+            )
+
+            # Status breakdown
+            status_counts = stats.get('status_counts', {})
+            status_text = "\n".join([f"**{status.title()}:** {count}"
+                                     for status, count in status_counts.items()])
+
+            embed.add_field(
+                name="📋 **Status Breakdown**",
+                value=status_text or "No data available",
+                inline=True
+            )
+
+            # Source breakdown
+            source_counts = stats.get('source_counts', {})
+            source_text = "\n".join([f"**{source.replace('_', ' ').title()}:** {count}"
+                                     for source, count in source_counts.items()])
+
+            embed.add_field(
+                name="🔄 **Question Sources**",
+                value=source_text or "No data available",
+                inline=True
+            )
+
+            # Total summary
+            total_questions = stats.get('total_questions', 0)
+            embed.add_field(
+                name="📈 **Summary**",
+                value=f"**Total Questions:** {total_questions}\n**Pool Status:** {pool_health}",
+                inline=False
+            )
+
+            # Add recommendations if pool is low
+            if available_count < minimum_required:
+                needed = minimum_required - available_count
+                embed.add_field(
+                    name="💡 **Recommendations**",
+                    value=f"• Generate {needed} more questions with `!generatequestions {needed}`\n• Reset old questions with `!resettrivia`\n• Add manual questions with `!addtrivia`",
+                    inline=False)
+
+            embed.set_footer(text="Use !generatequestions <count> to create new questions")
+
+            await ctx.send(embed=embed)
+
+        except Exception as e:
+            logger.error(f"Error checking trivia pool status: {e}")
+            await ctx.send(f"❌ **Pool status check failed:** {str(e)}")
 
 
 async def setup(bot):

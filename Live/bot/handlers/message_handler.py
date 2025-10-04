@@ -16,7 +16,10 @@ from typing import Any, Dict, List, Match, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 import discord
+import nltk
 from discord.ext import commands
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
 
 from ..config import (
     BOT_PERSONA,
@@ -55,19 +58,147 @@ from .context_manager import (
     should_use_context,
 )
 
+
+# Initialize NLTK components with robust error handling
+def initialize_nltk_resources():
+    """Initialize NLTK resources with comprehensive error handling for deployment."""
+    resources_to_download = [
+        ('tokenizers/punkt', 'punkt'),
+        ('tokenizers/punkt_tab', 'punkt_tab'),
+        ('corpora/stopwords', 'stopwords'),
+    ]
+
+    for resource_path, resource_name in resources_to_download:
+        try:
+            nltk.data.find(resource_path)
+            print(f"✅ NLTK resource '{resource_name}' found")
+        except LookupError:
+            try:
+                print(f"📥 Downloading NLTK '{resource_name}' resource...")
+                nltk.download(resource_name, quiet=True)
+                print(f"✅ NLTK resource '{resource_name}' downloaded successfully")
+            except Exception as download_error:
+                print(f"⚠️ Failed to download NLTK '{resource_name}': {download_error}")
+                print(f"   Bot will continue with degraded NLP functionality")
+
+
+# Initialize NLTK resources on module load
+try:
+    initialize_nltk_resources()
+except Exception as nltk_init_error:
+    print(f"❌ NLTK initialization error: {nltk_init_error}")
+    print("   Bot will continue with degraded NLP functionality")
+
+# Constants for response handling
+MAX_DISCORD_LENGTH = 2000
+TRUNCATION_BUFFER = 80  # Buffer for truncation message
+
+
 # Get database instance
 db: DatabaseManager = get_database()
 
 
+def smart_truncate_response(response: str, max_length: int = MAX_DISCORD_LENGTH,
+                            truncation_suffix: str = " *[Response truncated for message limits...]*") -> str:
+    """
+    Intelligently truncate a response using NLTK sentence tokenization.
+    Preserves sentence boundaries to avoid cutting off mid-sentence.
+    """
+    if len(response) <= max_length:
+        return response
+
+    # Calculate available space after accounting for truncation message
+    available_length = max_length - len(truncation_suffix)
+
+    if available_length <= 0:
+        return truncation_suffix[:max_length]
+
+    try:
+        # Use NLTK to split into sentences
+        sentences = nltk.sent_tokenize(response)
+
+        truncated_response = ""
+        kept_sentences = []
+
+        for sentence in sentences:
+            # Check if adding the next sentence would exceed the limit
+            potential_length = len(truncated_response) + len(sentence)
+            if potential_length > available_length:
+                break
+
+            kept_sentences.append(sentence)
+            truncated_response = " ".join(kept_sentences)
+
+        if not kept_sentences:
+            # If even the first sentence is too long, do a hard truncation
+            return response[:available_length].rstrip() + "..."
+
+        return truncated_response + truncation_suffix
+
+    except Exception as e:
+        print(f"Error in smart truncation: {e}")
+        # Fall back to simple truncation
+        return response[:available_length].rstrip() + "..."
+
+
+def enhance_query_parsing(query: str) -> Dict[str, Any]:
+    """
+    Use NLTK to enhance query understanding with tokenization and linguistic analysis.
+    Returns enhanced query information for better pattern matching.
+    """
+    try:
+        # Tokenize the query
+        tokens = word_tokenize(query.lower())
+
+        # Get stopwords for English
+        stop_words = set(stopwords.words('english'))
+
+        # Filter out stopwords to focus on key terms
+        key_tokens = [token for token in tokens if token not in stop_words and token.isalpha()]
+
+        # Identify potential game-related keywords
+        gaming_keywords = {
+            'game', 'games', 'played', 'play', 'playing', 'series', 'franchise',
+            'episode', 'episodes', 'hour', 'hours', 'time', 'playtime', 'complete',
+            'completed', 'finish', 'finished', 'jonesy', 'captain', 'longest',
+            'shortest', 'most', 'genre', 'rpg', 'action', 'adventure', 'strategy'
+        }
+
+        gaming_terms = [token for token in key_tokens if token in gaming_keywords]
+        non_gaming_terms = [token for token in key_tokens if token not in gaming_keywords]
+
+        return {
+            'original_query': query,
+            'all_tokens': tokens,
+            'key_tokens': key_tokens,
+            'gaming_terms': gaming_terms,
+            'potential_game_names': non_gaming_terms,
+            'token_count': len(tokens),
+            'key_token_count': len(key_tokens)
+        }
+
+    except Exception as e:
+        print(f"Error in enhanced query parsing: {e}")
+        return {
+            'original_query': query,
+            'all_tokens': [],
+            'key_tokens': [],
+            'gaming_terms': [],
+            'potential_game_names': [],
+            'token_count': 0,
+            'key_token_count': 0
+        }
+
+
 def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
-    """Apply sarcastic modifications to responses for Pops Arcade"""
+    """Apply sarcastic modifications to responses for Pops Arcade (Robust Version)"""
+    # NOTE: Assuming POPS_ARCADE_USER_ID is defined elsewhere, e.g., POPS_ARCADE_USER_ID = 123456789
     if user_id != POPS_ARCADE_USER_ID:
         return response
 
-    # Check Discord message length limit to prevent truncation
     MAX_DISCORD_LENGTH = 2000
 
-    # Sarcastic replacements - fixed to prevent sentence fragmentation
+    # Sarcastic replacements (no changes here)
     sarcastic_replacements = {
         "Database analysis": "Database analysis, regrettably,",
         "Affirmative": "I suppose that's... affirmative",
@@ -82,36 +213,28 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
         "Fascinating": "Marginally interesting, I suppose",
         "Outstanding": "Adequate, I suppose",
         "Excellent": "Satisfactory, regrettably",
-        # Fix the problematic patterns that were breaking sentences
         "Their activity appears consistent": "Their activity appears... consistent, I suppose",
         "Their contributions lack a certain": "Their contributions lack a certain sophistication",
         "your struggles with trivia appear to be predictable": "your struggles with trivia appear to be... predictable, regrettably",
     }
 
-    # Apply replacements more carefully to avoid breaking sentence structure
     modified_response = response
-
-    # First, handle full phrase replacements (longer patterns first)
     for original, sarcastic in sorted(sarcastic_replacements.items(), key=len, reverse=True):
         if original in modified_response:
             modified_response = modified_response.replace(original, sarcastic)
 
-    # Add sarcastic interjections to certain sentence patterns
-    # Fix grammatical issues and sentence completion
+    # Regex fixes (no changes here)
     fixes = [
-        # Fix incomplete sentences that end abruptly
         (r'(\w+)\s+appears\.\s*$', r'\1 appears... adequate, I suppose.'),
         (r'(\w+)\s+consistent\.\s*$', r'\1 consistent, regrettably.'),
         (r'lack\s+a\s+certain\.\s*$', r'lack a certain... sophistication, predictably.'),
         (r'appear\s+to\s+be\.\s*$', r'appear to be... as expected, I suppose.'),
         (r'(\w+)\s+predictable\.\s*$', r'\1 predictable, unsurprisingly.'),
     ]
-
-    import re
     for pattern, replacement in fixes:
         modified_response = re.sub(pattern, replacement, modified_response)
 
-    # Add dismissive ending if it doesn't already have one and the message is complete
+    # Sarcastic ending logic (no changes here)
     sarcastic_indicators = [
         "i suppose",
         "regrettably",
@@ -122,33 +245,17 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
     has_sarcastic_ending = any(indicator in modified_response.lower() for indicator in sarcastic_indicators)
 
     if not has_sarcastic_ending:
-        # Only add ending if the sentence seems complete (ends with punctuation)
         if modified_response.strip().endswith(('.', '!', '?')):
             if modified_response.endswith("."):
                 modified_response = modified_response[:-1] + ", I suppose."
             else:
                 modified_response += " *[Processing reluctantly...]*"
 
-    # Ensure we don't exceed Discord's character limit
-    if len(modified_response) > MAX_DISCORD_LENGTH:
-        # Truncate gracefully at sentence boundary
-        sentences = modified_response.split('. ')
-        truncated = ""
-        for sentence in sentences:
-            if len(truncated + sentence + '. ') <= MAX_DISCORD_LENGTH - 50:  # Leave buffer
-                truncated += sentence + '. '
-            else:
-                break
-
-        if truncated:
-            modified_response = truncated.strip()
-            if not modified_response.endswith('.'):
-                modified_response += "."
-            # Add truncation indicator
-            modified_response += " *[Response truncated for efficiency...]*"
-        else:
-            # Fallback: hard truncate but preserve ending
-            modified_response = modified_response[:MAX_DISCORD_LENGTH - 30] + "... *[Truncated reluctantly.]*"
+    # Use the existing smart truncation function with custom suffix
+    modified_response = smart_truncate_response(
+        modified_response,
+        truncation_suffix=" *[Response truncated for efficiency...]*"
+    )
 
     return modified_response
 
@@ -256,8 +363,18 @@ async def handle_pineapple_pizza_enforcement(message: discord.Message) -> bool:
 
 
 def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
-    """Route a query to the appropriate handler based on patterns."""
+    """Route a query to the appropriate handler based on patterns with enhanced NLTK analysis."""
     lower_content = content.lower()
+
+    # Use enhanced query parsing for better understanding
+    query_analysis = enhance_query_parsing(content)
+
+    # Log enhanced analysis for debugging (can be removed in production)
+    if query_analysis['key_token_count'] > 2:  # Only log substantial queries
+        print(
+            f"Enhanced query analysis: {query_analysis['gaming_terms']} | potential games: {query_analysis['potential_game_names']}")
+
+    print(f"🔍 ROUTE_QUERY: Processing query: '{content[:100]}...'")
 
     # Define query patterns and their types
     query_patterns = {
@@ -285,7 +402,15 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"what.*longest.*game.*jonesy.*played",
             r"what.*game.*longest.*playtime",
             r"which.*game.*longest.*hours",
-            r"what.*game.*most.*hours"
+            r"what.*game.*most.*hours",
+            # Patterns for "most played" queries
+            r"what.*most\s+played\s+game",
+            r"which.*most\s+played\s+game",
+            r"what.*jonesy.*most\s+played",
+            r"which.*jonesy.*most\s+played",
+            r"most\s+played\s+game",
+            r"what.*jonesy.*played.*most",
+            r"which.*game.*jonesy.*played.*most"
         ],
         "genre": [
             r"what\s+(.*?)\s+games\s+has\s+jonesy\s+played",
@@ -337,7 +462,30 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"most\s+viewed\s+game",
             r"highest\s+viewed\s+game",
             r"what\s+game\s+got.*most\s+views",
-            r"which\s+game\s+got.*most\s+views"
+            r"which\s+game\s+got.*most\s+views",
+            # Add patterns for video-specific queries
+            r"what.*most\s+viewed\s+video",
+            r"which.*most\s+viewed\s+video",
+            r"what.*highest\s+viewed\s+video",
+            r"most\s+viewed\s+video",
+            # Add patterns for "most popular" queries (popularity = views)
+            r"what.*most\s+popular\s+game",
+            r"which.*most\s+popular\s+game",
+            r"what.*jonesy.*most\s+popular",
+            r"most\s+popular\s+game",
+            r"what.*jonesy.*popular.*game",
+            r"which.*game.*most\s+popular",
+            # Add patterns for "most watched" queries
+            r"what.*most\s+watched\s+game",
+            r"which.*most\s+watched\s+game",
+            r"what.*jonesy.*most\s+watched",
+            r"most\s+watched\s+game",
+            r"what.*jonesy.*watched.*game",
+            r"which.*game.*most\s+watched",
+            # Add additional "most viewed" variants
+            r"what.*jonesy.*most\s+viewed",
+            r"which.*jonesy.*most\s+viewed",
+            r"what.*game.*most\s+viewed"
         ]
     }
 
@@ -355,12 +503,16 @@ async def handle_statistical_query(
         message: discord.Message,
         content: str) -> None:
     """Handle statistical queries about games and series."""
+    print(f"🔍 HANDLE_STATISTICAL_QUERY: Called with content: '{content[:100]}...'")
+
     # Check if database is available
     if db is None:
+        print(f"❌ HANDLE_STATISTICAL_QUERY: Database is None!")
         await message.reply("Database analysis systems offline. Statistical processing unavailable.")
         return
 
     lower_content = content.lower()
+    print(f"🔍 HANDLE_STATISTICAL_QUERY: Processing lower_content: '{lower_content[:100]}...'")
 
     try:
         if "most minutes" in lower_content or "most playtime" in lower_content:
@@ -385,16 +537,17 @@ async def handle_statistical_query(
                     else:
                         response += "I could examine her complete gaming franchise analysis or compare series engagement patterns if you require additional mission data."
 
-                    # Apply sarcastic modifications for Pops Arcade
+                    # Apply sarcastic modifications for Pops Arcade and smart truncation
                     response = apply_pops_arcade_sarcasm(response, message.author.id)
+                    response = smart_truncate_response(response)
                     await message.reply(response)
                 else:
                     response = "Database analysis complete. Insufficient playtime data available for series ranking. Mission parameters require more comprehensive temporal logging."
                     response = apply_pops_arcade_sarcasm(response, message.author.id)
                     await message.reply(response)
             else:
-                # Handle individual game playtime query
-                games_by_playtime = db.get_longest_completion_games()  # type: ignore
+                # Handle individual game playtime query - USE ALL GAMES, not just completed
+                games_by_playtime = db.get_games_by_playtime('DESC')  # type: ignore - FIXED: now uses all games
                 if games_by_playtime:
                     top_game = games_by_playtime[0]
                     total_hours = round(
@@ -461,10 +614,8 @@ async def handle_statistical_query(
             else:
                 await message.reply("Database analysis complete. No episode data available for ranking. Mission logging requires enhancement.")
 
-        elif ("longest" in lower_content and "complete" in lower_content) or \
-             ("longest" in lower_content and "game" in lower_content) or \
-             ("most" in lower_content and ("hours" in lower_content or "playtime" in lower_content)):
-            # Handle longest playtime/completion games - unified handler for all playtime queries
+        elif ("longest" in lower_content and "complete" in lower_content):
+            # Handle longest COMPLETED games specifically
             completion_stats = db.get_longest_completion_games()  # type: ignore
             if completion_stats:
                 top_game = completion_stats[0]
@@ -473,27 +624,69 @@ async def handle_statistical_query(
                     episodes = top_game['total_episodes']
                     game_name = top_game['canonical_name']
 
-                    response = f"Database analysis: '{game_name}' demonstrates maximum temporal investment with {hours} hours"
+                    response = f"Database analysis: '{game_name}' demonstrates maximum temporal investment among completed games with {hours} hours"
                     if episodes > 0:
                         response += f" across {episodes} episodes"
-                    response += f", completion status: {top_game.get('completion_status', 'unknown')}. "
+                    response += ". "
 
                     # Add conversational follow-up
                     if len(completion_stats) > 1:
                         second_game = completion_stats[1]
                         second_hours = round(second_game['total_playtime_minutes'] / 60, 1)
-                        response += f"This significantly exceeds the second-longest '{second_game['canonical_name']}' at {second_hours} hours. Would you like me to analyze her other marathon gaming sessions or compare completion patterns?"
-                    else:
-                        response += f"I could investigate her completion timeline patterns or compare this against other {top_game.get('genre', 'similar')} gaming commitments if you require additional analysis."
+                        response += f"This significantly exceeds the second-longest completed game '{second_game['canonical_name']}' at {second_hours} hours."
+
+                    await message.reply(response)
                 else:
-                    # Fall back to episode count if no playtime data
-                    episodes = top_game['total_episodes']
-                    game_name = top_game['canonical_name']
-                    response = f"Database analysis: '{game_name}' demonstrates maximum episode commitment with {episodes} episodes, however temporal data is insufficient. Mission parameters require enhanced playtime logging for comprehensive analysis."
+                    await message.reply("Database analysis complete. Insufficient playtime data for completed games.")
+            else:
+                await message.reply("Database analysis complete. No completed games with playtime data found.")
+
+        elif ("longest" in lower_content and "game" in lower_content) or \
+             ("most" in lower_content and ("hours" in lower_content or "playtime" in lower_content)) or \
+             ("most" in lower_content and "game" in lower_content and any(word in lower_content for word in ["played", "play", "playing"])):
+            # Handle "most played" / longest playtime games (ALL games, not just completed)
+            playtime_stats = db.get_games_by_playtime('DESC')  # type: ignore - NEW METHOD
+            if playtime_stats:
+                top_game = playtime_stats[0]
+                hours = round(top_game['total_playtime_minutes'] / 60, 1)
+                episodes = top_game['total_episodes']
+                game_name = top_game['canonical_name']
+                status = top_game.get('completion_status', 'unknown')
+
+                response = f"Database analysis: '{game_name}' demonstrates maximum temporal investment with {hours} hours"
+                if episodes > 0:
+                    response += f" across {episodes} episodes"
+                response += f", completion status: {status}. "
+
+                # Add conversational follow-up
+                if len(playtime_stats) > 1:
+                    second_game = playtime_stats[1]
+                    second_hours = round(second_game['total_playtime_minutes'] / 60, 1)
+                    response += f"This significantly exceeds '{second_game['canonical_name']}' at {second_hours} hours. Would you like me to analyze her other marathon gaming sessions or compare completion patterns?"
+                else:
+                    response += f"I could investigate her completion timeline patterns or compare this against other {top_game.get('genre', 'similar')} gaming commitments if you require additional analysis."
 
                 await message.reply(response)
             else:
-                await message.reply("Database analysis complete. Insufficient playtime data available for temporal ranking. Mission parameters require more comprehensive logging.")
+                # Fallback to episode count when playtime data unavailable
+                episode_stats = db.get_games_by_episode_count('DESC')  # type: ignore
+                if episode_stats and len(episode_stats) > 0:
+                    top_game = episode_stats[0]
+                    episodes = top_game['total_episodes']
+                    game_name = top_game['canonical_name']
+                    status = top_game.get('completion_status', 'unknown')
+
+                    response = f"Database analysis: While temporal data is insufficient, episode metrics indicate '{game_name}' demonstrates maximum engagement with {episodes} episodes, completion status: {status}. "
+
+                    if len(episode_stats) > 1:
+                        second_game = episode_stats[1]
+                        response += f"This significantly exceeds '{second_game['canonical_name']}' at {second_game['total_episodes']} episodes. Playtime logging requires enhancement for comprehensive temporal analysis."
+                    else:
+                        response += "Enhanced playtime data collection would provide more precise temporal metrics."
+
+                    await message.reply(response)
+                else:
+                    await message.reply("Database analysis complete. Insufficient playtime and episode data available for engagement ranking. Mission parameters require comprehensive data logging.")
 
     except Exception as e:
         print(f"Error in statistical query: {e}")
@@ -982,8 +1175,249 @@ async def handle_recommendation_query(
 
 
 async def handle_youtube_views_query(message: discord.Message) -> None:
-    """Handle YouTube view count queries - prevents AI fabrication by providing proper response."""
-    await message.reply("Database analysis: YouTube view count metrics require external API integration to prevent data fabrication. This functionality is not currently available - I cannot access YouTube Analytics data to determine which games have received the most views. Mission parameters require YouTube API implementation for accurate viewership analysis.")
+    """Handle YouTube view count queries with intelligent database analysis and API fallback."""
+    try:
+        # Check if database is available
+        if db is None:
+            await message.reply("Database analysis systems offline. YouTube view analytics unavailable.")
+            return
+
+        # Try YouTube API integration if available
+        youtube_data = await attempt_youtube_api_analysis(None, "general")
+
+        if youtube_data:
+            # Use real YouTube API data if available
+            most_viewed_game = youtube_data['most_viewed_game']
+            total_views = most_viewed_game['total_views']
+            total_episodes = most_viewed_game['total_episodes']
+            game_name = most_viewed_game['name']
+
+            response = f"YouTube analytics complete. '{game_name}' demonstrates maximum viewer engagement with {total_views:,} total views across {total_episodes} episodes"
+
+            # Add average views per episode if available
+            if most_viewed_game.get('average_views_per_episode'):
+                avg_views = most_viewed_game['average_views_per_episode']
+                response += f" (average: {avg_views:,} views per episode)"
+
+            response += ". "
+
+            # Add runner-up information if available
+            if youtube_data.get('runner_up'):
+                runner_up = youtube_data['runner_up']
+                response += f"Secondary analysis indicates '{runner_up['name']}' follows with {runner_up['total_views']:,} views. "
+
+            # Add Ash-style conversation guidance for enhanced analytics
+            response += f"\n\n**Mission Parameters - Enhanced Analytics Available:**\n"
+            response += f"• *'Which {game_name} episode got the most views?'*\n"
+            response += f"• *'What's the least viewed episode of {game_name}?'*\n"
+            response += f"• *'Show me view breakdown for {game_name} episodes'*\n"
+            response += f"• *'How many total views did [specific game] get?'*\n\n"
+            response += f"I can provide precise YouTube analytics for any game series in Captain Jonesy's archives. Real-time data acquisition protocols are fully operational."
+
+            # Apply personality modifications and send
+            response = apply_pops_arcade_sarcasm(response, message.author.id)
+            response = smart_truncate_response(response)
+            await message.reply(response)
+
+            # Update context for conversational follow-ups
+            context = get_or_create_context(message.author.id, message.channel.id)
+            context.add_message(message.content, "user")
+            context.update_game_context(game_name, "youtube_views")
+            context.add_message("youtube_analysis_complete", "bot")
+
+        else:
+            # Fall back to database popularity analysis
+            popularity_data = await analyze_database_popularity()
+
+            if popularity_data:
+                top_game = popularity_data['most_popular']
+                popularity_score = popularity_data['popularity_score']
+
+                response = f"Database analysis: While YouTube view count data requires API integration, popularity metrics indicate '{top_game['canonical_name']}' demonstrates highest engagement indicators"
+
+                # Add specific metrics that contribute to popularity score
+                metrics = []
+                if top_game.get('total_playtime_minutes', 0) > 0:
+                    hours = round(top_game['total_playtime_minutes'] / 60, 1)
+                    metrics.append(f"{hours} hours playtime")
+                if top_game.get('total_episodes', 0) > 0:
+                    metrics.append(f"{top_game['total_episodes']} episodes")
+                if top_game.get('completion_status') == 'completed':
+                    metrics.append("completed series")
+
+                if metrics:
+                    response += f" with {', '.join(metrics)}. "
+                else:
+                    response += ". "
+
+                response += f"Popularity confidence: {popularity_score:.1%}."
+
+                # Add Ash-style conversation guidance for database fallback
+                game_name = top_game['canonical_name']
+                response += f"\n\n**Mission Parameters - Precise Analytics Available:**\n"
+                response += f"• *'Which {game_name} episode got the most views?'*\n"
+                response += f"• *'What's the least viewed episode of {game_name}?'*\n"
+                response += f"• *'How many total views did {game_name} get?'*\n"
+                response += f"• *'Show me view breakdown for [specific game] episodes'*\n\n"
+                response += f"For precise YouTube view counts, specify individual game series. Real-time data acquisition protocols will provide exact viewership analytics from Captain Jonesy's archives."
+
+                # Apply personality and context handling
+                response = apply_pops_arcade_sarcasm(response, message.author.id)
+                response = smart_truncate_response(response)
+                await message.reply(response)
+
+                # Update context for follow-ups
+                context = get_or_create_context(message.author.id, message.channel.id)
+                context.add_message(message.content, "user")
+                context.update_game_context(top_game['canonical_name'], "popularity_analysis")
+                context.add_message("popularity_analysis_complete", "bot")
+
+            else:
+                # Graceful fallback when no data available
+                response = "Database analysis: Insufficient engagement data available for popularity ranking. YouTube view count metrics require external API integration for accurate viewership analysis. Mission parameters suggest enhancing data collection protocols."
+                response = apply_pops_arcade_sarcasm(response, message.author.id)
+                await message.reply(response)
+
+    except Exception as e:
+        print(f"Error in YouTube views query: {e}")
+        await message.reply("Database analysis encountered an anomaly during popularity assessment. YouTube analytics systems require recalibration.")
+
+
+async def attempt_youtube_api_analysis(
+        game_name: Optional[str] = None, query_type: str = "general") -> Optional[Dict[str, Any]]:
+    """Attempt to use YouTube API for real view count data with intelligent context awareness."""
+    try:
+        import os
+        youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+
+        if not youtube_api_key:
+            print("⚠️ YouTube API key not configured, falling back to database analysis")
+            return None
+
+        # Try to import and use YouTube integration
+        try:
+            from ..integrations.youtube import get_most_viewed_game_overall, get_youtube_analytics_for_game
+
+            if game_name:
+                # Get analytics for specific game
+                print(f"🔄 Attempting YouTube API analysis for game: '{game_name}', query type: {query_type}")
+                youtube_data = await get_youtube_analytics_for_game(game_name, query_type)
+
+                if youtube_data and 'error' not in youtube_data:
+                    print(f"✅ YouTube API analysis successful for '{game_name}'")
+                    return youtube_data
+                else:
+                    print(f"⚠️ YouTube API returned no valid data for '{game_name}', falling back to database analysis")
+                    return None
+            else:
+                # General query - use new overall analytics function
+                print("🔄 General YouTube query requested, attempting overall YouTube analytics")
+                youtube_data = await get_most_viewed_game_overall()
+
+                if youtube_data and 'error' not in youtube_data:
+                    print(f"✅ Overall YouTube API analysis successful")
+                    return youtube_data
+                else:
+                    print("⚠️ Overall YouTube API failed, falling back to database analysis")
+                    return None
+
+        except ImportError as import_error:
+            print(f"⚠️ YouTube integration import failed: {import_error}, falling back to database analysis")
+            return None
+        except Exception as api_error:
+            print(f"⚠️ YouTube API error: {api_error}, falling back to database analysis")
+            return None
+
+    except Exception as e:
+        print(f"❌ Error in YouTube API attempt: {e}")
+        return None
+
+
+async def analyze_database_popularity() -> Optional[Dict[str, Any]]:
+    """Analyze database metrics to estimate game popularity as proxy for YouTube views."""
+    try:
+        if not db:
+            return None
+
+        print("🔄 Analyzing database metrics for popularity estimation...")
+
+        # Get all played games with metrics
+        all_games = db.get_all_played_games()
+        if not all_games:
+            return None
+
+        # Calculate popularity scores based on multiple factors
+        scored_games = []
+
+        for game in all_games:
+            popularity_score = 0.0
+            factors = []
+
+            # Factor 1: Episode count (more episodes = more viewer engagement potential)
+            episodes = game.get('total_episodes', 0)
+            if episodes > 0:
+                episode_score = min(episodes / 50.0, 1.0)  # Normalize to max of 1.0
+                popularity_score += episode_score * 0.4  # 40% weight
+                factors.append(f"episodes: {episode_score:.2f}")
+
+            # Factor 2: Playtime (longer playtime = more content = more views)
+            playtime_minutes = game.get('total_playtime_minutes', 0)
+            if playtime_minutes > 0:
+                # Normalize playtime score (assume 2000 minutes is very high)
+                playtime_score = min(playtime_minutes / 2000.0, 1.0)
+                popularity_score += playtime_score * 0.3  # 30% weight
+                factors.append(f"playtime: {playtime_score:.2f}")
+
+            # Factor 3: Completion status (completed series often more popular)
+            if game.get('completion_status') == 'completed':
+                popularity_score += 0.2  # 20% bonus
+                factors.append("completed: +0.2")
+            elif game.get('completion_status') == 'ongoing':
+                popularity_score += 0.1  # 10% bonus
+                factors.append("ongoing: +0.1")
+
+            # Factor 4: Series popularity (some franchises naturally more popular)
+            series_name = game.get('series_name', '').lower()
+            popular_series = [
+                'god of war', 'final fantasy', 'assassin\'s creed', 'call of duty',
+                'grand theft auto', 'gta', 'the elder scrolls', 'fallout',
+                'resident evil', 'silent hill', 'mass effect', 'dragon age'
+            ]
+
+            if any(popular in series_name for popular in popular_series):
+                popularity_score += 0.1  # 10% bonus
+                factors.append("popular series: +0.1")
+
+            # Only include games with some scoring factors
+            if popularity_score > 0:
+                scored_games.append({
+                    'game': game,
+                    'popularity_score': popularity_score,
+                    'factors': factors
+                })
+
+        if not scored_games:
+            return None
+
+        # Sort by popularity score
+        scored_games.sort(key=lambda x: x['popularity_score'], reverse=True)
+
+        top_game_data = scored_games[0]
+
+        print(
+            f"✅ Database popularity analysis: '{top_game_data['game']['canonical_name']}' scored {top_game_data['popularity_score']:.3f}")
+        print(f"   Factors: {', '.join(top_game_data['factors'])}")
+
+        return {
+            'most_popular': top_game_data['game'],
+            'popularity_score': top_game_data['popularity_score'],
+            'ranking_factors': top_game_data['factors'],
+            'total_analyzed': len(scored_games)
+        }
+
+    except Exception as e:
+        print(f"❌ Error analyzing database popularity: {e}")
+        return None
 
 
 async def handle_context_aware_query(message: discord.Message) -> bool:

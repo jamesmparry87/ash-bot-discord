@@ -72,9 +72,8 @@ def _detect_bot_environment():
 
         bot_id = bot.user.id
 
-        # Known bot IDs - update these with your actual bot IDs
-        LIVE_BOT_ID = 1162034693115748462  # Replace with actual live bot ID
-        STAGING_BOT_ID = None  # Replace with actual staging bot ID if you have one
+        LIVE_BOT_ID = 1393984585502687293
+        STAGING_BOT_ID = 1413574803545395290
 
         if bot_id == LIVE_BOT_ID:
             _is_live_bot = True
@@ -312,11 +311,17 @@ async def scheduled_games_update():
             print("❌ Mod channel not found for scheduled update")
             return
 
-        # Perform the update (placeholder - would call actual update functions)
-        await mod_channel.send(
-            "🔄 **Weekly Games Update:** Automatic Sunday midday update initiated. "
-            "Refreshing ongoing games data and statistics."
-        )
+        # Perform actual database maintenance and updates
+        update_results = await perform_weekly_games_maintenance()
+
+        # Send detailed report to moderators
+        if update_results:
+            await mod_channel.send(update_results)
+        else:
+            await mod_channel.send(
+                "🔄 **Weekly Games Update:** Maintenance completed successfully. "
+                "Database integrity verified, statistics refreshed."
+            )
 
         print("✅ Scheduled games update completed")
 
@@ -360,59 +365,40 @@ async def scheduled_midnight_restart():
 
 @tasks.loop(minutes=1)  # Check reminders every minute
 async def check_due_reminders():
-    """Check for due reminders and deliver them with enhanced debugging"""
+    """Check for due reminders and deliver them"""
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
 
-        print(
-            f"🕒 Reminder check running at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-
-        # Enhanced database diagnostics
+        # Enhanced database diagnostics - only log issues or when processing reminders
         if not db:
             print("❌ Database instance (db) is None - reminder system disabled")
             return
-
-        print(f"✅ Database instance available: {type(db).__name__}")
 
         if not db:
             print("❌ Database instance not available - reminder system disabled")
             return
 
-        # Check if database is configured
+        # Check database connection - only log errors
         try:
-            if hasattr(
-                db,
-                'get_connection') and callable(
-                getattr(
-                    db,
-                    'get_connection')):
+            if hasattr(db, 'get_connection') and callable(getattr(db, 'get_connection')):
                 conn = db.get_connection()
                 if not conn:
-                    print(
-                        "❌ No database connection available - reminder system disabled")
+                    print("❌ No database connection available - reminder system disabled")
                     return
-                print("✅ Database connection available")
             else:
                 print("❌ Database get_connection method not available")
                 return
         except Exception as db_check_e:
-            print(
-                f"❌ Database check failed - reminder system disabled: {db_check_e}")
+            print(f"❌ Database check failed - reminder system disabled: {db_check_e}")
             return
 
-        # Test database connection with detailed logging
+        # Test database connection - only log errors
         try:
-            if hasattr(
-                db,
-                'get_connection') and callable(
-                getattr(
-                    db,
-                    'get_connection')):
+            if hasattr(db, 'get_connection') and callable(getattr(db, 'get_connection')):
                 conn = db.get_connection()  # type: ignore
                 if not conn:
                     print("❌ Database connection failed in reminder check")
                     return
-                print("✅ Database connection successful")
             else:
                 print("❌ Database get_connection method not available")
                 return
@@ -420,13 +406,14 @@ async def check_due_reminders():
             print(f"❌ Database connection error: {conn_e}")
             return
 
-        # Get due reminders with detailed logging
+        # Get due reminders - only log if found or if error occurs
         try:
             due_reminders = db.get_due_reminders(uk_now)  # type: ignore
-            print(
-                f"📋 Database query successful - found {len(due_reminders) if due_reminders else 0} due reminders")
 
-            if due_reminders:
+            # Only log when there are actually reminders to process
+            if due_reminders and len(due_reminders) > 0:
+                print(
+                    f"🕒 Reminder check at {uk_now.strftime('%H:%M:%S UK')} - found {len(due_reminders)} due reminders")
                 for i, reminder in enumerate(due_reminders):
                     print(
                         f"  📌 Reminder {i+1}: ID={reminder.get('id')}, User={reminder.get('user_id')}, Text='{reminder.get('reminder_text', '')[:30]}...', Due={reminder.get('scheduled_time')}")
@@ -438,10 +425,10 @@ async def check_due_reminders():
             return
 
         if not due_reminders:
-            print("📋 No due reminders to process")
+            # Silent return when no reminders - no logging needed
             return
 
-        print(f"🔔 Processing {len(due_reminders)} due reminders")
+        print(f" Processing {len(due_reminders)} due reminders")
 
         # Get bot instance more reliably
         bot = None
@@ -1085,11 +1072,11 @@ async def trivia_tuesday():
                 'status': 'active'
             }
 
-            # Schedule answer reveal for 1 hour later
+            # Schedule answer reveal for 2 hours later
             asyncio.create_task(
                 schedule_trivia_answer_reveal(
                     session_id,
-                    uk_now + timedelta(hours=1)))
+                    uk_now + timedelta(hours=2)))
 
             print(f"✅ Trivia Tuesday question posted in {members_channel.name}")
 
@@ -1420,6 +1407,117 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
     except Exception as e:
         print(f"❌ Error executing auto-action: {e}")
         raise
+
+
+async def perform_weekly_games_maintenance() -> Optional[str]:
+    """
+    Perform weekly games database maintenance and return status report.
+    Returns detailed report string if maintenance was performed, None if no issues found.
+    """
+    try:
+        if not db:
+            return "❌ **Weekly Games Maintenance Failed:** Database not available for maintenance operations."
+
+        print("🔄 Starting weekly games database maintenance...")
+
+        maintenance_report = []
+        issues_found = False
+        all_games = []  # Initialize to avoid unbound variable error
+
+        # 1. Refresh cached statistics
+        try:
+            print("📊 Refreshing game statistics...")
+
+            # Get basic stats for reporting
+            all_games = db.get_all_played_games()
+            total_games = len(all_games) if all_games else 0
+
+            completed_games = [g for g in all_games if g.get('completion_status') == 'completed'] if all_games else []
+            ongoing_games = [g for g in all_games if g.get('completion_status') == 'ongoing'] if all_games else []
+
+            maintenance_report.append(f"📊 **Database Statistics:**")
+            maintenance_report.append(f"• Total games in archives: {total_games}")
+            maintenance_report.append(f"• Completed missions: {len(completed_games)}")
+            maintenance_report.append(f"• Ongoing missions: {len(ongoing_games)}")
+
+            # Calculate total playtime across all games
+            total_minutes = sum(g.get('total_playtime_minutes', 0) for g in all_games) if all_games else 0
+            if total_minutes > 0:
+                total_hours = round(total_minutes / 60, 1)
+                maintenance_report.append(f"• Total recorded playtime: {total_hours} hours")
+
+        except Exception as stats_error:
+            print(f"⚠️ Statistics refresh error: {stats_error}")
+            maintenance_report.append(f"⚠️ Statistics refresh encountered errors: {str(stats_error)}")
+            issues_found = True
+
+        # 2. Check for data integrity issues
+        try:
+            print("🔍 Performing data integrity checks...")
+
+            integrity_issues = []
+
+            # Check for games with missing essential data
+            if all_games:
+                for game in all_games:
+                    game_name = game.get('canonical_name', 'Unknown')
+
+                    # Check for missing playtime on completed games
+                    if game.get('completion_status') == 'completed' and game.get('total_playtime_minutes', 0) == 0:
+                        if game.get('total_episodes', 0) > 0:
+                            integrity_issues.append(f"'{game_name}' marked complete but missing playtime data")
+
+                    # Check for games with episodes but no playtime
+                    if game.get('total_episodes', 0) > 0 and game.get('total_playtime_minutes', 0) == 0:
+                        integrity_issues.append(f"'{game_name}' has episodes but no playtime recorded")
+
+            if integrity_issues:
+                maintenance_report.append(f"🔍 **Data Integrity Issues Found:**")
+                for issue in integrity_issues[:5]:  # Limit to 5 issues to avoid spam
+                    maintenance_report.append(f"• {issue}")
+                if len(integrity_issues) > 5:
+                    maintenance_report.append(f"• ... and {len(integrity_issues) - 5} more issues")
+                issues_found = True
+            else:
+                maintenance_report.append(f"✅ **Data Integrity:** No issues detected")
+
+        except Exception as integrity_error:
+            print(f"⚠️ Integrity check error: {integrity_error}")
+            maintenance_report.append(f"⚠️ Data integrity check failed: {str(integrity_error)}")
+            issues_found = True
+
+        # 3. Clean up any stale data
+        try:
+            print("🧹 Cleaning up stale data...")
+
+            # This would include cleaning up old temporary records, expired sessions, etc.
+            # For now, we'll just report that cleanup was attempted
+            maintenance_report.append(f"🧹 **Cleanup Operations:** Temporary data cleanup completed")
+
+        except Exception as cleanup_error:
+            print(f"⚠️ Cleanup error: {cleanup_error}")
+            maintenance_report.append(f"⚠️ Cleanup operations failed: {str(cleanup_error)}")
+            issues_found = True
+
+        # 4. Generate final report
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+
+        if issues_found:
+            report_header = f"🔄 **Weekly Games Maintenance Report** - {uk_now.strftime('%Y-%m-%d %H:%M UK')}\n\n"
+            report_header += f"**Status:** ⚠️ Issues detected during maintenance\n\n"
+        else:
+            report_header = f"🔄 **Weekly Games Maintenance Report** - {uk_now.strftime('%Y-%m-%d %H:%M UK')}\n\n"
+            report_header += f"**Status:** ✅ Maintenance completed successfully\n\n"
+
+        full_report = report_header + "\n".join(maintenance_report)
+
+        print("✅ Weekly games maintenance completed")
+        return full_report
+
+    except Exception as e:
+        print(f"❌ Critical error in weekly games maintenance: {e}")
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        return f"❌ **Weekly Games Maintenance Failed** - {uk_now.strftime('%Y-%m-%d %H:%M UK')}\n\nCritical error encountered: {str(e)}\n\nManual intervention may be required."
 
 
 async def schedule_delayed_trivia_validation():

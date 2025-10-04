@@ -1895,6 +1895,34 @@ class DatabaseManager:
             logger.error(f"Error getting longest completion games: {e}")
             return []
 
+    def get_games_by_playtime(self, order: str = 'DESC', limit: int = 15) -> List[Dict[str, Any]]:
+        """Get ALL games ranked by playtime (regardless of completion status)"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
+                cur.execute(f"""
+                    SELECT
+                        canonical_name,
+                        series_name,
+                        total_episodes,
+                        total_playtime_minutes,
+                        completion_status,
+                        genre
+                    FROM played_games
+                    WHERE total_playtime_minutes > 0
+                    ORDER BY total_playtime_minutes {order_clause}
+                    LIMIT %s
+                """, (limit,))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting games by playtime: {e}")
+            return []
+
     def get_games_by_episode_count(
             self, order: str = 'DESC') -> List[Dict[str, Any]]:
         """Get games ranked by episode count"""
@@ -3551,7 +3579,7 @@ class DatabaseManager:
 
     def end_trivia_session(self, session_id: int,
                            ended_by: int) -> Optional[Dict[str, Any]]:
-        """End trivia session and return results"""
+        """End trivia session and return enhanced results with participant lists"""
         conn = self.get_connection()
         if not conn:
             return None
@@ -3612,17 +3640,50 @@ class DatabaseManager:
                         first_correct_result = cur.fetchone()
                         first_correct_user = dict(first_correct_result) if first_correct_result else None
 
+                        # NEW: Get lists of all correct and incorrect users (excluding conflicts)
+                        cur.execute("""
+                            SELECT DISTINCT user_id FROM trivia_answers
+                            WHERE session_id = %s AND is_correct = TRUE AND conflict_detected = FALSE
+                            ORDER BY user_id
+                        """, (session_id,))
+                        correct_users_results = cur.fetchall()
+                        correct_user_ids = [dict(row)['user_id'] for row in correct_users_results]
+
+                        cur.execute("""
+                            SELECT DISTINCT user_id FROM trivia_answers
+                            WHERE session_id = %s AND (is_correct = FALSE OR is_correct IS NULL) AND conflict_detected = FALSE
+                            ORDER BY user_id
+                        """, (session_id,))
+                        incorrect_users_results = cur.fetchall()
+                        incorrect_user_ids = [dict(row)['user_id'] for row in incorrect_users_results]
+
                         correct_answer = updated_session_dict.get(
                             'calculated_answer') or updated_session_dict.get('correct_answer')
+
+                        # Calculate accuracy rate for bonus round consideration
+                        total_count = updated_session_dict.get('total_participants', unique_participants)
+                        correct_count = updated_session_dict.get('correct_answers_count', 0)
+                        accuracy_rate = (correct_count / total_count) if total_count > 0 else 0
+
+                        # Determine if bonus round should be triggered (Ash is "annoyed" that
+                        # challenge was insufficient)
+                        bonus_round_triggered = accuracy_rate > 0.5 and total_count >= 2  # At least 2 participants and >50% correct
 
                         return {
                             'session_id': session_id,
                             'question_id': updated_session_dict.get('question_id'),
                             'question': updated_session_dict.get('question_text'),
                             'correct_answer': correct_answer,
-                            'total_participants': updated_session_dict.get('total_participants', unique_participants),
-                            'correct_answers': updated_session_dict.get('correct_answers_count', 0),
-                            'first_correct': first_correct_user
+                            'total_participants': total_count,
+                            'correct_answers': correct_count,
+                            'accuracy_rate': accuracy_rate,
+                            'first_correct': first_correct_user,
+                            # Enhanced data for community engagement
+                            'correct_user_ids': correct_user_ids,
+                            'incorrect_user_ids': incorrect_user_ids,
+                            # NEW: Bonus round system
+                            'bonus_round_triggered': bonus_round_triggered,
+                            'bonus_round_reason': f"Challenge parameters insufficient - {accuracy_rate:.1%} success rate exceeds acceptable failure thresholds" if bonus_round_triggered else None
                         }
 
                 return None
@@ -3777,6 +3838,36 @@ class DatabaseManager:
 
     # --- Persistent Trivia Approval System ---
 
+    def _insert_approval_session(
+            self,
+            cur,
+            user_id: int,
+            session_type: str,
+            conversation_step: str,
+            question_data: Dict[str, Any],
+            conversation_data: Optional[Dict[str, Any]],
+            uk_now,
+            expires_at
+    ) -> Optional[int]:
+        """Helper method to insert approval session (reduces duplication)"""
+        cur.execute("""
+            INSERT INTO trivia_approval_sessions (
+                user_id, session_type, conversation_step, question_data,
+                conversation_data, created_at, last_activity, expires_at, status
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'active')
+            RETURNING id
+        """, (
+            user_id, session_type, conversation_step,
+            json.dumps(question_data),
+            json.dumps(conversation_data or {}),
+            uk_now, uk_now, expires_at
+        ))
+
+        result = cur.fetchone()
+        if result:
+            return int(result[0])
+        return None
+
     def create_approval_session(
             self,
             user_id: int,
@@ -3789,40 +3880,70 @@ class DatabaseManager:
         """Create a new persistent approval session"""
         conn = self.get_connection()
         if not conn:
+            logger.error("Failed to create approval session: No database connection")
             return None
+
+        # Define variables outside try block to avoid scoping issues
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        expires_at = uk_now + timedelta(minutes=timeout_minutes)
 
         try:
             with conn.cursor() as cur:
-                from datetime import datetime, timedelta
-                from zoneinfo import ZoneInfo
+                # Enhanced logging for debugging
+                logger.info(f"Creating approval session for user {user_id}, type: {session_type}")
 
-                uk_now = datetime.now(ZoneInfo("Europe/London"))
-                expires_at = uk_now + timedelta(minutes=timeout_minutes)
+                session_id = self._insert_approval_session(
+                    cur, user_id, session_type, conversation_step,
+                    question_data, conversation_data, uk_now, expires_at
+                )
 
-                cur.execute("""
-                    INSERT INTO trivia_approval_sessions (
-                        user_id, session_type, conversation_step, question_data,
-                        conversation_data, created_at, last_activity, expires_at, status
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'active')
-                    RETURNING id
-                """, (
-                    user_id, session_type, conversation_step,
-                    json.dumps(question_data),
-                    json.dumps(conversation_data or {}),
-                    uk_now, uk_now, expires_at
-                ))
-
-                result = cur.fetchone()
-                conn.commit()
-
-                if result:
-                    session_id = int(result[0])  # Fix type issue - use index access
-                    logger.info(f"Created persistent approval session {session_id} for user {user_id}")
+                if session_id:
+                    conn.commit()
+                    logger.info(f"✅ Successfully created persistent approval session {session_id} for user {user_id}")
                     return session_id
-                return None
+                else:
+                    logger.error(f"❌ Failed to create approval session: INSERT returned no result")
+                    return None
 
         except Exception as e:
-            logger.error(f"Error creating approval session: {e}")
+            logger.error(f"❌ Error creating approval session - Exception type: {type(e).__name__}")
+            logger.error(f"❌ Error creating approval session - Message: {str(e)}")
+            logger.error(f"❌ Error creating approval session - User ID: {user_id}, Session type: {session_type}")
+
+            # Check if this is a sequence synchronization issue
+            error_str = str(e).lower()
+            if "duplicate key value violates unique constraint" in error_str and "pkey" in error_str:
+                logger.error("🔧 DETECTED: Primary key constraint violation - likely sequence synchronization issue")
+                logger.info("🔄 Attempting automatic sequence repair...")
+
+                # Attempt sequence repair
+                repair_result = self.repair_database_sequences()
+                if repair_result.get("total_repaired", 0) > 0:
+                    logger.info(f"✅ Repaired {repair_result['total_repaired']} sequences, retrying session creation...")
+
+                    # Retry using the helper method
+                    try:
+                        with conn.cursor() as retry_cur:
+                            session_id = self._insert_approval_session(
+                                retry_cur, user_id, session_type, conversation_step,
+                                question_data, conversation_data, uk_now, expires_at
+                            )
+
+                            if session_id:
+                                conn.commit()
+                                logger.info(
+                                    f"✅ Successfully created approval session {session_id} after sequence repair")
+                                return session_id
+                            else:
+                                logger.error("❌ Retry after sequence repair also failed")
+                    except Exception as retry_error:
+                        logger.error(f"❌ Retry after sequence repair failed: {retry_error}")
+                else:
+                    logger.error("❌ Sequence repair found no issues to fix")
+
             conn.rollback()
             return None
 
