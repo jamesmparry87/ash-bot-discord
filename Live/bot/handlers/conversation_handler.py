@@ -392,20 +392,20 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
             # Store the raw content for later reference
             data['raw_content'] = content
             target_channel = data.get('target_channel', 'mod')
-            
+
             # Check if we're in edit mode (skip AI enhancement)
             if data.get('edit_mode', False):
                 # Use exact text as provided - no AI enhancement
                 data['content'] = content
                 data['edit_mode'] = False  # Clear the flag
                 conversation['step'] = 'preview'
-                
+
                 # Create formatted preview using exact content
                 preview_content = await format_announcement_content(content, target_channel, user_id, creator_notes=data.get('creator_notes'))
                 data['formatted_content'] = preview_content
-                
+
                 greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
-                
+
                 await message.reply(
                     f"📋 **Updated Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
                     f"```\n{preview_content}\n```\n\n"
