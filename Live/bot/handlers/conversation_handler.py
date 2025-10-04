@@ -456,7 +456,7 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                 # Clean up conversation BEFORE posting to ensure it ends properly
                 if user_id in announcement_conversations:
                     del announcement_conversations[user_id]
-                
+
                 # Post regular announcement
                 success = await post_announcement(data, user_id)
 
@@ -513,7 +513,7 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                 # Clean up conversation BEFORE cancelling to ensure it ends properly
                 if user_id in announcement_conversations:
                     del announcement_conversations[user_id]
-                
+
                 # Cancel the announcement
                 await message.reply(
                     f"❌ **Announcement Protocol Cancelled**\n\n"
