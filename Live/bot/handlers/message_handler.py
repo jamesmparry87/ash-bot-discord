@@ -677,15 +677,15 @@ async def handle_statistical_query(
                     episodes = top_game['total_episodes']
                     game_name = top_game['canonical_name']
                     status = top_game.get('completion_status', 'unknown')
-                    
+
                     response = f"Database analysis: While temporal data is insufficient, episode metrics indicate '{game_name}' demonstrates maximum engagement with {episodes} episodes, completion status: {status}. "
-                    
+
                     if len(episode_stats) > 1:
                         second_game = episode_stats[1]
                         response += f"This significantly exceeds '{second_game['canonical_name']}' at {second_game['total_episodes']} episodes. Playtime logging requires enhancement for comprehensive temporal analysis."
                     else:
                         response += "Enhanced playtime data collection would provide more precise temporal metrics."
-                    
+
                     await message.reply(response)
                 else:
                     await message.reply("Database analysis complete. Insufficient playtime and episode data available for engagement ranking. Mission parameters require comprehensive data logging.")
