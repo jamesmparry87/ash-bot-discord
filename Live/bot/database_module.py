@@ -3838,6 +3838,36 @@ class DatabaseManager:
 
     # --- Persistent Trivia Approval System ---
 
+    def _insert_approval_session(
+            self,
+            cur,
+            user_id: int,
+            session_type: str,
+            conversation_step: str,
+            question_data: Dict[str, Any],
+            conversation_data: Optional[Dict[str, Any]],
+            uk_now,
+            expires_at
+    ) -> Optional[int]:
+        """Helper method to insert approval session (reduces duplication)"""
+        cur.execute("""
+            INSERT INTO trivia_approval_sessions (
+                user_id, session_type, conversation_step, question_data,
+                conversation_data, created_at, last_activity, expires_at, status
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'active')
+            RETURNING id
+        """, (
+            user_id, session_type, conversation_step,
+            json.dumps(question_data),
+            json.dumps(conversation_data or {}),
+            uk_now, uk_now, expires_at
+        ))
+
+        result = cur.fetchone()
+        if result:
+            return int(result[0])
+        return None
+
     def create_approval_session(
             self,
             user_id: int,
@@ -3865,24 +3895,13 @@ class DatabaseManager:
                 # Enhanced logging for debugging
                 logger.info(f"Creating approval session for user {user_id}, type: {session_type}")
 
-                cur.execute("""
-                    INSERT INTO trivia_approval_sessions (
-                        user_id, session_type, conversation_step, question_data,
-                        conversation_data, created_at, last_activity, expires_at, status
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'active')
-                    RETURNING id
-                """, (
-                    user_id, session_type, conversation_step,
-                    json.dumps(question_data),
-                    json.dumps(conversation_data or {}),
-                    uk_now, uk_now, expires_at
-                ))
+                session_id = self._insert_approval_session(
+                    cur, user_id, session_type, conversation_step,
+                    question_data, conversation_data, uk_now, expires_at
+                )
 
-                result = cur.fetchone()
-                conn.commit()
-
-                if result:
-                    session_id = int(result[0])  # Fix type issue - use index access
+                if session_id:
+                    conn.commit()
                     logger.info(f"✅ Successfully created persistent approval session {session_id} for user {user_id}")
                     return session_id
                 else:
@@ -3905,27 +3924,16 @@ class DatabaseManager:
                 if repair_result.get("total_repaired", 0) > 0:
                     logger.info(f"✅ Repaired {repair_result['total_repaired']} sequences, retrying session creation...")
 
-                    # Retry the creation after repair with new connection and cursor
+                    # Retry using the helper method
                     try:
                         with conn.cursor() as retry_cur:
-                            retry_cur.execute("""
-                                INSERT INTO trivia_approval_sessions (
-                                    user_id, session_type, conversation_step, question_data,
-                                    conversation_data, created_at, last_activity, expires_at, status
-                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'active')
-                                RETURNING id
-                            """, (
-                                user_id, session_type, conversation_step,
-                                json.dumps(question_data),
-                                json.dumps(conversation_data or {}),
-                                uk_now, uk_now, expires_at
-                            ))
+                            session_id = self._insert_approval_session(
+                                retry_cur, user_id, session_type, conversation_step,
+                                question_data, conversation_data, uk_now, expires_at
+                            )
 
-                            retry_result = retry_cur.fetchone()
-                            conn.commit()
-
-                            if retry_result:
-                                session_id = int(retry_result[0])
+                            if session_id:
+                                conn.commit()
                                 logger.info(
                                     f"✅ Successfully created approval session {session_id} after sequence repair")
                                 return session_id

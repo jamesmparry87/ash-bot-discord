@@ -251,33 +251,11 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
             else:
                 modified_response += " *[Processing reluctantly...]*"
 
-    # --- ROBUST TRUNCATION LOGIC (UPDATED) ---
-    if len(modified_response) > MAX_DISCORD_LENGTH:
-        # Use NLTK to intelligently split the text into sentences
-        sentences = nltk.sent_tokenize(modified_response)
-
-        truncated_response = ""
-        kept_sentences = []
-        # Leave a buffer for the truncation message
-        buffer = 50
-
-        for sentence in sentences:
-            # Check if adding the next sentence (plus a space) exceeds the limit
-            if len(truncated_response) + len(sentence) + 1 > MAX_DISCORD_LENGTH - buffer:
-                break
-
-            kept_sentences.append(sentence)
-            truncated_response = " ".join(kept_sentences)
-
-        if not kept_sentences:
-            # This happens if the very first sentence is already too long.
-            # In this case, we have to perform a hard truncate on that sentence.
-            modified_response = sentences[0][:MAX_DISCORD_LENGTH - buffer] + "..."
-        else:
-            modified_response = truncated_response
-
-        # Add a consistent truncation indicator
-        modified_response += " *[Response truncated for efficiency...]*"
+    # Use the existing smart truncation function with custom suffix
+    modified_response = smart_truncate_response(
+        modified_response,
+        truncation_suffix=" *[Response truncated for efficiency...]*"
+    )
 
     return modified_response
 

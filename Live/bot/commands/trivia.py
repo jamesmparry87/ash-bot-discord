@@ -10,6 +10,7 @@ Handles comprehensive trivia management including:
 
 import asyncio
 import logging
+import random
 from datetime import datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -19,6 +20,8 @@ from discord.ext import commands
 
 from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..database_module import DatabaseManager, get_database
+from ..handlers.ai_handler import call_ai_with_rate_limiting
+from ..integrations.youtube import get_most_viewed_game_overall, get_youtube_analytics_for_game
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -131,13 +134,8 @@ class TriviaCommands(commands.Cog):
     async def _generate_youtube_analytics_question(self):
         """Generate trivia questions powered by real YouTube analytics data"""
         try:
-            import random
-
-            from ..handlers.ai_handler import call_ai_with_rate_limiting
-
             # Try to get YouTube data
             try:
-                from ..integrations.youtube import get_most_viewed_game_overall, get_youtube_analytics_for_game
 
                 # First, try to get overall most viewed data
                 overall_data = await get_most_viewed_game_overall()
