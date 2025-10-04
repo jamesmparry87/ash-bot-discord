@@ -978,6 +978,26 @@ question_history = {
 def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
     """Get diverse question templates organized by category - now with more engaging varieties!"""
     return {
+        "playtime_champion": [
+            {
+                "template": "What game has Jonesy spent the most time playing?",
+                "answer_logic": "max_playtime",
+                "type": "single_answer",
+                "weight": 2.0  # Highest weight - most common interpretation of "most played"
+            },
+            {
+                "template": "Which game has the highest total playtime in Jonesy's collection?",
+                "answer_logic": "max_playtime",
+                "type": "single_answer",
+                "weight": 1.9
+            },
+            {
+                "template": "What's Jonesy's most played game by time spent?",
+                "answer_logic": "max_playtime",
+                "type": "single_answer",
+                "weight": 1.8
+            }
+        ],
         "genre_adventures": [
             {
                 "template": "What horror game did Jonesy play most recently?",
@@ -1277,10 +1297,19 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
         games_with_playtime = [g for g in games_data if g.get("total_playtime_minutes", 0) > 0]
         if games_with_playtime:
             winner = max(games_with_playtime, key=lambda x: x.get("total_playtime_minutes", 0))
+            playtime_minutes = winner.get("total_playtime_minutes", 0)
+            playtime_hours = round(playtime_minutes / 60, 1)
+            episodes = winner.get("total_episodes", 0)
+            
             return {
                 "question_text": template["template"],
                 "correct_answer": winner["canonical_name"],
-                "question_type": "single_answer"
+                "question_type": "single_answer",
+                "context_data": {  # Add context for better responses
+                    "playtime_minutes": playtime_minutes,
+                    "playtime_hours": playtime_hours,
+                    "total_episodes": episodes
+                }
             }
 
     elif logic == "completion_percentage":
@@ -1514,23 +1543,34 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
 
         content_prompt = f"""Generate a trivia question about Captain Jonesy's gaming experiences. Use your analytical voice but be CONCISE - minimal preamble, direct question delivery.
 
+CRITICAL TERMINOLOGY - READ CAREFULLY:
+⚠️ "most played" = game with HIGHEST total_playtime_minutes (time spent playing)
+⚠️ "most episodes" = game with MOST episode count (number of episodes)
+⚠️ These are DIFFERENT metrics! Episode count ≠ playtime!
+
+DATABASE SCHEMA:
+- total_playtime_minutes: Actual time spent playing in minutes (THIS IS "MOST PLAYED")
+- total_episodes: Number of recorded episodes
+
 AVOID these overused categories: {avoid_categories}
 
 PREFERRED QUESTION TYPES (pick one):
 🎮 **Genre Adventures**: "What horror game did Jonesy play most recently?"
 🏆 **Gaming Milestones**: "Which was Jonesy's first completed RPG?"
 📚 **Series Explorer**: "How many Resident Evil games has Jonesy played?"
-🎯 **Gaming Stories**: "What game took Jonesy the most episodes to finish?"
+🎯 **Gaming Stories**: "What game took Jonesy the most episodes to finish?" (use "episodes" not "played")
 🕐 **Timeline Fun**: "Which game did Jonesy complete first - [Game A] or [Game B]?"
-⭐ **Fun Facts**: "What percentage of Jonesy's games are completed?"
+⭐ **Playtime Champion**: "What game has Jonesy spent the most time playing?" (use "time" for playtime)
 
 AVAILABLE GAMES: {game_context}
 Total games: {stats.get('total_games', 0)}
 
 CRITICAL: Keep the question CONCISE. Use your analytical voice but avoid lengthy preambles or game lists. A brief greeting like "Personnel, analysis indicates:" followed by a direct question is ideal.
 
-GOOD EXAMPLE: "Personnel, analysis indicates a question arises: What was Captain Jonesy's first completed game?"
-BAD EXAMPLE: "Personnel, I have analyzed Captain Jonesy's extensive gaming logs. Considering her engagement with titles such as [long list], the question arises: [question]"
+GOOD EXAMPLES:
+✅ "Personnel, what game has Jonesy spent the most time playing?" (uses playtime)
+✅ "What game took Jonesy the most episodes to complete?" (uses episode count)
+❌ "What is Jonesy's most played game?" (AMBIGUOUS - specify time OR episodes)
 
 RETURN ONLY JSON:
 {{
