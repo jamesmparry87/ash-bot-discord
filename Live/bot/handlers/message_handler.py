@@ -656,7 +656,7 @@ async def handle_statistical_query(
                         second_game = completion_stats[1]
                         second_hours = round(second_game['total_playtime_minutes'] / 60, 1)
                         response += f"This significantly exceeds the second-longest completed game '{second_game['canonical_name']}' at {second_hours} hours."
-                    
+
                     await message.reply(response)
                 else:
                     await message.reply("Database analysis complete. Insufficient playtime data for completed games.")
