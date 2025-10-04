@@ -1141,7 +1141,7 @@ class TriviaCommands(commands.Cog):
     async def add_trivia_question_conversation(self, ctx):
         """Start interactive DM conversation for trivia question submission"""
         try:
-            from bot.handlers.conversation_handler import start_trivia_conversation
+            from ..handlers.conversation_handler import start_trivia_conversation
             await start_trivia_conversation(ctx)
         except ImportError:
             await ctx.send("❌ Trivia submission system not available - conversation handler not loaded.")
