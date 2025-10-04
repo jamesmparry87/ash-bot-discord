@@ -1895,6 +1895,34 @@ class DatabaseManager:
             logger.error(f"Error getting longest completion games: {e}")
             return []
 
+    def get_games_by_playtime(self, order: str = 'DESC', limit: int = 15) -> List[Dict[str, Any]]:
+        """Get ALL games ranked by playtime (regardless of completion status)"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
+                cur.execute(f"""
+                    SELECT
+                        canonical_name,
+                        series_name,
+                        total_episodes,
+                        total_playtime_minutes,
+                        completion_status,
+                        genre
+                    FROM played_games
+                    WHERE total_playtime_minutes > 0
+                    ORDER BY total_playtime_minutes {order_clause}
+                    LIMIT %s
+                """, (limit,))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting games by playtime: {e}")
+            return []
+
     def get_games_by_episode_count(
             self, order: str = 'DESC') -> List[Dict[str, Any]]:
         """Get games ranked by episode count"""

@@ -568,8 +568,8 @@ async def handle_statistical_query(
                     response = apply_pops_arcade_sarcasm(response, message.author.id)
                     await message.reply(response)
             else:
-                # Handle individual game playtime query
-                games_by_playtime = db.get_longest_completion_games()  # type: ignore
+                # Handle individual game playtime query - USE ALL GAMES, not just completed
+                games_by_playtime = db.get_games_by_playtime('DESC')  # type: ignore - FIXED: now uses all games
                 if games_by_playtime:
                     top_game = games_by_playtime[0]
                     total_hours = round(
@@ -636,12 +636,8 @@ async def handle_statistical_query(
             else:
                 await message.reply("Database analysis complete. No episode data available for ranking. Mission logging requires enhancement.")
 
-        elif ("longest" in lower_content and "complete" in lower_content) or \
-             ("longest" in lower_content and "game" in lower_content) or \
-             ("most" in lower_content and ("hours" in lower_content or "playtime" in lower_content)) or \
-             ("most" in lower_content and "game" in lower_content and any(word in lower_content for word in ["played", "play", "playing"])):
-            # Handle longest playtime/completion games - unified handler for all
-            # playtime queries including "most played"
+        elif ("longest" in lower_content and "complete" in lower_content):
+            # Handle longest COMPLETED games specifically
             completion_stats = db.get_longest_completion_games()  # type: ignore
             if completion_stats:
                 top_game = completion_stats[0]
@@ -650,23 +646,47 @@ async def handle_statistical_query(
                     episodes = top_game['total_episodes']
                     game_name = top_game['canonical_name']
 
-                    response = f"Database analysis: '{game_name}' demonstrates maximum temporal investment with {hours} hours"
+                    response = f"Database analysis: '{game_name}' demonstrates maximum temporal investment among completed games with {hours} hours"
                     if episodes > 0:
                         response += f" across {episodes} episodes"
-                    response += f", completion status: {top_game.get('completion_status', 'unknown')}. "
+                    response += ". "
 
                     # Add conversational follow-up
                     if len(completion_stats) > 1:
                         second_game = completion_stats[1]
                         second_hours = round(second_game['total_playtime_minutes'] / 60, 1)
-                        response += f"This significantly exceeds the second-longest '{second_game['canonical_name']}' at {second_hours} hours. Would you like me to analyze her other marathon gaming sessions or compare completion patterns?"
-                    else:
-                        response += f"I could investigate her completion timeline patterns or compare this against other {top_game.get('genre', 'similar')} gaming commitments if you require additional analysis."
+                        response += f"This significantly exceeds the second-longest completed game '{second_game['canonical_name']}' at {second_hours} hours."
+                    
+                    await message.reply(response)
                 else:
-                    # Fall back to episode count if no playtime data
-                    episodes = top_game['total_episodes']
-                    game_name = top_game['canonical_name']
-                    response = f"Database analysis: '{game_name}' demonstrates maximum episode commitment with {episodes} episodes, however temporal data is insufficient. Mission parameters require enhanced playtime logging for comprehensive analysis."
+                    await message.reply("Database analysis complete. Insufficient playtime data for completed games.")
+            else:
+                await message.reply("Database analysis complete. No completed games with playtime data found.")
+
+        elif ("longest" in lower_content and "game" in lower_content) or \
+             ("most" in lower_content and ("hours" in lower_content or "playtime" in lower_content)) or \
+             ("most" in lower_content and "game" in lower_content and any(word in lower_content for word in ["played", "play", "playing"])):
+            # Handle "most played" / longest playtime games (ALL games, not just completed)
+            playtime_stats = db.get_games_by_playtime('DESC')  # type: ignore - NEW METHOD
+            if playtime_stats:
+                top_game = playtime_stats[0]
+                hours = round(top_game['total_playtime_minutes'] / 60, 1)
+                episodes = top_game['total_episodes']
+                game_name = top_game['canonical_name']
+                status = top_game.get('completion_status', 'unknown')
+
+                response = f"Database analysis: '{game_name}' demonstrates maximum temporal investment with {hours} hours"
+                if episodes > 0:
+                    response += f" across {episodes} episodes"
+                response += f", completion status: {status}. "
+
+                # Add conversational follow-up
+                if len(playtime_stats) > 1:
+                    second_game = playtime_stats[1]
+                    second_hours = round(second_game['total_playtime_minutes'] / 60, 1)
+                    response += f"This significantly exceeds '{second_game['canonical_name']}' at {second_hours} hours. Would you like me to analyze her other marathon gaming sessions or compare completion patterns?"
+                else:
+                    response += f"I could investigate her completion timeline patterns or compare this against other {top_game.get('genre', 'similar')} gaming commitments if you require additional analysis."
 
                 await message.reply(response)
             else:
