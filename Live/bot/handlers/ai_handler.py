@@ -1300,7 +1300,7 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
             playtime_minutes = winner.get("total_playtime_minutes", 0)
             playtime_hours = round(playtime_minutes / 60, 1)
             episodes = winner.get("total_episodes", 0)
-            
+
             return {
                 "question_text": template["template"],
                 "correct_answer": winner["canonical_name"],
