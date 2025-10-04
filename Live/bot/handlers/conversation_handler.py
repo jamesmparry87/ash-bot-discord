@@ -391,64 +391,89 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
         elif step == 'content_input':
             # Store the raw content for later reference
             data['raw_content'] = content
-
-            # Create AI-enhanced content in Ash's style
             target_channel = data.get('target_channel', 'mod')
-            greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
-
-            await message.reply(
-                f"🧠 **AI Content Creation Protocol Initiated**\n\n"
-                f"Processing your input through my cognitive matrix, {greeting}. I will craft this update "
-                f"in my own words and style while preserving your intended meaning and technical accuracy.\n\n"
-                f"**Your Input:** {content[:200]}{'...' if len(content) > 200 else ''}\n\n"
-                f"*Analyzing content parameters and generating Ash-appropriate prose...*"
-            )
-
-            # Use AI to create content in Ash's style
-            enhanced_content = await create_ai_announcement_content(content, target_channel, user_id)
-
-            if enhanced_content and enhanced_content.strip():
-                # Store both AI and raw content
-                data['ai_content'] = enhanced_content
-                # Use AI content as primary content
-                data['content'] = enhanced_content
+            
+            # Check if we're in edit mode (skip AI enhancement)
+            if data.get('edit_mode', False):
+                # Use exact text as provided - no AI enhancement
+                data['content'] = content
+                data['edit_mode'] = False  # Clear the flag
                 conversation['step'] = 'preview'
-
-                # Create formatted preview using AI content
-                preview_content = await format_announcement_content(enhanced_content, target_channel, user_id)
+                
+                # Create formatted preview using exact content
+                preview_content = await format_announcement_content(content, target_channel, user_id, creator_notes=data.get('creator_notes'))
                 data['formatted_content'] = preview_content
-
-                # Show AI-enhanced preview
-                preview_msg = (
-                    f"📋 **AI-Enhanced Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
+                
+                greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
+                
+                await message.reply(
+                    f"📋 **Updated Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
                     f"```\n{preview_content}\n```\n\n"
-                    f"✨ **Content created in Ash's analytical style based on your specifications**\n\n"
+                    f"✏️ **Your exact text has been used, {greeting}.**\n\n"
                     f"📚 **Available Actions:**\n"
                     f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
-                    f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
-                    f"**3.** 📝 **Add Creator Notes** - Include personal notes from the creator\n"
+                    f"**2.** ✏️ **Edit Content** - Revise the announcement text again\n"
+                    f"**3.** 📝 **Add/Edit Creator Notes** - Include or modify personal notes\n"
                     f"**4.** ❌ **Cancel** - Abort announcement creation\n\n"
-                    f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
-                    f"*Review mission parameters carefully before deployment.*")
-
-                await message.reply(preview_msg)
+                    f"*Review mission parameters carefully before deployment.*"
+                )
             else:
-                # AI failed, fall back to original content
-                data['content'] = content  # Store original content as primary
-                conversation['step'] = 'preview'
-                preview_content = await format_announcement_content(content, target_channel, user_id)
-                data['formatted_content'] = preview_content
+                # Initial content - use AI enhancement
+                greeting = "Captain Jonesy" if user_id == JONESY_USER_ID else "Sir Decent Jam"
 
                 await message.reply(
-                    f"⚠️ **AI content creation failed.** Proceeding with your original content.\n\n"
-                    f"📋 **Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
-                    f"```\n{preview_content}\n```\n\n"
-                    f"📚 **Available Actions:**\n"
-                    f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
-                    f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
-                    f"**3.** 📝 **Add Creator Notes** - Include personal notes from the creator\n"
-                    f"**4.** ❌ **Cancel** - Abort announcement creation\n\n"
-                    f"*Review mission parameters carefully before deployment.*")
+                    f"🧠 **AI Content Creation Protocol Initiated**\n\n"
+                    f"Processing your input through my cognitive matrix, {greeting}. I will craft this update "
+                    f"in my own words and style while preserving your intended meaning and technical accuracy.\n\n"
+                    f"**Your Input:** {content[:200]}{'...' if len(content) > 200 else ''}\n\n"
+                    f"*Analyzing content parameters and generating Ash-appropriate prose...*"
+                )
+
+                # Use AI to create content in Ash's style
+                enhanced_content = await create_ai_announcement_content(content, target_channel, user_id)
+
+                if enhanced_content and enhanced_content.strip():
+                    # Store both AI and raw content
+                    data['ai_content'] = enhanced_content
+                    # Use AI content as primary content
+                    data['content'] = enhanced_content
+                    conversation['step'] = 'preview'
+
+                    # Create formatted preview using AI content
+                    preview_content = await format_announcement_content(enhanced_content, target_channel, user_id)
+                    data['formatted_content'] = preview_content
+
+                    # Show AI-enhanced preview
+                    preview_msg = (
+                        f"📋 **AI-Enhanced Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
+                        f"```\n{preview_content}\n```\n\n"
+                        f"✨ **Content created in Ash's analytical style based on your specifications**\n\n"
+                        f"📚 **Available Actions:**\n"
+                        f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
+                        f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
+                        f"**3.** 📝 **Add Creator Notes** - Include personal notes from the creator\n"
+                        f"**4.** ❌ **Cancel** - Abort announcement creation\n\n"
+                        f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
+                        f"*Review mission parameters carefully before deployment.*")
+
+                    await message.reply(preview_msg)
+                else:
+                    # AI failed, fall back to original content
+                    data['content'] = content  # Store original content as primary
+                    conversation['step'] = 'preview'
+                    preview_content = await format_announcement_content(content, target_channel, user_id)
+                    data['formatted_content'] = preview_content
+
+                    await message.reply(
+                        f"⚠️ **AI content creation failed.** Proceeding with your original content.\n\n"
+                        f"📋 **Announcement Preview** ({'Moderator' if target_channel == 'mod' else 'Community'} Channel):\n\n"
+                        f"```\n{preview_content}\n```\n\n"
+                        f"📚 **Available Actions:**\n"
+                        f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
+                        f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
+                        f"**3.** 📝 **Add Creator Notes** - Include personal notes from the creator\n"
+                        f"**4.** ❌ **Cancel** - Abort announcement creation\n\n"
+                        f"*Review mission parameters carefully before deployment.*")
 
         elif step == 'preview':
             # Handle preview actions
@@ -479,15 +504,17 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                         f"**This conversation has ended.** Use `!announceupdate` to try again.\n\n"
                         f"*Please retry or contact system administrator for technical support.*"
                     )
+                return  # Exit immediately after cleanup
 
             elif content in ['2', 'edit', 'revise']:
-                # Return to content input
+                # Return to content input with edit mode flag
+                data['edit_mode'] = True  # Flag to skip AI enhancement on edits
                 conversation['step'] = 'content_input'
 
                 await message.reply(
                     f"✏️ **Content Revision Mode**\n\n"
-                    f"Please provide your updated announcement content. Previous content will be replaced "
-                    f"with your new input.\n\n"
+                    f"Please provide your updated announcement content. Your text will be used exactly as written, "
+                    f"without AI enhancement.\n\n"
                     f"*Precision and clarity are paramount for effective mission communication.*"
                 )
 
@@ -522,6 +549,7 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                     f"**This conversation has ended.** Use `!announceupdate` to create a new announcement.\n\n"
                     f"*Mission parameters reset. Standing by for new directives.*"
                 )
+                return  # Exit immediately after cleanup
             else:
                 await message.reply(
                     f"⚠️ **Invalid command.** Please respond with **1** (Post), **2** (Edit), **3** (Creator Notes), or **4** (Cancel).\n\n"
