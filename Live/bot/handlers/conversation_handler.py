@@ -598,6 +598,7 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
         if user_id in announcement_conversations:
             del announcement_conversations[user_id]
 
+
 def _infer_dynamic_query_type(question_text: str) -> Optional[str]:
     """Infers the dynamic query type from the question text."""
     text = question_text.lower()
@@ -612,6 +613,7 @@ def _infer_dynamic_query_type(question_text: str) -> Optional[str]:
     if "genre" in text and ("most games" in text or "most played" in text):
         return "genre_most_games"
     return None
+
 
 async def handle_mod_trivia_conversation(message: discord.Message) -> None:
     """Handle the interactive DM conversation for mod trivia question submission"""
@@ -775,7 +777,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                     else:
                         calculated_answer = "Could not be determined. No data found for this query."
             else:
-                data['dynamic_query_type'] = category # Fallback to broad category
+                data['dynamic_query_type'] = category  # Fallback to broad category
 
             # --- UPDATED: Show preview for database question with answer preview ---
             preview_msg = (

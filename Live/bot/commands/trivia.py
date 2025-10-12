@@ -1163,17 +1163,17 @@ class TriviaCommands(commands.Cog):
             if not target:
                 # Show usage help
                 help_text = (
-                "**Add Trivia Question (Two Formats):**\n\n"
-                "**1. Easy Multi-line Format (Recommended):**\n"
-                "```\n"
-                "!addtrivia What is the capital of France?\n"
-                "A. London\n"
-                "B. Paris\n"
-                "C. Berlin\n"
-                "Correct answer: B"
-                "```\n"
-                "**2. Pipe-Delimited Format:**\n"
-                "`!addtrivia <question> | answer:<correct_answer> | choices:A,B,C,D | type:multiple`"
+                    "**Add Trivia Question (Two Formats):**\n\n"
+                    "**1. Easy Multi-line Format (Recommended):**\n"
+                    "```\n"
+                    "!addtrivia What is the capital of France?\n"
+                    "A. London\n"
+                    "B. Paris\n"
+                    "C. Berlin\n"
+                    "Correct answer: B"
+                    "```\n"
+                    "**2. Pipe-Delimited Format:**\n"
+                    "`!addtrivia <question> | answer:<correct_answer> | choices:A,B,C,D | type:multiple`"
                 )
                 await ctx.send(help_text)
                 return

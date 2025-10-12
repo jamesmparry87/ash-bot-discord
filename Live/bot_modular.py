@@ -952,7 +952,7 @@ async def process_trivia_answer(message, trivia_session):
     try:
         if db is None:
             return False
-        
+
         assert db is not None
 
         # Extract answer text

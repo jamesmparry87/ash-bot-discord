@@ -160,6 +160,7 @@ class ConversationContext:
             timedelta(minutes=minutes)
         return self.last_activity < cutoff
 
+
 def get_or_create_context(
         user_id: int,
         channel_id: int) -> ConversationContext:

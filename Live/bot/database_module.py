@@ -782,7 +782,7 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting played game {name}: {e}")
             return None
-        
+
     def get_cached_youtube_rankings(self) -> List[Dict[str, Any]]:
         """Gets all played games ranked by their cached YouTube views."""
         conn = self.get_connection()
@@ -815,7 +815,7 @@ class DatabaseManager:
                 update_data = []
                 sync_time = datetime.now(ZoneInfo("Europe/London"))
                 for game in game_rankings:
-                # Align keys with the data from youtube.py and the database schema
+                    # Align keys with the data from youtube.py and the database schema
                     if 'canonical_name' in game and 'youtube_views' in game:
                         update_data.append((game['youtube_views'], sync_time, game['canonical_name']))
                     if not update_data:
@@ -1990,16 +1990,16 @@ class DatabaseManager:
             return []
 
     def get_games_by_episode_count(
-                self, order: str = 'DESC', limit: int = 15) -> List[Dict[str, Any]]:
-            """Get games ranked by episode count"""
-            conn = self.get_connection()
-            if not conn:
-                return []
+            self, order: str = 'DESC', limit: int = 15) -> List[Dict[str, Any]]:
+        """Get games ranked by episode count"""
+        conn = self.get_connection()
+        if not conn:
+            return []
 
-            try:
-                with conn.cursor() as cur:
-                    order_clause = "DESC" if order.upper() == "DESC" else "ASC"
-                    cur.execute(f"""
+        try:
+            with conn.cursor() as cur:
+                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
+                cur.execute(f"""
                         SELECT
                             canonical_name,
                             series_name,
@@ -2012,11 +2012,11 @@ class DatabaseManager:
                         ORDER BY total_episodes {order_clause}
                         LIMIT %s
                     """, (limit,))
-                    results = cur.fetchall()
-                    return [dict(row) for row in results]
-            except Exception as e:
-                logger.error(f"Error getting games by episode count: {e}")
-                return []
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting games by episode count: {e}")
+            return []
 
     def get_genre_statistics(self) -> List[Dict[str, Any]]:
         """Get comprehensive genre statistics"""
@@ -2618,7 +2618,6 @@ class DatabaseManager:
         normalized = re.sub(r'\s+', ' ', normalized).strip()
 
         return normalized
-
 
     def add_trivia_question(
         self,

@@ -603,10 +603,10 @@ async def get_most_viewed_game_overall(channel_id: str = "UCPoUxLHeTnE9SUDAkqfJz
 
                         if videos_data:
                             total_views = sum(video.get('view_count', 0) for video in videos_data)
-                            
+
                             game_analytics.append({
                                 'canonical_name': canonical_name,
-                                'youtube_views': total_views, # Use the key expected by the database/handler
+                                'youtube_views': total_views,  # Use the key expected by the database/handler
                                 'total_episodes': len(videos_data),
                             })
 

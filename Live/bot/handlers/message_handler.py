@@ -83,12 +83,14 @@ def initialize_series_list():
 
     # Dynamic list from the database
     db_series_names = set(db.get_all_unique_series_names())
-    
+
     # Combine them
     _known_game_series = db_series_names.union(static_series_keywords)
     print(f"✅ Series list initialized with {len(_known_game_series)} unique series.")
 
 # Initialize NLTK components with robust error handling
+
+
 def initialize_nltk_resources():
     """Initialize NLTK resources with comprehensive error handling for deployment."""
     resources_to_download = [
@@ -673,7 +675,7 @@ async def handle_statistical_query(
         elif ("longest" in lower_content and "game" in lower_content) or \
              ("most" in lower_content and ("hours" in lower_content or "playtime" in lower_content)) or \
              ("most" in lower_content and "game" in lower_content and any(word in lower_content for word in ["played", "play", "playing"])):
-            
+
             # Handle ambiguous "most played" queries by providing both metrics
             playtime_stats = db.get_games_by_playtime('DESC', limit=1)
             episode_stats = db.get_games_by_episode_count('DESC', limit=1)
@@ -683,12 +685,12 @@ async def handle_statistical_query(
                 return
 
             response = "Analysis complete. The term 'most played' can be interpreted in two ways:\n\n"
-            
+
             if playtime_stats:
                 top_playtime_game = playtime_stats[0]
                 hours = round(top_playtime_game['total_playtime_minutes'] / 60, 1)
                 response += f"▶️ **By Playtime:** '{top_playtime_game['canonical_name']}' has the most playtime with **{hours} hours**.\n"
-            
+
             if episode_stats:
                 top_episode_game = episode_stats[0]
                 episodes = top_episode_game['total_episodes']
@@ -838,7 +840,7 @@ async def handle_game_status_query(
 
     # Check if the query matches a known series from our dynamic list
     is_series_query = False
-    if not any(char.isdigit() for char in game_name): # Don't trigger for "GTA 5"
+    if not any(char.isdigit() for char in game_name):  # Don't trigger for "GTA 5"
         for series in _known_game_series:
             if series in game_name_lower:
                 is_series_query = True
@@ -869,7 +871,7 @@ async def handle_game_status_query(
                 status = game.get("completion_status", "unknown")
                 series_games_formatted.append(f"'{game['canonical_name']}'{episodes} - {status}")
                 available_game_names.append(game['canonical_name'])
-            
+
             games_list = ", ".join(series_games_formatted)
 
             # Set disambiguation state in conversation context
@@ -979,7 +981,7 @@ async def handle_game_details_query(
 
     # Check if the query matches a known series from our dynamic list
     is_series_query = False
-    if not any(char.isdigit() for char in game_name): # Don't trigger for "GTA 5"
+    if not any(char.isdigit() for char in game_name):  # Don't trigger for "GTA 5"
         for series in _known_game_series:
             if series in game_name_lower:
                 is_series_query = True
@@ -1007,7 +1009,7 @@ async def handle_game_details_query(
                 status = game.get("completion_status", "unknown")
                 series_games_formatted.append(f"'{game['canonical_name']}'{episodes} - {status}")
                 available_game_names.append(game['canonical_name'])
-            
+
             games_list = ", ".join(series_games_formatted)
 
             # Set disambiguation state in conversation context
@@ -1125,7 +1127,8 @@ async def handle_youtube_views_query(message: discord.Message) -> None:
         if sync_is_stale:
             print("🔄 YouTube Analytics: Cache is stale or empty. Fetching live data from API...")
             data_source = "live API"
-            youtube_data = await attempt_youtube_api_analysis(None, "general_full_list") # Assumes this returns a full list
+            # Assumes this returns a full list
+            youtube_data = await attempt_youtube_api_analysis(None, "general_full_list")
 
             if youtube_data and 'full_rankings' in youtube_data:
                 full_rankings = youtube_data['full_rankings']
@@ -1150,8 +1153,7 @@ async def handle_youtube_views_query(message: discord.Message) -> None:
 
         response = (
             f"YouTube analytics complete (data source: {data_source}). "
-            f"'{top_game['canonical_name']}' demonstrates maximum viewer engagement with {top_game.get('youtube_views', 0):,} total views."
-        )
+            f"'{top_game['canonical_name']}' demonstrates maximum viewer engagement with {top_game.get('youtube_views', 0):,} total views.")
 
         if runner_up:
             response += f" Secondary analysis indicates '{runner_up['canonical_name']}' follows with {runner_up.get('youtube_views', 0):,} views."
@@ -1170,6 +1172,7 @@ async def handle_youtube_views_query(message: discord.Message) -> None:
         print(f"❌ Error in YouTube views query: {e}")
         await message.reply("Database analysis encountered an anomaly during popularity assessment. Analytics systems require recalibration.")
 
+
 async def _handle_ranking_follow_up(message: discord.Message, context: 'ConversationContext') -> bool:
     """Handles follow-up questions about a previously generated ranked list."""
     content = message.content.lower()
@@ -1180,7 +1183,7 @@ async def _handle_ranking_follow_up(message: discord.Message, context: 'Conversa
     # Find numbers in the user's query (e.g., "third", "4th", "5")
     ranks_to_show = []
     word_to_num = {"third": 3, "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10}
-    
+
     # Simple number parsing
     for word in content.split():
         clean_word = word.strip('.,?!').replace('rd', '').replace('th', '').replace('st', '')
@@ -1194,14 +1197,14 @@ async def _handle_ranking_follow_up(message: discord.Message, context: 'Conversa
         if "next" in content or "other" in content or "rest" in content:
             # Assume they want the next few after the last ones shown (usually 2)
             start_index = 2
-            count = 3 # Default to showing the next 3
+            count = 3  # Default to showing the next 3
             ranks_to_show.extend(range(start_index + 1, start_index + 1 + count))
 
     if not ranks_to_show:
         # Default to showing the 3rd, 4th, 5th if no numbers are found
         ranks_to_show.extend([3, 4, 5])
-    
-    ranks_to_show = sorted(list(set(ranks_to_show))) # Remove duplicates and sort
+
+    ranks_to_show = sorted(list(set(ranks_to_show)))  # Remove duplicates and sort
 
     response_parts = []
     for rank in ranks_to_show:
@@ -1658,7 +1661,7 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
         # First check if this is a DM conversation (including JAM approval)
         if await handle_dm_conversations(message):
             return True
-        
+
         # Check for specific follow-up intents that don't need full routing
         context = get_or_create_context(message.author.id, message.channel.id)
         follow_up_intent = detect_follow_up_intent(message.content, context)
