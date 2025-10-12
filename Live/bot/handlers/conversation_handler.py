@@ -602,16 +602,39 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
 def _infer_dynamic_query_type(question_text: str) -> Optional[str]:
     """Infers the dynamic query type from the question text."""
     text = question_text.lower()
-    if "longest" in text and ("playthrough" in text or "playtime" in text or "hours" in text or "time" in text):
-        return "longest_playtime"
-    if "most episodes" in text:
-        return "most_episodes"
-    if "series" in text and ("playtime" in text or "time" in text):
+
+    # Playtime queries
+    if "playthrough" in text or "playtime" in text or "hours" in text:
+        if "longest" in text or "most" in text:
+            return "longest_playtime"
+        if "shortest" in text or "least" in text or "fewest" in text:
+            return "shortest_playtime"
+
+    # Episode queries
+    if "episodes" in text:
+        if "most" in text or "longest" in text:
+            return "most_episodes"
+        if "fewest" in text or "least" in text or "shortest" in text:
+            return "fewest_episodes"
+
+    # Timeline queries
+    if "first game" in text and "played" in text:
+        return "first_game_played"
+    if ("most recent" in text or "latest" in text) and "played" in text:
+        return "most_recent_game_played"
+    if "oldest" in text and ("release" in text or "year" in text):
+        return "oldest_game_by_release"
+
+    # Aggregate & Series queries
+    if "series" in text and "time" in text:
         return "series_most_playtime"
     if "average" in text and "episode" in text:
         return "highest_avg_episode"
-    if "genre" in text and ("most games" in text or "most played" in text):
-        return "genre_most_games"
+    if ("most common" in text or "most played" in text) and "genre" in text:
+        return "most_common_genre"
+    if "how many" in text and "games" in text and "genre" in text:
+        return "genre_game_count" # Special case, requires parameter
+
     return None
 
 

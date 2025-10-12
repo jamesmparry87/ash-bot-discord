@@ -419,6 +419,13 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"which\s+game\s+.*longest.*complete",
             r"what.*game.*most.*playtime",
             r"which.*series.*most.*playtime",
+            r"what.*(shortest|least|fewest).*(playthrough|playtime|hours)",
+            r"which.*(fewest|shortest|least).*episodes",
+            r"what.*(first|earliest).*game.*played",
+            r"what.*(most recent|latest).*game.*played",
+            r"what.*oldest.*game.*(release|year)",
+            r"how many.*(horror|survival horror|rpg|action|adventure|puzzle|strategy).*games", # Example genres
+            r"what.*(most common|most played).*genre",
             r"what.*game.*shortest.*episodes",
             r"which.*game.*fastest.*complete",
             r"what.*game.*most.*time",
@@ -443,6 +450,11 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"what.*jonesy.*played.*most",
             r"which.*game.*jonesy.*played.*most"
         ],
+        "comparison": [
+            r"(?:compare|vs|versus)\s+(.+?)\s+(?:and|to|with)\s+(.+?)[\?\.]?$",
+            r"which.*(?:longer|more episodes|more playtime|shorter|fewer episodes)\s+(.+?)\s+or\s+(.+?)[\?\.]?$"
+        ],
+
         "genre": [
             r"what\s+(.*?)\s+games\s+has\s+jonesy\s+played",
             r"what\s+(.*?)\s+games\s+did\s+jonesy\s+play",
@@ -645,6 +657,57 @@ async def handle_statistical_query(
             else:
                 await message.reply("Database analysis complete. No episode data available for ranking. Mission logging requires enhancement.")
 
+        elif any(word in lower_content for word in ["shortest", "fewest", "least"]) and any(word in lower_content for word in ["playtime", "hours"]):
+                    games = db.get_games_by_playtime("ASC", limit=1)
+                    if games:
+                        game = games[0]
+                        hours = round(game['total_playtime_minutes'] / 60, 1)
+                        await message.reply(f"Database analysis indicates '{game['canonical_name']}' represents the shortest playthrough at {hours} hours.")
+                    else:
+                        await message.reply("Database analysis complete. Insufficient playtime data for analysis.")
+
+        elif any(word in lower_content for word in ["fewest", "shortest", "least"]) and "episodes" in lower_content:
+            games = db.get_games_by_episode_count("ASC", limit=1)
+            if games:
+                game = games[0]
+                await message.reply(f"Analysis complete. '{game['canonical_name']}' has the fewest episodes with {game['total_episodes']}.")
+            else:
+                await message.reply("Database analysis complete. Insufficient episode data for analysis.")
+
+        elif ("first" in lower_content or "earliest" in lower_content) and "game" in lower_content and "played" in lower_content:
+            games = db.get_games_by_played_date("ASC", limit=1)
+            if games:
+                game = games[0]
+                play_date = game['first_played_date'].strftime('%B %Y')
+                await message.reply(f"According to mission logs, the first recorded game played was '{game['canonical_name']}' in {play_date}.")
+            else:
+                await message.reply("Temporal analysis failed. No valid 'first played' dates found in the archives.")
+
+        elif ("most recent" in lower_content or "latest" in lower_content) and "game" in lower_content:
+            games = db.get_games_by_played_date("DESC", limit=1)
+            if games:
+                game = games[0]
+                play_date = game['first_played_date'].strftime('%B %Y')
+                await message.reply(f"The most recently archived game is '{game['canonical_name']}', first played in {play_date}.")
+            else:
+                await message.reply("Temporal analysis failed. No valid 'first played' dates found in the archives.")
+        
+        elif "oldest" in lower_content and "game" in lower_content:
+            games = db.get_games_by_release_year("ASC", limit=1)
+            if games:
+                game = games[0]
+                await message.reply(f"Analysis of historical data indicates the oldest game played is '{game['canonical_name']}', released in {game['release_year']}.")
+            else:
+                await message.reply("Historical analysis failed. No valid release year data found.")
+
+        elif ("most common" in lower_content or "most played" in lower_content) and "genre" in lower_content:
+            stats = db.get_genre_statistics()
+            if stats:
+                top_genre = stats[0]
+                await message.reply(f"Statistical analysis indicates the most engaged genre is **{top_genre['genre'].title()}** with {top_genre['game_count']} titles played.")
+            else:
+                await message.reply("Genre analysis failed. Insufficient data in the archives.")
+
         elif ("longest" in lower_content and "complete" in lower_content):
             # Handle longest COMPLETED games specifically
             completion_stats = db.get_longest_completion_games()  # type: ignore
@@ -703,6 +766,70 @@ async def handle_statistical_query(
         print(f"Error in statistical query: {e}")
         await message.reply("Database analysis encountered an anomaly. Statistical processing systems require recalibration.")
 
+async def handle_comparison_query(message: discord.Message, match: Match[str]) -> None:
+    """Handles direct comparison queries between two games."""
+    if db is None:
+        await message.reply("Database analysis systems offline. Comparison queries unavailable.")
+        return
+
+    game1_name = match.group(1).strip()
+    game2_name = match.group(2).strip()
+
+    comparison_data = db.compare_games(game1_name, game2_name)
+
+    if comparison_data.get('error'):
+        if not comparison_data.get('game1_found') and not comparison_data.get('game2_found'):
+            await message.reply(f"Database scan complete. No records found for either '{game1_name}' or '{game2_name}'.")
+        elif not comparison_data.get('game1_found'):
+            await message.reply(f"Database scan complete. No records found for '{game1_name}'.")
+        else:
+            await message.reply(f"Database scan complete. No records found for '{game2_name}'.")
+        return
+
+    game1 = comparison_data['game1']
+    game2 = comparison_data['game2']
+    comparison = comparison_data['comparison']
+
+    embed = discord.Embed(
+        title=f"Comparative Analysis: {game1['name']} vs. {game2['name']}",
+        color=0x00ff00,
+        timestamp=datetime.now(ZoneInfo("Europe/London"))
+    )
+
+    # Add fields for each game
+    embed.add_field(
+        name=f"🎮 {game1['name']}",
+        value=(
+            f"**Playtime:** {game1['playtime_hours']} hours\n"
+            f"**Episodes:** {game1['episodes']}\n"
+            f"**Status:** {game1['status'].title()}"
+        ),
+        inline=True
+    )
+    embed.add_field(
+        name=f"🎮 {game2['name']}",
+        value=(
+            f"**Playtime:** {game2['playtime_hours']} hours\n"
+            f"**Episodes:** {game2['episodes']}\n"
+            f"**Status:** {game2['status'].title()}"
+        ),
+        inline=True
+    )
+
+    # Add a summary of the comparison
+    playtime_diff = abs(comparison['playtime_difference_minutes'])
+    playtime_diff_hours = round(playtime_diff / 60, 1)
+    episode_diff = abs(comparison['episode_difference'])
+
+    summary = (
+        f"▶️ **Longer Playtime:** {comparison['longer_game']} (by {playtime_diff_hours} hours)\n"
+        f"▶️ **More Episodes:** {comparison['more_episodes']} (by {episode_diff} episodes)"
+    )
+
+    embed.add_field(name="📊 Summary", value=summary, inline=False)
+    embed.set_footer(text="Analysis complete. All data retrieved from mission archives.")
+
+    await message.reply(embed=embed)
 
 async def handle_genre_query(
         message: discord.Message,
@@ -1685,6 +1812,8 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
             # Process the query normally and update context
             if query_type == "statistical":
                 await handle_statistical_query(message, message.content)
+            elif query_type == "comparison":
+                await handle_comparison_query(message, match)
             elif query_type == "genre":
                 await handle_genre_query(message, match)
                 series_name = match.group(1).strip()
