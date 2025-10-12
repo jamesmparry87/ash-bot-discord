@@ -33,12 +33,25 @@ except Exception as db_error:
 
 # Import integrations
 try:
-    from ..integrations.youtube import execute_youtube_auto_post
+    from ..integrations.youtube import execute_youtube_auto_post, fetch_new_videos_since
+    from ..integrations.twitch import fetch_new_vods_since
 except ImportError:
     print("⚠️ YouTube integration not available for scheduled tasks")
 
     async def execute_youtube_auto_post(*args, **kwargs):
         print("⚠️ YouTube auto-post not available - integration not loaded")
+        return None
+    
+    async def fetch_new_videos_since(*args, **kwargs):
+        print("⚠️ fetch_new_videos_since not available - integration not loaded")
+        return []
+
+    async def fetch_new_vods_since(*args, **kwargs):
+        print("⚠️ fetch_new_vods_since not available - integration not loaded")
+        return []
+
+    def extract_game_name_from_title(*args, **kwargs):
+        print("⚠️ extract_game_name_from_title not available - integration not loaded")
         return None
 
 # Global state for trivia and bot instance
@@ -250,53 +263,97 @@ async def safe_send_message(channel, content, mention_user_id=None):
         print(f"❌ Unexpected error sending message to #{channel.name}: {e}")
         return False
 
+# A global variable to hold the analysis results for the 9 AM message
+_weekly_analysis_results = None
 
-@tasks.loop(time=time(12, 0))  # Run at 12:00 PM (midday) every day
-async def scheduled_games_update():
-    """Automatically update ongoing games data every Sunday at midday"""
-    # Only run on Sundays (weekday 6)
-    if datetime.now().weekday() != 6:
+@tasks.loop(time=time(8, 0, tzinfo=ZoneInfo("Europe/London")))
+async def monday_content_sync():
+    """Syncs new YouTube & Twitch content and prepares the weekly analysis."""
+    global _weekly_analysis_results
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    if uk_now.weekday() != 0: # Only run on Mondays
         return
 
-    print("🔄 Starting scheduled games update (Sunday midday)")
+    print("🔄 SYNC: Starting weekly content sync...")
+    if not db:
+        print("❌ SYNC: Database not available.")
+        return
 
     try:
-        if not _bot_instance:
-            print("❌ Bot instance not available for scheduled games update")
+        start_sync_time = db.get_latest_game_update_timestamp()
+        if not start_sync_time:
+            print("❌ SYNC: Could not determine last sync time.")
             return
+        
+        print(f"🔄 SYNC: Fetching new content since {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        # --- Data Gathering ---
+        new_youtube_videos = await fetch_new_videos_since("UCPoUxLHeTnE9SUDAkqfJzDQ", start_sync_time)
+        new_twitch_vods = await fetch_new_vods_since("jonesyspacecat", start_sync_time)
+        print(f"🔄 SYNC: Found {len(new_youtube_videos)} new YouTube videos and {len(new_twitch_vods)} new Twitch VODs.")
 
-        guild = _bot_instance.get_guild(GUILD_ID)
-        if not guild:
-            print("❌ Guild not found for scheduled update")
+        total_new_content = len(new_youtube_videos) + len(new_twitch_vods)
+        if total_new_content == 0:
+            print("✅ SYNC: No new content found. Sync complete.")
+            _weekly_analysis_results = {"status": "no_new_content"}
             return
+            
+        # --- Processing & Deduplication ---
+        new_views = 0
+        total_new_minutes = 0
+        most_engaging_video = None
 
-        # Find mod channel
-        mod_channel = None
-        for channel in guild.text_channels:
-            if channel.name in ["mod-chat", "moderator-chat", "mod"]:
-                mod_channel = channel
-                break
+        all_content = new_youtube_videos + new_twitch_vods
+        
+        for item in all_content:
+            game_name = extract_game_name_from_title(item['title'])
+            if not game_name:
+                continue
 
-        if not isinstance(mod_channel, discord.TextChannel):
-            print("❌ Mod channel not found for scheduled update")
-            return
+            duration_minutes = item.get('duration_seconds', 0) // 60
+            views = item.get('view_count', 0)
+            
+            total_new_minutes += duration_minutes
+            new_views += views
 
-        # Perform actual database maintenance and updates
-        update_results = await perform_weekly_games_maintenance()
+            if views > (most_engaging_video or {}).get('view_count', 0):
+                most_engaging_video = item
+            
+            existing_game = db.get_played_game(game_name)
+            if existing_game:
+                # Update existing game
+                db.update_played_game(
+                    existing_game['id'],
+                    total_playtime_minutes=existing_game.get('total_playtime_minutes', 0) + duration_minutes,
+                    total_episodes=existing_game.get('total_episodes', 0) + 1,
+                    youtube_views=existing_game.get('youtube_views', 0) + views
+                )
+                print(f"✅ SYNC: Updated '{game_name}' with {duration_minutes} mins.")
+            else:
+                # Add new game
+                db.add_played_game(
+                    canonical_name=game_name,
+                    total_playtime_minutes=duration_minutes,
+                    total_episodes=1,
+                    youtube_views=views,
+                    first_played_date=item['published_at'].date(),
+                    notes=f"Auto-discovered from content sync on {uk_now.strftime('%Y-%m-%d')}."
+                )
+                print(f"✅ SYNC: Added new game '{game_name}' with {duration_minutes} mins.")
 
-        # Send detailed report to moderators
-        if update_results:
-            await mod_channel.send(update_results)
-        else:
-            await mod_channel.send(
-                "🔄 **Weekly Games Update:** Maintenance completed successfully. "
-                "Database integrity verified, statistics refreshed."
-            )
-
-        print("✅ Scheduled games update completed")
+        # --- Store Analysis for 9 AM Message ---
+        _weekly_analysis_results = {
+            "status": "success",
+            "new_content_count": total_new_content,
+            "new_hours": round(total_new_minutes / 60, 1),
+            "new_views": new_views,
+            "top_video": most_engaging_video
+        }
+        print("✅ SYNC: Weekly analysis complete and stored for 9 AM briefing.")
 
     except Exception as e:
-        print(f"❌ Error in scheduled_games_update: {e}")
+        print(f"❌ SYNC: Critical error during content sync: {e}")
+        _weekly_analysis_results = {"status": "error", "message": str(e)}
 
 
 # Run at 00:00 PT (midnight Pacific Time) every day
@@ -1564,7 +1621,7 @@ def start_all_scheduled_tasks(bot):
 
         # Try to start each task individually with error handling
         tasks_to_start = [
-            (scheduled_games_update, "Scheduled games update task (Sunday midday)"),
+            (monday_content_sync, "Weekly Content Sync (Monday 8am)"),
             (scheduled_midnight_restart, "Scheduled midnight restart task (00:00 PT daily)"),
             (check_due_reminders, "Reminder checking task (every minute)"),
             (check_auto_actions, "Auto-action checking task (every minute)"),
@@ -1611,7 +1668,7 @@ def get_scheduled_tasks_status():
         task_statuses = []
 
         tasks_to_check = [
-            (scheduled_games_update, "Games Update"),
+            (monday_content_sync, "Weekly Content Sync (Monday 8am)"),
             (scheduled_midnight_restart, "Midnight Restart"),
             (check_due_reminders, "Reminder Check"),
             (check_auto_actions, "Auto Actions"),
@@ -1663,7 +1720,7 @@ def stop_all_scheduled_tasks():
     """Stop all scheduled tasks"""
     try:
         tasks_to_stop = [
-            scheduled_games_update,
+            monday_content_sync,
             scheduled_midnight_restart,
             check_due_reminders,
             check_auto_actions,

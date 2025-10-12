@@ -90,6 +90,55 @@ async def fetch_twitch_games(username: str) -> List[str]:
 
     return games
 
+async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List[Dict[str, Any]]:
+    """Fetch all new VODs from a Twitch channel since a given timestamp."""
+    twitch_client_id, twitch_client_secret = get_twitch_api_credentials()
+    if not twitch_client_id or not twitch_client_secret:
+        print("⚠️ Twitch credentials not configured for fetching new VODs.")
+        return []
+
+    new_vods = []
+    async with aiohttp.ClientSession() as session:
+        try:
+            # Get OAuth token
+            token_url = "https://id.twitch.tv/oauth2/token"
+            token_data = {'client_id': twitch_client_id, 'client_secret': twitch_client_secret, 'grant_type': 'client_credentials'}
+            async with session.post(token_url, data=token_data) as response:
+                if response.status != 200: return []
+                token_info = await response.json()
+                access_token = token_info['access_token']
+            
+            headers = {"Client-ID": twitch_client_id, "Authorization": f"Bearer {access_token}"}
+
+            # Get user ID
+            user_url = f"https://api.twitch.tv/helix/users?login={username}"
+            async with session.get(user_url, headers=headers) as response:
+                if response.status != 200: return []
+                user_data = await response.json()
+                user_id = user_data['data'][0]['id']
+
+            # Get recent videos
+            videos_url = f"https://api.twitch.tv/helix/videos"
+            params = {"user_id": user_id, "first": 100, "type": "archive"} # 'archive' for past broadcasts
+            
+            async with session.get(videos_url, params=params, headers=headers) as response:
+                if response.status != 200: return []
+                videos_data = await response.json()
+                for video in videos_data['data']:
+                    created_at = datetime.fromisoformat(video['created_at'].replace('Z', '+00:00'))
+                    if created_at < start_timestamp:
+                        break # Stop when we find videos older than our sync time
+                    
+                    new_vods.append({
+                        'title': video['title'],
+                        'url': video['url'],
+                        'duration_seconds': parse_twitch_duration(video.get('duration', '0s')),
+                        'published_at': created_at
+                    })
+        except Exception as e:
+            print(f"❌ Failed to fetch new Twitch VODs: {e}")
+            
+    return new_vods
 
 async def fetch_comprehensive_twitch_games(
         username: str) -> List[Dict[str, Any]]:

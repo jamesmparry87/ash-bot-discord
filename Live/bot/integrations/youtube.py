@@ -433,110 +433,71 @@ async def execute_youtube_auto_post(
     except Exception as e:
         print(f"❌ Error executing YouTube auto-post: {e}")
 
+async def fetch_new_videos_since(channel_id: str, start_timestamp: datetime) -> List[Dict[str, Any]]:
+    """Fetch all new videos from a channel's uploads playlist since a given timestamp."""
+    youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+    if not youtube_api_key:
+        print("⚠️ YOUTUBE_API_KEY not configured for fetching new videos.")
+        return []
 
-async def update_youtube_playlist_data(
-        games_data: List[Dict[str, Any]]) -> int:
-    """Update YouTube playlist data for games that have playlist URLs"""
-    try:
-        if not db:
-            return 0
+    new_videos = []
+    async with aiohttp.ClientSession() as session:
+        try:
+            # 1. Get the channel's uploads playlist ID
+            url = "https://www.googleapis.com/youtube/v3/channels"
+            params = {"part": "contentDetails", "id": channel_id, "key": youtube_api_key}
+            async with session.get(url, params=params) as response:
+                if response.status != 200: return []
+                data = await response.json()
+                uploads_playlist_id = data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
 
-        updated_count = 0
-        youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+            # 2. Paginate through the playlist to find new videos
+            next_page_token = None
+            while True:
+                url = "https://www.googleapis.com/youtube/v3/playlistItems"
+                params = {
+                    'part': 'snippet',
+                    'playlistId': uploads_playlist_id,
+                    'maxResults': 50,
+                    'key': youtube_api_key
+                }
+                if next_page_token:
+                    params['pageToken'] = next_page_token
 
-        if not youtube_api_key:
-            return 0
+                async with session.get(url, params=params) as response:
+                    if response.status != 200: break
+                    data = await response.json()
+                    
+                    for item in data['items']:
+                        published_at = datetime.fromisoformat(item['snippet']['publishedAt'].replace('Z', '+00:00'))
+                        # If video is older than our start time, stop searching
+                        if published_at < start_timestamp:
+                            # Break the outer loop
+                            return new_videos
+                        
+                        video_details = {
+                            'title': item['snippet']['title'],
+                            'video_id': item['snippet']['resourceId']['videoId'],
+                            'published_at': published_at
+                        }
+                        new_videos.append(video_details)
 
+                    next_page_token = data.get('nextPageToken')
+                    if not next_page_token:
+                        break
+        except Exception as e:
+            print(f"❌ Failed to fetch new YouTube videos: {e}")
+    
+    # After fetching IDs, get their stats (duration, views) in a batch
+    if new_videos:
+        video_ids = [v['video_id'] for v in new_videos]
         async with aiohttp.ClientSession() as session:
-            for game in games_data:
-                try:
-                    playlist_url = game.get('youtube_playlist_url')
-                    if not playlist_url:
-                        continue
+            stats = await get_video_statistics(session, video_ids, youtube_api_key)
+            for video in new_videos:
+                if video['video_id'] in stats:
+                    video.update(stats[video['video_id']])
 
-                    # Extract playlist ID
-                    playlist_id_match = re.search(
-                        r'list=([a-zA-Z0-9_-]+)', playlist_url)
-                    if not playlist_id_match:
-                        continue
-
-                    playlist_id = playlist_id_match.group(1)
-
-                    # Get current video count and playtime
-                    playlist_url_api = f"https://www.googleapis.com/youtube/v3/playlists"
-                    params = {
-                        "part": "contentDetails",
-                        "id": playlist_id,
-                        "key": youtube_api_key
-                    }
-
-                    async with session.get(playlist_url_api, params=params) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            if data['items']:
-                                current_video_count = data['items'][0]['contentDetails']['itemCount']
-
-                                # Get video IDs from playlist
-                                playlist_items_url = f"https://www.googleapis.com/youtube/v3/playlistItems"
-                                playlist_params = {
-                                    'part': 'snippet',
-                                    'playlistId': playlist_id,
-                                    'maxResults': 50,
-                                    'key': youtube_api_key
-                                }
-
-                                video_ids = []
-                                async with session.get(playlist_items_url, params=playlist_params) as playlist_response:
-                                    if playlist_response.status == 200:
-                                        playlist_data = await playlist_response.json()
-                                        for item in playlist_data['items']:
-                                            video_id = item['snippet']['resourceId']['videoId']
-                                            video_ids.append(video_id)
-
-                                # Get video durations
-                                total_playtime_seconds = 0
-                                if video_ids:
-                                    videos_url = f"https://www.googleapis.com/youtube/v3/videos"
-                                    videos_params = {
-                                        'part': 'contentDetails',
-                                        'id': ','.join(video_ids[:50]),
-                                        'key': youtube_api_key
-                                    }
-
-                                    async with session.get(videos_url, params=videos_params) as videos_response:
-                                        if videos_response.status == 200:
-                                            videos_data = await videos_response.json()
-                                            for video in videos_data['items']:
-                                                duration = video["contentDetails"]["duration"]
-                                                duration_minutes = parse_youtube_duration(
-                                                    duration) // 60
-                                                total_playtime_seconds += duration_minutes * 60
-
-                                total_playtime_minutes = total_playtime_seconds // 60
-
-                                # Update database with new data
-                                canonical_name = game.get('canonical_name')
-                                if canonical_name and total_playtime_minutes > 0:
-                                    # Get the game by name first, then update
-                                    # it
-                                    existing_game = db.get_played_game(  # type: ignore
-                                        canonical_name)  # type: ignore
-                                    if existing_game:
-                                        success = db.update_played_game(  # type: ignore
-                                            existing_game['id'], total_playtime_minutes=total_playtime_minutes)  # type: ignore
-                                        if success:
-                                            updated_count += 1
-
-                except Exception as e:
-                    print(
-                        f"Error updating YouTube data for {game.get('canonical_name', 'unknown')}: {e}")
-
-        return updated_count
-
-    except Exception as e:
-        print(f"Error in update_youtube_playlist_data: {e}")
-        return 0
-
+    return new_videos
 
 def extract_youtube_urls(text: str) -> List[str]:
     """Extract YouTube URLs from text"""

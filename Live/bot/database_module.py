@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta 
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from zoneinfo import ZoneInfo
 
@@ -647,7 +647,8 @@ class DatabaseManager:
                         total_playtime_minutes: int = 0,
                         youtube_playlist_url: Optional[str] = None,
                         twitch_vod_urls: Optional[List[str]] = None,
-                        notes: Optional[str] = None) -> bool:
+                        notes: Optional[str] = None,
+                        youtube_views: int = 0) -> bool:
         """Add a played game to the database"""
         conn = self.get_connection()
         if not conn:
@@ -665,7 +666,7 @@ class DatabaseManager:
                     INSERT INTO played_games (
                         canonical_name, alternative_names, series_name, genre,
                         release_year, platform, first_played_date, completion_status, total_episodes,
-                        total_playtime_minutes, youtube_playlist_url, twitch_vod_urls, notes,
+                        total_playtime_minutes, youtube_playlist_url, twitch_vod_urls, notes, youtube_views,
                         created_at, updated_at
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """, (
@@ -1103,7 +1104,8 @@ class DatabaseManager:
                     'total_playtime_minutes',
                     'youtube_playlist_url',
                     'twitch_vod_urls',
-                    'notes']
+                    'notes',
+                    'youtube_views']
 
                 updates = []
                 values = []
@@ -1626,6 +1628,33 @@ class DatabaseManager:
             game['id'],
             total_episodes=new_episode_count,
             completion_status="ongoing" if new_episode_count > 1 else "completed")
+    
+    def get_latest_game_update_timestamp(self) -> Optional[datetime]:
+            """Gets the most recent 'updated_at' timestamp from the played_games table."""
+            conn = self.get_connection()
+            if not conn:
+                return None
+
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT MAX(updated_at) as latest_update FROM played_games")
+                    result = cur.fetchone()
+
+                    # If there's no result from the database, fall back to syncing the last 7 days.
+                    if not result:
+                        return datetime.now(ZoneInfo("Europe/London")) - timedelta(days=7)
+
+                    typed_result = cast(RealDictRow, result)
+
+                    # Now, safely access the key from the typed variable.
+                    if typed_result['latest_update']:
+                        return typed_result['latest_update']
+                    else:
+                        # Fallback if the latest_update value is NULL (e.g., table is empty).
+                        return datetime.now(ZoneInfo("Europe/London")) - timedelta(days=7)
+            except Exception as e:
+                logger.error(f"Error getting latest game update timestamp: {e}")
+                return None
 
     def get_games_by_genre(self, genre: str) -> List[Dict[str, Any]]:
         """Get all games in a specific genre"""
