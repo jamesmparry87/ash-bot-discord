@@ -32,6 +32,7 @@ class ConversationContext:
         self.recent_games: List[str] = []  # Last few games mentioned
         # Recent message context
         self.message_history: List[Dict[str, Any]] = []
+        self.last_ranked_list: Optional[List[Dict[str, Any]]] = None
 
         # Jonesy disambiguation context
         self.current_jonesy_context: str = "user"  # 'user', 'cat', or 'ambiguous'
@@ -77,6 +78,11 @@ class ConversationContext:
             # Keep only last 3 games
             if len(self.recent_games) > 3:
                 self.recent_games.pop(0)
+
+    def update_ranked_list_context(self, ranked_list: List[Dict[str, Any]]):
+        """Stores the most recent ranked list in the context."""
+        self.last_ranked_list = ranked_list
+        self.last_activity = datetime.now(ZoneInfo("Europe/London"))
 
     def update_series_context(self, series_name: str):
         """Update series context"""
@@ -153,7 +159,6 @@ class ConversationContext:
         cutoff = datetime.now(ZoneInfo("Europe/London")) - \
             timedelta(minutes=minutes)
         return self.last_activity < cutoff
-
 
 def get_or_create_context(
         user_id: int,
@@ -262,6 +267,19 @@ def detect_follow_up_intent(
 
     # Follow-up question patterns
     follow_up_patterns = [
+
+        # Ranking follow-ups
+        {
+            'patterns': [
+                r'what\s*about\s*(the\s*)?(third|fourth|fifth|3rd|4th|5th)',
+                r'what\s*are\s*(the\s*)?(next|other|following)',
+                r'show\s*me\s*the\s*rest',
+                r'list\s*the\s*others',
+            ],
+            'intent': 'ranking_followup',
+            'needs_ranking_list': True
+        },
+
         # Duration/time follow-ups
         {
             'patterns': [
@@ -331,6 +349,9 @@ def detect_follow_up_intent(
                     continue
                 if follow_up.get(
                         'needs_series') and not context.last_series_mentioned:
+                    continue
+                if follow_up.get(
+                        'needs_ranking_list') and not context.last_ranked_list:
                     continue
 
                 return {

@@ -50,6 +50,7 @@ from ..utils.permissions import (
 )
 from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
 from .context_manager import (
+    ConversationContext,
     cleanup_expired_contexts,
     detect_follow_up_intent,
     detect_jonesy_context,
@@ -1175,112 +1176,126 @@ async def handle_recommendation_query(
 
 
 async def handle_youtube_views_query(message: discord.Message) -> None:
-    """Handle YouTube view count queries with intelligent database analysis and API fallback."""
+    """Handle YouTube view count queries with database caching and context retention."""
     try:
-        # Check if database is available
         if db is None:
             await message.reply("Database analysis systems offline. YouTube view analytics unavailable.")
             return
 
-        # Try YouTube API integration if available
-        youtube_data = await attempt_youtube_api_analysis(None, "general")
+        context = get_or_create_context(message.author.id, message.channel.id)
+        full_rankings = []
+        data_source = "cache"
 
-        if youtube_data:
-            # Use real YouTube API data if available
-            most_viewed_game = youtube_data['most_viewed_game']
-            total_views = most_viewed_game['total_views']
-            total_episodes = most_viewed_game['total_episodes']
-            game_name = most_viewed_game['name']
+        # Step 1: Try to get data from the database cache
+        cached_rankings = db.get_cached_youtube_rankings()
+        sync_is_stale = True
+        if cached_rankings:
+            last_sync_time = cached_rankings[0].get('last_youtube_sync')
+            if last_sync_time:
+                # Data is stale if it's older than 24 hours
+                if datetime.now(ZoneInfo("Europe/London")) - last_sync_time < timedelta(hours=24):
+                    sync_is_stale = False
+                    full_rankings = cached_rankings
+                    print("✅ YouTube Analytics: Using fresh data from database cache.")
 
-            response = f"YouTube analytics complete. '{game_name}' demonstrates maximum viewer engagement with {total_views:,} total views across {total_episodes} episodes"
+        # Step 2: If cache is stale or empty, fetch from YouTube API
+        if sync_is_stale:
+            print("🔄 YouTube Analytics: Cache is stale or empty. Fetching live data from API...")
+            data_source = "live API"
+            youtube_data = await attempt_youtube_api_analysis(None, "general_full_list") # Assumes this returns a full list
 
-            # Add average views per episode if available
-            if most_viewed_game.get('average_views_per_episode'):
-                avg_views = most_viewed_game['average_views_per_episode']
-                response += f" (average: {avg_views:,} views per episode)"
-
-            response += ". "
-
-            # Add runner-up information if available
-            if youtube_data.get('runner_up'):
-                runner_up = youtube_data['runner_up']
-                response += f"Secondary analysis indicates '{runner_up['name']}' follows with {runner_up['total_views']:,} views. "
-
-            # Add Ash-style conversation guidance for enhanced analytics
-            response += f"\n\n**Mission Parameters - Enhanced Analytics Available:**\n"
-            response += f"• *'Which {game_name} episode got the most views?'*\n"
-            response += f"• *'What's the least viewed episode of {game_name}?'*\n"
-            response += f"• *'Show me view breakdown for {game_name} episodes'*\n"
-            response += f"• *'How many total views did [specific game] get?'*\n\n"
-            response += f"I can provide precise YouTube analytics for any game series in Captain Jonesy's archives. Real-time data acquisition protocols are fully operational."
-
-            # Apply personality modifications and send
-            response = apply_pops_arcade_sarcasm(response, message.author.id)
-            response = smart_truncate_response(response)
-            await message.reply(response)
-
-            # Update context for conversational follow-ups
-            context = get_or_create_context(message.author.id, message.channel.id)
-            context.add_message(message.content, "user")
-            context.update_game_context(game_name, "youtube_views")
-            context.add_message("youtube_analysis_complete", "bot")
-
-        else:
-            # Fall back to database popularity analysis
-            popularity_data = await analyze_database_popularity()
-
-            if popularity_data:
-                top_game = popularity_data['most_popular']
-                popularity_score = popularity_data['popularity_score']
-
-                response = f"Database analysis: While YouTube view count data requires API integration, popularity metrics indicate '{top_game['canonical_name']}' demonstrates highest engagement indicators"
-
-                # Add specific metrics that contribute to popularity score
-                metrics = []
-                if top_game.get('total_playtime_minutes', 0) > 0:
-                    hours = round(top_game['total_playtime_minutes'] / 60, 1)
-                    metrics.append(f"{hours} hours playtime")
-                if top_game.get('total_episodes', 0) > 0:
-                    metrics.append(f"{top_game['total_episodes']} episodes")
-                if top_game.get('completion_status') == 'completed':
-                    metrics.append("completed series")
-
-                if metrics:
-                    response += f" with {', '.join(metrics)}. "
-                else:
-                    response += ". "
-
-                response += f"Popularity confidence: {popularity_score:.1%}."
-
-                # Add Ash-style conversation guidance for database fallback
-                game_name = top_game['canonical_name']
-                response += f"\n\n**Mission Parameters - Precise Analytics Available:**\n"
-                response += f"• *'Which {game_name} episode got the most views?'*\n"
-                response += f"• *'What's the least viewed episode of {game_name}?'*\n"
-                response += f"• *'How many total views did {game_name} get?'*\n"
-                response += f"• *'Show me view breakdown for [specific game] episodes'*\n\n"
-                response += f"For precise YouTube view counts, specify individual game series. Real-time data acquisition protocols will provide exact viewership analytics from Captain Jonesy's archives."
-
-                # Apply personality and context handling
-                response = apply_pops_arcade_sarcasm(response, message.author.id)
-                response = smart_truncate_response(response)
-                await message.reply(response)
-
-                # Update context for follow-ups
-                context = get_or_create_context(message.author.id, message.channel.id)
-                context.add_message(message.content, "user")
-                context.update_game_context(top_game['canonical_name'], "popularity_analysis")
-                context.add_message("popularity_analysis_complete", "bot")
-
+            if youtube_data and 'full_rankings' in youtube_data:
+                full_rankings = youtube_data['full_rankings']
+                # Step 3: Update the database cache with the new data
+                db.update_youtube_cache(full_rankings)
             else:
-                # Graceful fallback when no data available
-                response = "Database analysis: Insufficient engagement data available for popularity ranking. YouTube view count metrics require external API integration for accurate viewership analysis. Mission parameters suggest enhancing data collection protocols."
-                response = apply_pops_arcade_sarcasm(response, message.author.id)
-                await message.reply(response)
+                # If API fails, fall back to whatever is in the cache
+                full_rankings = cached_rankings
+                data_source = "stale cache (API failed)"
+                print("⚠️ YouTube API failed. Falling back to stale cache.")
+
+        if not full_rankings:
+            await message.reply("Database analysis complete. Insufficient engagement data available for popularity ranking.")
+            return
+
+        # Step 4: Store the full list in the conversation context
+        context.update_ranked_list_context(full_rankings)
+
+        # Step 5: Format and send the response for the top results
+        top_game = full_rankings[0]
+        runner_up = full_rankings[1] if len(full_rankings) > 1 else None
+
+        response = (
+            f"YouTube analytics complete (data source: {data_source}). "
+            f"'{top_game['canonical_name']}' demonstrates maximum viewer engagement with {top_game.get('youtube_views', 0):,} total views."
+        )
+
+        if runner_up:
+            response += f" Secondary analysis indicates '{runner_up['canonical_name']}' follows with {runner_up.get('youtube_views', 0):,} views."
+
+        response += (
+            f"\n\n**Mission Parameters - Enhanced Analytics Available:**\n"
+            f"• *'What are the next three?'*\n"
+            f"• *'Show me the 4th and 5th most popular.'*\n"
+            f"• *'What about the third?'*\n\n"
+            f"I have retained the complete rankings for this session. You may ask follow-up questions."
+        )
+
+        await message.reply(apply_pops_arcade_sarcasm(response, message.author.id))
 
     except Exception as e:
-        print(f"Error in YouTube views query: {e}")
-        await message.reply("Database analysis encountered an anomaly during popularity assessment. YouTube analytics systems require recalibration.")
+        print(f"❌ Error in YouTube views query: {e}")
+        await message.reply("Database analysis encountered an anomaly during popularity assessment. Analytics systems require recalibration.")
+
+async def _handle_ranking_follow_up(message: discord.Message, context: 'ConversationContext') -> bool:
+    """Handles follow-up questions about a previously generated ranked list."""
+    content = message.content.lower()
+    ranked_list = context.last_ranked_list
+    if not ranked_list:
+        return False
+
+    # Find numbers in the user's query (e.g., "third", "4th", "5")
+    ranks_to_show = []
+    word_to_num = {"third": 3, "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10}
+    
+    # Simple number parsing
+    for word in content.split():
+        clean_word = word.strip('.,?!').replace('rd', '').replace('th', '').replace('st', '')
+        if clean_word.isdigit():
+            ranks_to_show.append(int(clean_word))
+        elif clean_word in word_to_num:
+            ranks_to_show.append(word_to_num[clean_word])
+
+    # Handle "next three", "other five", etc.
+    if not ranks_to_show:
+        if "next" in content or "other" in content or "rest" in content:
+            # Assume they want the next few after the last ones shown (usually 2)
+            start_index = 2
+            count = 3 # Default to showing the next 3
+            ranks_to_show.extend(range(start_index + 1, start_index + 1 + count))
+
+    if not ranks_to_show:
+        # Default to showing the 3rd, 4th, 5th if no numbers are found
+        ranks_to_show.extend([3, 4, 5])
+    
+    ranks_to_show = sorted(list(set(ranks_to_show))) # Remove duplicates and sort
+
+    response_parts = []
+    for rank in ranks_to_show:
+        index = rank - 1
+        if 0 <= index < len(ranked_list):
+            game = ranked_list[index]
+            response_parts.append(f"**#{rank}:** '{game['canonical_name']}' ({game.get('youtube_views', 0):,} views)")
+        else:
+            response_parts.append(f"**#{rank}:** No data available.")
+
+    if not response_parts:
+        await message.reply("Analysis indicates no further data is available for the requested ranks.")
+        return True
+
+    full_response = "Continuing analysis of YouTube engagement data:\n\n" + "\n".join(response_parts)
+    await message.reply(full_response)
+    return True
 
 
 async def attempt_youtube_api_analysis(
@@ -1720,6 +1735,13 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
         # First check if this is a DM conversation (including JAM approval)
         if await handle_dm_conversations(message):
             return True
+        
+        # Check for specific follow-up intents that don't need full routing
+        context = get_or_create_context(message.author.id, message.channel.id)
+        follow_up_intent = detect_follow_up_intent(message.content, context)
+        if follow_up_intent and follow_up_intent['intent'] == 'ranking_followup':
+            if await _handle_ranking_follow_up(message, context):
+                return True
 
         # Then, try context-aware processing for gaming queries
         if await handle_context_aware_query(message):

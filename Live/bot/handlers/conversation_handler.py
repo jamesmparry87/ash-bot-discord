@@ -598,6 +598,20 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
         if user_id in announcement_conversations:
             del announcement_conversations[user_id]
 
+def _infer_dynamic_query_type(question_text: str) -> Optional[str]:
+    """Infers the dynamic query type from the question text."""
+    text = question_text.lower()
+    if "longest" in text and ("playthrough" in text or "playtime" in text or "hours" in text or "time" in text):
+        return "longest_playtime"
+    if "most episodes" in text:
+        return "most_episodes"
+    if "series" in text and ("playtime" in text or "time" in text):
+        return "series_most_playtime"
+    if "average" in text and "episode" in text:
+        return "highest_avg_episode"
+    if "genre" in text and ("most games" in text or "most played" in text):
+        return "genre_most_games"
+    return None
 
 async def handle_mod_trivia_conversation(message: discord.Message) -> None:
     """Handle the interactive DM conversation for mod trivia question submission"""
@@ -733,13 +747,10 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
         elif step == 'category_selection':
             if content in ['1', 'statistics', 'stats']:
                 data['category'] = 'statistics'
-                data['dynamic_query_type'] = 'statistics'
             elif content in ['2', 'games', 'game']:
                 data['category'] = 'games'
-                data['dynamic_query_type'] = 'games'
             elif content in ['3', 'series', 'franchise']:
                 data['category'] = 'series'
-                data['dynamic_query_type'] = 'series'
             else:
                 await message.reply(
                     f"⚠️ **Invalid category.** Please respond with **1** (Statistics), **2** (Games), or **3** (Series).\n\n"
@@ -749,14 +760,29 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
 
             conversation['step'] = 'preview'
 
-            # Show preview for database question
             question_text = data['question_text']
             category = data['category']
 
+            # --- NEW: Infer query type and calculate preview answer ---
+            inferred_query_type = _infer_dynamic_query_type(question_text)
+            calculated_answer = "Could not be determined. The question may be too ambiguous."
+            if inferred_query_type:
+                data['dynamic_query_type'] = inferred_query_type
+                if db:
+                    answer = db.calculate_dynamic_answer(inferred_query_type)
+                    if answer:
+                        calculated_answer = answer
+                    else:
+                        calculated_answer = "Could not be determined. No data found for this query."
+            else:
+                data['dynamic_query_type'] = category # Fallback to broad category
+
+            # --- UPDATED: Show preview for database question with answer preview ---
             preview_msg = (
                 f"📋 **Trivia Question Preview**\n\n"
                 f"**Question:** {question_text}\n\n"
-                f"**Answer:** *Will be calculated from gaming database before posting*\n"
+                f"**Current Answer (calculated now):** {calculated_answer}\n"
+                f"**Note:** *This answer is dynamic and will be recalculated when the question is used.*\n\n"
                 f"**Category:** {category.title()}\n"
                 f"**Type:** Database-Calculated\n"
                 f"**Source:** Moderator Submission\n\n"
@@ -794,6 +820,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                         category=data.get('category'),
                         submitted_by_user_id=user_id,
                     )
+
                 else:
                     # Manual question+answer
                     multiple_choice_options = None

@@ -550,6 +550,93 @@ async def get_most_viewed_game_overall(channel_id: str = "UCPoUxLHeTnE9SUDAkqfJz
     Query YouTube API to find the most viewed game across all of Jonesy's content.
 
     Returns:
+        A dictionary containing the full ranked list of games: {'full_rankings': [...]}
+    """
+    try:
+        youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+        if not youtube_api_key:
+            print("⚠️ YouTube API key not configured for overall analytics")
+            return None
+
+        print(f"🔄 Fetching overall YouTube analytics for channel: {channel_id}")
+
+        async with aiohttp.ClientSession() as session:
+            # Step 1: Get all playlists from the channel
+            url = f"https://www.googleapis.com/youtube/v3/playlists"
+            params = {
+                'part': 'snippet,contentDetails',
+                'channelId': channel_id,
+                'maxResults': 50,
+                'key': youtube_api_key
+            }
+
+            async with session.get(url, params=params) as response:
+                if response.status != 200:
+                    print(f"YouTube API error: {response.status}")
+                    return None
+
+                data = await response.json()
+
+                game_analytics = []
+
+                # Step 2: Process each playlist to calculate total views
+                for playlist in data['items']:
+                    try:
+                        playlist_id = playlist['id']
+                        playlist_title = playlist['snippet']['title']
+                        video_count = playlist['contentDetails']['itemCount']
+
+                        if video_count < 3:
+                            continue
+
+                        skip_patterns = ['shorts', 'live', 'stream', 'highlight', 'clip']
+                        if any(pattern in playlist_title.lower() for pattern in skip_patterns):
+                            continue
+
+                        canonical_name = extract_game_name_from_title(playlist_title)
+                        if not canonical_name:
+                            continue
+
+                        print(f"📊 Analyzing playlist: {playlist_title} ({video_count} videos)")
+
+                        videos_data = await get_playlist_videos_with_views(session, playlist_id, youtube_api_key)
+
+                        if videos_data:
+                            total_views = sum(video.get('view_count', 0) for video in videos_data)
+                            
+                            game_analytics.append({
+                                'canonical_name': canonical_name,
+                                'youtube_views': total_views, # Use the key expected by the database/handler
+                                'total_episodes': len(videos_data),
+                            })
+
+                    except Exception as playlist_error:
+                        print(
+                            f"⚠️ Error processing playlist {playlist.get('snippet', {}).get('title', 'Unknown')}: {playlist_error}")
+                        continue
+
+                if not game_analytics:
+                    print("❌ No valid game playlists found for analysis")
+                    return None
+
+                # --- MODIFICATION START ---
+                # Sort the full list by views
+                game_analytics.sort(key=lambda x: x['youtube_views'], reverse=True)
+
+                print(f"✅ Overall YouTube analytics complete. Found {len(game_analytics)} ranked games.")
+
+                # Return the full list in the format expected by the message handler
+                return {'full_rankings': game_analytics}
+                # --- MODIFICATION END ---
+
+    except Exception as e:
+        print(f"❌ Error in get_most_viewed_game_overall: {e}")
+        return None
+
+    """
+    Query YouTube API to find the most viewed game across all of Jonesy's content.
+
+    Returns:
         Dict with most viewed game data or None if unavailable
     """
     try:

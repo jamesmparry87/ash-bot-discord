@@ -1039,7 +1039,7 @@ async def trivia_tuesday():
             return
 
         # Format question
-        question_text = question_data.get("question", "")
+        question_text = question_data.get("question_text", "")
         if question_data.get("question_type") == "multiple_choice":
             options = question_data.get("multiple_choice_options", [])
             options_text = "\n".join([f"**{chr(65+i)}.** {option}"
@@ -1047,6 +1047,11 @@ async def trivia_tuesday():
             formatted_question = f"{question_text}\n\n{options_text}"
         else:
             formatted_question = question_text
+
+        if not question_text:
+            print("❌ Failed to generate trivia question text.")
+            await notify_scheduled_message_error("Trivia Tuesday", "Generated question was blank.", uk_now)
+            return
 
         # Create Ash-style trivia message
         trivia_message = (

@@ -3,6 +3,7 @@ import logging
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from zoneinfo import ZoneInfo
 
 import psycopg2
 from psycopg2.extras import RealDictCursor, RealDictRow
@@ -210,7 +211,10 @@ class DatabaseManager:
                         twitch_vod_urls TEXT,
                         notes TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        -- ADD THESE TWO NEW COLUMNS --
+                        youtube_views INTEGER DEFAULT 0,
+                        last_youtube_sync TIMESTAMP
                     )
                 """)
 
@@ -778,6 +782,68 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting played game {name}: {e}")
             return None
+        
+    def get_cached_youtube_rankings(self) -> List[Dict[str, Any]]:
+        """Gets all played games ranked by their cached YouTube views."""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, canonical_name, youtube_views, last_youtube_sync
+                    FROM played_games
+                    WHERE youtube_views > 0
+                    ORDER BY youtube_views DESC
+                """)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting cached YouTube rankings: {e}")
+            return []
+
+    def update_youtube_cache(self, game_rankings: List[Dict[str, Any]]) -> int:
+        """Bulk updates the YouTube views and sync time for games."""
+        conn = self.get_connection()
+        if not conn or not game_rankings:
+            return 0
+
+        try:
+            with conn.cursor() as cur:
+                # Prepare data for batch update
+                update_data = []
+                sync_time = datetime.now(ZoneInfo("Europe/London"))
+                for game in game_rankings:
+                # Align keys with the data from youtube.py and the database schema
+                    if 'canonical_name' in game and 'youtube_views' in game:
+                        update_data.append((game['youtube_views'], sync_time, game['canonical_name']))
+                    if not update_data:
+                        return 0
+
+                # Use a temporary table for an efficient bulk update
+                cur.execute("CREATE TEMP TABLE temp_youtube_updates (views INT, sync_time TIMESTAMP, name VARCHAR(255))")
+                cur.executemany("INSERT INTO temp_youtube_updates VALUES (%s, %s, %s)", update_data)
+
+                cur.execute("""
+                    UPDATE played_games
+                    SET
+                        youtube_views = temp.views,
+                        last_youtube_sync = temp.sync_time
+                    FROM temp_youtube_updates temp
+                    WHERE played_games.canonical_name = temp.name
+                """)
+
+                updated_count = cur.rowcount
+                conn.commit()
+                cur.execute("DROP TABLE temp_youtube_updates")
+                logger.info(f"Updated YouTube cache for {updated_count} games.")
+                return updated_count
+
+        except Exception as e:
+            logger.error(f"Error bulk updating YouTube cache: {e}")
+            conn.rollback()
+            return 0
 
     def _parse_comma_separated_list(self, text: Optional[str]) -> List[str]:
         """Convert a comma-separated string to a list of stripped, non-empty items"""
@@ -3865,7 +3931,11 @@ class DatabaseManager:
 
         result = cur.fetchone()
         if result:
-            return int(result[0])
+            # Use column name access for RealDictCursor compatibility
+            try:
+                return int(result['id'])  # type: ignore
+            except (TypeError, KeyError):
+                return int(result[0])  # Fallback to index access
         return None
 
     def create_approval_session(
