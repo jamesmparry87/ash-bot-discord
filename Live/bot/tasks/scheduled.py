@@ -33,8 +33,8 @@ except Exception as db_error:
 
 # Import integrations
 try:
-    from ..integrations.youtube import execute_youtube_auto_post, fetch_new_videos_since
     from ..integrations.twitch import fetch_new_vods_since
+    from ..integrations.youtube import execute_youtube_auto_post, fetch_new_videos_since
 except ImportError:
     print("⚠️ YouTube integration not available for scheduled tasks")
 
