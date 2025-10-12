@@ -1628,33 +1628,33 @@ class DatabaseManager:
             game['id'],
             total_episodes=new_episode_count,
             completion_status="ongoing" if new_episode_count > 1 else "completed")
-    
+
     def get_latest_game_update_timestamp(self) -> Optional[datetime]:
-            """Gets the most recent 'updated_at' timestamp from the played_games table."""
-            conn = self.get_connection()
-            if not conn:
-                return None
+        """Gets the most recent 'updated_at' timestamp from the played_games table."""
+        conn = self.get_connection()
+        if not conn:
+            return None
 
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT MAX(updated_at) as latest_update FROM played_games")
-                    result = cur.fetchone()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT MAX(updated_at) as latest_update FROM played_games")
+                result = cur.fetchone()
 
-                    # If there's no result from the database, fall back to syncing the last 7 days.
-                    if not result:
-                        return datetime.now(ZoneInfo("Europe/London")) - timedelta(days=7)
+                # If there's no result from the database, fall back to syncing the last 7 days.
+                if not result:
+                    return datetime.now(ZoneInfo("Europe/London")) - timedelta(days=7)
 
-                    typed_result = cast(RealDictRow, result)
+                typed_result = cast(RealDictRow, result)
 
-                    # Now, safely access the key from the typed variable.
-                    if typed_result['latest_update']:
-                        return typed_result['latest_update']
-                    else:
-                        # Fallback if the latest_update value is NULL (e.g., table is empty).
-                        return datetime.now(ZoneInfo("Europe/London")) - timedelta(days=7)
-            except Exception as e:
-                logger.error(f"Error getting latest game update timestamp: {e}")
-                return None
+                # Now, safely access the key from the typed variable.
+                if typed_result['latest_update']:
+                    return typed_result['latest_update']
+                else:
+                    # Fallback if the latest_update value is NULL (e.g., table is empty).
+                    return datetime.now(ZoneInfo("Europe/London")) - timedelta(days=7)
+        except Exception as e:
+            logger.error(f"Error getting latest game update timestamp: {e}")
+            return None
 
     def get_games_by_genre(self, genre: str) -> List[Dict[str, Any]]:
         """Get all games in a specific genre"""
@@ -2048,24 +2048,24 @@ class DatabaseManager:
             return []
 
     def get_games_by_played_date(self, order: str = 'DESC', limit: int = 1) -> List[Dict[str, Any]]:
-            """Get games ranked by the date they were first played."""
-            conn = self.get_connection()
-            if not conn:
-                return []
-            try:
-                with conn.cursor() as cur:
-                    order_clause = "DESC" if order.upper() == "DESC" else "ASC"
-                    cur.execute(f"""
+        """Get games ranked by the date they were first played."""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        try:
+            with conn.cursor() as cur:
+                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
+                cur.execute(f"""
                         SELECT canonical_name, first_played_date FROM played_games
                         WHERE first_played_date IS NOT NULL
                         ORDER BY first_played_date {order_clause}
                         LIMIT %s
                     """, (limit,))
-                    results = cur.fetchall()
-                    return [dict(row) for row in results]
-            except Exception as e:
-                logger.error(f"Error getting games by played date: {e}")
-                return []
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting games by played date: {e}")
+            return []
 
     def get_games_by_release_year(self, order: str = 'DESC', limit: int = 1) -> List[Dict[str, Any]]:
         """Get games ranked by their release year."""
@@ -3372,62 +3372,62 @@ class DatabaseManager:
         return False
 
     def calculate_dynamic_answer(
-                self, dynamic_query_type: str) -> Optional[str]:
-            """Calculate the current answer for a dynamic question"""
-            try:
-                # Playtime Queries
-                if dynamic_query_type == "longest_playtime":
-                    games = self.get_games_by_playtime("DESC", limit=1)
-                    return games[0]["canonical_name"] if games else None
-                
-                elif dynamic_query_type == "shortest_playtime":
-                    games = self.get_games_by_playtime("ASC", limit=1)
-                    return games[0]["canonical_name"] if games else None
+            self, dynamic_query_type: str) -> Optional[str]:
+        """Calculate the current answer for a dynamic question"""
+        try:
+            # Playtime Queries
+            if dynamic_query_type == "longest_playtime":
+                games = self.get_games_by_playtime("DESC", limit=1)
+                return games[0]["canonical_name"] if games else None
 
-                # Episode Queries
-                elif dynamic_query_type == "most_episodes":
-                    games = self.get_games_by_episode_count("DESC", limit=1)
-                    return games[0]["canonical_name"] if games else None
-                
-                elif dynamic_query_type == "fewest_episodes":
-                    games = self.get_games_by_episode_count("ASC", limit=1)
-                    return games[0]["canonical_name"] if games else None
+            elif dynamic_query_type == "shortest_playtime":
+                games = self.get_games_by_playtime("ASC", limit=1)
+                return games[0]["canonical_name"] if games else None
 
-                # Timeline Queries
-                elif dynamic_query_type == "first_game_played":
-                    games = self.get_games_by_played_date("ASC", limit=1)
-                    return games[0]["canonical_name"] if games else None
+            # Episode Queries
+            elif dynamic_query_type == "most_episodes":
+                games = self.get_games_by_episode_count("DESC", limit=1)
+                return games[0]["canonical_name"] if games else None
 
-                elif dynamic_query_type == "most_recent_game_played":
-                    games = self.get_games_by_played_date("DESC", limit=1)
-                    return games[0]["canonical_name"] if games else None
+            elif dynamic_query_type == "fewest_episodes":
+                games = self.get_games_by_episode_count("ASC", limit=1)
+                return games[0]["canonical_name"] if games else None
 
-                elif dynamic_query_type == "oldest_game_by_release":
-                    games = self.get_games_by_release_year("ASC", limit=1)
-                    return games[0]["canonical_name"] if games else None
+            # Timeline Queries
+            elif dynamic_query_type == "first_game_played":
+                games = self.get_games_by_played_date("ASC", limit=1)
+                return games[0]["canonical_name"] if games else None
 
-                # Aggregate & Series Queries
-                elif dynamic_query_type == "series_most_playtime":
-                    series = self.get_series_by_total_playtime()
-                    return series[0]["series_name"] if series else None
+            elif dynamic_query_type == "most_recent_game_played":
+                games = self.get_games_by_played_date("DESC", limit=1)
+                return games[0]["canonical_name"] if games else None
 
-                elif dynamic_query_type == "highest_avg_episode":
-                    games = self.get_games_by_average_episode_length()
-                    return games[0]["canonical_name"] if games else None
-                
-                elif dynamic_query_type == "most_common_genre":
-                    stats = self.get_genre_statistics()
-                    # The get_genre_statistics is already ordered by count/playtime, so the top one is the most common.
-                    return stats[0]["genre"] if stats else None
+            elif dynamic_query_type == "oldest_game_by_release":
+                games = self.get_games_by_release_year("ASC", limit=1)
+                return games[0]["canonical_name"] if games else None
 
-                # Note: 'genre_game_count' is too specific for this general function
-                # and will be handled by the conversation/message handlers directly.
+            # Aggregate & Series Queries
+            elif dynamic_query_type == "series_most_playtime":
+                series = self.get_series_by_total_playtime()
+                return series[0]["series_name"] if series else None
 
-                return None
-            except Exception as e:
-                logger.error(
-                    f"Error calculating dynamic answer for {dynamic_query_type}: {e}")
-                return None
+            elif dynamic_query_type == "highest_avg_episode":
+                games = self.get_games_by_average_episode_length()
+                return games[0]["canonical_name"] if games else None
+
+            elif dynamic_query_type == "most_common_genre":
+                stats = self.get_genre_statistics()
+                # The get_genre_statistics is already ordered by count/playtime, so the top one is the most common.
+                return stats[0]["genre"] if stats else None
+
+            # Note: 'genre_game_count' is too specific for this general function
+            # and will be handled by the conversation/message handlers directly.
+
+            return None
+        except Exception as e:
+            logger.error(
+                f"Error calculating dynamic answer for {dynamic_query_type}: {e}")
+            return None
 
     def get_trivia_question_by_id(
             self, question_id: int) -> Optional[Dict[str, Any]]:

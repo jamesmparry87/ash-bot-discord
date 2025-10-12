@@ -633,7 +633,7 @@ def _infer_dynamic_query_type(question_text: str) -> Optional[str]:
     if ("most common" in text or "most played" in text) and "genre" in text:
         return "most_common_genre"
     if "how many" in text and "games" in text and "genre" in text:
-        return "genre_game_count" # Special case, requires parameter
+        return "genre_game_count"  # Special case, requires parameter
 
     return None
 

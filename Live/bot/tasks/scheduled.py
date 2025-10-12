@@ -41,7 +41,7 @@ except ImportError:
     async def execute_youtube_auto_post(*args, **kwargs):
         print("⚠️ YouTube auto-post not available - integration not loaded")
         return None
-    
+
     async def fetch_new_videos_since(*args, **kwargs):
         print("⚠️ fetch_new_videos_since not available - integration not loaded")
         return []
@@ -266,12 +266,13 @@ async def safe_send_message(channel, content, mention_user_id=None):
 # A global variable to hold the analysis results for the 9 AM message
 _weekly_analysis_results = None
 
+
 @tasks.loop(time=time(8, 0, tzinfo=ZoneInfo("Europe/London")))
 async def monday_content_sync():
     """Syncs new YouTube & Twitch content and prepares the weekly analysis."""
     global _weekly_analysis_results
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 0: # Only run on Mondays
+    if uk_now.weekday() != 0:  # Only run on Mondays
         return
 
     print("🔄 SYNC: Starting weekly content sync...")
@@ -284,9 +285,9 @@ async def monday_content_sync():
         if not start_sync_time:
             print("❌ SYNC: Could not determine last sync time.")
             return
-        
+
         print(f"🔄 SYNC: Fetching new content since {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        
+
         # --- Data Gathering ---
         new_youtube_videos = await fetch_new_videos_since("UCPoUxLHeTnE9SUDAkqfJzDQ", start_sync_time)
         new_twitch_vods = await fetch_new_vods_since("jonesyspacecat", start_sync_time)
@@ -297,14 +298,14 @@ async def monday_content_sync():
             print("✅ SYNC: No new content found. Sync complete.")
             _weekly_analysis_results = {"status": "no_new_content"}
             return
-            
+
         # --- Processing & Deduplication ---
         new_views = 0
         total_new_minutes = 0
         most_engaging_video = None
 
         all_content = new_youtube_videos + new_twitch_vods
-        
+
         for item in all_content:
             game_name = extract_game_name_from_title(item['title'])
             if not game_name:
@@ -312,13 +313,13 @@ async def monday_content_sync():
 
             duration_minutes = item.get('duration_seconds', 0) // 60
             views = item.get('view_count', 0)
-            
+
             total_new_minutes += duration_minutes
             new_views += views
 
             if views > (most_engaging_video or {}).get('view_count', 0):
                 most_engaging_video = item
-            
+
             existing_game = db.get_played_game(game_name)
             if existing_game:
                 # Update existing game

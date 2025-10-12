@@ -433,6 +433,7 @@ async def execute_youtube_auto_post(
     except Exception as e:
         print(f"❌ Error executing YouTube auto-post: {e}")
 
+
 async def fetch_new_videos_since(channel_id: str, start_timestamp: datetime) -> List[Dict[str, Any]]:
     """Fetch all new videos from a channel's uploads playlist since a given timestamp."""
     youtube_api_key = os.getenv('YOUTUBE_API_KEY')
@@ -447,7 +448,8 @@ async def fetch_new_videos_since(channel_id: str, start_timestamp: datetime) -> 
             url = "https://www.googleapis.com/youtube/v3/channels"
             params = {"part": "contentDetails", "id": channel_id, "key": youtube_api_key}
             async with session.get(url, params=params) as response:
-                if response.status != 200: return []
+                if response.status != 200:
+                    return []
                 data = await response.json()
                 uploads_playlist_id = data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
 
@@ -465,16 +467,17 @@ async def fetch_new_videos_since(channel_id: str, start_timestamp: datetime) -> 
                     params['pageToken'] = next_page_token
 
                 async with session.get(url, params=params) as response:
-                    if response.status != 200: break
+                    if response.status != 200:
+                        break
                     data = await response.json()
-                    
+
                     for item in data['items']:
                         published_at = datetime.fromisoformat(item['snippet']['publishedAt'].replace('Z', '+00:00'))
                         # If video is older than our start time, stop searching
                         if published_at < start_timestamp:
                             # Break the outer loop
                             return new_videos
-                        
+
                         video_details = {
                             'title': item['snippet']['title'],
                             'video_id': item['snippet']['resourceId']['videoId'],
@@ -487,7 +490,7 @@ async def fetch_new_videos_since(channel_id: str, start_timestamp: datetime) -> 
                         break
         except Exception as e:
             print(f"❌ Failed to fetch new YouTube videos: {e}")
-    
+
     # After fetching IDs, get their stats (duration, views) in a batch
     if new_videos:
         video_ids = [v['video_id'] for v in new_videos]
@@ -498,6 +501,7 @@ async def fetch_new_videos_since(channel_id: str, start_timestamp: datetime) -> 
                     video.update(stats[video['video_id']])
 
     return new_videos
+
 
 def extract_youtube_urls(text: str) -> List[str]:
     """Extract YouTube URLs from text"""
