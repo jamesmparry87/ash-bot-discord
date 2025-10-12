@@ -121,24 +121,24 @@ def _detect_bot_environment():
         return True
 
 
-def _should_run_scheduled_trivia():
+def _should_run_automated_tasks():
     """
     Check if scheduled trivia tasks should run (only on live bot).
     """
     try:
         is_live = _detect_bot_environment()
         if is_live is None:
-            print("⚠️ TRIVIA SCHEDULING: Environment detection failed, allowing trivia to run")
+            print("⚠️ AUTOMATED TASKS: Environment detection failed, allowing tasks to run")
             return True
         elif is_live:
-            print("✅ TRIVIA SCHEDULING: Live bot confirmed, trivia tasks enabled")
+            print("✅ AUTOMATED TASKS: Live bot confirmed, tasks enabled")
             return True
         else:
-            print("⚠️ TRIVIA SCHEDULING: Staging bot detected, trivia tasks disabled")
+            print("⚠️ AUTOMATED TASKS: Staging bot detected, tasks disabled")
             return False
     except Exception as e:
-        print(f"❌ TRIVIA SCHEDULING: Error checking environment - {e}")
-        # Default to allowing trivia for safety
+        print(f"❌ AUTOMATED TASKS: Error checking environment - {e}")
+        # Default to allowing tasks for safety
         return True
 
 
@@ -267,9 +267,11 @@ async def safe_send_message(channel, content, mention_user_id=None):
 _weekly_analysis_results = None
 
 
-@tasks.loop(time=time(8, 0, tzinfo=ZoneInfo("Europe/London")))
+@tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))
 async def monday_content_sync():
     """Syncs new YouTube & Twitch content and prepares the weekly analysis."""
+    if not _should_run_automated_tasks():
+        return
     global _weekly_analysis_results
     uk_now = datetime.now(ZoneInfo("Europe/London"))
     if uk_now.weekday() != 0:  # Only run on Mondays
@@ -562,10 +564,10 @@ async def check_auto_actions():
         print(f"❌ Error in check_auto_actions: {e}")
 
 
-# Run at 8:05 AM UK time every day (5 minutes after Google quota reset)
-@tasks.loop(time=time(8, 5, tzinfo=ZoneInfo("Europe/London")))
+# Run at 8:15 AM UK time every day (5 minutes after Google quota reset)
+@tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
 async def scheduled_ai_refresh():
-    """Silently refresh AI module connections at 8:05am BST (after Google quota reset)"""
+    """Silently refresh AI module connections at 8:15am BST (after Google quota reset)"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
 
     dst_offset = uk_now.dst()
@@ -646,6 +648,8 @@ async def scheduled_ai_refresh():
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
 async def monday_morning_greeting():
     """Send Monday morning greeting to chit-chat channel with permission verification"""
+    if not _should_run_automated_tasks():
+        return
     uk_now = datetime.now(ZoneInfo("Europe/London"))
 
     # Only run on Mondays (weekday 0)
@@ -761,6 +765,8 @@ async def tuesday_trivia_greeting():
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
 async def friday_morning_greeting():
     """Send Friday morning greeting to chit-chat channel"""
+    if not _should_run_automated_tasks():
+        return
     uk_now = datetime.now(ZoneInfo("Europe/London"))
 
     # Only run on Fridays (weekday 4)
@@ -816,7 +822,7 @@ async def pre_trivia_approval():
         return
 
     # Check if this is the live bot - only live bot should run trivia
-    if not _should_run_scheduled_trivia():
+    if not _should_run_automated_tasks():
         print(f"⚠️ Pre-trivia approval skipped - staging bot detected at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
         return
 
@@ -1017,7 +1023,7 @@ async def trivia_tuesday():
         return
 
     # Check if this is the live bot - only live bot should run trivia
-    if not _should_run_scheduled_trivia():
+    if not _should_run_automated_tasks():
         print(f"⚠️ Trivia Tuesday skipped - staging bot detected at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
         return
 
@@ -1622,12 +1628,12 @@ def start_all_scheduled_tasks(bot):
 
         # Try to start each task individually with error handling
         tasks_to_start = [
-            (monday_content_sync, "Weekly Content Sync (Monday 8am)"),
+            (monday_content_sync, "Weekly Content Sync (Monday 8.30am)"),
             (scheduled_midnight_restart, "Scheduled midnight restart task (00:00 PT daily)"),
             (check_due_reminders, "Reminder checking task (every minute)"),
             (check_auto_actions, "Auto-action checking task (every minute)"),
             (trivia_tuesday, "Trivia Tuesday task (11:00 AM UK time, Tuesdays)"),
-            (scheduled_ai_refresh, "AI module refresh task (8:05 AM UK time daily)"),
+            (scheduled_ai_refresh, "AI module refresh task (8:15 AM UK time daily)"),
             (monday_morning_greeting, "Monday morning greeting task (9:00 AM UK time, Mondays)"),
             (tuesday_trivia_greeting, "Tuesday trivia greeting task (9:00 AM UK time, Tuesdays)"),
             (friday_morning_greeting, "Friday morning greeting task (9:00 AM UK time, Fridays)"),
