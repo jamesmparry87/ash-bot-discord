@@ -134,7 +134,6 @@ def initialize_bot_instance(bot):
     global _bot_instance, _bot_ready
 
     try:
-        # Validate bot is properly logged in
         if not bot or not hasattr(bot, 'user') or not bot.user:
             print("⚠️ Bot instance initialization failed: Bot not logged in")
             return False
@@ -218,40 +217,11 @@ async def _validate_bot_permissions():
 
 
 def get_bot_instance():
-    """Get bot instance with multiple fallback methods and validation"""
-    global _bot_instance, _bot_ready
-
-    # Method 1: Use validated global instance
-    if _bot_instance and _bot_ready and hasattr(_bot_instance, 'user') and _bot_instance.user:
+    """Get the globally stored bot instance."""
+    global _bot_instance
+    if _bot_instance and _bot_instance.user:
         return _bot_instance
-
-    # Method 2: Search through modules (fallback)
-    print("🔍 Global bot instance not available, searching modules...")
-    import sys
-
-    for name, obj in sys.modules.items():
-        if hasattr(obj, 'bot') and hasattr(obj.bot, 'user'):
-            try:
-                if obj.bot.user and obj.bot.is_ready():
-                    print(f"✅ Found ready bot instance in module: {name}")
-                    # Update global reference
-                    _bot_instance = obj.bot
-                    _bot_ready = True
-                    return obj.bot
-            except Exception:
-                continue
-
-    # Method 3: Search for any bot instance (last resort)
-    for name, obj in sys.modules.items():
-        if hasattr(obj, 'bot') and hasattr(obj.bot, 'user'):
-            try:
-                if obj.bot.user:  # Just check if logged in, not necessarily ready
-                    print(f"⚠️ Found bot instance in module: {name} (may not be fully ready)")
-                    return obj.bot
-            except Exception:
-                continue
-
-    print("❌ No bot instance found in any module")
+    print("❌ Bot instance not available for scheduled tasks.")
     return None
 
 
@@ -1586,7 +1556,7 @@ async def _delayed_trivia_validation():
             print("❌ DELAYED TRIVIA VALIDATION: Failed to send error notification to JAM")
 
 
-def start_all_scheduled_tasks():
+def start_all_scheduled_tasks(bot):
     """Start all scheduled tasks with enhanced monitoring"""
     try:
         tasks_started = 0

@@ -59,6 +59,34 @@ from .context_manager import (
     should_use_context,
 )
 
+db: DatabaseManager = get_database()
+
+# This will hold our dynamic and static series names
+_known_game_series = set()
+
+
+def initialize_series_list():
+    """Fetches series from the DB and merges them with a static list."""
+    global _known_game_series
+    if not db:
+        print("⚠️ Cannot initialize series list: Database not available.")
+        return
+
+    # Static list of other popular franchises as a fallback
+    static_series_keywords = {
+        "final fantasy", "call of duty", "assassin's creed", "the elder scrolls",
+        "metal gear", "halo", "gears of war", "mass effect", "dragon age",
+        "dark souls", "borderlands", "far cry", "bioshock", "tomb raider",
+        "hitman", "battlefield", "mortal kombat", "street fighter", "tekken",
+        "sonic", "kingdom hearts", "persona", "fire emblem"
+    }
+
+    # Dynamic list from the database
+    db_series_names = set(db.get_all_unique_series_names())
+    
+    # Combine them
+    _known_game_series = db_series_names.union(static_series_keywords)
+    print(f"✅ Series list initialized with {len(_known_game_series)} unique series.")
 
 # Initialize NLTK components with robust error handling
 def initialize_nltk_resources():
@@ -645,49 +673,29 @@ async def handle_statistical_query(
         elif ("longest" in lower_content and "game" in lower_content) or \
              ("most" in lower_content and ("hours" in lower_content or "playtime" in lower_content)) or \
              ("most" in lower_content and "game" in lower_content and any(word in lower_content for word in ["played", "play", "playing"])):
-            # Handle "most played" / longest playtime games (ALL games, not just completed)
-            playtime_stats = db.get_games_by_playtime('DESC')  # type: ignore - NEW METHOD
+            
+            # Handle ambiguous "most played" queries by providing both metrics
+            playtime_stats = db.get_games_by_playtime('DESC', limit=1)
+            episode_stats = db.get_games_by_episode_count('DESC', limit=1)
+
+            if not playtime_stats and not episode_stats:
+                await message.reply("Database analysis complete. Insufficient playtime and episode data available for engagement ranking.")
+                return
+
+            response = "Analysis complete. The term 'most played' can be interpreted in two ways:\n\n"
+            
             if playtime_stats:
-                top_game = playtime_stats[0]
-                hours = round(top_game['total_playtime_minutes'] / 60, 1)
-                episodes = top_game['total_episodes']
-                game_name = top_game['canonical_name']
-                status = top_game.get('completion_status', 'unknown')
+                top_playtime_game = playtime_stats[0]
+                hours = round(top_playtime_game['total_playtime_minutes'] / 60, 1)
+                response += f"▶️ **By Playtime:** '{top_playtime_game['canonical_name']}' has the most playtime with **{hours} hours**.\n"
+            
+            if episode_stats:
+                top_episode_game = episode_stats[0]
+                episodes = top_episode_game['total_episodes']
+                response += f"▶️ **By Episodes:** '{top_episode_game['canonical_name']}' has the most episodes with **{episodes} parts**."
 
-                response = f"Database analysis: '{game_name}' demonstrates maximum temporal investment with {hours} hours"
-                if episodes > 0:
-                    response += f" across {episodes} episodes"
-                response += f", completion status: {status}. "
-
-                # Add conversational follow-up
-                if len(playtime_stats) > 1:
-                    second_game = playtime_stats[1]
-                    second_hours = round(second_game['total_playtime_minutes'] / 60, 1)
-                    response += f"This significantly exceeds '{second_game['canonical_name']}' at {second_hours} hours. Would you like me to analyze her other marathon gaming sessions or compare completion patterns?"
-                else:
-                    response += f"I could investigate her completion timeline patterns or compare this against other {top_game.get('genre', 'similar')} gaming commitments if you require additional analysis."
-
-                await message.reply(response)
-            else:
-                # Fallback to episode count when playtime data unavailable
-                episode_stats = db.get_games_by_episode_count('DESC')  # type: ignore
-                if episode_stats and len(episode_stats) > 0:
-                    top_game = episode_stats[0]
-                    episodes = top_game['total_episodes']
-                    game_name = top_game['canonical_name']
-                    status = top_game.get('completion_status', 'unknown')
-
-                    response = f"Database analysis: While temporal data is insufficient, episode metrics indicate '{game_name}' demonstrates maximum engagement with {episodes} episodes, completion status: {status}. "
-
-                    if len(episode_stats) > 1:
-                        second_game = episode_stats[1]
-                        response += f"This significantly exceeds '{second_game['canonical_name']}' at {second_game['total_episodes']} episodes. Playtime logging requires enhancement for comprehensive temporal analysis."
-                    else:
-                        response += "Enhanced playtime data collection would provide more precise temporal metrics."
-
-                    await message.reply(response)
-                else:
-                    await message.reply("Database analysis complete. Insufficient playtime and episode data available for engagement ranking. Mission parameters require comprehensive data logging.")
+            response += "\n\nPlease specify which metric you require for further analysis."
+            await message.reply(response)
 
     except Exception as e:
         print(f"Error in statistical query: {e}")
@@ -828,67 +836,13 @@ async def handle_game_status_query(
     game_name = match.group(1).strip()
     game_name_lower = game_name.lower()
 
-    # Common game series that need disambiguation
-    game_series_keywords = [
-        "god of war",
-        "final fantasy",
-        "call of duty",
-        "assassin's creed",
-        "grand theft auto",
-        "gta",
-        "the elder scrolls",
-        "fallout",
-        "resident evil",
-        "silent hill",
-        "metal gear",
-        "halo",
-        "gears of war",
-        "dead space",
-        "mass effect",
-        "dragon age",
-        "the witcher",
-        "dark souls",
-        "borderlands",
-        "far cry",
-        "just cause",
-        "saints row",
-        "watch dogs",
-        "dishonored",
-        "bioshock",
-        "tomb raider",
-        "hitman",
-        "splinter cell",
-        "rainbow six",
-        "ghost recon",
-        "battlefield",
-        "need for speed",
-        "fifa",
-        "madden",
-        "nba 2k",
-        "mortal kombat",
-        "street fighter",
-        "tekken",
-        "super mario",
-        "zelda",
-        "pokemon",
-        "sonic",
-        "crash bandicoot",
-        "spyro",
-        "kingdom hearts",
-        "persona",
-        "shin megami tensei",
-        "tales of",
-        "fire emblem",
-        "advance wars"]
-
-    # Check if this might be a game series query that needs disambiguation
+    # Check if the query matches a known series from our dynamic list
     is_series_query = False
-    for series in game_series_keywords:
-        if series in game_name_lower and not any(
-                char.isdigit() for char in game_name):
-            # It's a series name without specific numbers/years
-            is_series_query = True
-            break
+    if not any(char.isdigit() for char in game_name): # Don't trigger for "GTA 5"
+        for series in _known_game_series:
+            if series in game_name_lower:
+                is_series_query = True
+                break
 
     # Also check for generic patterns like "the new [game]" or just "[series
     # name]"
@@ -905,29 +859,18 @@ async def handle_game_status_query(
 
     if is_series_query:
         # Get games from PLAYED GAMES database for series disambiguation
-        played_games = db.get_all_played_games()  # type: ignore
+        series_games_data = db.get_series_games(game_name)
 
-        # Find all games in this series from played games database
-        series_games = []
-        available_game_names = []
-        for game in played_games:
-            game_lower = game['canonical_name'].lower()
-            series_lower = game.get('series_name', '').lower()
-            # Check if this game belongs to the detected series
-            for series in game_series_keywords:
-                if series in game_name_lower and (
-                        series in game_lower or series in series_lower):
-                    episodes = f" ({game.get('total_episodes', 0)} episodes)" if game.get(
-                        "total_episodes", 0) > 0 else ""
-                    status = game.get("completion_status", "unknown")
-                    series_games.append(
-                        f"'{game['canonical_name']}'{episodes} - {status}")
-                    available_game_names.append(game['canonical_name'])
-                    break
-
-        # Create disambiguation response with specific games if found
-        if series_games:
-            games_list = ", ".join(series_games)
+        if series_games_data:
+            series_games_formatted = []
+            available_game_names = []
+            for game in series_games_data:
+                episodes = f" ({game.get('total_episodes', 0)} episodes)" if game.get("total_episodes", 0) > 0 else ""
+                status = game.get("completion_status", "unknown")
+                series_games_formatted.append(f"'{game['canonical_name']}'{episodes} - {status}")
+                available_game_names.append(game['canonical_name'])
+            
+            games_list = ", ".join(series_games_formatted)
 
             # Set disambiguation state in conversation context
             from .context_manager import get_or_create_context
@@ -1034,25 +977,13 @@ async def handle_game_details_query(
     game_name = match.group(1).strip()
     game_name_lower = game_name.lower()
 
-    # Common game series that need disambiguation (same list as game_status_query)
-    game_series_keywords = [
-        "god of war", "final fantasy", "call of duty", "assassin's creed", "grand theft auto", "gta",
-        "the elder scrolls", "fallout", "resident evil", "silent hill", "metal gear", "halo",
-        "gears of war", "dead space", "mass effect", "dragon age", "the witcher", "dark souls",
-        "borderlands", "far cry", "just cause", "saints row", "watch dogs", "dishonored",
-        "bioshock", "tomb raider", "hitman", "splinter cell", "rainbow six", "ghost recon",
-        "battlefield", "need for speed", "fifa", "madden", "nba 2k", "mortal kombat",
-        "street fighter", "tekken", "super mario", "zelda", "pokemon", "sonic",
-        "crash bandicoot", "spyro", "kingdom hearts", "persona", "shin megami tensei",
-        "tales of", "fire emblem", "advance wars"
-    ]
-
-    # Check if this might be a game series query that needs disambiguation
+    # Check if the query matches a known series from our dynamic list
     is_series_query = False
-    for series in game_series_keywords:
-        if series in game_name_lower and not any(char.isdigit() for char in game_name):
-            is_series_query = True
-            break
+    if not any(char.isdigit() for char in game_name): # Don't trigger for "GTA 5"
+        for series in _known_game_series:
+            if series in game_name_lower:
+                is_series_query = True
+                break
 
     # Also check for generic patterns
     if not is_series_query:
@@ -1066,26 +997,18 @@ async def handle_game_details_query(
 
     if is_series_query:
         # Get games from PLAYED GAMES database for series disambiguation
-        played_games = db.get_all_played_games()  # type: ignore
-        series_games = []
-        available_game_names = []
+        series_games_data = db.get_series_games(game_name)
 
-        for game in played_games:
-            game_lower = game['canonical_name'].lower()
-            series_lower = game.get('series_name', '').lower()
-            # Check if this game belongs to the detected series
-            for series in game_series_keywords:
-                if series in game_name_lower and (series in game_lower or series in series_lower):
-                    episodes = f" ({game.get('total_episodes', 0)} episodes)" if game.get(
-                        "total_episodes", 0) > 0 else ""
-                    status = game.get("completion_status", "unknown")
-                    series_games.append(f"'{game['canonical_name']}'{episodes} - {status}")
-                    available_game_names.append(game['canonical_name'])
-                    break
-
-        # Create disambiguation response with specific games if found
-        if series_games:
-            games_list = ", ".join(series_games)
+        if series_games_data:
+            series_games_formatted = []
+            available_game_names = []
+            for game in series_games_data:
+                episodes = f" ({game.get('total_episodes', 0)} episodes)" if game.get("total_episodes", 0) > 0 else ""
+                status = game.get("completion_status", "unknown")
+                series_games_formatted.append(f"'{game['canonical_name']}'{episodes} - {status}")
+                available_game_names.append(game['canonical_name'])
+            
+            games_list = ", ".join(series_games_formatted)
 
             # Set disambiguation state in conversation context
             from .context_manager import get_or_create_context

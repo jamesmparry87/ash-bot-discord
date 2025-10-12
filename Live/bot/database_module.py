@@ -1990,33 +1990,33 @@ class DatabaseManager:
             return []
 
     def get_games_by_episode_count(
-            self, order: str = 'DESC') -> List[Dict[str, Any]]:
-        """Get games ranked by episode count"""
-        conn = self.get_connection()
-        if not conn:
-            return []
+                self, order: str = 'DESC', limit: int = 15) -> List[Dict[str, Any]]:
+            """Get games ranked by episode count"""
+            conn = self.get_connection()
+            if not conn:
+                return []
 
-        try:
-            with conn.cursor() as cur:
-                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
-                cur.execute(f"""
-                    SELECT
-                        canonical_name,
-                        series_name,
-                        total_episodes,
-                        total_playtime_minutes,
-                        completion_status,
-                        genre
-                    FROM played_games
-                    WHERE total_episodes > 0
-                    ORDER BY total_episodes {order_clause}
-                    LIMIT 15
-                """)
-                results = cur.fetchall()
-                return [dict(row) for row in results]
-        except Exception as e:
-            logger.error(f"Error getting games by episode count: {e}")
-            return []
+            try:
+                with conn.cursor() as cur:
+                    order_clause = "DESC" if order.upper() == "DESC" else "ASC"
+                    cur.execute(f"""
+                        SELECT
+                            canonical_name,
+                            series_name,
+                            total_episodes,
+                            total_playtime_minutes,
+                            completion_status,
+                            genre
+                        FROM played_games
+                        WHERE total_episodes > 0
+                        ORDER BY total_episodes {order_clause}
+                        LIMIT %s
+                    """, (limit,))
+                    results = cur.fetchall()
+                    return [dict(row) for row in results]
+            except Exception as e:
+                logger.error(f"Error getting games by episode count: {e}")
+                return []
 
     def get_genre_statistics(self) -> List[Dict[str, Any]]:
         """Get comprehensive genre statistics"""
@@ -2538,7 +2538,87 @@ class DatabaseManager:
         if self.connection and not self.connection.closed:
             self.connection.close()
 
+    def get_all_unique_series_names(self) -> List[str]:
+        """Gets a list of all unique, non-empty series names from the played_games table."""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT DISTINCT series_name FROM played_games
+                    WHERE series_name IS NOT NULL AND series_name != ''
+                """)
+                results = cur.fetchall()
+                # Return a simple list of lowercase names for easy matching
+                return [cast(RealDictRow, row)['series_name'].lower() for row in results]
+        except Exception as e:
+            logger.error(f"Error getting unique series names: {e}")
+            return []
+
     # --- Trivia System Methods ---
+
+    def normalize_trivia_answer(self, answer_text: str) -> str:
+        """Enhanced normalization for trivia answers with fuzzy matching support"""
+        import re
+
+        # Start with the original text
+        normalized = answer_text.strip()
+
+        # Remove common punctuation but preserve important chars like hyphens in compound words
+        normalized = re.sub(r'[.,!?;:"\'()[\]{}]', '', normalized)
+
+        # Handle common game/media abbreviations and variations
+        abbreviation_map = {
+            'gta': 'grand theft auto',
+            'cod': 'call of duty',
+            'gtav': 'grand theft auto v',
+            'gtaiv': 'grand theft auto iv',
+            'rdr': 'red dead redemption',
+            'rdr2': 'red dead redemption 2',
+            'gow': 'god of war',
+            'tlou': 'the last of us',
+            'botw': 'breath of the wild',
+            'totk': 'tears of the kingdom',
+            'ff': 'final fantasy',
+            'ffvii': 'final fantasy vii',
+            'ffx': 'final fantasy x',
+            'mgs': 'metal gear solid',
+            'loz': 'legend of zelda',
+            'zelda': 'legend of zelda',
+            'pokemon': 'pokémon',
+            'mario': 'super mario',
+            'doom': 'doom',
+            'halo': 'halo',
+            'fallout': 'fallout'
+        }
+
+        # Apply abbreviation expansions (case insensitive)
+        words = normalized.lower().split()
+        expanded_words = []
+        for word in words:
+            if word in abbreviation_map:
+                expanded_words.extend(abbreviation_map[word].split())
+            else:
+                expanded_words.append(word)
+        normalized = ' '.join(expanded_words)
+
+        # Remove filler words that don't change meaning
+        filler_words = ['and', 'the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by',
+                        'about', 'approximately', 'roughly', 'around', 'over', 'under', 'just',
+                        'exactly', 'precisely', 'nearly', 'almost', 'close to', 'more than', 'less than']
+
+        # Split into words and filter out filler words
+        words = normalized.split()
+        filtered_words = [word for word in words if word not in filler_words]
+
+        # Rejoin and clean up extra spaces
+        normalized = ' '.join(filtered_words)
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+
+        return normalized
+
 
     def add_trivia_question(
         self,
@@ -3103,8 +3183,8 @@ class DatabaseManager:
         correct_clean = correct_answer.strip()
 
         # Normalize answers for better matching
-        user_normalized = self._normalize_answer_for_matching(user_clean)
-        correct_normalized = self._normalize_answer_for_matching(correct_clean)
+        user_normalized = self.normalize_trivia_answer(user_clean)
+        correct_normalized = self.normalize_trivia_answer(correct_clean)
 
         # Level 1: Exact match (case-insensitive)
         if user_clean.lower() == correct_clean.lower():

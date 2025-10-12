@@ -9,7 +9,7 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta
-from typing import Optional, Union
+from typing import Any, Optional, Union
 from zoneinfo import ZoneInfo
 
 import discord
@@ -62,11 +62,13 @@ except Exception as e:
     print(f"❌ Failed to load configuration: {e}")
     sys.exit(1)
 
+db: Any = None
+
 # Import the enhanced database manager with trivia methods
 try:
     from bot.database_module import DatabaseManager as EnhancedDatabaseManager
     from bot.database_module import get_database
-    db: Union[EnhancedDatabaseManager, 'DatabaseManager', None] = get_database()
+    db = get_database()
     print("✅ Database manager loaded successfully")
 except ImportError as e:
     print(f"❌ Failed to import enhanced database manager: {e}")
@@ -418,7 +420,7 @@ async def initialize_modular_components():
     # 5. Start Scheduled Tasks
     try:
         from bot.tasks.scheduled import schedule_delayed_trivia_validation, start_all_scheduled_tasks
-        start_all_scheduled_tasks()
+        start_all_scheduled_tasks(bot)
         print("✅ Scheduled tasks started successfully")
 
         # Schedule delayed trivia validation (non-blocking for deployment safety)
@@ -775,12 +777,17 @@ async def on_ready():
     """Bot ready event - initialize all modular components"""
     print(f"\n🚀 {bot.user} connected to Discord!")
     print(f"📊 Connected to {len(bot.guilds)} guild(s)")
-    print(f"🔧 Initializing modular architecture with deployment fixes...")
     print(
         f"⏰ Startup time: {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d %H:%M:%S UK')}")
 
     # Initialize all modular components
     status_report = await initialize_modular_components()
+
+    try:
+        from bot.handlers import message_handler
+        message_handler.initialize_series_list()
+    except Exception as e:
+        print(f"⚠️ Failed to initialize dynamic series list: {e}")
 
     # Send deployment success notification
     await send_deployment_success_dm(status_report)
@@ -874,67 +881,6 @@ async def is_trivia_answer_reply(message):
         return False, None
 
 
-def normalize_trivia_answer(answer_text: str) -> str:
-    """Enhanced normalization for trivia answers with fuzzy matching support"""
-    import re
-
-    # Start with the original text
-    normalized = answer_text.strip()
-
-    # Remove common punctuation but preserve important chars like hyphens in compound words
-    normalized = re.sub(r'[.,!?;:"\'()[\]{}]', '', normalized)
-
-    # Handle common game/media abbreviations and variations
-    abbreviation_map = {
-        'gta': 'grand theft auto',
-        'cod': 'call of duty',
-        'gtav': 'grand theft auto v',
-        'gtaiv': 'grand theft auto iv',
-        'rdr': 'red dead redemption',
-        'rdr2': 'red dead redemption 2',
-        'gow': 'god of war',
-        'tlou': 'the last of us',
-        'botw': 'breath of the wild',
-        'totk': 'tears of the kingdom',
-        'ff': 'final fantasy',
-        'ffvii': 'final fantasy vii',
-        'ffx': 'final fantasy x',
-        'mgs': 'metal gear solid',
-        'loz': 'legend of zelda',
-        'zelda': 'legend of zelda',
-        'pokemon': 'pokémon',
-        'mario': 'super mario',
-        'doom': 'doom',
-        'halo': 'halo',
-        'fallout': 'fallout'
-    }
-
-    # Apply abbreviation expansions (case insensitive)
-    words = normalized.lower().split()
-    expanded_words = []
-    for word in words:
-        if word in abbreviation_map:
-            expanded_words.extend(abbreviation_map[word].split())
-        else:
-            expanded_words.append(word)
-    normalized = ' '.join(expanded_words)
-
-    # Remove filler words that don't change meaning
-    filler_words = ['and', 'the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by',
-                    'about', 'approximately', 'roughly', 'around', 'over', 'under', 'just',
-                    'exactly', 'precisely', 'nearly', 'almost', 'close to', 'more than', 'less than']
-
-    # Split into words and filter out filler words
-    words = normalized.split()
-    filtered_words = [word for word in words if word not in filler_words]
-
-    # Rejoin and clean up extra spaces
-    normalized = ' '.join(filtered_words)
-    normalized = re.sub(r'\s+', ' ', normalized).strip()
-
-    return normalized
-
-
 def extract_time_components(text: str) -> dict:
     """Extract time components from text for numerical matching"""
     import re
@@ -1006,12 +952,14 @@ async def process_trivia_answer(message, trivia_session):
     try:
         if db is None:
             return False
+        
+        assert db is not None
 
         # Extract answer text
         answer_text = message.content.strip()
 
         # Enhanced normalization for fuzzy matching
-        normalized_answer = normalize_trivia_answer(answer_text)
+        normalized_answer = db.normalize_trivia_answer(answer_text)
 
         print(f"🧠 TRIVIA: Processing answer - Original: '{answer_text}' → Normalized: '{normalized_answer}'")
 
