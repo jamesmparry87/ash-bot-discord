@@ -53,12 +53,12 @@ except ImportError:
     def extract_game_name_from_title(*args, **kwargs):
         print("⚠️ extract_game_name_from_title not available - integration not loaded")
         return None
-    
+
 try:
     from ..handlers.conversation_handler import start_weekly_announcement_approval
 except ImportError:
     print("⚠️ Conversation handlers not available for scheduled tasks")
-    
+
     async def start_weekly_announcement_approval(*args, **kwargs):
         print("⚠️ start_weekly_announcement_approval not available - handler not loaded")
         return None
@@ -273,49 +273,62 @@ async def safe_send_message(channel, content, mention_user_id=None):
         return False
 
 # Run at 8:30 AM UK time every Monday
+
+
 @tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))
 async def monday_content_sync():
     """Syncs new YouTube & Twitch content, generates a debrief, and sends it for approval."""
-    if not _should_run_automated_tasks(): return
-    
+    if not _should_run_automated_tasks():
+        return
+
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 0: return
+    if uk_now.weekday() != 0:
+        return
 
     print("🔄 SYNC & DEBRIEF (Monday): Starting weekly content sync...")
-    if not db: return
+    if not db:
+        return
 
     try:
         start_sync_time = db.get_latest_game_update_timestamp()
-        if not start_sync_time: return
+        if not start_sync_time:
+            return
 
         # --- Data Gathering & Sync ---
         new_youtube_videos = await fetch_new_videos_since("UCPoUxLHeTnE9SUDAkqfJzDQ", start_sync_time)
         new_twitch_vods = await fetch_new_vods_since("jonesyspacecat", start_sync_time)
-        
+
         total_new_content = len(new_youtube_videos) + len(new_twitch_vods)
         if total_new_content == 0:
             print("✅ SYNC & DEBRIEF (Monday): No new content found. No message to generate.")
             return
-        
+
         new_views = sum(v.get('view_count', 0) for v in new_youtube_videos)
         total_new_minutes = sum(item.get('duration_seconds', 0) // 60 for item in new_youtube_videos + new_twitch_vods)
-        most_engaging_video = max(new_youtube_videos, key=lambda v: v.get('view_count', 0)) if new_youtube_videos else None
-        
+        most_engaging_video = max(
+            new_youtube_videos, key=lambda v: v.get(
+                'view_count', 0)) if new_youtube_videos else None
+
         # --- Content Generation ---
         debrief = (
             f"🌅 **Monday Morning Protocol Initiated**\n\n"
             f"Analysis of the previous 168-hour operational cycle is complete. **{total_new_content}** new transmissions were logged, "
-            f"accumulating **{round(total_new_minutes / 60, 1)} hours** of new mission data and **{new_views:,}** viewer engagements."
-        )
+            f"accumulating **{round(total_new_minutes / 60, 1)} hours** of new mission data and **{new_views:,}** viewer engagements.")
         if most_engaging_video:
             debrief += f"\n\nMaximum engagement was recorded on the transmission titled **'{most_engaging_video['title']}'**."
             if "finale" in most_engaging_video['title'].lower() or "ending" in most_engaging_video['title'].lower():
                 debrief += " This concludes all active mission parameters for this series."
 
         # --- Approval Workflow ---
-        analysis_cache = { "total_videos": total_new_content, "total_hours": round(total_new_minutes/60,1), "total_views": new_views, "top_video": most_engaging_video }
+        analysis_cache = {
+            "total_videos": total_new_content,
+            "total_hours": round(
+                total_new_minutes / 60,
+                1),
+            "total_views": new_views,
+            "top_video": most_engaging_video}
         announcement_id = db.create_weekly_announcement('monday', debrief, analysis_cache)
-        
+
         if announcement_id:
             await start_weekly_announcement_approval(announcement_id, debrief, 'monday')
         else:
@@ -614,13 +627,16 @@ async def scheduled_ai_refresh():
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
 async def monday_morning_greeting():
     """Posts the approved Monday morning debrief to the chit-chat channel."""
-    if not _should_run_automated_tasks(): return
+    if not _should_run_automated_tasks():
+        return
 
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 0: return
+    if uk_now.weekday() != 0:
+        return
 
     print(f"🌅 MONDAY GREETING: Checking for approved message at {uk_now.strftime('%H:%M UK')}")
-    if not db: return
+    if not db:
+        return
 
     try:
         approved_announcement = db.get_announcement_by_day('monday', 'approved')
@@ -629,7 +645,8 @@ async def monday_morning_greeting():
             return
 
         bot = get_bot_instance()
-        if not bot: return
+        if not bot:
+            return
 
         channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID)
         if channel and isinstance(channel, discord.TextChannel):

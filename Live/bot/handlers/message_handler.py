@@ -1754,7 +1754,7 @@ async def handle_dm_conversations(message: discord.Message) -> bool:
             print(f"🔄 Processing JAM approval conversation for user {user_id}")
             await handle_jam_approval_conversation(message)
             return True
-        
+
         # Handle JAM approval conversations for weekly announcements
         if user_id in weekly_announcement_approvals:
             print(f"🔄 Processing weekly announcement approval for user {user_id}")

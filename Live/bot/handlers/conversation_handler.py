@@ -145,7 +145,10 @@ def update_jam_approval_activity(user_id: int):
             ZoneInfo("Europe/London"))
 
 # Weekly Announcement Approval Regeneration Logic
-async def _regenerate_weekly_announcement_content(analysis_cache: Dict[str, Any], day: str, original_content: str) -> Optional[str]:
+
+
+async def _regenerate_weekly_announcement_content(
+        analysis_cache: Dict[str, Any], day: str, original_content: str) -> Optional[str]:
     """Uses AI to generate a new version of a weekly announcement from cached data."""
     if not ai_enabled:
         return None
@@ -184,19 +187,23 @@ async def _regenerate_weekly_announcement_content(analysis_cache: Dict[str, Any]
         if response_text:
             return filter_ai_response(response_text)
         return None
-    
+
     # Placeholder for Friday's regeneration logic
     return None
 
 # Weekly Announcement Approval Workflow
+
+
 async def start_weekly_announcement_approval(announcement_id: int, content: str, day: str):
     """Starts the approval workflow for a weekly announcement."""
     try:
         bot = _get_bot_instance()
-        if not bot: return
+        if not bot:
+            return
 
         jam_user = await bot.fetch_user(JAM_USER_ID)
-        if not jam_user: return
+        if not jam_user:
+            return
 
         uk_now = datetime.now(ZoneInfo("Europe/London"))
         weekly_announcement_approvals[JAM_USER_ID] = {
@@ -220,12 +227,14 @@ async def start_weekly_announcement_approval(announcement_id: int, content: str,
     except Exception as e:
         print(f"❌ Error starting weekly announcement approval: {e}")
 
+
 async def handle_weekly_announcement_approval(message: discord.Message):
     """Handles the state machine for the weekly announcement approval conversation."""
     user_id = message.author.id
     convo = weekly_announcement_approvals.get(user_id)
-    if not convo: return
-    
+    if not convo:
+        return
+
     content = message.content.strip()
     announcement_id = convo['announcement_id']
 
@@ -237,50 +246,50 @@ async def handle_weekly_announcement_approval(message: discord.Message):
         elif content == '2':
             convo['step'] = 'amending'
             await message.reply("✏️ **Amend:** Please provide your instructions (e.g., 'remove the part about views', 'make it shorter').")
-        elif content == '3': # Regenerate
-                    await message.reply("🔄 **Regenerating...** Analyzing data from a different perspective. Please wait.")
-                    
-                    # Fetch the latest announcement record from the DB to get the analysis_cache
-                    announcement_data = db.get_announcement_by_day(convo['day'], 'pending_approval')
-                    if not announcement_data or not announcement_data.get('analysis_cache'):
-                        await message.reply("❌ **Regeneration Failed:** Could not retrieve analysis data. Please amend manually or cancel.")
-                        return
+        elif content == '3':  # Regenerate
+            await message.reply("🔄 **Regenerating...** Analyzing data from a different perspective. Please wait.")
 
-                    analysis_cache = announcement_data['analysis_cache']
-                    original_content = convo['original_content']
+            # Fetch the latest announcement record from the DB to get the analysis_cache
+            announcement_data = db.get_announcement_by_day(convo['day'], 'pending_approval')
+            if not announcement_data or not announcement_data.get('analysis_cache'):
+                await message.reply("❌ **Regeneration Failed:** Could not retrieve analysis data. Please amend manually or cancel.")
+                return
 
-                    # Call the regeneration helper function
-                    new_content = await _regenerate_weekly_announcement_content(analysis_cache, convo['day'], original_content)
+            analysis_cache = announcement_data['analysis_cache']
+            original_content = convo['original_content']
 
-                    if new_content:
-                        # Update the conversation state with the new content
-                        convo['original_content'] = new_content
-                        
-                        # Update the database record with the new content so it persists
-                        db.update_announcement_status(announcement_id, 'pending_approval', new_content=new_content)
-                        
-                        # Present the new version for approval
-                        approval_msg = (
-                            f"🔄 **Regeneration Complete**\n\n"
-                            f"Here is an alternative version of the {convo['day'].title()} greeting:\n\n"
-                            f"```\n{new_content}\n```\n"
-                            f"**Available Actions:**\n"
-                            f"**1.** ✅ **Approve**\n"
-                            f"**2.** ✏️ **Amend**\n"
-                            f"**3.** 🔄 **Regenerate Again**\n"
-                            f"**4.** ❌ **Cancel**\n\n"
-                            f"Please respond with **1, 2, 3, or 4**."
-                        )
-                        await message.reply(approval_msg)
-                    else:
-                        await message.reply("❌ **Regeneration Failed:** The AI was unable to generate an alternative. Please try amending the message or cancel.")
+            # Call the regeneration helper function
+            new_content = await _regenerate_weekly_announcement_content(analysis_cache, convo['day'], original_content)
+
+            if new_content:
+                # Update the conversation state with the new content
+                convo['original_content'] = new_content
+
+                # Update the database record with the new content so it persists
+                db.update_announcement_status(announcement_id, 'pending_approval', new_content=new_content)
+
+                # Present the new version for approval
+                approval_msg = (
+                    f"🔄 **Regeneration Complete**\n\n"
+                    f"Here is an alternative version of the {convo['day'].title()} greeting:\n\n"
+                    f"```\n{new_content}\n```\n"
+                    f"**Available Actions:**\n"
+                    f"**1.** ✅ **Approve**\n"
+                    f"**2.** ✏️ **Amend**\n"
+                    f"**3.** 🔄 **Regenerate Again**\n"
+                    f"**4.** ❌ **Cancel**\n\n"
+                    f"Please respond with **1, 2, 3, or 4**."
+                )
+                await message.reply(approval_msg)
+            else:
+                await message.reply("❌ **Regeneration Failed:** The AI was unable to generate an alternative. Please try amending the message or cancel.")
         elif content == '4':
             db.update_announcement_status(announcement_id, 'cancelled')
             await message.reply("❌ **Cancelled.** No message will be sent today.")
             del weekly_announcement_approvals[user_id]
         else:
             await message.reply("⚠️ Invalid input. Please respond with 1, 2, 3, or 4.")
-    
+
     elif convo['step'] == 'amending':
         # Simple amendment for now: append user notes.
         amended_content = f"{convo['original_content']}\n\n*Creator's Note: {content}*"

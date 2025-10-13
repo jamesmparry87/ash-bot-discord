@@ -4377,12 +4377,13 @@ class DatabaseManager:
     def create_weekly_announcement(self, day: str, content: str, cache: Dict[str, Any]) -> Optional[int]:
         """Creates a new weekly announcement record for approval."""
         conn = self.get_connection()
-        if not conn: return None
+        if not conn:
+            return None
         try:
             with conn.cursor() as cur:
                 # Clean up any old pending messages for that day first
                 cur.execute("DELETE FROM weekly_announcements WHERE day = %s AND status = 'pending_approval'", (day,))
-                
+
                 cur.execute("""
                     INSERT INTO weekly_announcements (day, generated_content, analysis_cache)
                     VALUES (%s, %s, %s) RETURNING id
@@ -4402,7 +4403,8 @@ class DatabaseManager:
     def get_announcement_by_day(self, day: str, status: str) -> Optional[Dict[str, Any]]:
         """Gets a weekly announcement for a specific day and status."""
         conn = self.get_connection()
-        if not conn: return None
+        if not conn:
+            return None
         try:
             with conn.cursor() as cur:
                 cur.execute("""
@@ -4421,7 +4423,8 @@ class DatabaseManager:
     def update_announcement_status(self, announcement_id: int, status: str, new_content: Optional[str] = None) -> bool:
         """Updates the status and optionally the content of a weekly announcement."""
         conn = self.get_connection()
-        if not conn: return False
+        if not conn:
+            return False
         try:
             with conn.cursor() as cur:
                 uk_now = datetime.now(ZoneInfo("Europe/London"))
