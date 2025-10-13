@@ -1163,18 +1163,17 @@ class TriviaCommands(commands.Cog):
             if not target:
                 # Show usage help
                 help_text = (
-                    "**Manual Question Approval Usage:**\n"
-                    "`!approvequestion <question_id>` - Send specific question to JAM for review\n"
-                    "`!approvequestion auto` - Send next auto-selected question for approval\n"
-                    "`!approvequestion generate` - Generate new question and send for approval\n\n"
-                    "**Examples:**\n"
-                    "• `!approvequestion 25` - Review question #25\n"
-                    "• `!approvequestion auto` - Review what would be auto-selected\n"
-                    "• `!approvequestion generate` - Create and review new AI question\n\n"
-                    "**Use Cases:**\n"
-                    "• Quality check before bonus trivia sessions\n"
-                    "• Review newly added questions\n"
-                    "• Preview auto-selection before events"
+                    "**Add Trivia Question (Two Formats):**\n\n"
+                    "**1. Easy Multi-line Format (Recommended):**\n"
+                    "```\n"
+                    "!addtrivia What is the capital of France?\n"
+                    "A. London\n"
+                    "B. Paris\n"
+                    "C. Berlin\n"
+                    "Correct answer: B"
+                    "```\n"
+                    "**2. Pipe-Delimited Format:**\n"
+                    "`!addtrivia <question> | answer:<correct_answer> | choices:A,B,C,D | type:multiple`"
                 )
                 await ctx.send(help_text)
                 return

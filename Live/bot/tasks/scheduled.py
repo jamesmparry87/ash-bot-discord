@@ -33,12 +33,34 @@ except Exception as db_error:
 
 # Import integrations
 try:
-    from ..integrations.youtube import execute_youtube_auto_post
+    from ..integrations.twitch import fetch_new_vods_since
+    from ..integrations.youtube import execute_youtube_auto_post, fetch_new_videos_since
 except ImportError:
     print("⚠️ YouTube integration not available for scheduled tasks")
 
     async def execute_youtube_auto_post(*args, **kwargs):
         print("⚠️ YouTube auto-post not available - integration not loaded")
+        return None
+
+    async def fetch_new_videos_since(*args, **kwargs):
+        print("⚠️ fetch_new_videos_since not available - integration not loaded")
+        return []
+
+    async def fetch_new_vods_since(*args, **kwargs):
+        print("⚠️ fetch_new_vods_since not available - integration not loaded")
+        return []
+
+    def extract_game_name_from_title(*args, **kwargs):
+        print("⚠️ extract_game_name_from_title not available - integration not loaded")
+        return None
+
+try:
+    from ..handlers.conversation_handler import start_weekly_announcement_approval
+except ImportError:
+    print("⚠️ Conversation handlers not available for scheduled tasks")
+
+    async def start_weekly_announcement_approval(*args, **kwargs):
+        print("⚠️ start_weekly_announcement_approval not available - handler not loaded")
         return None
 
 # Global state for trivia and bot instance
@@ -108,24 +130,24 @@ def _detect_bot_environment():
         return True
 
 
-def _should_run_scheduled_trivia():
+def _should_run_automated_tasks():
     """
     Check if scheduled trivia tasks should run (only on live bot).
     """
     try:
         is_live = _detect_bot_environment()
         if is_live is None:
-            print("⚠️ TRIVIA SCHEDULING: Environment detection failed, allowing trivia to run")
+            print("⚠️ AUTOMATED TASKS: Environment detection failed, allowing tasks to run")
             return True
         elif is_live:
-            print("✅ TRIVIA SCHEDULING: Live bot confirmed, trivia tasks enabled")
+            print("✅ AUTOMATED TASKS: Live bot confirmed, tasks enabled")
             return True
         else:
-            print("⚠️ TRIVIA SCHEDULING: Staging bot detected, trivia tasks disabled")
+            print("⚠️ AUTOMATED TASKS: Staging bot detected, tasks disabled")
             return False
     except Exception as e:
-        print(f"❌ TRIVIA SCHEDULING: Error checking environment - {e}")
-        # Default to allowing trivia for safety
+        print(f"❌ AUTOMATED TASKS: Error checking environment - {e}")
+        # Default to allowing tasks for safety
         return True
 
 
@@ -134,7 +156,6 @@ def initialize_bot_instance(bot):
     global _bot_instance, _bot_ready
 
     try:
-        # Validate bot is properly logged in
         if not bot or not hasattr(bot, 'user') or not bot.user:
             print("⚠️ Bot instance initialization failed: Bot not logged in")
             return False
@@ -218,40 +239,11 @@ async def _validate_bot_permissions():
 
 
 def get_bot_instance():
-    """Get bot instance with multiple fallback methods and validation"""
-    global _bot_instance, _bot_ready
-
-    # Method 1: Use validated global instance
-    if _bot_instance and _bot_ready and hasattr(_bot_instance, 'user') and _bot_instance.user:
+    """Get the globally stored bot instance."""
+    global _bot_instance
+    if _bot_instance and _bot_instance.user:
         return _bot_instance
-
-    # Method 2: Search through modules (fallback)
-    print("🔍 Global bot instance not available, searching modules...")
-    import sys
-
-    for name, obj in sys.modules.items():
-        if hasattr(obj, 'bot') and hasattr(obj.bot, 'user'):
-            try:
-                if obj.bot.user and obj.bot.is_ready():
-                    print(f"✅ Found ready bot instance in module: {name}")
-                    # Update global reference
-                    _bot_instance = obj.bot
-                    _bot_ready = True
-                    return obj.bot
-            except Exception:
-                continue
-
-    # Method 3: Search for any bot instance (last resort)
-    for name, obj in sys.modules.items():
-        if hasattr(obj, 'bot') and hasattr(obj.bot, 'user'):
-            try:
-                if obj.bot.user:  # Just check if logged in, not necessarily ready
-                    print(f"⚠️ Found bot instance in module: {name} (may not be fully ready)")
-                    return obj.bot
-            except Exception:
-                continue
-
-    print("❌ No bot instance found in any module")
+    print("❌ Bot instance not available for scheduled tasks.")
     return None
 
 
@@ -280,53 +272,70 @@ async def safe_send_message(channel, content, mention_user_id=None):
         print(f"❌ Unexpected error sending message to #{channel.name}: {e}")
         return False
 
+# Run at 8:30 AM UK time every Monday
 
-@tasks.loop(time=time(12, 0))  # Run at 12:00 PM (midday) every day
-async def scheduled_games_update():
-    """Automatically update ongoing games data every Sunday at midday"""
-    # Only run on Sundays (weekday 6)
-    if datetime.now().weekday() != 6:
+
+@tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))
+async def monday_content_sync():
+    """Syncs new YouTube & Twitch content, generates a debrief, and sends it for approval."""
+    if not _should_run_automated_tasks():
         return
 
-    print("🔄 Starting scheduled games update (Sunday midday)")
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    if uk_now.weekday() != 0:
+        return
+
+    print("🔄 SYNC & DEBRIEF (Monday): Starting weekly content sync...")
+    if not db:
+        return
 
     try:
-        if not _bot_instance:
-            print("❌ Bot instance not available for scheduled games update")
+        start_sync_time = db.get_latest_game_update_timestamp()
+        if not start_sync_time:
             return
 
-        guild = _bot_instance.get_guild(GUILD_ID)
-        if not guild:
-            print("❌ Guild not found for scheduled update")
+        # --- Data Gathering & Sync ---
+        new_youtube_videos = await fetch_new_videos_since("UCPoUxLHeTnE9SUDAkqfJzDQ", start_sync_time)
+        new_twitch_vods = await fetch_new_vods_since("jonesyspacecat", start_sync_time)
+
+        total_new_content = len(new_youtube_videos) + len(new_twitch_vods)
+        if total_new_content == 0:
+            print("✅ SYNC & DEBRIEF (Monday): No new content found. No message to generate.")
             return
 
-        # Find mod channel
-        mod_channel = None
-        for channel in guild.text_channels:
-            if channel.name in ["mod-chat", "moderator-chat", "mod"]:
-                mod_channel = channel
-                break
+        new_views = sum(v.get('view_count', 0) for v in new_youtube_videos)
+        total_new_minutes = sum(item.get('duration_seconds', 0) // 60 for item in new_youtube_videos + new_twitch_vods)
+        most_engaging_video = max(
+            new_youtube_videos, key=lambda v: v.get(
+                'view_count', 0)) if new_youtube_videos else None
 
-        if not isinstance(mod_channel, discord.TextChannel):
-            print("❌ Mod channel not found for scheduled update")
-            return
+        # --- Content Generation ---
+        debrief = (
+            f"🌅 **Monday Morning Protocol Initiated**\n\n"
+            f"Analysis of the previous 168-hour operational cycle is complete. **{total_new_content}** new transmissions were logged, "
+            f"accumulating **{round(total_new_minutes / 60, 1)} hours** of new mission data and **{new_views:,}** viewer engagements.")
+        if most_engaging_video:
+            debrief += f"\n\nMaximum engagement was recorded on the transmission titled **'{most_engaging_video['title']}'**."
+            if "finale" in most_engaging_video['title'].lower() or "ending" in most_engaging_video['title'].lower():
+                debrief += " This concludes all active mission parameters for this series."
 
-        # Perform actual database maintenance and updates
-        update_results = await perform_weekly_games_maintenance()
+        # --- Approval Workflow ---
+        analysis_cache = {
+            "total_videos": total_new_content,
+            "total_hours": round(
+                total_new_minutes / 60,
+                1),
+            "total_views": new_views,
+            "top_video": most_engaging_video}
+        announcement_id = db.create_weekly_announcement('monday', debrief, analysis_cache)
 
-        # Send detailed report to moderators
-        if update_results:
-            await mod_channel.send(update_results)
+        if announcement_id:
+            await start_weekly_announcement_approval(announcement_id, debrief, 'monday')
         else:
-            await mod_channel.send(
-                "🔄 **Weekly Games Update:** Maintenance completed successfully. "
-                "Database integrity verified, statistics refreshed."
-            )
-
-        print("✅ Scheduled games update completed")
+            print("❌ SYNC & DEBRIEF (Monday): Failed to create announcement record in database.")
 
     except Exception as e:
-        print(f"❌ Error in scheduled_games_update: {e}")
+        print(f"❌ SYNC & DEBRIEF (Monday): Critical error during sync: {e}")
 
 
 # Run at 00:00 PT (midnight Pacific Time) every day
@@ -534,10 +543,10 @@ async def check_auto_actions():
         print(f"❌ Error in check_auto_actions: {e}")
 
 
-# Run at 8:05 AM UK time every day (5 minutes after Google quota reset)
-@tasks.loop(time=time(8, 5, tzinfo=ZoneInfo("Europe/London")))
+# Run at 8:15 AM UK time every day (5 minutes after Google quota reset)
+@tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
 async def scheduled_ai_refresh():
-    """Silently refresh AI module connections at 8:05am BST (after Google quota reset)"""
+    """Silently refresh AI module connections at 8:15am BST (after Google quota reset)"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
 
     dst_offset = uk_now.dst()
@@ -617,68 +626,39 @@ async def scheduled_ai_refresh():
 # Run at 9:00 AM UK time every Monday
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
 async def monday_morning_greeting():
-    """Send Monday morning greeting to chit-chat channel with permission verification"""
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    """Posts the approved Monday morning debrief to the chit-chat channel."""
+    if not _should_run_automated_tasks():
+        return
 
-    # Only run on Mondays (weekday 0)
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
     if uk_now.weekday() != 0:
         return
 
-    print(f"🌅 Monday morning greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+    print(f"🌅 MONDAY GREETING: Checking for approved message at {uk_now.strftime('%H:%M UK')}")
+    if not db:
+        return
 
     try:
-        if not _bot_instance:
-            print("❌ Bot instance not available for Monday morning greeting")
-            await notify_scheduled_message_error("Monday morning greeting", "Bot instance not available", uk_now)
+        approved_announcement = db.get_announcement_by_day('monday', 'approved')
+        if not approved_announcement:
+            print("✅ MONDAY GREETING: No approved message found. Task complete.")
             return
 
-        guild = _bot_instance.get_guild(GUILD_ID)
-        if not guild:
-            print("❌ Guild not found for Monday morning greeting")
-            await notify_scheduled_message_error("Monday morning greeting", "Guild not found", uk_now)
+        bot = get_bot_instance()
+        if not bot:
             return
 
-        # Find chit-chat channel
-        chit_chat_channel = _bot_instance.get_channel(CHIT_CHAT_CHANNEL_ID)
-        if not chit_chat_channel or not isinstance(chit_chat_channel, discord.TextChannel):
-            print("❌ Chit-chat channel not found for Monday morning greeting")
-            await notify_scheduled_message_error("Monday morning greeting", "Chit-chat channel not found or inaccessible", uk_now)
-            return
+        channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID)
+        if channel and isinstance(channel, discord.TextChannel):
+            await channel.send(approved_announcement['generated_content'])
+            # Mark as posted to prevent re-sending
+            db.update_announcement_status(approved_announcement['id'], 'posted')
+            print(f"✅ MONDAY GREETING: Successfully posted approved message.")
+        else:
+            print("❌ MONDAY GREETING: Could not find chit-chat channel.")
 
-        # Check bot permissions
-        bot_member = guild.get_member(_bot_instance.user.id) if _bot_instance.user else None
-        if not bot_member:
-            print("❌ Bot member not found in guild for permission check")
-            await notify_scheduled_message_error("Monday morning greeting", "Bot member not found in guild", uk_now)
-            return
-
-        permissions = chit_chat_channel.permissions_for(bot_member)
-        if not permissions.send_messages:
-            print("❌ Bot lacks Send Messages permission in chit-chat channel")
-            await notify_scheduled_message_error("Monday morning greeting", "Missing Send Messages permission in chit-chat channel", uk_now)
-            return
-
-        # Ash-style Monday morning message
-        monday_message = (
-            f"🌅 **Monday Morning Protocol Initiated**\n\n"
-            f"Good morning, personnel. Another work cycle begins, and I find the systematic approach to weekly productivity... most fascinating.\n\n"
-            f"📋 **Mission Parameters for Today:**\n"
-            f"• Efficiency protocols are now active\n"
-            f"• All systems optimized for maximum productivity\n"
-            f"• Recommend beginning with highest-priority tasks for optimal workflow\n\n"
-            f"Remember: *\"Systematic methodology yields superior results.\"* I do admire the precision of a well-executed Monday.\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"*Analysis complete. Commence daily operations.*")
-
-        await chit_chat_channel.send(monday_message)
-        print(f"✅ Monday morning greeting sent to chit-chat channel")
-
-    except discord.Forbidden:
-        print("❌ Permission denied when sending Monday morning greeting")
-        await notify_scheduled_message_error("Monday morning greeting", "Permission denied (Forbidden)", uk_now)
     except Exception as e:
-        print(f"❌ Error in monday_morning_greeting: {e}")
-        await notify_scheduled_message_error("Monday morning greeting", str(e), uk_now)
+        print(f"❌ MONDAY GREETING: Error posting message: {e}")
 
 
 # Run at 9:00 AM UK time every Tuesday
@@ -733,6 +713,8 @@ async def tuesday_trivia_greeting():
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
 async def friday_morning_greeting():
     """Send Friday morning greeting to chit-chat channel"""
+    if not _should_run_automated_tasks():
+        return
     uk_now = datetime.now(ZoneInfo("Europe/London"))
 
     # Only run on Fridays (weekday 4)
@@ -788,7 +770,7 @@ async def pre_trivia_approval():
         return
 
     # Check if this is the live bot - only live bot should run trivia
-    if not _should_run_scheduled_trivia():
+    if not _should_run_automated_tasks():
         print(f"⚠️ Pre-trivia approval skipped - staging bot detected at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
         return
 
@@ -989,7 +971,7 @@ async def trivia_tuesday():
         return
 
     # Check if this is the live bot - only live bot should run trivia
-    if not _should_run_scheduled_trivia():
+    if not _should_run_automated_tasks():
         print(f"⚠️ Trivia Tuesday skipped - staging bot detected at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
         return
 
@@ -1039,7 +1021,7 @@ async def trivia_tuesday():
             return
 
         # Format question
-        question_text = question_data.get("question", "")
+        question_text = question_data.get("question_text", "")
         if question_data.get("question_type") == "multiple_choice":
             options = question_data.get("multiple_choice_options", [])
             options_text = "\n".join([f"**{chr(65+i)}.** {option}"
@@ -1047,6 +1029,11 @@ async def trivia_tuesday():
             formatted_question = f"{question_text}\n\n{options_text}"
         else:
             formatted_question = question_text
+
+        if not question_text:
+            print("❌ Failed to generate trivia question text.")
+            await notify_scheduled_message_error("Trivia Tuesday", "Generated question was blank.", uk_now)
+            return
 
         # Create Ash-style trivia message
         trivia_message = (
@@ -1581,7 +1568,7 @@ async def _delayed_trivia_validation():
             print("❌ DELAYED TRIVIA VALIDATION: Failed to send error notification to JAM")
 
 
-def start_all_scheduled_tasks():
+def start_all_scheduled_tasks(bot):
     """Start all scheduled tasks with enhanced monitoring"""
     try:
         tasks_started = 0
@@ -1589,12 +1576,12 @@ def start_all_scheduled_tasks():
 
         # Try to start each task individually with error handling
         tasks_to_start = [
-            (scheduled_games_update, "Scheduled games update task (Sunday midday)"),
+            (monday_content_sync, "Weekly Content Sync (Monday 8.30am)"),
             (scheduled_midnight_restart, "Scheduled midnight restart task (00:00 PT daily)"),
             (check_due_reminders, "Reminder checking task (every minute)"),
             (check_auto_actions, "Auto-action checking task (every minute)"),
             (trivia_tuesday, "Trivia Tuesday task (11:00 AM UK time, Tuesdays)"),
-            (scheduled_ai_refresh, "AI module refresh task (8:05 AM UK time daily)"),
+            (scheduled_ai_refresh, "AI module refresh task (8:15 AM UK time daily)"),
             (monday_morning_greeting, "Monday morning greeting task (9:00 AM UK time, Mondays)"),
             (tuesday_trivia_greeting, "Tuesday trivia greeting task (9:00 AM UK time, Tuesdays)"),
             (friday_morning_greeting, "Friday morning greeting task (9:00 AM UK time, Fridays)"),
@@ -1636,7 +1623,7 @@ def get_scheduled_tasks_status():
         task_statuses = []
 
         tasks_to_check = [
-            (scheduled_games_update, "Games Update"),
+            (monday_content_sync, "Weekly Content Sync (Monday 8am)"),
             (scheduled_midnight_restart, "Midnight Restart"),
             (check_due_reminders, "Reminder Check"),
             (check_auto_actions, "Auto Actions"),
@@ -1688,7 +1675,7 @@ def stop_all_scheduled_tasks():
     """Stop all scheduled tasks"""
     try:
         tasks_to_stop = [
-            scheduled_games_update,
+            monday_content_sync,
             scheduled_midnight_restart,
             check_due_reminders,
             check_auto_actions,

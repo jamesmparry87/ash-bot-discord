@@ -1,8 +1,9 @@
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from zoneinfo import ZoneInfo
 
 import psycopg2
 from psycopg2.extras import RealDictCursor, RealDictRow
@@ -210,7 +211,10 @@ class DatabaseManager:
                         twitch_vod_urls TEXT,
                         notes TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        -- ADD THESE TWO NEW COLUMNS --
+                        youtube_views INTEGER DEFAULT 0,
+                        last_youtube_sync TIMESTAMP
                     )
                 """)
 
@@ -301,6 +305,19 @@ class DatabaseManager:
                 cur.execute("""
                     CREATE INDEX IF NOT EXISTS idx_played_games_series_name
                     ON played_games(series_name)
+                """)
+
+                # Create weekly_announcements table for approval workflows
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS weekly_announcements (
+                        id SERIAL PRIMARY KEY,
+                        day VARCHAR(10) NOT NULL, -- 'monday' or 'friday'
+                        generated_content TEXT NOT NULL,
+                        status VARCHAR(20) DEFAULT 'pending_approval', -- pending_approval, approved, rejected, cancelled, posted
+                        analysis_cache JSONB,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                        approved_at TIMESTAMP WITH TIME ZONE
+                    )
                 """)
 
                 conn.commit()
@@ -643,7 +660,8 @@ class DatabaseManager:
                         total_playtime_minutes: int = 0,
                         youtube_playlist_url: Optional[str] = None,
                         twitch_vod_urls: Optional[List[str]] = None,
-                        notes: Optional[str] = None) -> bool:
+                        notes: Optional[str] = None,
+                        youtube_views: int = 0) -> bool:
         """Add a played game to the database"""
         conn = self.get_connection()
         if not conn:
@@ -661,7 +679,7 @@ class DatabaseManager:
                     INSERT INTO played_games (
                         canonical_name, alternative_names, series_name, genre,
                         release_year, platform, first_played_date, completion_status, total_episodes,
-                        total_playtime_minutes, youtube_playlist_url, twitch_vod_urls, notes,
+                        total_playtime_minutes, youtube_playlist_url, twitch_vod_urls, notes, youtube_views,
                         created_at, updated_at
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """, (
@@ -778,6 +796,68 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting played game {name}: {e}")
             return None
+
+    def get_cached_youtube_rankings(self) -> List[Dict[str, Any]]:
+        """Gets all played games ranked by their cached YouTube views."""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, canonical_name, youtube_views, last_youtube_sync
+                    FROM played_games
+                    WHERE youtube_views > 0
+                    ORDER BY youtube_views DESC
+                """)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting cached YouTube rankings: {e}")
+            return []
+
+    def update_youtube_cache(self, game_rankings: List[Dict[str, Any]]) -> int:
+        """Bulk updates the YouTube views and sync time for games."""
+        conn = self.get_connection()
+        if not conn or not game_rankings:
+            return 0
+
+        try:
+            with conn.cursor() as cur:
+                # Prepare data for batch update
+                update_data = []
+                sync_time = datetime.now(ZoneInfo("Europe/London"))
+                for game in game_rankings:
+                    # Align keys with the data from youtube.py and the database schema
+                    if 'canonical_name' in game and 'youtube_views' in game:
+                        update_data.append((game['youtube_views'], sync_time, game['canonical_name']))
+                    if not update_data:
+                        return 0
+
+                # Use a temporary table for an efficient bulk update
+                cur.execute("CREATE TEMP TABLE temp_youtube_updates (views INT, sync_time TIMESTAMP, name VARCHAR(255))")
+                cur.executemany("INSERT INTO temp_youtube_updates VALUES (%s, %s, %s)", update_data)
+
+                cur.execute("""
+                    UPDATE played_games
+                    SET
+                        youtube_views = temp.views,
+                        last_youtube_sync = temp.sync_time
+                    FROM temp_youtube_updates temp
+                    WHERE played_games.canonical_name = temp.name
+                """)
+
+                updated_count = cur.rowcount
+                conn.commit()
+                cur.execute("DROP TABLE temp_youtube_updates")
+                logger.info(f"Updated YouTube cache for {updated_count} games.")
+                return updated_count
+
+        except Exception as e:
+            logger.error(f"Error bulk updating YouTube cache: {e}")
+            conn.rollback()
+            return 0
 
     def _parse_comma_separated_list(self, text: Optional[str]) -> List[str]:
         """Convert a comma-separated string to a list of stripped, non-empty items"""
@@ -1037,7 +1117,8 @@ class DatabaseManager:
                     'total_playtime_minutes',
                     'youtube_playlist_url',
                     'twitch_vod_urls',
-                    'notes']
+                    'notes',
+                    'youtube_views']
 
                 updates = []
                 values = []
@@ -1561,6 +1642,33 @@ class DatabaseManager:
             total_episodes=new_episode_count,
             completion_status="ongoing" if new_episode_count > 1 else "completed")
 
+    def get_latest_game_update_timestamp(self) -> Optional[datetime]:
+        """Gets the most recent 'updated_at' timestamp from the played_games table."""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT MAX(updated_at) as latest_update FROM played_games")
+                result = cur.fetchone()
+
+                # If there's no result from the database, fall back to syncing the last 7 days.
+                if not result:
+                    return datetime.now(ZoneInfo("Europe/London")) - timedelta(days=7)
+
+                typed_result = cast(RealDictRow, result)
+
+                # Now, safely access the key from the typed variable.
+                if typed_result['latest_update']:
+                    return typed_result['latest_update']
+                else:
+                    # Fallback if the latest_update value is NULL (e.g., table is empty).
+                    return datetime.now(ZoneInfo("Europe/London")) - timedelta(days=7)
+        except Exception as e:
+            logger.error(f"Error getting latest game update timestamp: {e}")
+            return None
+
     def get_games_by_genre(self, genre: str) -> List[Dict[str, Any]]:
         """Get all games in a specific genre"""
         conn = self.get_connection()
@@ -1924,7 +2032,7 @@ class DatabaseManager:
             return []
 
     def get_games_by_episode_count(
-            self, order: str = 'DESC') -> List[Dict[str, Any]]:
+            self, order: str = 'DESC', limit: int = 15) -> List[Dict[str, Any]]:
         """Get games ranked by episode count"""
         conn = self.get_connection()
         if not conn:
@@ -1934,22 +2042,62 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 order_clause = "DESC" if order.upper() == "DESC" else "ASC"
                 cur.execute(f"""
-                    SELECT
-                        canonical_name,
-                        series_name,
-                        total_episodes,
-                        total_playtime_minutes,
-                        completion_status,
-                        genre
-                    FROM played_games
-                    WHERE total_episodes > 0
-                    ORDER BY total_episodes {order_clause}
-                    LIMIT 15
-                """)
+                        SELECT
+                            canonical_name,
+                            series_name,
+                            total_episodes,
+                            total_playtime_minutes,
+                            completion_status,
+                            genre
+                        FROM played_games
+                        WHERE total_episodes > 0
+                        ORDER BY total_episodes {order_clause}
+                        LIMIT %s
+                    """, (limit,))
                 results = cur.fetchall()
                 return [dict(row) for row in results]
         except Exception as e:
             logger.error(f"Error getting games by episode count: {e}")
+            return []
+
+    def get_games_by_played_date(self, order: str = 'DESC', limit: int = 1) -> List[Dict[str, Any]]:
+        """Get games ranked by the date they were first played."""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        try:
+            with conn.cursor() as cur:
+                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
+                cur.execute(f"""
+                        SELECT canonical_name, first_played_date FROM played_games
+                        WHERE first_played_date IS NOT NULL
+                        ORDER BY first_played_date {order_clause}
+                        LIMIT %s
+                    """, (limit,))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting games by played date: {e}")
+            return []
+
+    def get_games_by_release_year(self, order: str = 'DESC', limit: int = 1) -> List[Dict[str, Any]]:
+        """Get games ranked by their release year."""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        try:
+            with conn.cursor() as cur:
+                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
+                cur.execute(f"""
+                    SELECT canonical_name, release_year FROM played_games
+                    WHERE release_year IS NOT NULL AND release_year > 0
+                    ORDER BY release_year {order_clause}
+                    LIMIT %s
+                """, (limit,))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting games by release year: {e}")
             return []
 
     def get_genre_statistics(self) -> List[Dict[str, Any]]:
@@ -2472,7 +2620,86 @@ class DatabaseManager:
         if self.connection and not self.connection.closed:
             self.connection.close()
 
+    def get_all_unique_series_names(self) -> List[str]:
+        """Gets a list of all unique, non-empty series names from the played_games table."""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT DISTINCT series_name FROM played_games
+                    WHERE series_name IS NOT NULL AND series_name != ''
+                """)
+                results = cur.fetchall()
+                # Return a simple list of lowercase names for easy matching
+                return [cast(RealDictRow, row)['series_name'].lower() for row in results]
+        except Exception as e:
+            logger.error(f"Error getting unique series names: {e}")
+            return []
+
     # --- Trivia System Methods ---
+
+    def normalize_trivia_answer(self, answer_text: str) -> str:
+        """Enhanced normalization for trivia answers with fuzzy matching support"""
+        import re
+
+        # Start with the original text
+        normalized = answer_text.strip()
+
+        # Remove common punctuation but preserve important chars like hyphens in compound words
+        normalized = re.sub(r'[.,!?;:"\'()[\]{}]', '', normalized)
+
+        # Handle common game/media abbreviations and variations
+        abbreviation_map = {
+            'gta': 'grand theft auto',
+            'cod': 'call of duty',
+            'gtav': 'grand theft auto v',
+            'gtaiv': 'grand theft auto iv',
+            'rdr': 'red dead redemption',
+            'rdr2': 'red dead redemption 2',
+            'gow': 'god of war',
+            'tlou': 'the last of us',
+            'botw': 'breath of the wild',
+            'totk': 'tears of the kingdom',
+            'ff': 'final fantasy',
+            'ffvii': 'final fantasy vii',
+            'ffx': 'final fantasy x',
+            'mgs': 'metal gear solid',
+            'loz': 'legend of zelda',
+            'zelda': 'legend of zelda',
+            'pokemon': 'pokémon',
+            'mario': 'super mario',
+            'doom': 'doom',
+            'halo': 'halo',
+            'fallout': 'fallout'
+        }
+
+        # Apply abbreviation expansions (case insensitive)
+        words = normalized.lower().split()
+        expanded_words = []
+        for word in words:
+            if word in abbreviation_map:
+                expanded_words.extend(abbreviation_map[word].split())
+            else:
+                expanded_words.append(word)
+        normalized = ' '.join(expanded_words)
+
+        # Remove filler words that don't change meaning
+        filler_words = ['and', 'the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by',
+                        'about', 'approximately', 'roughly', 'around', 'over', 'under', 'just',
+                        'exactly', 'precisely', 'nearly', 'almost', 'close to', 'more than', 'less than']
+
+        # Split into words and filter out filler words
+        words = normalized.split()
+        filtered_words = [word for word in words if word not in filler_words]
+
+        # Rejoin and clean up extra spaces
+        normalized = ' '.join(filtered_words)
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+
+        return normalized
 
     def add_trivia_question(
         self,
@@ -3037,8 +3264,8 @@ class DatabaseManager:
         correct_clean = correct_answer.strip()
 
         # Normalize answers for better matching
-        user_normalized = self._normalize_answer_for_matching(user_clean)
-        correct_normalized = self._normalize_answer_for_matching(correct_clean)
+        user_normalized = self.normalize_trivia_answer(user_clean)
+        correct_normalized = self.normalize_trivia_answer(correct_clean)
 
         # Level 1: Exact match (case-insensitive)
         if user_clean.lower() == correct_clean.lower():
@@ -3161,32 +3388,54 @@ class DatabaseManager:
             self, dynamic_query_type: str) -> Optional[str]:
         """Calculate the current answer for a dynamic question"""
         try:
+            # Playtime Queries
             if dynamic_query_type == "longest_playtime":
-                games = self.get_longest_completion_games()
-                if games:
-                    return games[0]["canonical_name"]
+                games = self.get_games_by_playtime("DESC", limit=1)
+                return games[0]["canonical_name"] if games else None
 
+            elif dynamic_query_type == "shortest_playtime":
+                games = self.get_games_by_playtime("ASC", limit=1)
+                return games[0]["canonical_name"] if games else None
+
+            # Episode Queries
             elif dynamic_query_type == "most_episodes":
-                games = self.get_games_by_episode_count("DESC")
-                if games:
-                    return games[0]["canonical_name"]
+                games = self.get_games_by_episode_count("DESC", limit=1)
+                return games[0]["canonical_name"] if games else None
 
+            elif dynamic_query_type == "fewest_episodes":
+                games = self.get_games_by_episode_count("ASC", limit=1)
+                return games[0]["canonical_name"] if games else None
+
+            # Timeline Queries
+            elif dynamic_query_type == "first_game_played":
+                games = self.get_games_by_played_date("ASC", limit=1)
+                return games[0]["canonical_name"] if games else None
+
+            elif dynamic_query_type == "most_recent_game_played":
+                games = self.get_games_by_played_date("DESC", limit=1)
+                return games[0]["canonical_name"] if games else None
+
+            elif dynamic_query_type == "oldest_game_by_release":
+                games = self.get_games_by_release_year("ASC", limit=1)
+                return games[0]["canonical_name"] if games else None
+
+            # Aggregate & Series Queries
             elif dynamic_query_type == "series_most_playtime":
                 series = self.get_series_by_total_playtime()
-                if series:
-                    return series[0]["series_name"]
+                return series[0]["series_name"] if series else None
 
             elif dynamic_query_type == "highest_avg_episode":
                 games = self.get_games_by_average_episode_length()
-                if games:
-                    return games[0]["canonical_name"]
+                return games[0]["canonical_name"] if games else None
 
-            elif dynamic_query_type == "genre_most_games":
+            elif dynamic_query_type == "most_common_genre":
                 stats = self.get_genre_statistics()
-                if stats:
-                    return stats[0]["genre"]
+                # The get_genre_statistics is already ordered by count/playtime, so the top one is the most common.
+                return stats[0]["genre"] if stats else None
 
-            # Add more dynamic query types as needed
+            # Note: 'genre_game_count' is too specific for this general function
+            # and will be handled by the conversation/message handlers directly.
+
             return None
         except Exception as e:
             logger.error(
@@ -3865,7 +4114,11 @@ class DatabaseManager:
 
         result = cur.fetchone()
         if result:
-            return int(result[0])
+            # Use column name access for RealDictCursor compatibility
+            try:
+                return int(result['id'])  # type: ignore
+            except (TypeError, KeyError):
+                return int(result[0])  # Fallback to index access
         return None
 
     def create_approval_session(
@@ -4119,6 +4372,80 @@ class DatabaseManager:
             logger.error(f"Error cleaning up expired approval sessions: {e}")
             conn.rollback()
             return 0
+
+    # Weekly Announcement System
+    def create_weekly_announcement(self, day: str, content: str, cache: Dict[str, Any]) -> Optional[int]:
+        """Creates a new weekly announcement record for approval."""
+        conn = self.get_connection()
+        if not conn:
+            return None
+        try:
+            with conn.cursor() as cur:
+                # Clean up any old pending messages for that day first
+                cur.execute("DELETE FROM weekly_announcements WHERE day = %s AND status = 'pending_approval'", (day,))
+
+                cur.execute("""
+                    INSERT INTO weekly_announcements (day, generated_content, analysis_cache)
+                    VALUES (%s, %s, %s) RETURNING id
+                """, (day, content, json.dumps(cache)))
+                result = cur.fetchone()
+                conn.commit()
+                if result:
+                    announcement_id = cast(RealDictRow, result)['id']
+                    logger.info(f"Created weekly announcement record {announcement_id} for {day.title()}.")
+                    return announcement_id
+                return None
+        except Exception as e:
+            logger.error(f"Error creating weekly announcement: {e}")
+            conn.rollback()
+            return None
+
+    def get_announcement_by_day(self, day: str, status: str) -> Optional[Dict[str, Any]]:
+        """Gets a weekly announcement for a specific day and status."""
+        conn = self.get_connection()
+        if not conn:
+            return None
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT * FROM weekly_announcements
+                    WHERE day = %s AND status = %s
+                    ORDER BY created_at DESC LIMIT 1
+                """, (day, status))
+                result = cur.fetchone()
+                if result:
+                    return dict(result)
+                return None
+        except Exception as e:
+            logger.error(f"Error getting weekly announcement for {day}: {e}")
+            return None
+
+    def update_announcement_status(self, announcement_id: int, status: str, new_content: Optional[str] = None) -> bool:
+        """Updates the status and optionally the content of a weekly announcement."""
+        conn = self.get_connection()
+        if not conn:
+            return False
+        try:
+            with conn.cursor() as cur:
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+                if new_content:
+                    cur.execute("""
+                        UPDATE weekly_announcements
+                        SET status = %s, generated_content = %s, approved_at = %s
+                        WHERE id = %s
+                    """, (status, new_content, uk_now, announcement_id))
+                else:
+                    cur.execute("""
+                        UPDATE weekly_announcements
+                        SET status = %s, approved_at = %s
+                        WHERE id = %s
+                    """, (status, uk_now, announcement_id))
+                conn.commit()
+                return cur.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error updating announcement {announcement_id}: {e}")
+            conn.rollback()
+            return False
 
     # --- Missing Import/Enhancement Systems ---
 
