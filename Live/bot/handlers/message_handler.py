@@ -1729,6 +1729,8 @@ async def handle_dm_conversations(message: discord.Message) -> bool:
                 handle_jam_approval_conversation,
                 handle_mod_trivia_conversation,
                 jam_approval_conversations,
+                handle_weekly_announcement_approval,
+                weekly_announcement_approvals,
                 mod_trivia_conversations,
             )
         except ImportError:
@@ -1751,6 +1753,12 @@ async def handle_dm_conversations(message: discord.Message) -> bool:
         if user_id in jam_approval_conversations:
             print(f"🔄 Processing JAM approval conversation for user {user_id}")
             await handle_jam_approval_conversation(message)
+            return True
+        
+        # Handle JAM approval conversations for weekly announcements
+        if user_id in weekly_announcement_approvals:
+            print(f"🔄 Processing weekly announcement approval for user {user_id}")
+            await handle_weekly_announcement_approval(message)
             return True
 
         return False

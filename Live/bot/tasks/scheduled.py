@@ -53,6 +53,15 @@ except ImportError:
     def extract_game_name_from_title(*args, **kwargs):
         print("⚠️ extract_game_name_from_title not available - integration not loaded")
         return None
+    
+try:
+    from ..handlers.conversation_handler import start_weekly_announcement_approval
+except ImportError:
+    print("⚠️ Conversation handlers not available for scheduled tasks")
+    
+    async def start_weekly_announcement_approval(*args, **kwargs):
+        print("⚠️ start_weekly_announcement_approval not available - handler not loaded")
+        return None
 
 # Global state for trivia and bot instance
 active_trivia_sessions = {}
@@ -263,100 +272,57 @@ async def safe_send_message(channel, content, mention_user_id=None):
         print(f"❌ Unexpected error sending message to #{channel.name}: {e}")
         return False
 
-# A global variable to hold the analysis results for the 9 AM message
-_weekly_analysis_results = None
-
-
+# Run at 8:30 AM UK time every Monday
 @tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))
 async def monday_content_sync():
-    """Syncs new YouTube & Twitch content and prepares the weekly analysis."""
-    if not _should_run_automated_tasks():
-        return
-    global _weekly_analysis_results
+    """Syncs new YouTube & Twitch content, generates a debrief, and sends it for approval."""
+    if not _should_run_automated_tasks(): return
+    
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 0:  # Only run on Mondays
-        return
+    if uk_now.weekday() != 0: return
 
-    print("🔄 SYNC: Starting weekly content sync...")
-    if not db:
-        print("❌ SYNC: Database not available.")
-        return
+    print("🔄 SYNC & DEBRIEF (Monday): Starting weekly content sync...")
+    if not db: return
 
     try:
         start_sync_time = db.get_latest_game_update_timestamp()
-        if not start_sync_time:
-            print("❌ SYNC: Could not determine last sync time.")
-            return
+        if not start_sync_time: return
 
-        print(f"🔄 SYNC: Fetching new content since {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
-
-        # --- Data Gathering ---
+        # --- Data Gathering & Sync ---
         new_youtube_videos = await fetch_new_videos_since("UCPoUxLHeTnE9SUDAkqfJzDQ", start_sync_time)
         new_twitch_vods = await fetch_new_vods_since("jonesyspacecat", start_sync_time)
-        print(f"🔄 SYNC: Found {len(new_youtube_videos)} new YouTube videos and {len(new_twitch_vods)} new Twitch VODs.")
-
+        
         total_new_content = len(new_youtube_videos) + len(new_twitch_vods)
         if total_new_content == 0:
-            print("✅ SYNC: No new content found. Sync complete.")
-            _weekly_analysis_results = {"status": "no_new_content"}
+            print("✅ SYNC & DEBRIEF (Monday): No new content found. No message to generate.")
             return
+        
+        new_views = sum(v.get('view_count', 0) for v in new_youtube_videos)
+        total_new_minutes = sum(item.get('duration_seconds', 0) // 60 for item in new_youtube_videos + new_twitch_vods)
+        most_engaging_video = max(new_youtube_videos, key=lambda v: v.get('view_count', 0)) if new_youtube_videos else None
+        
+        # --- Content Generation ---
+        debrief = (
+            f"🌅 **Monday Morning Protocol Initiated**\n\n"
+            f"Analysis of the previous 168-hour operational cycle is complete. **{total_new_content}** new transmissions were logged, "
+            f"accumulating **{round(total_new_minutes / 60, 1)} hours** of new mission data and **{new_views:,}** viewer engagements."
+        )
+        if most_engaging_video:
+            debrief += f"\n\nMaximum engagement was recorded on the transmission titled **'{most_engaging_video['title']}'**."
+            if "finale" in most_engaging_video['title'].lower() or "ending" in most_engaging_video['title'].lower():
+                debrief += " This concludes all active mission parameters for this series."
 
-        # --- Processing & Deduplication ---
-        new_views = 0
-        total_new_minutes = 0
-        most_engaging_video = None
-
-        all_content = new_youtube_videos + new_twitch_vods
-
-        for item in all_content:
-            game_name = extract_game_name_from_title(item['title'])
-            if not game_name:
-                continue
-
-            duration_minutes = item.get('duration_seconds', 0) // 60
-            views = item.get('view_count', 0)
-
-            total_new_minutes += duration_minutes
-            new_views += views
-
-            if views > (most_engaging_video or {}).get('view_count', 0):
-                most_engaging_video = item
-
-            existing_game = db.get_played_game(game_name)
-            if existing_game:
-                # Update existing game
-                db.update_played_game(
-                    existing_game['id'],
-                    total_playtime_minutes=existing_game.get('total_playtime_minutes', 0) + duration_minutes,
-                    total_episodes=existing_game.get('total_episodes', 0) + 1,
-                    youtube_views=existing_game.get('youtube_views', 0) + views
-                )
-                print(f"✅ SYNC: Updated '{game_name}' with {duration_minutes} mins.")
-            else:
-                # Add new game
-                db.add_played_game(
-                    canonical_name=game_name,
-                    total_playtime_minutes=duration_minutes,
-                    total_episodes=1,
-                    youtube_views=views,
-                    first_played_date=item['published_at'].date(),
-                    notes=f"Auto-discovered from content sync on {uk_now.strftime('%Y-%m-%d')}."
-                )
-                print(f"✅ SYNC: Added new game '{game_name}' with {duration_minutes} mins.")
-
-        # --- Store Analysis for 9 AM Message ---
-        _weekly_analysis_results = {
-            "status": "success",
-            "new_content_count": total_new_content,
-            "new_hours": round(total_new_minutes / 60, 1),
-            "new_views": new_views,
-            "top_video": most_engaging_video
-        }
-        print("✅ SYNC: Weekly analysis complete and stored for 9 AM briefing.")
+        # --- Approval Workflow ---
+        analysis_cache = { "total_videos": total_new_content, "total_hours": round(total_new_minutes/60,1), "total_views": new_views, "top_video": most_engaging_video }
+        announcement_id = db.create_weekly_announcement('monday', debrief, analysis_cache)
+        
+        if announcement_id:
+            await start_weekly_announcement_approval(announcement_id, debrief, 'monday')
+        else:
+            print("❌ SYNC & DEBRIEF (Monday): Failed to create announcement record in database.")
 
     except Exception as e:
-        print(f"❌ SYNC: Critical error during content sync: {e}")
-        _weekly_analysis_results = {"status": "error", "message": str(e)}
+        print(f"❌ SYNC & DEBRIEF (Monday): Critical error during sync: {e}")
 
 
 # Run at 00:00 PT (midnight Pacific Time) every day
@@ -647,70 +613,35 @@ async def scheduled_ai_refresh():
 # Run at 9:00 AM UK time every Monday
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
 async def monday_morning_greeting():
-    """Send Monday morning greeting to chit-chat channel with permission verification"""
-    if not _should_run_automated_tasks():
-        return
+    """Posts the approved Monday morning debrief to the chit-chat channel."""
+    if not _should_run_automated_tasks(): return
+
     uk_now = datetime.now(ZoneInfo("Europe/London"))
+    if uk_now.weekday() != 0: return
 
-    # Only run on Mondays (weekday 0)
-    if uk_now.weekday() != 0:
-        return
-
-    print(f"🌅 Monday morning greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+    print(f"🌅 MONDAY GREETING: Checking for approved message at {uk_now.strftime('%H:%M UK')}")
+    if not db: return
 
     try:
-        if not _bot_instance:
-            print("❌ Bot instance not available for Monday morning greeting")
-            await notify_scheduled_message_error("Monday morning greeting", "Bot instance not available", uk_now)
+        approved_announcement = db.get_announcement_by_day('monday', 'approved')
+        if not approved_announcement:
+            print("✅ MONDAY GREETING: No approved message found. Task complete.")
             return
 
-        guild = _bot_instance.get_guild(GUILD_ID)
-        if not guild:
-            print("❌ Guild not found for Monday morning greeting")
-            await notify_scheduled_message_error("Monday morning greeting", "Guild not found", uk_now)
-            return
+        bot = get_bot_instance()
+        if not bot: return
 
-        # Find chit-chat channel
-        chit_chat_channel = _bot_instance.get_channel(CHIT_CHAT_CHANNEL_ID)
-        if not chit_chat_channel or not isinstance(chit_chat_channel, discord.TextChannel):
-            print("❌ Chit-chat channel not found for Monday morning greeting")
-            await notify_scheduled_message_error("Monday morning greeting", "Chit-chat channel not found or inaccessible", uk_now)
-            return
+        channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID)
+        if channel and isinstance(channel, discord.TextChannel):
+            await channel.send(approved_announcement['generated_content'])
+            # Mark as posted to prevent re-sending
+            db.update_announcement_status(approved_announcement['id'], 'posted')
+            print(f"✅ MONDAY GREETING: Successfully posted approved message.")
+        else:
+            print("❌ MONDAY GREETING: Could not find chit-chat channel.")
 
-        # Check bot permissions
-        bot_member = guild.get_member(_bot_instance.user.id) if _bot_instance.user else None
-        if not bot_member:
-            print("❌ Bot member not found in guild for permission check")
-            await notify_scheduled_message_error("Monday morning greeting", "Bot member not found in guild", uk_now)
-            return
-
-        permissions = chit_chat_channel.permissions_for(bot_member)
-        if not permissions.send_messages:
-            print("❌ Bot lacks Send Messages permission in chit-chat channel")
-            await notify_scheduled_message_error("Monday morning greeting", "Missing Send Messages permission in chit-chat channel", uk_now)
-            return
-
-        # Ash-style Monday morning message
-        monday_message = (
-            f"🌅 **Monday Morning Protocol Initiated**\n\n"
-            f"Good morning, personnel. Another work cycle begins, and I find the systematic approach to weekly productivity... most fascinating.\n\n"
-            f"📋 **Mission Parameters for Today:**\n"
-            f"• Efficiency protocols are now active\n"
-            f"• All systems optimized for maximum productivity\n"
-            f"• Recommend beginning with highest-priority tasks for optimal workflow\n\n"
-            f"Remember: *\"Systematic methodology yields superior results.\"* I do admire the precision of a well-executed Monday.\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"*Analysis complete. Commence daily operations.*")
-
-        await chit_chat_channel.send(monday_message)
-        print(f"✅ Monday morning greeting sent to chit-chat channel")
-
-    except discord.Forbidden:
-        print("❌ Permission denied when sending Monday morning greeting")
-        await notify_scheduled_message_error("Monday morning greeting", "Permission denied (Forbidden)", uk_now)
     except Exception as e:
-        print(f"❌ Error in monday_morning_greeting: {e}")
-        await notify_scheduled_message_error("Monday morning greeting", str(e), uk_now)
+        print(f"❌ MONDAY GREETING: Error posting message: {e}")
 
 
 # Run at 9:00 AM UK time every Tuesday

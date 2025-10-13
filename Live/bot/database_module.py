@@ -307,6 +307,19 @@ class DatabaseManager:
                     ON played_games(series_name)
                 """)
 
+                # Create weekly_announcements table for approval workflows
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS weekly_announcements (
+                        id SERIAL PRIMARY KEY,
+                        day VARCHAR(10) NOT NULL, -- 'monday' or 'friday'
+                        generated_content TEXT NOT NULL,
+                        status VARCHAR(20) DEFAULT 'pending_approval', -- pending_approval, approved, rejected, cancelled, posted
+                        analysis_cache JSONB,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                        approved_at TIMESTAMP WITH TIME ZONE
+                    )
+                """)
+
                 conn.commit()
                 print("✅ Database tables initialized successfully")
         except Exception as e:
@@ -4359,6 +4372,77 @@ class DatabaseManager:
             logger.error(f"Error cleaning up expired approval sessions: {e}")
             conn.rollback()
             return 0
+
+    # Weekly Announcement System
+    def create_weekly_announcement(self, day: str, content: str, cache: Dict[str, Any]) -> Optional[int]:
+        """Creates a new weekly announcement record for approval."""
+        conn = self.get_connection()
+        if not conn: return None
+        try:
+            with conn.cursor() as cur:
+                # Clean up any old pending messages for that day first
+                cur.execute("DELETE FROM weekly_announcements WHERE day = %s AND status = 'pending_approval'", (day,))
+                
+                cur.execute("""
+                    INSERT INTO weekly_announcements (day, generated_content, analysis_cache)
+                    VALUES (%s, %s, %s) RETURNING id
+                """, (day, content, json.dumps(cache)))
+                result = cur.fetchone()
+                conn.commit()
+                if result:
+                    announcement_id = cast(RealDictRow, result)['id']
+                    logger.info(f"Created weekly announcement record {announcement_id} for {day.title()}.")
+                    return announcement_id
+                return None
+        except Exception as e:
+            logger.error(f"Error creating weekly announcement: {e}")
+            conn.rollback()
+            return None
+
+    def get_announcement_by_day(self, day: str, status: str) -> Optional[Dict[str, Any]]:
+        """Gets a weekly announcement for a specific day and status."""
+        conn = self.get_connection()
+        if not conn: return None
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT * FROM weekly_announcements
+                    WHERE day = %s AND status = %s
+                    ORDER BY created_at DESC LIMIT 1
+                """, (day, status))
+                result = cur.fetchone()
+                if result:
+                    return dict(result)
+                return None
+        except Exception as e:
+            logger.error(f"Error getting weekly announcement for {day}: {e}")
+            return None
+
+    def update_announcement_status(self, announcement_id: int, status: str, new_content: Optional[str] = None) -> bool:
+        """Updates the status and optionally the content of a weekly announcement."""
+        conn = self.get_connection()
+        if not conn: return False
+        try:
+            with conn.cursor() as cur:
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+                if new_content:
+                    cur.execute("""
+                        UPDATE weekly_announcements
+                        SET status = %s, generated_content = %s, approved_at = %s
+                        WHERE id = %s
+                    """, (status, new_content, uk_now, announcement_id))
+                else:
+                    cur.execute("""
+                        UPDATE weekly_announcements
+                        SET status = %s, approved_at = %s
+                        WHERE id = %s
+                    """, (status, uk_now, announcement_id))
+                conn.commit()
+                return cur.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error updating announcement {announcement_id}: {e}")
+            conn.rollback()
+            return False
 
     # --- Missing Import/Enhancement Systems ---
 
