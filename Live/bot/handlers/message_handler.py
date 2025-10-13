@@ -1728,10 +1728,10 @@ async def handle_dm_conversations(message: discord.Message) -> bool:
                 handle_announcement_conversation,
                 handle_jam_approval_conversation,
                 handle_mod_trivia_conversation,
-                jam_approval_conversations,
                 handle_weekly_announcement_approval,
-                weekly_announcement_approvals,
+                jam_approval_conversations,
                 mod_trivia_conversations,
+                weekly_announcement_approvals,
             )
         except ImportError:
             print("⚠️ Conversation handlers not available for DM routing")
