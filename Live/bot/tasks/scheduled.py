@@ -1572,7 +1572,7 @@ def start_all_scheduled_tasks(bot):
     """Start all scheduled tasks with enhanced monitoring"""
     try:
         initialize_bot_instance(bot)
-        
+
         tasks_started = 0
         tasks_failed = 0
 

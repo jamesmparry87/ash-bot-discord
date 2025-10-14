@@ -29,13 +29,15 @@ from .ai_handler import ai_enabled, apply_ash_persona_to_ai_prompt, call_ai_with
 db = get_database()  # type: ignore
 
 
-_bot_instance = None # This will hold our stable bot reference
+_bot_instance = None  # This will hold our stable bot reference
+
 
 def initialize_conversation_handler(bot):
     """Initializes the conversation handler with a stable bot instance."""
     global _bot_instance
     _bot_instance = bot
     print("✅ Conversation handler initialized with bot instance.")
+
 
 def _get_bot_instance():
     """Gets the globally stored bot instance for conversation handlers."""
