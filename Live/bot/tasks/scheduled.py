@@ -964,13 +964,14 @@ async def cleanup_game_recommendations():
 async def trivia_tuesday():
     """Posts the approved Trivia Tuesday question and starts a persistent database session."""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 1: return
+    if uk_now.weekday() != 1:
+        return
     if not _should_run_automated_tasks():
         print(f"⚠️ Trivia Tuesday skipped - staging bot detected at {uk_now.strftime('%H:%M:%S UK')}")
         return
 
     print(f"🧠 Trivia Tuesday task triggered at {uk_now.strftime('%H:%M:%S UK')}")
-    
+
     bot = get_bot_instance()
     if not bot:
         await notify_scheduled_message_error("Trivia Tuesday", "Bot instance not available.", uk_now)
@@ -1006,7 +1007,7 @@ async def trivia_tuesday():
         if not session_id:
             await notify_scheduled_message_error("Trivia Tuesday", f"Failed to create database session for question #{question_id}.", uk_now)
             return
-        
+
         # 4. Format the message
         if question_data.get("question_type") == "multiple_choice" and question_data.get("multiple_choice_options"):
             options = question_data["multiple_choice_options"]
@@ -1014,26 +1015,25 @@ async def trivia_tuesday():
             formatted_question = f"{question_text}\n\n{options_text}"
         else:
             formatted_question = question_text
-        
+
         trivia_message = (
             f"🧠 **TRIVIA TUESDAY - INTELLIGENCE ASSESSMENT**\n\n"
             f"**Analysis required, personnel.** Today's intelligence assessment focuses on Captain Jonesy's gaming archives.\n\n"
             f"📋 **QUESTION:**\n{formatted_question}\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🎯 **Mission Parameters:** Reply to this message with your analysis. First correct response receives priority recognition.\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        )
-        
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
         # 5. Post the message and update the session
         channel = bot.get_channel(MEMBERS_CHANNEL_ID)
         if channel and isinstance(channel, discord.TextChannel):
             trivia_post = await channel.send(trivia_message)
-            
+
             # CRITICAL: Update the session with message IDs for answer detection
             db.update_trivia_session_messages(
                 session_id=session_id,
                 question_message_id=trivia_post.id,
-                confirmation_message_id=trivia_post.id, # Use the same ID for automated posts
+                confirmation_message_id=trivia_post.id,  # Use the same ID for automated posts
                 channel_id=channel.id
             )
             print(f"✅ Trivia Tuesday question posted and session #{session_id} started in the database.")
@@ -1501,7 +1501,8 @@ def start_all_scheduled_tasks(bot):
 # Validate bot instance after starting tasks
         bot_check = get_bot_instance()
         if bot_check:
-            print(f"✅ Bot instance validation: {bot_check.user.name}#{bot_check.user.discriminator} (ID: {bot_check.user.id})")
+            print(
+                f"✅ Bot instance validation: {bot_check.user.name}#{bot_check.user.discriminator} (ID: {bot_check.user.id})")
             print(f"✅ Bot ready status: {bot_check.is_ready()}")
         else:
             print("⚠️ Bot instance not available immediately after task startup")
