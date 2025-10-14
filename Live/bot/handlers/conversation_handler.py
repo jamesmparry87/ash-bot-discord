@@ -29,44 +29,21 @@ from .ai_handler import ai_enabled, apply_ash_persona_to_ai_prompt, call_ai_with
 db = get_database()  # type: ignore
 
 
+_bot_instance = None # This will hold our stable bot reference
+
+def initialize_conversation_handler(bot):
+    """Initializes the conversation handler with a stable bot instance."""
+    global _bot_instance
+    _bot_instance = bot
+    print("✅ Conversation handler initialized with bot instance.")
+
 def _get_bot_instance():
-    """
-    Centralized bot instance access for conversation handlers.
-    Tries multiple strategies to find the active bot instance.
-    """
-    try:
-        # Strategy 1: Import directly from bot_modular (most reliable)
-        try:
-            import sys
-            if 'bot_modular' in sys.modules:
-                bot_modular = sys.modules['bot_modular']
-                if hasattr(bot_modular, 'bot') and hasattr(bot_modular.bot, 'user'):
-                    if bot_modular.bot.user:
-                        print("✅ Found bot instance from bot_modular")
-                        return bot_modular.bot
-        except Exception as e:
-            print(f"⚠️ Strategy 1 failed: {e}")
-
-        # Strategy 2: Search through all modules (fallback)
-        try:
-            import sys
-            for name, obj in sys.modules.items():
-                if hasattr(obj, 'bot') and hasattr(obj.bot, 'user'):
-                    try:
-                        if obj.bot.user:  # Check if bot is logged in
-                            print(f"✅ Found bot instance in module: {name}")
-                            return obj.bot
-                    except Exception:
-                        continue
-        except Exception as e:
-            print(f"⚠️ Strategy 2 failed: {e}")
-
-        print("❌ Could not find bot instance")
-        return None
-
-    except Exception as e:
-        print(f"❌ Error in _get_bot_instance: {e}")
-        return None
+    """Gets the globally stored bot instance for conversation handlers."""
+    global _bot_instance
+    if _bot_instance and _bot_instance.user:
+        return _bot_instance
+    print("❌ Bot instance not available for conversation handler.")
+    return None
 
 
 # Global conversation state management

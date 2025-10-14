@@ -72,14 +72,6 @@ try:
     print("✅ Database manager loaded successfully")
 except ImportError as e:
     print(f"❌ Failed to import enhanced database manager: {e}")
-    # Fallback to old database
-    try:
-        from database import DatabaseManager
-        db = DatabaseManager()
-        print("⚠️ Using fallback database (enhanced trivia features may not be available)")
-    except ImportError as e2:
-        print(f"❌ Failed to import fallback database manager: {e2}")
-        db = None
 
 # Import ModeratorFAQHandler system
 try:
@@ -314,6 +306,14 @@ async def initialize_modular_components():
     except Exception as e:
         status_report["errors"].append(f"AI Handler: {e}")
         print(f"❌ AI Handler initialization failed: {e}")
+
+    # 2.1. Initialize Conversation Handler
+    try:
+        from bot.handlers.conversation_handler import initialize_conversation_handler
+        initialize_conversation_handler(bot)
+    except Exception as e:
+        status_report["errors"].append(f"Conversation Handler: {e}")
+        print(f"❌ Conversation Handler initialization failed: {e}")
 
     # 3. Load Command Cogs with detailed failure tracking
     command_modules = [{"name": "strikes",
