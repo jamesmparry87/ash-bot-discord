@@ -1181,6 +1181,23 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
     if not conversation:
         return
+    
+    timeout_minutes = 3
+    last_activity = conversation.get('last_activity', datetime.now(ZoneInfo("Europe/London")))
+    if datetime.now(ZoneInfo("Europe/London")) > last_activity + timedelta(minutes=timeout_minutes):
+        print(f"⌛️ JAM APPROVAL: Detected expired conversation for user {user_id}. Cleaning up.")
+        
+        # Mark as expired in the database if a session ID exists
+        session_id = conversation.get('session_id')
+        if session_id:
+            db.complete_approval_session(session_id, 'expired')
+
+        # Remove from memory
+        del jam_approval_conversations[user_id]
+        
+        # Inform the user and stop processing. The bot will now treat the next message normally.
+        await message.reply("⌛️ **Approval session timed out.** Your previous conversation has ended. A new question will be sent for approval when required.")
+        return
 
     # Only JAM can use this conversation
     if user_id != JAM_USER_ID:
