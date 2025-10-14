@@ -64,7 +64,6 @@ except ImportError:
         return None
 
 # Global state for trivia and bot instance
-active_trivia_sessions = {}
 _bot_instance = None  # Store the bot instance globally
 _bot_ready = False  # Track if bot is fully ready
 
@@ -963,193 +962,87 @@ async def cleanup_game_recommendations():
 # Run at 11:00 AM UK time every Tuesday
 @tasks.loop(time=time(11, 0, tzinfo=ZoneInfo("Europe/London")))
 async def trivia_tuesday():
-    """Post Trivia Tuesday question every Tuesday at 11am UK time with enhanced reliability"""
+    """Posts the approved Trivia Tuesday question and starts a persistent database session."""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-
-    # Only run on Tuesdays (weekday 1)
-    if uk_now.weekday() != 1:
-        return
-
-    # Check if this is the live bot - only live bot should run trivia
+    if uk_now.weekday() != 1: return
     if not _should_run_automated_tasks():
-        print(f"⚠️ Trivia Tuesday skipped - staging bot detected at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+        print(f"⚠️ Trivia Tuesday skipped - staging bot detected at {uk_now.strftime('%H:%M:%S UK')}")
         return
 
-    print(f"🧠 Trivia Tuesday task triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+    print(f"🧠 Trivia Tuesday task triggered at {uk_now.strftime('%H:%M:%S UK')}")
+    
+    bot = get_bot_instance()
+    if not bot:
+        await notify_scheduled_message_error("Trivia Tuesday", "Bot instance not available.", uk_now)
+        return
+    if not db:
+        await notify_scheduled_message_error("Trivia Tuesday", "Database not available.", uk_now)
+        return
 
     try:
-        from ..handlers.ai_handler import generate_ai_trivia_question
-
-        # Get bot instance using improved method
-        bot = get_bot_instance()
-        if not bot:
-            print("❌ Bot instance not available for Trivia Tuesday")
-            await notify_scheduled_message_error("Trivia Tuesday", "Bot instance not available", uk_now)
-            return
-
-        guild = bot.get_guild(GUILD_ID)
-        if not guild:
-            print("❌ Guild not found for Trivia Tuesday")
-            await notify_scheduled_message_error("Trivia Tuesday", "Guild not found", uk_now)
-            return
-
-        # Find members channel using multiple methods
-        members_channel = None
-
-        # Method 1: Try direct channel ID lookup
-        members_channel = bot.get_channel(MEMBERS_CHANNEL_ID)
-        if members_channel and isinstance(members_channel, discord.TextChannel):
-            print(f"✅ Found members channel by ID: {members_channel.name}")
-        else:
-            # Method 2: Search by name
-            for channel in guild.text_channels:
-                if channel.name in ["senior-officers-area", "members", "general"]:
-                    members_channel = channel
-                    print(f"✅ Found members channel by name: {members_channel.name}")
-                    break
-
-        if not members_channel:
-            print("❌ Members channel not found for Trivia Tuesday")
-            await notify_scheduled_message_error("Trivia Tuesday", "Members channel not found", uk_now)
-            return
-
-        # Generate trivia question using AI
-        question_data = await generate_ai_trivia_question()
+        # 1. Get the highest-priority available question (which should be the one approved at 10 AM)
+        question_data = db.get_next_trivia_question()
         if not question_data:
-            print("❌ Failed to generate trivia question")
-            await notify_scheduled_message_error("Trivia Tuesday", "Failed to generate trivia question", uk_now)
+            await notify_scheduled_message_error("Trivia Tuesday", "No approved/available trivia questions found in the database.", uk_now)
             return
 
-        # Format question
+        question_id = question_data['id']
         question_text = question_data.get("question_text", "")
-        if question_data.get("question_type") == "multiple_choice":
-            options = question_data.get("multiple_choice_options", [])
-            options_text = "\n".join([f"**{chr(65+i)}.** {option}"
-                                      for i, option in enumerate(options)])
+
+        # 2. Handle dynamic questions by calculating the answer now
+        calculated_answer = None
+        if question_data.get('is_dynamic'):
+            calculated_answer = db.calculate_dynamic_answer(question_data.get('dynamic_query_type', ''))
+            if not calculated_answer:
+                await notify_scheduled_message_error("Trivia Tuesday", f"Failed to calculate dynamic answer for question #{question_id}.", uk_now)
+                return
+
+        # 3. Start a persistent session in the database
+        session_id = db.create_trivia_session(
+            question_id=question_id,
+            session_type='weekly_auto',
+            calculated_answer=calculated_answer
+        )
+        if not session_id:
+            await notify_scheduled_message_error("Trivia Tuesday", f"Failed to create database session for question #{question_id}.", uk_now)
+            return
+        
+        # 4. Format the message
+        if question_data.get("question_type") == "multiple_choice" and question_data.get("multiple_choice_options"):
+            options = question_data["multiple_choice_options"]
+            options_text = "\n".join([f"**{chr(65+i)}.** {option}" for i, option in enumerate(options)])
             formatted_question = f"{question_text}\n\n{options_text}"
         else:
             formatted_question = question_text
-
-        if not question_text:
-            print("❌ Failed to generate trivia question text.")
-            await notify_scheduled_message_error("Trivia Tuesday", "Generated question was blank.", uk_now)
-            return
-
-        # Create Ash-style trivia message
+        
         trivia_message = (
             f"🧠 **TRIVIA TUESDAY - INTELLIGENCE ASSESSMENT**\n\n"
             f"**Analysis required, personnel.** Today's intelligence assessment focuses on Captain Jonesy's gaming archives.\n\n"
             f"📋 **QUESTION:**\n{formatted_question}\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🎯 **Mission Parameters:** Reply with your analysis. First correct response receives priority recognition.\n"
-            f"⏰ **Intelligence Deadline:** 60 minutes from deployment.\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-        # Post trivia message using safe method
-        try:
-            trivia_post = await members_channel.send(trivia_message)
-
-            # Store trivia session data
-            session_id = trivia_post.id
-            active_trivia_sessions[session_id] = {
-                'question_data': question_data,
-                'channel_id': members_channel.id,
-                'start_time': uk_now,
-                'participants': {},
-                'status': 'active'
-            }
-
-            # Schedule answer reveal for 2 hours later
-            asyncio.create_task(
-                schedule_trivia_answer_reveal(
-                    session_id,
-                    uk_now + timedelta(hours=2)))
-
-            print(f"✅ Trivia Tuesday question posted in {members_channel.name}")
-
-        except discord.Forbidden:
-            print("❌ Permission denied when posting Trivia Tuesday question")
-            await notify_scheduled_message_error("Trivia Tuesday", "Permission denied when posting question", uk_now)
-        except Exception as post_error:
-            print(f"❌ Error posting Trivia Tuesday question: {post_error}")
-            await notify_scheduled_message_error("Trivia Tuesday", f"Error posting question: {post_error}", uk_now)
+            f"🎯 **Mission Parameters:** Reply to this message with your analysis. First correct response receives priority recognition.\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        )
+        
+        # 5. Post the message and update the session
+        channel = bot.get_channel(MEMBERS_CHANNEL_ID)
+        if channel and isinstance(channel, discord.TextChannel):
+            trivia_post = await channel.send(trivia_message)
+            
+            # CRITICAL: Update the session with message IDs for answer detection
+            db.update_trivia_session_messages(
+                session_id=session_id,
+                question_message_id=trivia_post.id,
+                confirmation_message_id=trivia_post.id, # Use the same ID for automated posts
+                channel_id=channel.id
+            )
+            print(f"✅ Trivia Tuesday question posted and session #{session_id} started in the database.")
+        else:
+            await notify_scheduled_message_error("Trivia Tuesday", "Could not find Members channel to post question.", uk_now)
 
     except Exception as e:
         print(f"❌ Error in trivia_tuesday task: {e}")
         await notify_scheduled_message_error("Trivia Tuesday", str(e), uk_now)
-
-
-async def schedule_trivia_answer_reveal(
-        session_id: int, reveal_time: datetime):
-    """Schedule the answer reveal for a trivia session"""
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-    delay_seconds = (reveal_time - uk_now).total_seconds()
-
-    if delay_seconds > 0:
-        await asyncio.sleep(delay_seconds)
-
-    await reveal_trivia_answer(session_id)
-
-
-async def reveal_trivia_answer(session_id: int):
-    """Reveal the answer for a trivia session"""
-    try:
-        if not _bot_instance:
-            print("❌ Bot instance not available for trivia answer reveal")
-            return
-
-        if session_id not in active_trivia_sessions:
-            return
-
-        session_data = active_trivia_sessions[session_id]
-        question_data = session_data['question_data']
-        channel_id = session_data['channel_id']
-
-        channel = _bot_instance.get_channel(channel_id)
-        if not channel or not isinstance(channel, discord.TextChannel):
-            return
-
-        # Analyze participants
-        participants = session_data.get('participants', {})
-        correct_answers = []
-        first_correct = None
-        first_correct_time = None
-        mod_conflict_detected = False
-
-        for user_id, answer_data in participants.items():
-            if answer_data.get('correct', False):
-                correct_answers.append(user_id)
-                if first_correct is None or answer_data['timestamp'] < first_correct_time:
-                    first_correct = user_id
-                    first_correct_time = answer_data['timestamp']
-
-        # Create reveal message
-        correct_answer = question_data.get("correct_answer", "Unknown")
-        reveal_message = (
-            f"🧠 **TRIVIA ANALYSIS COMPLETE**\n\n"
-            f"📋 **Correct Answer:** {correct_answer}\n\n"
-        )
-
-        if first_correct:
-            reveal_message += f"🏆 **Priority Recognition:** <@{first_correct}> - First correct analysis\n"
-
-        if len(correct_answers) > 1:
-            reveal_message += f"✅ **Additional Correct Responses:** {len(correct_answers)-1} personnel\n"
-        elif len(correct_answers) == 0:
-            reveal_message += f"❌ **Mission Status:** No correct analyses submitted. Intelligence review recommended.\n"
-
-        reveal_message += (f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                           f"*Next intelligence assessment: Tuesday, 11:00 UK time. Prepare accordingly.*")
-
-        await channel.send(reveal_message)
-
-        # Mark session as completed
-        session_data['status'] = 'completed'
-
-        print(f"✅ Trivia answer revealed for session {session_id}")
-
-    except Exception as e:
-        print(f"❌ Error revealing trivia answer: {e}")
 
 
 # --- Scheduled Message Helper Functions ---
@@ -1571,6 +1464,8 @@ async def _delayed_trivia_validation():
 def start_all_scheduled_tasks(bot):
     """Start all scheduled tasks with enhanced monitoring"""
     try:
+        initialize_bot_instance(bot)
+
         tasks_started = 0
         tasks_failed = 0
 
@@ -1603,11 +1498,11 @@ def start_all_scheduled_tasks(bot):
 
         print(f"📊 Scheduled tasks startup summary: {tasks_started} started, {tasks_failed} failed")
 
-        # Validate bot instance after starting tasks
-        bot = get_bot_instance()
-        if bot:
-            print(f"✅ Bot instance validation: {bot.user.name}#{bot.user.discriminator} (ID: {bot.user.id})")
-            print(f"✅ Bot ready status: {bot.is_ready()}")
+# Validate bot instance after starting tasks
+        bot_check = get_bot_instance()
+        if bot_check:
+            print(f"✅ Bot instance validation: {bot_check.user.name}#{bot_check.user.discriminator} (ID: {bot_check.user.id})")
+            print(f"✅ Bot ready status: {bot_check.is_ready()}")
         else:
             print("⚠️ Bot instance not available immediately after task startup")
 
