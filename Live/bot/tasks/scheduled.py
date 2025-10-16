@@ -22,10 +22,10 @@ from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID, GUILD
 
 # Database and config imports
 try:
-    from ..database import get_database
+    from ..database_module import DatabaseManager, get_database
 
     # Get database instance
-    db = get_database()  # type: ignore
+    db: DatabaseManager | None = get_database()
     print("✅ Scheduled tasks: Database connection established")
 except Exception as db_error:
     print(f"⚠️ Scheduled tasks: Database not available - {db_error}")
@@ -272,62 +272,45 @@ async def safe_send_message(channel, content, mention_user_id=None):
         return False
 
 # Run at 8:30 AM UK time every Monday
-
-
 @tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))
 async def monday_content_sync():
-    """Syncs new YouTube & Twitch content, generates a debrief, and sends it for approval."""
-    if not _should_run_automated_tasks():
-        return
-
+    """Syncs new content and generates a debrief for approval."""
+    if not _should_run_automated_tasks(): return
+    
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 0:
-        return
+    if uk_now.weekday() != 0: return
 
     print("🔄 SYNC & DEBRIEF (Monday): Starting weekly content sync...")
+    
     if not db:
+        print("❌ SYNC & DEBRIEF (Monday): Database not available")
         return
-
+    
     try:
         start_sync_time = db.get_latest_game_update_timestamp()
-        if not start_sync_time:
-            return
+        if not start_sync_time: return
 
-        # --- Data Gathering & Sync ---
-        new_youtube_videos = await fetch_new_videos_since("UCPoUxLHeTnE9SUDAkqfJzDQ", start_sync_time)
-        new_twitch_vods = await fetch_new_vods_since("jonesyspacecat", start_sync_time)
-
-        total_new_content = len(new_youtube_videos) + len(new_twitch_vods)
-        if total_new_content == 0:
+        analysis_results = await perform_full_content_sync(start_sync_time)
+        
+        if analysis_results.get("status") == "no_new_content":
             print("✅ SYNC & DEBRIEF (Monday): No new content found. No message to generate.")
             return
-
-        new_views = sum(v.get('view_count', 0) for v in new_youtube_videos)
-        total_new_minutes = sum(item.get('duration_seconds', 0) // 60 for item in new_youtube_videos + new_twitch_vods)
-        most_engaging_video = max(
-            new_youtube_videos, key=lambda v: v.get(
-                'view_count', 0)) if new_youtube_videos else None
 
         # --- Content Generation ---
         debrief = (
             f"🌅 **Monday Morning Protocol Initiated**\n\n"
-            f"Analysis of the previous 168-hour operational cycle is complete. **{total_new_content}** new transmissions were logged, "
-            f"accumulating **{round(total_new_minutes / 60, 1)} hours** of new mission data and **{new_views:,}** viewer engagements.")
-        if most_engaging_video:
-            debrief += f"\n\nMaximum engagement was recorded on the transmission titled **'{most_engaging_video['title']}'**."
-            if "finale" in most_engaging_video['title'].lower() or "ending" in most_engaging_video['title'].lower():
+            f"Analysis of the previous 168-hour operational cycle is complete. **{analysis_results.get('new_content_count', 0)}** new transmissions were logged, "
+            f"accumulating **{analysis_results.get('new_hours', 0)} hours** of new mission data and **{analysis_results.get('new_views', 0):,}** viewer engagements."
+        )
+        top_video = analysis_results.get("top_video")
+        if top_video:
+            debrief += f"\n\nMaximum engagement was recorded on the transmission titled **'{top_video['title']}'**."
+            if "finale" in top_video['title'].lower() or "ending" in top_video['title'].lower():
                 debrief += " This concludes all active mission parameters for this series."
 
         # --- Approval Workflow ---
-        analysis_cache = {
-            "total_videos": total_new_content,
-            "total_hours": round(
-                total_new_minutes / 60,
-                1),
-            "total_views": new_views,
-            "top_video": most_engaging_video}
-        announcement_id = db.create_weekly_announcement('monday', debrief, analysis_cache)
-
+        announcement_id = db.create_weekly_announcement('monday', debrief, analysis_results)
+        
         if announcement_id:
             await start_weekly_announcement_approval(announcement_id, debrief, 'monday')
         else:
@@ -1288,117 +1271,75 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         print(f"❌ Error executing auto-action: {e}")
         raise
 
-
-async def perform_weekly_games_maintenance() -> Optional[str]:
+async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]:
     """
-    Perform weekly games database maintenance and return status report.
-    Returns detailed report string if maintenance was performed, None if no issues found.
+    Performs a full sync of new content from YouTube and Twitch,
+    deduplicates, and updates the database. Returns an analysis dictionary.
     """
-    try:
-        if not db:
-            return "❌ **Weekly Games Maintenance Failed:** Database not available for maintenance operations."
+    if not db:
+        raise RuntimeError("Database not available for sync.")
 
-        print("🔄 Starting weekly games database maintenance...")
+    print(f"🔄 SYNC: Fetching new content since {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # --- Data Gathering ---
+    new_youtube_videos = await fetch_new_videos_since("UCPoUxLHeTnE9SUDAkqfJzDQ", start_sync_time)
+    new_twitch_vods = await fetch_new_vods_since("jonesyspacecat", start_sync_time)
+    print(f"🔄 SYNC: Found {len(new_youtube_videos)} new YouTube videos and {len(new_twitch_vods)} new Twitch VODs.")
 
-        maintenance_report = []
-        issues_found = False
-        all_games = []  # Initialize to avoid unbound variable error
+    total_new_content = len(new_youtube_videos) + len(new_twitch_vods)
+    if total_new_content == 0:
+        return {"status": "no_new_content"}
+        
+    # --- Processing & Deduplication ---
+    new_views = 0
+    total_new_minutes = 0
+    most_engaging_video = None
 
-        # 1. Refresh cached statistics
-        try:
-            print("📊 Refreshing game statistics...")
+    all_content = new_youtube_videos + new_twitch_vods
+    
+    for item in all_content:
+        game_name = extract_game_name_from_title(item['title'])
+        if not game_name:
+            continue
 
-            # Get basic stats for reporting
-            all_games = db.get_all_played_games()
-            total_games = len(all_games) if all_games else 0
+        duration_minutes = item.get('duration_seconds', 0) // 60
+        views = item.get('view_count', 0)
+        
+        total_new_minutes += duration_minutes
+        new_views += views
 
-            completed_games = [g for g in all_games if g.get('completion_status') == 'completed'] if all_games else []
-            ongoing_games = [g for g in all_games if g.get('completion_status') == 'ongoing'] if all_games else []
-
-            maintenance_report.append(f"📊 **Database Statistics:**")
-            maintenance_report.append(f"• Total games in archives: {total_games}")
-            maintenance_report.append(f"• Completed missions: {len(completed_games)}")
-            maintenance_report.append(f"• Ongoing missions: {len(ongoing_games)}")
-
-            # Calculate total playtime across all games
-            total_minutes = sum(g.get('total_playtime_minutes', 0) for g in all_games) if all_games else 0
-            if total_minutes > 0:
-                total_hours = round(total_minutes / 60, 1)
-                maintenance_report.append(f"• Total recorded playtime: {total_hours} hours")
-
-        except Exception as stats_error:
-            print(f"⚠️ Statistics refresh error: {stats_error}")
-            maintenance_report.append(f"⚠️ Statistics refresh encountered errors: {str(stats_error)}")
-            issues_found = True
-
-        # 2. Check for data integrity issues
-        try:
-            print("🔍 Performing data integrity checks...")
-
-            integrity_issues = []
-
-            # Check for games with missing essential data
-            if all_games:
-                for game in all_games:
-                    game_name = game.get('canonical_name', 'Unknown')
-
-                    # Check for missing playtime on completed games
-                    if game.get('completion_status') == 'completed' and game.get('total_playtime_minutes', 0) == 0:
-                        if game.get('total_episodes', 0) > 0:
-                            integrity_issues.append(f"'{game_name}' marked complete but missing playtime data")
-
-                    # Check for games with episodes but no playtime
-                    if game.get('total_episodes', 0) > 0 and game.get('total_playtime_minutes', 0) == 0:
-                        integrity_issues.append(f"'{game_name}' has episodes but no playtime recorded")
-
-            if integrity_issues:
-                maintenance_report.append(f"🔍 **Data Integrity Issues Found:**")
-                for issue in integrity_issues[:5]:  # Limit to 5 issues to avoid spam
-                    maintenance_report.append(f"• {issue}")
-                if len(integrity_issues) > 5:
-                    maintenance_report.append(f"• ... and {len(integrity_issues) - 5} more issues")
-                issues_found = True
-            else:
-                maintenance_report.append(f"✅ **Data Integrity:** No issues detected")
-
-        except Exception as integrity_error:
-            print(f"⚠️ Integrity check error: {integrity_error}")
-            maintenance_report.append(f"⚠️ Data integrity check failed: {str(integrity_error)}")
-            issues_found = True
-
-        # 3. Clean up any stale data
-        try:
-            print("🧹 Cleaning up stale data...")
-
-            # This would include cleaning up old temporary records, expired sessions, etc.
-            # For now, we'll just report that cleanup was attempted
-            maintenance_report.append(f"🧹 **Cleanup Operations:** Temporary data cleanup completed")
-
-        except Exception as cleanup_error:
-            print(f"⚠️ Cleanup error: {cleanup_error}")
-            maintenance_report.append(f"⚠️ Cleanup operations failed: {str(cleanup_error)}")
-            issues_found = True
-
-        # 4. Generate final report
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
-
-        if issues_found:
-            report_header = f"🔄 **Weekly Games Maintenance Report** - {uk_now.strftime('%Y-%m-%d %H:%M UK')}\n\n"
-            report_header += f"**Status:** ⚠️ Issues detected during maintenance\n\n"
+        if views > (most_engaging_video or {}).get('view_count', 0):
+            most_engaging_video = item
+        
+        existing_game = db.get_played_game(game_name)
+        if existing_game:
+            # Update existing game
+            db.update_played_game(
+                existing_game['id'],
+                total_playtime_minutes=existing_game.get('total_playtime_minutes', 0) + duration_minutes,
+                total_episodes=existing_game.get('total_episodes', 0) + 1,
+                youtube_views=existing_game.get('youtube_views', 0) + views
+            )
+            print(f"✅ SYNC: Updated '{game_name}' with {duration_minutes} mins.")
         else:
-            report_header = f"🔄 **Weekly Games Maintenance Report** - {uk_now.strftime('%Y-%m-%d %H:%M UK')}\n\n"
-            report_header += f"**Status:** ✅ Maintenance completed successfully\n\n"
+            # Add new game
+            db.add_played_game(
+                canonical_name=game_name,
+                total_playtime_minutes=duration_minutes,
+                total_episodes=1,
+                youtube_views=views,
+                first_played_date=item['published_at'].date(),
+                notes=f"Auto-discovered from content sync on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}."
+            )
+            print(f"✅ SYNC: Added new game '{game_name}' with {duration_minutes} mins.")
 
-        full_report = report_header + "\n".join(maintenance_report)
-
-        print("✅ Weekly games maintenance completed")
-        return full_report
-
-    except Exception as e:
-        print(f"❌ Critical error in weekly games maintenance: {e}")
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
-        return f"❌ **Weekly Games Maintenance Failed** - {uk_now.strftime('%Y-%m-%d %H:%M UK')}\n\nCritical error encountered: {str(e)}\n\nManual intervention may be required."
-
+    return {
+        "status": "success",
+        "new_content_count": total_new_content,
+        "new_hours": round(total_new_minutes / 60, 1),
+        "new_views": new_views,
+        "top_video": most_engaging_video
+    }
 
 async def schedule_delayed_trivia_validation():
     """Schedule trivia validation to run 2 minutes after bot startup completion"""

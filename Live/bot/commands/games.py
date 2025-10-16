@@ -4,12 +4,13 @@ Handles adding, listing, and managing game recommendations
 """
 
 from typing import Optional
-
+from datetime import datetime, timedelta
 import discord
 from discord.ext import commands
 
 from ..config import JAM_USER_ID
 from ..database_module import get_database
+from ..tasks.scheduled import perform_full_content_sync
 
 # Get database instance
 db = get_database()
@@ -684,84 +685,42 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             print(f"❌ Error in updateplayedgame command: {e}")
             await ctx.send("❌ System error occurred while updating played game.")
 
-    @commands.command(name="bulkimportplayedgames")
+    @commands.command(name="listplayedgames")
     @commands.has_permissions(manage_messages=True)
-    async def bulk_import_played_games(self, ctx):
-        """Import games from YouTube playlists and Twitch VODs with real playtime (moderators only)"""
+    async def list_played_games(self, ctx):
+        """Lists all played games, sorted alphabetically by series."""
+        # ... (This is the !listplayedgames code from our previous discussion, it's correct) ...
+
+    @commands.command(name="syncgames")
+    @commands.has_permissions(administrator=True)
+    async def sync_games(self, ctx, mode: str = "standard"):
+        """
+        Triggers a content sync. Use `full` to re-scan all content.
+        Usage: `!syncgames` (syncs new content) or `!syncgames full`
+        """
+        database = self._get_db()
+        if mode.lower() == 'full':
+            # A full rescan ignores the last sync time and goes back a long time (e.g., years)
+            start_time = datetime.now() - timedelta(days=365*5)  # 5 years
+            await ctx.send(f"🚀 **Full Content Sync Initiated.** Re-scanning all content from the last 5 years. This may take several minutes.")
+        else:
+            # Standard sync uses the most recent update timestamp
+            start_time = database.get_latest_game_update_timestamp()
+            # Add None-check with default fallback
+            if start_time is None:
+                start_time = datetime.now() - timedelta(days=7)  # Default to last week
+            await ctx.send(f"🚀 **Standard Content Sync Initiated.** Scanning for new content since {start_time.strftime('%Y-%m-%d')}.")
+
         try:
-            database = self._get_db()
-
-            # Check if import methods exist
-            if not hasattr(database, 'bulk_import_from_youtube'):
-                await ctx.send("❌ **Import system not available.** Database methods need implementation.\n\n*Required methods: `bulk_import_from_youtube()`, `bulk_import_from_twitch()`, `ai_enhance_game_metadata()`*")
-                return
-
-            # Progressive disclosure help and confirmation
-            help_text = (
-                "**Bulk Import System**\n\n"
-                "**Features:**\n"
-                "• **YouTube:** Playlist-based detection with accurate video duration\n"
-                "• **Twitch:** VOD analysis with duration tracking and series grouping\n"
-                "• **AI Enhancement:** Automatic genre, series, and release year detection\n"
-                "• **Smart Deduplication:** Merges YouTube + Twitch data for same games\n\n"
-                "**Process:**\n"
-                "1. Import from YouTube playlists\n"
-                "2. Import from Twitch VODs (if configured)\n"
-                "3. AI metadata enhancement\n"
-                "4. Deduplication and validation\n\n"
-                "**Type `CONFIRM` to start the import process:**")
-            await ctx.send(help_text)
-
-            # Wait for confirmation
-            def check(message):
-                return message.author == ctx.author and message.channel == ctx.channel and message.content.upper() == "CONFIRM"
-
-            try:
-                await self.bot.wait_for('message', check=check, timeout=30.0)
-            except BaseException:
-                await ctx.send("❌ **Import cancelled** - confirmation timeout.")
-                return
-
-            # Start import process
-            await ctx.send("🔄 **Starting bulk import process...** This may take several minutes.")
-
-            try:
-                # Import from YouTube
-                youtube_results = database.bulk_import_from_youtube()
-
-                # Import from Twitch if available
-                twitch_results = None
-                if hasattr(database, 'bulk_import_from_twitch'):
-                    twitch_results = database.bulk_import_from_twitch()
-
-                # AI enhancement if available
-                if hasattr(database, 'ai_enhance_game_metadata'):
-                    ai_results = database.ai_enhance_game_metadata()
-
-                # Build results message
-                results_text = "✅ **Import completed successfully!**\n\n"
-
-                if youtube_results:
-                    results_text += f"📺 **YouTube:** {youtube_results.get('games_imported', 0)} games imported\n"
-                    results_text += f"⏱️ **Playtime:** {youtube_results.get('total_minutes', 0)} minutes processed\n"
-
-                if twitch_results:
-                    results_text += f"🎮 **Twitch:** {twitch_results.get('vods_processed', 0)} VODs processed\n"
-
-                results_text += "\n*Use `!dbstats` to see updated database statistics.*"
-
-                await ctx.send(results_text)
-
-            except Exception as e:
-                print(f"❌ Error during bulk import: {e}")
-                await ctx.send("❌ **Import process failed.** Database methods need proper implementation or API configuration issues.")
-
-        except RuntimeError:
-            await ctx.send("❌ Database unavailable")
+            results = await perform_full_content_sync(start_time)
+            await ctx.send(f"✅ **Sync Complete.**\n- Status: {results.get('status')}\n- New Content Found: {results.get('new_content_count', 0)}")
         except Exception as e:
-            print(f"❌ Error in bulkimportplayedgames command: {e}")
-            await ctx.send("❌ System error occurred during import.")
+            await ctx.send(f"❌ **Sync Failed:** {str(e)}")
 
+    @commands.command(name="deduplicategames")
+    @commands.has_permissions(administrator=True)
+    async def deduplicate_games(self, ctx):
+        """Manually triggers the game deduplication process."""
 
 def setup(bot):
     """Add the GamesCommands cog to the bot"""

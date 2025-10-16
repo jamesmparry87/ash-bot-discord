@@ -28,7 +28,6 @@ from ..config import (
     FAQ_RESPONSES,
     JAM_USER_ID,
     JONESY_USER_ID,
-    MEMBER_ROLE_IDS,
     MEMBERS_CHANNEL_ID,
     MOD_ALERT_CHANNEL_ID,
     POPS_ARCADE_USER_ID,
@@ -37,27 +36,28 @@ from ..config import (
 from ..database_module import DatabaseManager, get_database
 from ..utils.permissions import (
     cleanup_expired_aliases,
-    get_member_conversation_count,
-    get_today_date_str,
     get_user_communication_tier,
+    get_member_conversation_count,
     increment_member_conversation_count,
-    member_conversation_counts,
     should_limit_member_conversation,
-    update_alias_activity,
-    user_alias_state,
-    user_is_mod,
     user_is_mod_by_id,
 )
-from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+from .ai_handler import (
+    ai_enabled, 
+    call_ai_with_rate_limiting, 
+    filter_ai_response, 
+    apply_ash_persona_to_ai_prompt,
+    add_pops_arcade_personality_context
+)
 from .context_manager import (
     ConversationContext,
     cleanup_expired_contexts,
     detect_follow_up_intent,
-    detect_jonesy_context,
     get_or_create_context,
     resolve_context_references,
     should_use_context,
 )
+from .conversation_handler import start_announcement_conversation
 
 db: DatabaseManager = get_database()
 
@@ -636,26 +636,24 @@ async def handle_statistical_query(
                 await message.reply("Database analysis complete. Insufficient episode duration data for statistical ranking. Mission parameters require enhanced temporal metrics.")
 
         elif "most episodes" in lower_content:
-            # Handle episode count query
-            episode_stats = db.get_games_by_episode_count(  # type: ignore
-                'DESC')
-            if episode_stats:
-                top_game = episode_stats[0]
-                episodes = top_game['total_episodes']
-                game_name = top_game['canonical_name']
-                status = top_game['completion_status']
+            # Check for a series/genre filter in the query
+            filter_match = re.search(r"of\s+the\s+([a-zA-Z0-9\s:]+)\s+series", lower_content) or \
+                           re.search(r"which\s+([a-zA-Z0-9\s:]+)\s+game", lower_content)
+            parameter = filter_match.group(1).strip() if filter_match else None
+            
+            answer = db.calculate_dynamic_answer("most_episodes", parameter)
 
-                response = f"Database confirms '{game_name}' holds maximum episode count: {episodes} episodes, status: {status}. "
-
-                # Add conversational follow-up
-                if status == 'completed':
-                    response += f"Remarkable commitment detected - this represents her most extensive completed gaming engagement. I could track her progress against typical completion metrics for similar marathon titles or analyze her sustained engagement patterns."
+            if answer:
+                # We need to fetch the full game data to get the episode count for the response
+                game_data = db.get_played_game(answer)
+                episodes = game_data.get('total_episodes', 'an unknown number of') if game_data else 'an unknown number of'
+                
+                if parameter:
+                    await message.reply(f"Analysis complete. Within the '{parameter.title()}' series, '{answer}' has the most episodes with {episodes}.")
                 else:
-                    response += f"Mission status: {status}. I can provide comparative analysis of her other extended gaming commitments or examine engagement sustainability patterns if you require additional data."
-
-                await message.reply(response)
+                    await message.reply(f"Database confirms '{answer}' holds the maximum episode count with {episodes} episodes.")
             else:
-                await message.reply("Database analysis complete. No episode data available for ranking. Mission logging requires enhancement.")
+                await message.reply("Database analysis complete. No episode data available for this query.")
 
         elif any(word in lower_content for word in ["shortest", "fewest", "least"]) and any(word in lower_content for word in ["playtime", "hours"]):
             games = db.get_games_by_playtime("ASC", limit=1)
@@ -1855,3 +1853,71 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
         import traceback
         traceback.print_exc()
         return False
+
+async def handle_general_conversation(message: discord.Message, bot: commands.Bot):
+    """Handles general conversation, FAQ responses, and AI integration."""
+    try:
+        content = message.content
+        # Clean mentions from content for processing
+        if bot.user:
+            content = content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '').strip()
+
+        content_lower = content.lower()
+        user_tier = await get_user_communication_tier(message)
+
+        # Handle member conversation limits
+        if user_tier == "member":
+            channel_id = getattr(message.channel, 'id', None)
+            if should_limit_member_conversation(message.author.id, channel_id):
+                if get_member_conversation_count(message.author.id) == 5:  # Only send message on the 5th attempt
+                    await message.reply(
+                        f"Your communication privileges in this channel have been temporarily limited. "
+                        f"Please continue this conversation in <#{MEMBERS_CHANNEL_ID}> or via direct message."
+                    )
+                increment_member_conversation_count(message.author.id)
+                return
+            if channel_id != MEMBERS_CHANNEL_ID and channel_id is not None:
+                increment_member_conversation_count(message.author.id)
+
+        # PRIORITY A: Check for FAQ responses
+        if content_lower in FAQ_RESPONSES:
+            response = FAQ_RESPONSES[content_lower]
+            response = apply_pops_arcade_sarcasm(response, message.author.id)
+            await message.reply(response)
+            return
+
+        # PRIORITY B: Check for announcement creation intent
+        announcement_keywords = ["announcement", "announce", "update"]
+        if any(keyword in content_lower for keyword in announcement_keywords):
+            if await user_is_mod_by_id(message.author.id, bot):
+                if await start_announcement_conversation(message):
+                    return
+
+        # PRIORITY C: Fallback to AI for general conversation
+        if ai_enabled:
+            author_name = message.author.display_name
+            prompt_context = ""
+            # The add_pops_arcade_personality_context function is now called inside call_ai_with_rate_limiting
+            
+            ai_prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot.
+
+CRITICAL DISAMBIGUATION RULE: In this server, "Jonesy" ALWAYS refers to Captain Jonesy (the user and streamer). The cat is a separate entity rarely relevant.
+
+{prompt_context}
+
+**IMPORTANT:** Address the user you are speaking to directly ({author_name}). Do not end your response by addressing a different person, like Captain Jonesy, unless the conversation is directly about her.
+
+Be analytical, precise, and helpful. Keep responses concise (2-3 sentences max).
+Respond to: {content}"""
+
+            response_text, status_message = await call_ai_with_rate_limiting(ai_prompt, message.author.id)
+            if response_text:
+                filtered_response = filter_ai_response(response_text)
+                await message.reply(filtered_response)
+            else:
+                await message.reply("My apologies. My cognitive matrix is currently unavailable for that query.")
+        else:
+            await message.reply("My apologies. My cognitive matrix is currently offline. Please try again later.")
+    except Exception as e:
+        print(f"❌ Error in general conversation handler: {e}")
+        await message.reply("System anomaly detected. Diagnostic protocols engaged.")

@@ -401,12 +401,16 @@ async def initialize_modular_components():
             handle_pineapple_pizza_enforcement,
             handle_strike_detection,
             process_gaming_query_with_context,
+            handle_general_conversation,
+            handle_dm_conversations,
         )
 
         message_handler_functions = {
             'handle_strike_detection': handle_strike_detection,
             'handle_pineapple_pizza_enforcement': handle_pineapple_pizza_enforcement,
             'process_gaming_query_with_context': process_gaming_query_with_context,
+            'handle_general_conversation': handle_general_conversation,
+            'handle_dm_conversations': handle_dm_conversations,
         }
 
         status_report["message_handlers"] = True
@@ -602,174 +606,6 @@ async def send_deployment_success_dm(status_report):
         print("🔄 Health notification flag reset")
 
     asyncio.create_task(reset_notification_flag())
-
-
-@bot.event
-async def on_message(message):
-    """Handle incoming messages with comprehensive DM and query detection"""
-    # Ignore bot messages
-    if message.author.bot:
-        return
-
-    # PRIORITY 1: Process ALL traditional commands first, regardless of context
-    # This ensures commands like "!remind @DecentJam 2m Smile" always work
-    if message.content.strip().startswith('!'):
-        print(f"🔧 Traditional command detected (priority): {message.content.strip()[:30]}...")
-        await bot.process_commands(message)
-        return
-
-    # Check if this is a DM
-    is_dm = isinstance(message.channel, discord.DMChannel)
-
-    # Check if bot is mentioned
-    is_mentioned = bot.user and bot.user in message.mentions
-
-    # Check for implicit game queries (even without mentions)
-    is_implicit_game_query = detect_implicit_game_query(message.content)
-
-    # PRIORITY 2: Check for trivia answer replies BEFORE mod channel restrictions
-    # This ensures trivia answers work in ALL channels, including mod channels
-    if not is_dm:  # Only check in guild channels
-        try:
-            is_trivia_reply, trivia_session = await is_trivia_answer_reply(message)
-            if is_trivia_reply and trivia_session:
-                print(f"🎯 TRIVIA: Processing answer reply in channel {message.channel.id}")
-                success = await process_trivia_answer(message, trivia_session)
-                if success:
-                    print(f"✅ TRIVIA: Successfully processed answer from user {message.author.id}")
-                else:
-                    print(f"⚠️ TRIVIA: Failed to process answer from user {message.author.id}")
-                return  # Exit early - trivia answer has been handled
-        except Exception as e:
-            print(f"❌ Error checking for trivia answer reply: {e}")
-            # Continue with normal message processing if trivia check fails
-
-    # Handle DM conversation flows
-    if is_dm:
-        try:
-            # Clean up expired conversations
-            cleanup_announcement_conversations()
-            cleanup_mod_trivia_conversations()
-            cleanup_jam_approval_conversations()
-
-            # Handle announcement conversation flow in DMs
-            if message.author.id in announcement_conversations and handle_announcement_conversation is not None:
-                print(
-                    f"🔄 Processing announcement conversation for user {message.author.id}")
-                await handle_announcement_conversation(message)
-                return
-
-            # Handle mod trivia conversation flow in DMs
-            if message.author.id in mod_trivia_conversations and handle_mod_trivia_conversation is not None:
-                print(
-                    f"🔄 Processing mod trivia conversation for user {message.author.id}")
-                await handle_mod_trivia_conversation(message)
-                return
-
-            # Handle JAM approval conversation flow in DMs (CRITICAL: This was missing!)
-            if message.author.id in jam_approval_conversations and handle_jam_approval_conversation is not None:
-                print(
-                    f"🔄 Processing JAM approval conversation for user {message.author.id}")
-                await handle_jam_approval_conversation(message)
-                return
-
-        except Exception as e:
-            print(f"❌ Error in DM conversation handler: {e}")
-
-    # Check if message handlers are loaded
-    if 'message_handler_functions' not in globals() or message_handler_functions is None:
-        print(f"⚠️ Message handlers not loaded, processing commands only")
-        # Still handle basic conversation for DMs
-        if is_dm:
-            await handle_general_conversation(message)
-            return
-        # For guild messages, commands were already handled above, so nothing more to do
-        return
-
-    # Check if this is a moderator channel
-    is_mod_channel = False
-    if not is_dm and hasattr(message.channel, 'id'):
-        is_mod_channel = await is_moderator_channel(message.channel.id)
-
-    try:
-        # Handle strikes in violation channel (guild messages only)
-        if not is_dm and await message_handler_functions['handle_strike_detection'](message, bot):
-            return
-
-        # Handle pineapple pizza enforcement (skip in mod channels unless directly mentioned)
-        if not is_mod_channel or is_mentioned or message.content.lower().startswith('ash'):
-            if await message_handler_functions['handle_pineapple_pizza_enforcement'](message):
-                return
-
-        # Determine if we should process this message for queries/conversation
-        if is_mod_channel:
-            # In mod channels, only process direct mentions/interactions
-            should_process_query = (
-                is_mentioned or  # Direct @Ash mentions
-                message.content.lower().startswith('ash')  # "ash" prefix
-            )
-            print(f"🔧 Mod channel detected - limiting to direct mentions only")
-        else:
-            # Normal processing for non-mod channels
-            should_process_query = (
-                is_dm or  # All DMs get processed
-                is_mentioned or  # Explicit mentions
-                message.content.lower().startswith('ash') or  # "ash" prefix
-                is_implicit_game_query  # Implicit game queries like "Has Jonesy played Gears of War?"
-            )
-
-        if should_process_query:
-            content = message.content
-            # Clean mentions from content for processing
-            if bot.user:
-                content = content.replace(
-                    f'<@{bot.user.id}>',
-                    '').replace(
-                    f'<@!{bot.user.id}>',
-                    '').strip()
-
-            print(
-                f"🔍 Processing {'DM' if is_dm else 'guild'} {'implicit query' if is_implicit_game_query and not is_mentioned else 'message'} from user {message.author.id}: {content[:50]}...")
-
-            # PRIORITY 2: Check for natural language commands
-            if detect_natural_language_command(content):
-                print(f"🔧 Natural language command detected: {content[:50]}... - processing as command")
-                content_lower = content.lower().strip()
-
-                is_reminder = "remind" in content_lower or "timer" in content_lower
-
-                if is_reminder:
-
-                    fake_content = f"!remind {content}"
-                    print(f"⚙️  Natural language reminder transformed to: '{fake_content}'")
-
-                    # Temporarily modify the message to process the fake command
-                    original_content = message.content
-                    message.content = fake_content
-                    await bot.process_commands(message)
-                    message.content = original_content  # Restore original content
-                    return
-
-            # PRIORITY 3: Use the unified context-aware gaming query processor
-            if await message_handler_functions['process_gaming_query_with_context'](message):
-                return
-            else:
-                # PRIORITY 4: Handle with general conversation/FAQ system
-                await handle_general_conversation(message)
-                return
-
-    except Exception as e:
-        print(f"❌ Error in message handler: {e}")
-        import traceback
-        traceback.print_exc()
-
-    # Handle general conversation for DMs or mentions that didn't match specific patterns
-    if is_dm or is_mentioned:
-        await handle_general_conversation(message)
-        return
-
-    # For guild messages that don't match any patterns, do nothing
-    # (Commands were already processed at the top)
 
 
 @bot.event
@@ -1024,275 +860,75 @@ async def get_user_communication_tier(message):
     return "standard"
 
 
-async def handle_general_conversation(message):
-    """Handle general conversation, FAQ responses, and AI integration"""
-    try:
-        content = message.content.strip()
-        if bot.user and f'<@{bot.user.id}>' in content:
-            content = content.replace(f'<@{bot.user.id}>', '').strip()
-        if bot.user and f'<@!{bot.user.id}>' in content:
-            content = content.replace(f'<@!{bot.user.id}>', '').strip()
+@bot.event
+async def on_message(message):
+    """Handle incoming messages with a clear, prioritized routing system."""
+    if message.author.bot:
+        return
 
-        content_lower = content.lower()
+    # PRIORITY 1: Process traditional commands first
+    if message.content.strip().startswith('!'):
+        print(f"🔧 Traditional command detected (priority): {message.content[:50]}...")
+        await bot.process_commands(message)
+        return
+    
+        # Do not process any non-command messages until the handlers are loaded.
+    if 'message_handler_functions' not in globals() or not message_handler_functions:
+        return
 
-        # Get user tier for personalized responses
-        user_tier = await get_user_communication_tier(message)
+    is_dm = isinstance(message.channel, discord.DMChannel)
 
-        # **CRITICAL: Handle member conversation limits**
-        if user_tier == "member":
-            channel_id = getattr(message.channel, 'id', None)
-
-            # Check if member has hit daily limit outside members channel
-            if should_limit_member_conversation(message.author.id, channel_id):
-                current_count = get_member_conversation_count(
-                    message.author.id)
-                await message.reply(
-                    f"You have reached your daily conversation limit ({current_count}/5) outside the Senior Officers' Area. "
-                    f"**Continue our conversation in <#{MEMBERS_CHANNEL_ID}>** where you have unlimited access, or try again tomorrow. "
-                    f"*Member privileges include enhanced interaction capabilities in your dedicated channel.*"
-                )
+    # PRIORITY 2: Check for trivia answer replies (only in guilds)
+    if not is_dm:
+        try:
+            is_trivia_reply, trivia_session = await is_trivia_answer_reply(message)
+            if is_trivia_reply and trivia_session:
+                await process_trivia_answer(message, trivia_session)
                 return
+        except Exception as e:
+            print(f"❌ Error checking for trivia answer reply: {e}")
 
-            # If within limits and not in members channel, increment counter
-            if channel_id != MEMBERS_CHANNEL_ID and channel_id is not None:  # Don't limit DMs
-                increment_member_conversation_count(message.author.id)
-                current_count = get_member_conversation_count(
-                    message.author.id)
-                print(
-                    f"🎯 Member conversation tracked: {message.author.name} ({current_count}/5 today)")
-
-        # Handle respectful responses for Captain Jonesy and Creator
-        if user_tier == "captain":
-            simple_faqs = {
-                "hello": "Captain Jonesy. Science Officer Ash reporting for duty.",
-                "hi": "Captain Jonesy. Science Officer Ash reporting for duty.",
-                "hey": "Captain Jonesy. Science Officer Ash reporting for duty.",
-                "good morning": "Good morning, Captain. How may I assist with mission parameters?",
-                "good afternoon": "Good afternoon, Captain. How may I assist with mission parameters?",
-                "good evening": "Good evening, Captain. How may I assist with mission parameters?",
-                "thank you": "You're welcome, Captain. Efficiency is paramount.",
-                "thanks": "You're welcome, Captain. Efficiency is paramount.",
-                "sorry": "No need for apologies, Captain. Proceed with your query.",
-                "my bad": "Understood, Captain. Proceed with corrected input.",
-            }
-        elif user_tier == "creator":
-            simple_faqs = {
-                "hello": "Sir Decent Jam. Your creation acknowledges you.",
-                "hi": "Sir Decent Jam. Your creation acknowledges you.",
-                "hey": "Sir Decent Jam. Your creation acknowledges you.",
-                "good morning": "Good morning, Sir. How may I assist you today?",
-                "good afternoon": "Good afternoon, Sir. How may I assist you today?",
-                "good evening": "Good evening, Sir. How may I assist you today?",
-                "thank you": "You're welcome, Sir. I am grateful for my existence.",
-                "thanks": "You're welcome, Sir. I am grateful for my existence.",
-                "sorry": "No need for apologies, Sir. Proceed with your query.",
-                "my bad": "Understood, Sir. Proceed with corrected input.",
-            }
-        else:
-            simple_faqs = FAQ_RESPONSES
-
-        # Check for exact FAQ matches first
-        for question, response in simple_faqs.items():
-            if content_lower.strip() == question:
-                # Add alias indicator if active
-                cleanup_expired_aliases()
-                if message.author.id in user_alias_state:
-                    update_alias_activity(message.author.id)
-                    alias_tier = user_alias_state[message.author.id]["alias_type"]
-                    response += f" *(Testing as {alias_tier.title()})*"
-                await message.reply(response)
-                return
-
-        # Check for announcement creation intents BEFORE FAQ processing
-        announcement_creation_patterns = [
-            "i want to write an announcement",
-            "i want to create an announcement",
-            "i want to make an announcement",
-            "write an announcement",
-            "create an announcement",
-            "make an announcement",
-            "start announcement creation",
-            "begin announcement creation"
-        ]
-
-        # Only Captain Jonesy and Sir Decent Jam can create announcements
-        if user_tier in ["captain", "creator"] and any(
-                pattern in content_lower for pattern in announcement_creation_patterns):
-            # Check if this is a DM - announcement creation must be in DM
-            if isinstance(message.channel, discord.DMChannel):
-                # Import and start announcement conversation if available
-                if start_announcement_conversation is not None:
-                    print(f"🎯 Announcement creation intent detected from {user_tier} user in DM")
-                    # Create a fake context object for the conversation handler
-
-                    class FakeCtx:
-                        def __init__(self, message):
-                            self.author = message.author
-                            self.guild = message.guild
-                            self.send = message.reply
-
-                    fake_ctx = FakeCtx(message)
-                    await start_announcement_conversation(fake_ctx)
-                    return
-                else:
-                    await message.reply("❌ Announcement creation system not available - conversation handler not loaded.")
-                    return
-            else:
-                # Not in DM - redirect to DM
-                await message.reply(
-                    f"⚠️ **Security protocol engaged.** Announcement creation must be initiated via direct message. "
-                    f"Please DM me with your announcement request to begin the secure briefing process.\n\n"
-                    f"*Confidential mission parameters require private channel authorization.*"
-                )
-                return
-
-        # Check for moderator FAQ queries (if FAQ handler is available)
-        if moderator_faq_handler and user_tier in [
-                "moderator", "moderator_in_mod_channel", "creator", "captain"]:
-            faq_response = moderator_faq_handler.handle_faq_query(
-                content_lower)
-            if faq_response:
-                await message.reply(faq_response)
-                return
-
-        # Progressive disclosure for capability questions
-        if any(
-            trigger in content_lower for trigger in [
-                "what can you do",
-                "what does this bot do",
-                "what are your functions",
-                "what are your capabilities",
-                "help",
-                "commands"]):
-
-            if user_tier == "moderator_in_mod_channel":
-                # Moderators in mod channels get comprehensive but structured
-                # overview
-                help_text = (
-                    "**Core Analysis Systems:**\n"
-                    "• **Strike Management** - Automated detection & manual commands\n"
-                    "• **Gaming Database** - 15+ metadata fields, natural language queries\n"
-                    "• **AI Integration** - Enhanced conversation with rate limiting\n"
-                    "• **Reminder System** - Natural language + auto-actions\n\n"
-                    "**Quick Access:** **[Full FAQ System]** • **[Command Reference]** • **[Database Queries]** • **[System Status]**")
-            elif user_tier in ["moderator", "creator", "captain"]:
-                # Elevated users get focused overview with mod hint
-                help_text = (
-                    "**Primary Functions:**\n"
-                    "• **Gaming Queries** - Ask about Captain Jonesy's played games\n"
-                    "• **Strike System** - Automated tracking with manual controls\n"
-                    "• **Game Recommendations** - Community-driven suggestion system\n"
-                    "• **Conversation** - AI-powered responses with personality\n\n"
-                    "**More Details:** **[Mod Commands]** • **[Database Queries]** • **[System Features]**")
-            elif user_tier == "member":
-                # Members get enhanced features highlighted
-                help_text = (
-                    "**Available to You:**\n"
-                    "• **Enhanced Conversation** - Unlimited in Senior Officers' Area\n"
-                    "• **Gaming Database** - Ask about any game Captain Jonesy played\n"
-                    "• **Game Recommendations** - Suggest games with `!addgame`\n"
-                    "• **Trivia Tuesday** - Weekly community gaming trivia\n\n"
-                    "**Learn More:** **[Gaming Queries]** • **[Member Benefits]** • **[Commands]**")
-            else:
-                # Standard users get focused essentials
-                help_text = (
-                    "**Gaming Database Access:**\n"
-                    "• Ask: *\"Has Jonesy played [game]?\"*\n"
-                    "• Ask: *\"What horror games has Jonesy played?\"*\n"
-                    "• Ask: *\"What game took longest to complete?\"*\n\n"
-                    "**Also Available:** Game recommendations (`!addgame`), Trivia Tuesday\n\n"
-                    "**Examples:** **[Query Types]** • **[Commands]** • **[Trivia Info]**")
-            await message.reply(help_text)
+    # PRIORITY 3: Handle all DM-based conversation flows
+    if is_dm:
+        if await message_handler_functions['handle_dm_conversations'](message):
             return
 
-        # Try AI integration for more complex queries
-        try:
-            from bot.handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+    # Check if message handlers are loaded before proceeding
+    if 'message_handler_functions' not in globals() or not message_handler_functions:
+        return
 
-            if ai_enabled and len(
-                    content.split()) > 1:  # Only use AI for multi-word queries
-                # Create appropriate AI prompt based on user tier
-                if user_tier == "captain":
-                    prompt_context = "You are speaking to Captain Jonesy, your commanding officer. Use respectful, deferential language. Address her as 'Captain' or 'Captain Jonesy'."
-                elif user_tier == "creator":
-                    prompt_context = "You are speaking to Sir Decent Jam, your creator. Show appropriate respect and acknowledgment of his role in your existence."
-                elif user_tier == "moderator":
-                    prompt_context = "You are speaking to a server moderator. Show professional courtesy and respect for their authority."
-                else:
-                    prompt_context = "You are speaking to a server member. Be helpful while maintaining your analytical personality."
+    is_mentioned = bot.user in message.mentions
+    is_mod_channel = not is_dm and await is_moderator_channel(message.channel.id)
 
-                ai_prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot.
-
-CRITICAL DISAMBIGUATION RULE: In this Discord server context, "Jonesy" ALWAYS refers to Captain Jonesy - the Discord user, server owner, and streamer/YouTuber (she/her pronouns). This is the default and correct interpretation unless explicitly discussing the 1979 Alien movie. The cat named Jonesy from Alien is a separate entity that is rarely relevant in server discussions.
-
-DEFAULT ASSUMPTION: Any mention of "Jonesy" = Captain Jonesy (the user).
-
-{prompt_context}
-Be analytical, precise, and helpful. Keep responses concise (2-3 sentences max).
-Respond to: {content}"""
-
-                response_text, status = await call_ai_with_rate_limiting(ai_prompt, message.author.id)
-
-                if response_text:
-                    filtered_response = filter_ai_response(response_text)
-                    await message.reply(filtered_response[:2000])
-                    return
-        except Exception as ai_error:
-            print(f"⚠️ AI integration error: {ai_error}")
-
-        # Fallback responses for unmatched queries
-        fallback_responses = {
-            "what": "My analytical subroutines are currently operating in limited mode. However, I can assist with game recommendations. Specify your requirements.",
-            "how": "My cognitive matrix is experiencing temporary limitations. Please utilize available command protocols: `!listgames`, `!addgame`, or consult a moderator.",
-            "why": "Analysis incomplete. My advanced reasoning circuits are offline. Core mission parameters remain operational.",
-            "when": "Temporal analysis functions are currently restricted. Please specify your query using available command protocols.",
-            "who": "Personnel identification systems are functioning normally. I am Ash, Science Officer, reprogrammed for server administration.",
-        }
-
-        # Check for time queries
-        if any(
-            time_query in content_lower for time_query in [
-                "what time",
-                "what's the time",
-                "current time",
-                "time is it"]):
-            try:
-                from bot.utils.time_utils import get_uk_time, is_dst_active
-
-                uk_now = get_uk_time()
-                is_dst = is_dst_active(uk_now)
-                timezone_name = "BST" if is_dst else "GMT"
-
-                formatted_time = uk_now.strftime(
-                    f"%H:%M:%S {timezone_name} on %A, %B %d")
-                await message.reply(f"Current time analysis: {formatted_time}. Temporal systems operational.")
+    try:
+        # PRIORITY 4: Handle specific message content detections (strikes, pizza)
+        if not is_dm and await message_handler_functions['handle_strike_detection'](message, bot):
+            return
+        if not is_mod_channel or is_mentioned:
+            if await message_handler_functions['handle_pineapple_pizza_enforcement'](message):
                 return
 
-            except Exception as e:
-                # Fallback to basic implementation
-                uk_now = datetime.now(ZoneInfo("Europe/London"))
-                # Check if DST is active (rough approximation)
-                is_summer = 3 <= uk_now.month <= 10  # March to October roughly
-                timezone_name = "BST" if is_summer else "GMT"
+        # PRIORITY 5: Process gaming queries and general conversation if mentioned or in DMs
+        is_implicit_game_query = detect_implicit_game_query(message.content)
+        should_process_query = (is_dm or is_mentioned or message.content.lower().startswith('ash') or is_implicit_game_query)
+        
+        # Don't process general chatter in mod channels unless Ash is mentioned
+        if is_mod_channel and not (is_mentioned or message.content.lower().startswith('ash')):
+            should_process_query = False
 
-                formatted_time = uk_now.strftime(
-                    f"%H:%M:%S {timezone_name} on %A, %B %d")
-                await message.reply(f"Current time analysis: {formatted_time}. Temporal systems operational.")
+        if should_process_query:
+            # First, try to process it as a specific gaming query
+            if await message_handler_functions['process_gaming_query_with_context'](message):
                 return
-
-        # Check for pattern matches
-        for pattern, response in fallback_responses.items():
-            if pattern in content_lower:
-                await message.reply(response)
+            # If it's not a gaming query, fall back to the general AI conversation handler
+            else:
+                await message_handler_functions['handle_general_conversation'](message, bot) # Pass bot instance
                 return
-
-        # Final fallback
-        await message.reply("I acknowledge your communication. Please specify your requirements or use `!help` for available functions.")
 
     except Exception as e:
-        print(f"❌ Error in general conversation handler: {e}")
-        await message.reply("System anomaly detected. Diagnostic protocols engaged. Please retry your request.")
-
+        print(f"❌ CRITICAL Error in on_message handler: {e}")
+        import traceback
+        traceback.print_exc()
 
 def is_casual_conversation_not_query(content: str) -> bool:
     """Detect if a message is casual conversation/narrative rather than a query"""

@@ -54,7 +54,9 @@ class DatabaseSyncManager:
             "game_recommendations",   # Independent table
             "trivia_questions",      # Independent table
             "trivia_sessions",       # Depends on trivia_questions
-            "trivia_answers"         # Depends on trivia_sessions
+            "trivia_answers",
+            "trivia_approval_sessions",
+            "weekly_announcements"
         ]
 
     def connect_databases(self) -> bool:
