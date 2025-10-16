@@ -3,8 +3,9 @@ Game recommendation commands for Ash Bot
 Handles adding, listing, and managing game recommendations
 """
 
-from typing import Optional
 from datetime import datetime, timedelta
+from typing import Optional
+
 import discord
 from discord.ext import commands
 

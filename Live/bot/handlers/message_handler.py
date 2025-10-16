@@ -36,18 +36,18 @@ from ..config import (
 from ..database_module import DatabaseManager, get_database
 from ..utils.permissions import (
     cleanup_expired_aliases,
-    get_user_communication_tier,
     get_member_conversation_count,
+    get_user_communication_tier,
     increment_member_conversation_count,
     should_limit_member_conversation,
     user_is_mod_by_id,
 )
 from .ai_handler import (
-    ai_enabled, 
-    call_ai_with_rate_limiting, 
-    filter_ai_response, 
+    add_pops_arcade_personality_context,
+    ai_enabled,
     apply_ash_persona_to_ai_prompt,
-    add_pops_arcade_personality_context
+    call_ai_with_rate_limiting,
+    filter_ai_response,
 )
 from .context_manager import (
     ConversationContext,

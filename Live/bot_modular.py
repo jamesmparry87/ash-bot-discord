@@ -398,11 +398,11 @@ async def initialize_modular_components():
         # Import message handler functions
         global message_handler_functions
         from bot.handlers.message_handler import (
+            handle_dm_conversations,
+            handle_general_conversation,
             handle_pineapple_pizza_enforcement,
             handle_strike_detection,
             process_gaming_query_with_context,
-            handle_general_conversation,
-            handle_dm_conversations,
         )
 
         message_handler_functions = {
