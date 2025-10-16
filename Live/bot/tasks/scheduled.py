@@ -272,26 +272,31 @@ async def safe_send_message(channel, content, mention_user_id=None):
         return False
 
 # Run at 8:30 AM UK time every Monday
+
+
 @tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))
 async def monday_content_sync():
     """Syncs new content and generates a debrief for approval."""
-    if not _should_run_automated_tasks(): return
-    
+    if not _should_run_automated_tasks():
+        return
+
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 0: return
+    if uk_now.weekday() != 0:
+        return
 
     print("🔄 SYNC & DEBRIEF (Monday): Starting weekly content sync...")
-    
+
     if not db:
         print("❌ SYNC & DEBRIEF (Monday): Database not available")
         return
-    
+
     try:
         start_sync_time = db.get_latest_game_update_timestamp()
-        if not start_sync_time: return
+        if not start_sync_time:
+            return
 
         analysis_results = await perform_full_content_sync(start_sync_time)
-        
+
         if analysis_results.get("status") == "no_new_content":
             print("✅ SYNC & DEBRIEF (Monday): No new content found. No message to generate.")
             return
@@ -300,8 +305,7 @@ async def monday_content_sync():
         debrief = (
             f"🌅 **Monday Morning Protocol Initiated**\n\n"
             f"Analysis of the previous 168-hour operational cycle is complete. **{analysis_results.get('new_content_count', 0)}** new transmissions were logged, "
-            f"accumulating **{analysis_results.get('new_hours', 0)} hours** of new mission data and **{analysis_results.get('new_views', 0):,}** viewer engagements."
-        )
+            f"accumulating **{analysis_results.get('new_hours', 0)} hours** of new mission data and **{analysis_results.get('new_views', 0):,}** viewer engagements.")
         top_video = analysis_results.get("top_video")
         if top_video:
             debrief += f"\n\nMaximum engagement was recorded on the transmission titled **'{top_video['title']}'**."
@@ -310,7 +314,7 @@ async def monday_content_sync():
 
         # --- Approval Workflow ---
         announcement_id = db.create_weekly_announcement('monday', debrief, analysis_results)
-        
+
         if announcement_id:
             await start_weekly_announcement_approval(announcement_id, debrief, 'monday')
         else:
@@ -1271,6 +1275,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         print(f"❌ Error executing auto-action: {e}")
         raise
 
+
 async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]:
     """
     Performs a full sync of new content from YouTube and Twitch,
@@ -1280,7 +1285,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
         raise RuntimeError("Database not available for sync.")
 
     print(f"🔄 SYNC: Fetching new content since {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    
+
     # --- Data Gathering ---
     new_youtube_videos = await fetch_new_videos_since("UCPoUxLHeTnE9SUDAkqfJzDQ", start_sync_time)
     new_twitch_vods = await fetch_new_vods_since("jonesyspacecat", start_sync_time)
@@ -1289,14 +1294,14 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
     total_new_content = len(new_youtube_videos) + len(new_twitch_vods)
     if total_new_content == 0:
         return {"status": "no_new_content"}
-        
+
     # --- Processing & Deduplication ---
     new_views = 0
     total_new_minutes = 0
     most_engaging_video = None
 
     all_content = new_youtube_videos + new_twitch_vods
-    
+
     for item in all_content:
         game_name = extract_game_name_from_title(item['title'])
         if not game_name:
@@ -1304,13 +1309,13 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
 
         duration_minutes = item.get('duration_seconds', 0) // 60
         views = item.get('view_count', 0)
-        
+
         total_new_minutes += duration_minutes
         new_views += views
 
         if views > (most_engaging_video or {}).get('view_count', 0):
             most_engaging_video = item
-        
+
         existing_game = db.get_played_game(game_name)
         if existing_game:
             # Update existing game
@@ -1329,8 +1334,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                 total_episodes=1,
                 youtube_views=views,
                 first_played_date=item['published_at'].date(),
-                notes=f"Auto-discovered from content sync on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}."
-            )
+                notes=f"Auto-discovered from content sync on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}.")
             print(f"✅ SYNC: Added new game '{game_name}' with {duration_minutes} mins.")
 
     return {
@@ -1340,6 +1344,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
         "new_views": new_views,
         "top_video": most_engaging_video
     }
+
 
 async def schedule_delayed_trivia_validation():
     """Schedule trivia validation to run 2 minutes after bot startup completion"""

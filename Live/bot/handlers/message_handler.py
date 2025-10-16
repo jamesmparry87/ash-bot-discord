@@ -638,16 +638,17 @@ async def handle_statistical_query(
         elif "most episodes" in lower_content:
             # Check for a series/genre filter in the query
             filter_match = re.search(r"of\s+the\s+([a-zA-Z0-9\s:]+)\s+series", lower_content) or \
-                           re.search(r"which\s+([a-zA-Z0-9\s:]+)\s+game", lower_content)
+                re.search(r"which\s+([a-zA-Z0-9\s:]+)\s+game", lower_content)
             parameter = filter_match.group(1).strip() if filter_match else None
-            
+
             answer = db.calculate_dynamic_answer("most_episodes", parameter)
 
             if answer:
                 # We need to fetch the full game data to get the episode count for the response
                 game_data = db.get_played_game(answer)
-                episodes = game_data.get('total_episodes', 'an unknown number of') if game_data else 'an unknown number of'
-                
+                episodes = game_data.get('total_episodes',
+                                         'an unknown number of') if game_data else 'an unknown number of'
+
                 if parameter:
                     await message.reply(f"Analysis complete. Within the '{parameter.title()}' series, '{answer}' has the most episodes with {episodes}.")
                 else:
@@ -1854,6 +1855,7 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
         traceback.print_exc()
         return False
 
+
 async def handle_general_conversation(message: discord.Message, bot: commands.Bot):
     """Handles general conversation, FAQ responses, and AI integration."""
     try:
@@ -1898,7 +1900,7 @@ async def handle_general_conversation(message: discord.Message, bot: commands.Bo
             author_name = message.author.display_name
             prompt_context = ""
             # The add_pops_arcade_personality_context function is now called inside call_ai_with_rate_limiting
-            
+
             ai_prompt = f"""You are Ash, the science officer from Alien, reprogrammed as a Discord bot.
 
 CRITICAL DISAMBIGUATION RULE: In this server, "Jonesy" ALWAYS refers to Captain Jonesy (the user and streamer). The cat is a separate entity rarely relevant.

@@ -737,7 +737,7 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
 def _infer_dynamic_query_type(question_text: str) -> Tuple[Optional[str], Optional[str]]:
     """Infers the dynamic query type and an optional parameter from the question text."""
     text = question_text.lower()
-    
+
     # Pattern to find a genre or series filter (e.g., "which horror game", "longest God of War playthrough")
     filter_match = re.search(r"\b(of|in the)\s+([a-zA-Z0-9\s:]+)\s+(series|franchise|playthrough|game)", text)
     parameter = filter_match.group(2).strip() if filter_match else None
@@ -759,10 +759,12 @@ def _infer_dynamic_query_type(question_text: str) -> Tuple[Optional[str], Option
             return "most_episodes", parameter
         if "fewest" in text or "least" in text or "shortest" in text:
             return "fewest_episodes", parameter
-    
+
     # Fallback for simple queries
-    if "longest" in text: return "longest_playtime", None
-    if "most episodes" in text: return "most_episodes", None
+    if "longest" in text:
+        return "longest_playtime", None
+    if "most episodes" in text:
+        return "most_episodes", None
 
     return None, None
 
@@ -876,7 +878,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                             calculated_answer = answer
                         else:
                             calculated_answer = "Could not be determined. No data found for this query."
-                
+
                 preview_msg = (
                     f"📋 **Trivia Question Preview**\n\n"
                     f"**Question:** {question_text}\n\n"
@@ -1208,7 +1210,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
             # We would add logic here to mark the question as 'retired' or similar.
         else:
             await message.reply("⚠️ Invalid input. Please respond with **1** (Approve) or **2** (Reject).")
-        
+
         del jam_approval_conversations[user_id]
         return
 

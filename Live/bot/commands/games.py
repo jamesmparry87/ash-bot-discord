@@ -702,7 +702,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         database = self._get_db()
         if mode.lower() == 'full':
             # A full rescan ignores the last sync time and goes back a long time (e.g., years)
-            start_time = datetime.now() - timedelta(days=365*5)  # 5 years
+            start_time = datetime.now() - timedelta(days=365 * 5)  # 5 years
             await ctx.send(f"🚀 **Full Content Sync Initiated.** Re-scanning all content from the last 5 years. This may take several minutes.")
         else:
             # Standard sync uses the most recent update timestamp
@@ -722,6 +722,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
     @commands.has_permissions(administrator=True)
     async def deduplicate_games(self, ctx):
         """Manually triggers the game deduplication process."""
+
 
 def setup(bot):
     """Add the GamesCommands cog to the bot"""

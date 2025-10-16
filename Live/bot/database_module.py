@@ -3387,7 +3387,8 @@ class DatabaseManager:
     def calculate_dynamic_answer(self, dynamic_query_type: str, parameter: Optional[str] = None) -> Optional[str]:
         """Calculate the current answer for a dynamic question, with optional filtering."""
         conn = self.get_connection()
-        if not conn: return None
+        if not conn:
+            return None
 
         try:
             with conn.cursor() as cur:
@@ -3410,11 +3411,11 @@ class DatabaseManager:
                 elif dynamic_query_type == "shortest_playtime":
                     order_by = "ORDER BY total_playtime_minutes ASC"
                 elif dynamic_query_type == "most_episodes":
-                    where_clauses.remove("total_playtime_minutes > 0") # Episodes don't require playtime
+                    where_clauses.remove("total_playtime_minutes > 0")  # Episodes don't require playtime
                     where_clauses.append("total_episodes > 0")
                     order_by = "ORDER BY total_episodes DESC"
                 else:
-                    return None # Unknown query type
+                    return None  # Unknown query type
 
                 # Build and execute the final query
                 full_query = f"{base_query} WHERE {' AND '.join(where_clauses)} {order_by} LIMIT 1"

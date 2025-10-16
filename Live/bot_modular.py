@@ -871,7 +871,7 @@ async def on_message(message):
         print(f"🔧 Traditional command detected (priority): {message.content[:50]}...")
         await bot.process_commands(message)
         return
-    
+
         # Do not process any non-command messages until the handlers are loaded.
     if 'message_handler_functions' not in globals() or not message_handler_functions:
         return
@@ -910,8 +910,9 @@ async def on_message(message):
 
         # PRIORITY 5: Process gaming queries and general conversation if mentioned or in DMs
         is_implicit_game_query = detect_implicit_game_query(message.content)
-        should_process_query = (is_dm or is_mentioned or message.content.lower().startswith('ash') or is_implicit_game_query)
-        
+        should_process_query = (
+            is_dm or is_mentioned or message.content.lower().startswith('ash') or is_implicit_game_query)
+
         # Don't process general chatter in mod channels unless Ash is mentioned
         if is_mod_channel and not (is_mentioned or message.content.lower().startswith('ash')):
             should_process_query = False
@@ -922,13 +923,14 @@ async def on_message(message):
                 return
             # If it's not a gaming query, fall back to the general AI conversation handler
             else:
-                await message_handler_functions['handle_general_conversation'](message, bot) # Pass bot instance
+                await message_handler_functions['handle_general_conversation'](message, bot)  # Pass bot instance
                 return
 
     except Exception as e:
         print(f"❌ CRITICAL Error in on_message handler: {e}")
         import traceback
         traceback.print_exc()
+
 
 def is_casual_conversation_not_query(content: str) -> bool:
     """Detect if a message is casual conversation/narrative rather than a query"""
