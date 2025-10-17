@@ -200,23 +200,23 @@ async def amend_weekly_content_with_ai(
     # Create a prompt that asks AI to modify the content according to the instruction
     amendment_prompt = f"""
     You have generated the following {day.title()} announcement content:
-    
+
     "{original_content}"
-    
+
     The user has requested the following modification:
     "{amendment_instruction}"
-    
+
     Please revise the announcement to incorporate this change. Maintain your analytical Ash persona and the overall structure, but apply the requested modification accurately.
-    
+
     IMPORTANT:
     - Apply the user's instruction precisely
     - Keep the same general format and tone
     - Maintain all factual information unless the instruction asks you to change it
     - Do NOT just append the instruction as text - actually modify the content
-    
+
     Provide ONLY the revised announcement text, with no additional commentary.
     """
-    
+
     prompt = apply_ash_persona_to_ai_prompt(amendment_prompt, "announcement_amendment")
     response_text, status_message = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
 
@@ -409,21 +409,21 @@ async def handle_weekly_announcement_approval(message: discord.Message):
     elif convo['step'] == 'ai_amending':
         # Use AI to amend the content based on user instructions
         await message.reply("🔄 **Processing Amendment...** Using AI to apply your requested changes. Please wait.")
-        
+
         amended_content = await amend_weekly_content_with_ai(
             original_content=convo['original_content'],
             amendment_instruction=content,
             day=convo['day']
         )
-        
+
         if amended_content:
             # Update the conversation state with the amended content
             convo['original_content'] = amended_content
             convo['step'] = 'approval'  # Return to approval step for preview
-            
+
             # Update the database with pending status (not auto-approved)
             db.update_announcement_status(announcement_id, 'pending_approval', new_content=amended_content)
-            
+
             # Present the amended version for approval
             approval_msg = (
                 f"✏️ **Amendment Complete**\n\n"
@@ -452,14 +452,14 @@ async def handle_weekly_announcement_approval(message: discord.Message):
     elif convo['step'] == 'manual_editing':
         # User has provided their complete replacement text
         manually_edited_content = content
-        
+
         # Update the conversation state with the manually edited content
         convo['original_content'] = manually_edited_content
         convo['step'] = 'approval'  # Return to approval step for preview
-        
+
         # Update the database with pending status (not auto-approved)
         db.update_announcement_status(announcement_id, 'pending_approval', new_content=manually_edited_content)
-        
+
         # Present the manually edited version for approval
         approval_msg = (
             f"✏️ **Manual Edit Complete**\n\n"
@@ -900,26 +900,26 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
         elif step == 'ai_amending':
             # Use AI to amend the announcement based on user instructions
             await message.reply("🔄 **Processing Amendment...** Using AI to apply your requested changes. Please wait.")
-            
+
             current_content = data.get('content', data.get('raw_content', ''))
             amended_content = await amend_weekly_content_with_ai(
                 original_content=current_content,
                 amendment_instruction=content,
                 day='announcement'  # Generic day for regular announcements
             )
-            
+
             if amended_content:
                 # Update with amended content
                 data['content'] = amended_content
                 conversation['step'] = 'preview'
-                
+
                 # Regenerate formatted preview
                 target_channel = data.get('target_channel', 'mod')
                 preview_content = await format_announcement_content(
                     amended_content, target_channel, user_id, creator_notes=data.get('creator_notes')
                 )
                 data['formatted_content'] = preview_content
-                
+
                 await message.reply(
                     f"✏️ **Amendment Complete**\n\n"
                     f"Here is the revised announcement:\n\n"
@@ -945,14 +945,14 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
             # User provided complete replacement text
             data['content'] = content
             conversation['step'] = 'preview'
-            
+
             # Regenerate formatted preview with manual edit
             target_channel = data.get('target_channel', 'mod')
             preview_content = await format_announcement_content(
                 content, target_channel, user_id, creator_notes=data.get('creator_notes')
             )
             data['formatted_content'] = preview_content
-            
+
             await message.reply(
                 f"✏️ **Manual Edit Complete**\n\n"
                 f"Here is your manually edited announcement:\n\n"
