@@ -3384,62 +3384,47 @@ class DatabaseManager:
 
         return False
 
-    def calculate_dynamic_answer(
-            self, dynamic_query_type: str) -> Optional[str]:
-        """Calculate the current answer for a dynamic question"""
-        try:
-            # Playtime Queries
-            if dynamic_query_type == "longest_playtime":
-                games = self.get_games_by_playtime("DESC", limit=1)
-                return games[0]["canonical_name"] if games else None
-
-            elif dynamic_query_type == "shortest_playtime":
-                games = self.get_games_by_playtime("ASC", limit=1)
-                return games[0]["canonical_name"] if games else None
-
-            # Episode Queries
-            elif dynamic_query_type == "most_episodes":
-                games = self.get_games_by_episode_count("DESC", limit=1)
-                return games[0]["canonical_name"] if games else None
-
-            elif dynamic_query_type == "fewest_episodes":
-                games = self.get_games_by_episode_count("ASC", limit=1)
-                return games[0]["canonical_name"] if games else None
-
-            # Timeline Queries
-            elif dynamic_query_type == "first_game_played":
-                games = self.get_games_by_played_date("ASC", limit=1)
-                return games[0]["canonical_name"] if games else None
-
-            elif dynamic_query_type == "most_recent_game_played":
-                games = self.get_games_by_played_date("DESC", limit=1)
-                return games[0]["canonical_name"] if games else None
-
-            elif dynamic_query_type == "oldest_game_by_release":
-                games = self.get_games_by_release_year("ASC", limit=1)
-                return games[0]["canonical_name"] if games else None
-
-            # Aggregate & Series Queries
-            elif dynamic_query_type == "series_most_playtime":
-                series = self.get_series_by_total_playtime()
-                return series[0]["series_name"] if series else None
-
-            elif dynamic_query_type == "highest_avg_episode":
-                games = self.get_games_by_average_episode_length()
-                return games[0]["canonical_name"] if games else None
-
-            elif dynamic_query_type == "most_common_genre":
-                stats = self.get_genre_statistics()
-                # The get_genre_statistics is already ordered by count/playtime, so the top one is the most common.
-                return stats[0]["genre"] if stats else None
-
-            # Note: 'genre_game_count' is too specific for this general function
-            # and will be handled by the conversation/message handlers directly.
-
+    def calculate_dynamic_answer(self, dynamic_query_type: str, parameter: Optional[str] = None) -> Optional[str]:
+        """Calculate the current answer for a dynamic question, with optional filtering."""
+        conn = self.get_connection()
+        if not conn:
             return None
+
+        try:
+            with conn.cursor() as cur:
+                base_query = "SELECT canonical_name FROM played_games"
+                where_clauses = ["total_playtime_minutes > 0"]
+                params = []
+                order_by = ""
+
+                # Add filter if a parameter (like a series name) is provided
+                if parameter:
+                    where_clauses.append("(LOWER(series_name) = %s OR LOWER(genre) = %s)")
+                    params.extend([parameter.lower(), parameter.lower()])
+
+                # Define query logic
+                if dynamic_query_type == "most_popular_by_views":
+                    where_clauses.append("youtube_views > 0")
+                    order_by = "ORDER BY youtube_views DESC"
+                elif dynamic_query_type == "longest_playtime":
+                    order_by = "ORDER BY total_playtime_minutes DESC"
+                elif dynamic_query_type == "shortest_playtime":
+                    order_by = "ORDER BY total_playtime_minutes ASC"
+                elif dynamic_query_type == "most_episodes":
+                    where_clauses.remove("total_playtime_minutes > 0")  # Episodes don't require playtime
+                    where_clauses.append("total_episodes > 0")
+                    order_by = "ORDER BY total_episodes DESC"
+                else:
+                    return None  # Unknown query type
+
+                # Build and execute the final query
+                full_query = f"{base_query} WHERE {' AND '.join(where_clauses)} {order_by} LIMIT 1"
+                cur.execute(full_query, tuple(params))
+                result = cur.fetchone()
+
+                return cast(RealDictRow, result)['canonical_name'] if result else None
         except Exception as e:
-            logger.error(
-                f"Error calculating dynamic answer for {dynamic_query_type}: {e}")
+            logger.error(f"Error calculating dynamic answer for {dynamic_query_type}: {e}")
             return None
 
     def get_trivia_question_by_id(
@@ -3642,6 +3627,49 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting trivia question statistics: {e}")
             return {}
+
+    def get_trivia_participant_stats_for_week(self) -> Dict[str, Any]:
+        """Gets key stats from the most recent Trivia Tuesday session."""
+        conn = self.get_connection()
+        if not conn:
+            return {}
+
+        try:
+            with conn.cursor() as cur:
+                # Find the most recent completed weekly trivia session in the last 7 days
+                cur.execute("""
+                    SELECT id, first_correct_user_id FROM trivia_sessions
+                    WHERE status = 'completed' AND session_type LIKE 'weekly%'
+                    AND started_at >= NOW() - INTERVAL '7 days'
+                    ORDER BY started_at DESC LIMIT 1
+                """)
+                session = cur.fetchone()
+                if not session:
+                    return {"status": "no_session_found"}
+
+                session_dict = dict(session)
+                session_id = session_dict['id']
+                winner_id = session_dict.get('first_correct_user_id')
+
+                # Find a "notable participant" (someone who answered but didn't win)
+                cur.execute("""
+                    SELECT user_id FROM trivia_answers
+                    WHERE session_id = %s AND conflict_detected = FALSE AND is_correct = FALSE
+                    AND user_id != %s
+                    GROUP BY user_id
+                    ORDER BY COUNT(*) DESC, MAX(submitted_at) DESC
+                    LIMIT 1
+                """, (session_id, winner_id))
+                notable_participant = cur.fetchone()
+
+                return {
+                    "status": "success",
+                    "winner_id": winner_id,
+                    "notable_participant_id": dict(notable_participant)['user_id'] if notable_participant else None
+                }
+        except Exception as e:
+            logger.error(f"Error getting weekly trivia stats: {e}")
+            return {"status": "error"}
 
     def check_question_duplicate(self, question_text: str,
                                  similarity_threshold: float = 0.8) -> Optional[Dict[str, Any]]:

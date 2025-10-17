@@ -67,12 +67,12 @@ class AnnouncementsCommands(commands.Cog):
                     text="Announced by Sir Decent Jam • Bot Creator",
                     icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None)
 
-            # Send to announcement channel
+            # Send to announcement channel with @everyone ping
             announcement_channel = self.bot.get_channel(
                 ANNOUNCEMENTS_CHANNEL_ID)
             if announcement_channel:
-                await announcement_channel.send(embed=embed)
-                await ctx.send(f"✅ **Announcement posted** to {announcement_channel.mention}.")
+                await announcement_channel.send("@everyone", embed=embed)
+                await ctx.send(f"✅ **Announcement posted** with @everyone ping to {announcement_channel.mention}.")
 
             else:
                 await ctx.send("❌ **Announcement channel not found.** Please check channel configuration.")

@@ -8,7 +8,7 @@ Manages conversation state and user flows for complex multi-step interactions.
 import asyncio
 import re
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 import discord
@@ -21,7 +21,7 @@ from ..config import (
     MOD_ALERT_CHANNEL_ID,
     YOUTUBE_UPLOADS_CHANNEL_ID,
 )
-from ..database import get_database
+from ..database_module import get_database
 from ..utils.permissions import get_user_communication_tier, user_is_mod_by_id
 from .ai_handler import ai_enabled, apply_ash_persona_to_ai_prompt, call_ai_with_rate_limiting, filter_ai_response
 
@@ -123,6 +123,71 @@ def update_jam_approval_activity(user_id: int):
         jam_approval_conversations[user_id]["last_activity"] = datetime.now(
             ZoneInfo("Europe/London"))
 
+
+def cleanup_weekly_announcement_approvals():
+    """Remove weekly announcement approval sessions inactive for more than 24 hours"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    cutoff_time = uk_now - timedelta(hours=24)
+    expired_users = []
+
+    for user_id, data in weekly_announcement_approvals.items():
+        last_activity = data.get("last_activity", uk_now)
+        if last_activity < cutoff_time:
+            expired_users.append(user_id)
+
+            # Mark as cancelled in database
+            announcement_id = data.get('announcement_id')
+            if announcement_id and db:
+                try:
+                    db.update_announcement_status(announcement_id, 'cancelled')
+                    print(f"Auto-cancelled stale weekly announcement {announcement_id} after 24 hours")
+                except Exception as e:
+                    print(f"Error auto-cancelling announcement {announcement_id}: {e}")
+
+    # Remove from memory
+    for user_id in expired_users:
+        conversation_age_hours = (
+            uk_now - weekly_announcement_approvals[user_id].get("last_activity", uk_now)).total_seconds() / 3600
+        print(
+            f"Cleaned up weekly announcement approval for user {user_id} after {conversation_age_hours:.1f} hours of inactivity")
+        del weekly_announcement_approvals[user_id]
+
+    return len(expired_users)
+
+
+async def notify_jam_weekly_message_failure(day: str, error_type: str, details: str):
+    """Send DM notification to JAM when weekly message generation fails"""
+    try:
+        bot = _get_bot_instance()
+        if not bot:
+            print("❌ Cannot notify JAM of weekly message failure - bot instance not available")
+            return False
+
+        jam_user = await bot.fetch_user(JAM_USER_ID)
+        if not jam_user:
+            print(f"❌ Cannot notify JAM of weekly message failure - user {JAM_USER_ID} not found")
+            return False
+
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        timestamp = uk_now.strftime("%Y-%m-%d %H:%M:%S UK")
+
+        # Create consistent error message format
+        error_msg = (
+            f"❌ **{day.title()} Message Creation Failure**\n\n"
+            f"**Reason:** {error_type}\n"
+            f"**Details:** {details}\n"
+            f"**Time:** {timestamp}\n\n"
+            f"*No {day.title()} greeting will be sent automatically. Manual intervention may be required.*"
+        )
+
+        await jam_user.send(error_msg)
+        print(f"✅ Sent {day.title()} failure notification to JAM: {error_type}")
+        return True
+
+    except Exception as e:
+        print(f"❌ Error sending failure notification to JAM: {e}")
+        return False
+
 # Weekly Announcement Approval Regeneration Logic
 
 
@@ -167,7 +232,36 @@ async def _regenerate_weekly_announcement_content(
             return filter_ai_response(response_text)
         return None
 
-    # Placeholder for Friday's regeneration logic
+    elif day == 'friday':
+        all_modules = analysis_cache.get("modules", [])
+        if not all_modules:
+            return "Analysis indicates no alternative data points are available for regeneration."
+
+        # Find a different module to report on than the one used in the original content
+        new_moment_content = ""
+        for module in all_modules:
+            if module['content'] not in original_content:
+                new_moment_content = module['content']
+                break
+
+        if not new_moment_content:  # If no other modules, just rephrase the first one
+            new_moment_content = all_modules[0]['content']
+
+        content_prompt = f"""
+        You previously generated an announcement based on this data point:
+        "{original_content}"
+
+        Now, using this ALTERNATIVE data point from the week's activity, generate a NEW Friday community report:
+        - New Data Point: "{new_moment_content}"
+
+        CRITICAL: Your new message must focus entirely on the new data point. Maintain your analytical persona.
+        Start with "Good morning, personnel. A secondary analysis of the past week's crew engagement is complete."
+        """
+        prompt = apply_ash_persona_to_ai_prompt(content_prompt, "announcement_regeneration")
+        response_text, status_message = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+
+        if response_text:
+            return filter_ai_response(response_text)
     return None
 
 # Weekly Announcement Approval Workflow
@@ -732,43 +826,41 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
             del announcement_conversations[user_id]
 
 
-def _infer_dynamic_query_type(question_text: str) -> Optional[str]:
-    """Infers the dynamic query type from the question text."""
+# In conversation_handler.py, replace the _infer_dynamic_query_type() function
+
+def _infer_dynamic_query_type(question_text: str) -> Tuple[Optional[str], Optional[str]]:
+    """Infers the dynamic query type and an optional parameter from the question text."""
     text = question_text.lower()
+
+    # Pattern to find a genre or series filter (e.g., "which horror game", "longest God of War playthrough")
+    filter_match = re.search(r"\b(of|in the)\s+([a-zA-Z0-9\s:]+)\s+(series|franchise|playthrough|game)", text)
+    parameter = filter_match.group(2).strip() if filter_match else None
+
+    # Popularity (views)
+    if "popular" in text or "views" in text:
+        return "most_popular_by_views", parameter
 
     # Playtime queries
     if "playthrough" in text or "playtime" in text or "hours" in text:
         if "longest" in text or "most" in text:
-            return "longest_playtime"
+            return "longest_playtime", parameter
         if "shortest" in text or "least" in text or "fewest" in text:
-            return "shortest_playtime"
+            return "shortest_playtime", parameter
 
     # Episode queries
     if "episodes" in text:
         if "most" in text or "longest" in text:
-            return "most_episodes"
+            return "most_episodes", parameter
         if "fewest" in text or "least" in text or "shortest" in text:
-            return "fewest_episodes"
+            return "fewest_episodes", parameter
 
-    # Timeline queries
-    if "first game" in text and "played" in text:
-        return "first_game_played"
-    if ("most recent" in text or "latest" in text) and "played" in text:
-        return "most_recent_game_played"
-    if "oldest" in text and ("release" in text or "year" in text):
-        return "oldest_game_by_release"
+    # Fallback for simple queries
+    if "longest" in text:
+        return "longest_playtime", None
+    if "most episodes" in text:
+        return "most_episodes", None
 
-    # Aggregate & Series queries
-    if "series" in text and "time" in text:
-        return "series_most_playtime"
-    if "average" in text and "episode" in text:
-        return "highest_avg_episode"
-    if ("most common" in text or "most played" in text) and "genre" in text:
-        return "most_common_genre"
-    if "how many" in text and "games" in text and "genre" in text:
-        return "genre_game_count"  # Special case, requires parameter
-
-    return None
+    return None, None
 
 
 async def handle_mod_trivia_conversation(message: discord.Message) -> None:
@@ -864,17 +956,37 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                     f"**Please provide the correct answer:**"
                 )
             else:
-                conversation['step'] = 'category_selection'
-                await message.reply(
-                    f"📝 **Question Recorded**\n\n"
-                    f"**Your Question:** {content}\n\n"
-                    f"📊 **Category Selection** (helps with answer calculation):\n"
-                    f"**1.** 📈 **Statistics** - Questions about playtime, episode counts, completion rates\n"
-                    f"**2.** 🎮 **Games** - Questions about specific games or series\n"
-                    f"**3.** 📺 **Series** - Questions about game franchises or series\n\n"
-                    f"Please respond with **1**, **2**, or **3** to categorize your question.\n\n"
-                    f"*This helps me calculate the most accurate answer from the database.*"
+                conversation['step'] = 'preview'
+                question_text = data['question_text']
+
+                # Infer query type AND parameters from the question text
+                inferred_query_type, parameter = _infer_dynamic_query_type(question_text)
+                data['dynamic_query_type'] = inferred_query_type
+                data['dynamic_parameter'] = parameter
+
+                calculated_answer = "Could not be determined. The question may be too ambiguous."
+                if inferred_query_type:
+                    if db:
+                        answer = db.calculate_dynamic_answer(inferred_query_type, parameter)
+                        if answer:
+                            calculated_answer = answer
+                        else:
+                            calculated_answer = "Could not be determined. No data found for this query."
+
+                preview_msg = (
+                    f"📋 **Trivia Question Preview**\n\n"
+                    f"**Question:** {question_text}\n\n"
+                    f"**Current Answer (calculated now):** {calculated_answer}\n"
+                    f"**Note:** *This answer is dynamic and will be recalculated when the question is used.*\n\n"
+                    f"**Type:** Database-Calculated\n"
+                    f"**Source:** Moderator Submission\n\n"
+                    f"📚 **Available Actions:**\n"
+                    f"**1.** ✅ **Submit Question**\n"
+                    f"**2.** ✏️ **Edit Question**\n"
+                    f"**3.** ❌ **Cancel**\n\n"
+                    f"Please respond with **1**, **2**, or **3**."
                 )
+                await message.reply(preview_msg)
 
         elif step == 'answer_input':
             # Store the answer and move to preview
@@ -922,12 +1034,13 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
             category = data['category']
 
             # --- NEW: Infer query type and calculate preview answer ---
-            inferred_query_type = _infer_dynamic_query_type(question_text)
+            inferred_query_type, parameter = _infer_dynamic_query_type(question_text)
             calculated_answer = "Could not be determined. The question may be too ambiguous."
             if inferred_query_type:
                 data['dynamic_query_type'] = inferred_query_type
+                data['dynamic_parameter'] = parameter
                 if db:
-                    answer = db.calculate_dynamic_answer(inferred_query_type)
+                    answer = db.calculate_dynamic_answer(inferred_query_type, parameter)
                     if answer:
                         calculated_answer = answer
                     else:
@@ -1176,17 +1289,30 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
     user_id = message.author.id
     conversation = jam_approval_conversations.get(user_id)
 
-    # Get conversation data - only JAM should have approval conversations
-    conversation = jam_approval_conversations.get(user_id)
-
     if not conversation:
         return
-    
-    timeout_minutes = 3
+
+    # Get message content early for pre-trivia check
+    content = message.content.strip()
+
+    # Handle pre-trivia approval context
+    if conversation.get('context') == 'pre_trivia':
+        if content == '1':  # Approve
+            await message.reply("✅ **Pre-Trivia Question Approved.** It will be posted automatically at 11:00 AM.")
+        elif content == '2':  # Reject
+            await message.reply("❌ **Pre-Trivia Question Rejected.** An alternative will be selected. You may need to start trivia manually if a replacement cannot be found in time.")
+            # We would add logic here to mark the question as 'retired' or similar.
+        else:
+            await message.reply("⚠️ Invalid input. Please respond with **1** (Approve) or **2** (Reject).")
+
+        del jam_approval_conversations[user_id]
+        return
+
+    timeout_minutes = 15
     last_activity = conversation.get('last_activity', datetime.now(ZoneInfo("Europe/London")))
     if datetime.now(ZoneInfo("Europe/London")) > last_activity + timedelta(minutes=timeout_minutes):
         print(f"⌛️ JAM APPROVAL: Detected expired conversation for user {user_id}. Cleaning up.")
-        
+
         # Mark as expired in the database if a session ID exists
         session_id = conversation.get('session_id')
         if session_id:
@@ -1194,9 +1320,10 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
         # Remove from memory
         del jam_approval_conversations[user_id]
-        
-        # Inform the user and stop processing. The bot will now treat the next message normally.
-        await message.reply("⌛️ **Approval session timed out.** Your previous conversation has ended. A new question will be sent for approval when required.")
+
+        # Inform the user and stop processing.
+        question_id_for_command = (conversation.get('data', {}).get('question_data', {}).get('id', 'Unknown'))
+        await message.reply(f"⌛️ **Approval session timed out.** Your previous conversation has ended. To restart the approval for this question, please use `!approvequestion {question_id_for_command}` in a channel.")
         return
 
     # Only JAM can use this conversation
@@ -1210,7 +1337,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
     step = conversation.get('step', 'approval')
     data = conversation.get('data', {})
-    content = message.content.strip()
+    # content already defined above for pre-trivia check
 
     try:
         if step == 'approval':
@@ -1551,7 +1678,7 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
                 session_type='question_approval',
                 conversation_step='approval',
                 question_data=question_data,
-                timeout_minutes=3  # 3 minutes timeout as requested
+                timeout_minutes=15
             )
 
             if not session_id:
@@ -1698,6 +1825,17 @@ async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
             print("❌ Could not find bot instance for pre-trivia approval")
             return False
 
+        # Get current UK time
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+
+        jam_approval_conversations[JAM_USER_ID] = {
+            'step': 'approval',
+            'data': {'question_data': question_data},
+            'context': 'pre_trivia',
+            'last_activity': uk_now,
+            'initiated_at': uk_now,
+        }
+
         # Get JAM user
         try:
             jam_user = await bot_instance.fetch_user(JAM_USER_ID)
@@ -1734,9 +1872,9 @@ async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
 
         pre_approval_msg += (
             f"📚 **Decision Required:**\n"
-            f"**✅ APPROVE** - This question will be posted at 11:00 AM as scheduled\n"
-            f"**❌ REJECT** - An alternative question will be selected and presented for approval\n\n"
-            f"Please respond with **APPROVE** or **REJECT**.\n\n"
+            f"**1.** ✅ **Approve** - This question will be posted at 11:00 AM as scheduled\n"
+            f"**2.** ❌ **Reject** - An alternative question will be selected and presented for approval\n\n"
+            f"Please respond with **1** or **2**.\n\n"
             f"*Time-sensitive approval required for today's Trivia Tuesday session.*"
         )
 
