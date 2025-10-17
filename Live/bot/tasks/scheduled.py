@@ -62,7 +62,7 @@ except ImportError:
     async def start_weekly_announcement_approval(*args, **kwargs):  # type: ignore
         print("⚠️ start_weekly_announcement_approval not available - handler not loaded")
         return None
-    
+
     async def notify_jam_weekly_message_failure(*args, **kwargs) -> bool:  # type: ignore
         print("⚠️ notify_jam_weekly_message_failure not available - handler not loaded")
         return False
@@ -277,6 +277,8 @@ async def safe_send_message(channel, content, mention_user_id=None):
 
 ## WEEKLY TASKS ##
 # Run at 8:30 AM UK time every Monday
+
+
 @tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))
 async def monday_content_sync():
     """Syncs new content and generates a debrief for approval."""
@@ -292,8 +294,8 @@ async def monday_content_sync():
     if not db:
         print("❌ SYNC & DEBRIEF (Monday): Database not available")
         await notify_jam_weekly_message_failure(
-            'monday', 
-            'Database unavailable', 
+            'monday',
+            'Database unavailable',
             'The database connection is not available. Cannot proceed with content sync.'
         )
         return
@@ -363,6 +365,8 @@ async def monday_content_sync():
         )
 
 # Run at 9:00 AM UK time every Monday
+
+
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
 async def monday_morning_greeting():
     """Posts the approved Monday morning debrief to the chit-chat channel."""
@@ -400,6 +404,8 @@ async def monday_morning_greeting():
         print(f"❌ MONDAY GREETING: Error posting message: {e}")
 
 # Run at 9:00 AM UK time every Tuesday - Trivia reminder
+
+
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
 async def tuesday_trivia_greeting():
     """Send Tuesday morning greeting with trivia reminder to members channel"""
@@ -447,6 +453,8 @@ async def tuesday_trivia_greeting():
         print(f"❌ Error in tuesday_trivia_greeting: {e}")
 
 # Run at 10:00 AM UK time every Tuesday - Trivia question pre-approval
+
+
 @tasks.loop(time=time(10, 0, tzinfo=ZoneInfo("Europe/London")))
 async def pre_trivia_approval():
     """Send selected trivia question to JAM for approval 1 hour before posting"""
@@ -557,6 +565,8 @@ async def pre_trivia_approval():
             pass
 
 # Run at 11:00 AM UK time every Tuesday - Trivia Tuesday question posting
+
+
 @tasks.loop(time=time(11, 0, tzinfo=ZoneInfo("Europe/London")))
 async def trivia_tuesday():
     """Posts the approved Trivia Tuesday question and starts a persistent database session."""
@@ -642,19 +652,21 @@ async def trivia_tuesday():
         await notify_scheduled_message_error("Trivia Tuesday", str(e), uk_now)
 
 # Run at 8:15 AM UK time every Friday - Gathering weekly activity
+
+
 @tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
 async def friday_community_analysis():
     """Scrapes community activity, generates a debrief, and sends it for approval."""
-    if not _should_run_automated_tasks(): 
+    if not _should_run_automated_tasks():
         return
-    
+
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 4: 
-        return # Only run on Fridays
+    if uk_now.weekday() != 4:
+        return  # Only run on Fridays
 
     print("🔄 COMMUNITY ANALYSIS (Friday): Starting weekly activity scrape...")
     bot = get_bot_instance()
-    
+
     if not bot:
         print("❌ COMMUNITY ANALYSIS (Friday): Bot instance not available")
         await notify_jam_weekly_message_failure(
@@ -663,7 +675,7 @@ async def friday_community_analysis():
             'The bot instance is not available. Cannot proceed with community analysis.'
         )
         return
-    
+
     if not db:
         print("❌ COMMUNITY ANALYSIS (Friday): Database not available")
         await notify_jam_weekly_message_failure(
@@ -677,7 +689,7 @@ async def friday_community_analysis():
         # --- 1. Data Gathering (Scraping) ---
         # Define public, non-moderator channels to scrape
         public_channel_ids = [CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID]
-        
+
         all_messages = []
         seven_days_ago = uk_now - timedelta(days=7)
 
@@ -697,7 +709,7 @@ async def friday_community_analysis():
                 f'Failed to scrape community messages from channels. Error: {str(scrape_error)[:200]}'
             )
             return
-        
+
         if not all_messages:
             print("✅ COMMUNITY ANALYSIS (Friday): No recent community activity found.")
             await notify_jam_weekly_message_failure(
@@ -709,13 +721,13 @@ async def friday_community_analysis():
 
         # --- 2. Analysis & Moment Selection ---
         analysis_modules = []
-        
+
         # Module A: Jonesy's Most Engaging Message
         jonesy_messages = [m for m in all_messages if m.author.id == JONESY_USER_ID]
         if jonesy_messages:
             jonesy_messages.sort(key=lambda m: len(m.reactions), reverse=True)
             top_jonesy_message = jonesy_messages[0]
-            if len(top_jonesy_message.reactions) > 2: # Set a minimum reaction threshold
+            if len(top_jonesy_message.reactions) > 2:  # Set a minimum reaction threshold
                 analysis_modules.append({
                     "type": "jonesy_message", "data": top_jonesy_message,
                     "content": f"Analysis of command personnel communications indicates a high engagement rate with the transmission: \"{top_jonesy_message.content}\". This may represent an emerging crew catchphrase."
@@ -743,7 +755,7 @@ async def friday_community_analysis():
 
         # --- 3. Content Generation ---
         import random
-        chosen_moment = random.choice(analysis_modules) # Choose one random module to report on for variance
+        chosen_moment = random.choice(analysis_modules)  # Choose one random module to report on for variance
 
         debrief = (
             f"📅 **Friday Protocol Assessment**\n\n"
@@ -753,9 +765,9 @@ async def friday_community_analysis():
         )
 
         # --- 4. Approval Workflow ---
-        analysis_cache = {"modules": analysis_modules} # Cache all found modules for regeneration
+        analysis_cache = {"modules": analysis_modules}  # Cache all found modules for regeneration
         announcement_id = db.create_weekly_announcement('friday', debrief, analysis_cache)
-        
+
         if announcement_id:
             await start_weekly_announcement_approval(announcement_id, debrief, 'friday')
         else:
@@ -775,16 +787,21 @@ async def friday_community_analysis():
         )
 
 # Run at 9:00 AM UK time every Friday - Friday morning greeting
+
+
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
 async def friday_morning_greeting():
     """Posts the approved Friday morning community report."""
-    if not _should_run_automated_tasks(): return
+    if not _should_run_automated_tasks():
+        return
 
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 4: return
+    if uk_now.weekday() != 4:
+        return
 
     print(f"📅 FRIDAY GREETING: Checking for approved message at {uk_now.strftime('%H:%M UK')}")
-    if not db: return
+    if not db:
+        return
 
     try:
         approved_announcement = db.get_announcement_by_day('friday', 'approved')
@@ -793,7 +810,8 @@ async def friday_morning_greeting():
             return
 
         bot = get_bot_instance()
-        if not bot: return
+        if not bot:
+            return
 
         channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID)
         if channel and isinstance(channel, discord.TextChannel):
@@ -808,6 +826,8 @@ async def friday_morning_greeting():
 
 ## DAILY TASKS ##
 # Run at 00:00 PT (midnight Pacific Time) every day
+
+
 @tasks.loop(time=time(0, 0, tzinfo=ZoneInfo("US/Pacific")))
 async def scheduled_midnight_restart():
     """Automatically restart the bot at midnight Pacific Time to reset daily limits"""
@@ -841,6 +861,8 @@ async def scheduled_midnight_restart():
         print(f"❌ Error in scheduled_midnight_restart: {e}")
 
 # Run at 8:15 AM UK time every day (5 minutes after Google quota reset)
+
+
 @tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
 async def scheduled_ai_refresh():
     """Silently refresh AI module connections at 8:15am BST (after Google quota reset)"""
@@ -921,7 +943,9 @@ async def scheduled_ai_refresh():
 
 ## CONTINUOUS TASKS ##
 # Check reminders every minute
-@tasks.loop(minutes=1)  
+
+
+@tasks.loop(minutes=1)
 async def check_due_reminders():
     """Check for due reminders and deliver them"""
     try:
@@ -1092,6 +1116,8 @@ async def check_auto_actions():
         print(f"❌ Error in check_auto_actions: {e}")
 
 # Run every hour to cleanup old recommendation messages
+
+
 @tasks.loop(hours=1)
 async def cleanup_game_recommendations():
     """Clean up user recommendation messages older than 24 hours in #game-recommendation channel"""
@@ -1100,7 +1126,7 @@ async def cleanup_game_recommendations():
         cutoff_time = uk_now - timedelta(hours=24)
 
         print(f"🧹 Game recommendation cleanup starting at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-        
+
         # Also cleanup stale weekly announcement approvals
         try:
             from ..handlers.conversation_handler import cleanup_weekly_announcement_approvals
@@ -1190,6 +1216,8 @@ async def cleanup_game_recommendations():
         traceback.print_exc()
 
 # --- Scheduled Message Helper Functions ---
+
+
 async def notify_scheduled_message_error(task_name: str, error_message: str, timestamp: datetime) -> None:
     """Notify JAM of scheduled message errors"""
     try:
@@ -1218,6 +1246,8 @@ async def notify_scheduled_message_error(task_name: str, error_message: str, tim
         print(f"❌ Failed to notify JAM of scheduled message error: {notify_error}")
 
 # --- Reminder Helper Functions ---
+
+
 async def deliver_reminder(reminder: Dict[str, Any]) -> None:
     """Deliver a reminder to the appropriate channel/user with enhanced reliability"""
     try:
@@ -1576,7 +1606,7 @@ def start_all_scheduled_tasks(bot):
             (monday_morning_greeting, "Monday morning greeting task (9:00 AM UK time, Mondays)"),
             (tuesday_trivia_greeting, "Tuesday trivia greeting task (9:00 AM UK time, Tuesdays)"),
             (pre_trivia_approval, "Pre-trivia approval task (10:00 AM UK time, Tuesdays)"),
-            (trivia_tuesday, "Trivia Tuesday task (11:00 AM UK time, Tuesdays)"),       
+            (trivia_tuesday, "Trivia Tuesday task (11:00 AM UK time, Tuesdays)"),
             (friday_community_analysis, "Friday Community Analysis (Friday 8.15am)"),
             (friday_morning_greeting, "Friday morning greeting task (9:00 AM UK time, Fridays)"),
             ## Daily ##

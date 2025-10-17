@@ -129,12 +129,12 @@ def cleanup_weekly_announcement_approvals():
     uk_now = datetime.now(ZoneInfo("Europe/London"))
     cutoff_time = uk_now - timedelta(hours=24)
     expired_users = []
-    
+
     for user_id, data in weekly_announcement_approvals.items():
         last_activity = data.get("last_activity", uk_now)
         if last_activity < cutoff_time:
             expired_users.append(user_id)
-            
+
             # Mark as cancelled in database
             announcement_id = data.get('announcement_id')
             if announcement_id and db:
@@ -143,13 +143,15 @@ def cleanup_weekly_announcement_approvals():
                     print(f"Auto-cancelled stale weekly announcement {announcement_id} after 24 hours")
                 except Exception as e:
                     print(f"Error auto-cancelling announcement {announcement_id}: {e}")
-    
+
     # Remove from memory
     for user_id in expired_users:
-        conversation_age_hours = (uk_now - weekly_announcement_approvals[user_id].get("last_activity", uk_now)).total_seconds() / 3600
-        print(f"Cleaned up weekly announcement approval for user {user_id} after {conversation_age_hours:.1f} hours of inactivity")
+        conversation_age_hours = (
+            uk_now - weekly_announcement_approvals[user_id].get("last_activity", uk_now)).total_seconds() / 3600
+        print(
+            f"Cleaned up weekly announcement approval for user {user_id} after {conversation_age_hours:.1f} hours of inactivity")
         del weekly_announcement_approvals[user_id]
-    
+
     return len(expired_users)
 
 
@@ -160,15 +162,15 @@ async def notify_jam_weekly_message_failure(day: str, error_type: str, details: 
         if not bot:
             print("❌ Cannot notify JAM of weekly message failure - bot instance not available")
             return False
-        
+
         jam_user = await bot.fetch_user(JAM_USER_ID)
         if not jam_user:
             print(f"❌ Cannot notify JAM of weekly message failure - user {JAM_USER_ID} not found")
             return False
-        
+
         uk_now = datetime.now(ZoneInfo("Europe/London"))
         timestamp = uk_now.strftime("%Y-%m-%d %H:%M:%S UK")
-        
+
         # Create consistent error message format
         error_msg = (
             f"❌ **{day.title()} Message Creation Failure**\n\n"
@@ -177,11 +179,11 @@ async def notify_jam_weekly_message_failure(day: str, error_type: str, details: 
             f"**Time:** {timestamp}\n\n"
             f"*No {day.title()} greeting will be sent automatically. Manual intervention may be required.*"
         )
-        
+
         await jam_user.send(error_msg)
         print(f"✅ Sent {day.title()} failure notification to JAM: {error_type}")
         return True
-        
+
     except Exception as e:
         print(f"❌ Error sending failure notification to JAM: {e}")
         return False
@@ -241,8 +243,8 @@ async def _regenerate_weekly_announcement_content(
             if module['content'] not in original_content:
                 new_moment_content = module['content']
                 break
-        
-        if not new_moment_content: # If no other modules, just rephrase the first one
+
+        if not new_moment_content:  # If no other modules, just rephrase the first one
             new_moment_content = all_modules[0]['content']
 
         content_prompt = f"""
@@ -257,7 +259,7 @@ async def _regenerate_weekly_announcement_content(
         """
         prompt = apply_ash_persona_to_ai_prompt(content_prompt, "announcement_regeneration")
         response_text, status_message = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
-        
+
         if response_text:
             return filter_ai_response(response_text)
     return None

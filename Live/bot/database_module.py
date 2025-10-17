@@ -3627,11 +3627,12 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting trivia question statistics: {e}")
             return {}
-        
+
     def get_trivia_participant_stats_for_week(self) -> Dict[str, Any]:
         """Gets key stats from the most recent Trivia Tuesday session."""
         conn = self.get_connection()
-        if not conn: return {}
+        if not conn:
+            return {}
 
         try:
             with conn.cursor() as cur:
@@ -3660,7 +3661,7 @@ class DatabaseManager:
                     LIMIT 1
                 """, (session_id, winner_id))
                 notable_participant = cur.fetchone()
-                
+
                 return {
                     "status": "success",
                     "winner_id": winner_id,
