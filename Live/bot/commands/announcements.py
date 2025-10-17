@@ -167,11 +167,11 @@ class AnnouncementsCommands(commands.Cog):
             from ..tasks.scheduled import perform_full_content_sync
 
             uk_now = datetime.now(ZoneInfo("Europe/London"))
-            
+
             await ctx.send("🔄 **Monday Content Sync Initiated...**\n\nAnalyzing new YouTube/Twitch content from the past week. This may take a moment...")
 
             database = self._get_db()
-            
+
             # Get the last sync timestamp
             start_sync_time = database.get_latest_game_update_timestamp()
             if not start_sync_time:
@@ -195,7 +195,7 @@ class AnnouncementsCommands(commands.Cog):
                 f"🌅 **Monday Morning Protocol Initiated**\n\n"
                 f"Analysis of the previous 168-hour operational cycle is complete. **{analysis_results.get('new_content_count', 0)}** new transmissions were logged, "
                 f"accumulating **{analysis_results.get('new_hours', 0)} hours** of new mission data and **{analysis_results.get('new_views', 0):,}** viewer engagements.")
-            
+
             top_video = analysis_results.get("top_video")
             if top_video:
                 debrief += f"\n\nMaximum engagement was recorded on the transmission titled **'{top_video['title']}'**."
@@ -241,14 +241,14 @@ class AnnouncementsCommands(commands.Cog):
             from ..handlers.conversation_handler import start_weekly_announcement_approval
 
             uk_now = datetime.now(ZoneInfo("Europe/London"))
-            
+
             await ctx.send("🔄 **Friday Community Analysis Initiated...**\n\nAnalyzing community activity from the past week. This may take a moment...")
 
             database = self._get_db()
 
             # Define channels to scrape
             public_channel_ids = [CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID]
-            
+
             all_messages = []
             seven_days_ago = uk_now - timedelta(days=7)
 
@@ -270,7 +270,7 @@ class AnnouncementsCommands(commands.Cog):
 
             # Analyze and create moment modules
             analysis_modules = []
-            
+
             # Module A: Jonesy's Most Engaging Message
             jonesy_messages = [m for m in all_messages if m.author.id == JONESY_USER_ID]
             if jonesy_messages:
@@ -282,11 +282,11 @@ class AnnouncementsCommands(commands.Cog):
                         "content": top_jonesy_message.content,
                         "author_id": top_jonesy_message.author.id,
                         "author_name": top_jonesy_message.author.name,
-                        "reaction_count": len(top_jonesy_message.reactions),
+                        "reaction_count": len(
+                            top_jonesy_message.reactions),
                         "message_id": top_jonesy_message.id,
                         "channel_id": top_jonesy_message.channel.id,
-                        "created_at": top_jonesy_message.created_at.isoformat() if top_jonesy_message.created_at else None
-                    }
+                        "created_at": top_jonesy_message.created_at.isoformat() if top_jonesy_message.created_at else None}
                     analysis_modules.append({
                         "type": "jonesy_message",
                         "data": message_data,

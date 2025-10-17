@@ -727,7 +727,7 @@ async def friday_community_analysis():
         if jonesy_messages:
             jonesy_messages.sort(key=lambda m: len(m.reactions), reverse=True)
             top_jonesy_message = jonesy_messages[0]
-            if len(top_jonesy_message.reactions) > 2: # Set a minimum reaction threshold
+            if len(top_jonesy_message.reactions) > 2:  # Set a minimum reaction threshold
                 # Extract JSON-serializable data from Message object
                 message_data = {
                     "content": top_jonesy_message.content,
