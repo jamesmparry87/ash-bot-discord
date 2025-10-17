@@ -727,9 +727,20 @@ async def friday_community_analysis():
         if jonesy_messages:
             jonesy_messages.sort(key=lambda m: len(m.reactions), reverse=True)
             top_jonesy_message = jonesy_messages[0]
-            if len(top_jonesy_message.reactions) > 2:  # Set a minimum reaction threshold
+            if len(top_jonesy_message.reactions) > 2: # Set a minimum reaction threshold
+                # Extract JSON-serializable data from Message object
+                message_data = {
+                    "content": top_jonesy_message.content,
+                    "author_id": top_jonesy_message.author.id,
+                    "author_name": top_jonesy_message.author.name,
+                    "reaction_count": len(top_jonesy_message.reactions),
+                    "message_id": top_jonesy_message.id,
+                    "channel_id": top_jonesy_message.channel.id,
+                    "created_at": top_jonesy_message.created_at.isoformat() if top_jonesy_message.created_at else None
+                }
                 analysis_modules.append({
-                    "type": "jonesy_message", "data": top_jonesy_message,
+                    "type": "jonesy_message",
+                    "data": message_data,
                     "content": f"Analysis of command personnel communications indicates a high engagement rate with the transmission: \"{top_jonesy_message.content}\". This may represent an emerging crew catchphrase."
                 })
 
