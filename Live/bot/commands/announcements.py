@@ -163,8 +163,8 @@ class AnnouncementsCommands(commands.Cog):
     async def generate_monday_manual(self, ctx):
         """Manually trigger Monday content sync and approval workflow (Admin only)"""
         try:
-            from ..tasks.scheduled import perform_full_content_sync
             from ..handlers.conversation_handler import start_weekly_announcement_approval
+            from ..tasks.scheduled import perform_full_content_sync
 
             uk_now = datetime.now(ZoneInfo("Europe/London"))
             
@@ -233,10 +233,12 @@ class AnnouncementsCommands(commands.Cog):
     async def generate_friday_manual(self, ctx):
         """Manually trigger Friday community analysis and approval workflow (Admin only)"""
         try:
-            import discord
             from datetime import timedelta
-            from ..handlers.conversation_handler import start_weekly_announcement_approval
+
+            import discord
+
             from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID, JONESY_USER_ID
+            from ..handlers.conversation_handler import start_weekly_announcement_approval
 
             uk_now = datetime.now(ZoneInfo("Europe/London"))
             
