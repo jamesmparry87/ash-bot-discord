@@ -3627,6 +3627,48 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting trivia question statistics: {e}")
             return {}
+        
+    def get_trivia_participant_stats_for_week(self) -> Dict[str, Any]:
+        """Gets key stats from the most recent Trivia Tuesday session."""
+        conn = self.get_connection()
+        if not conn: return {}
+
+        try:
+            with conn.cursor() as cur:
+                # Find the most recent completed weekly trivia session in the last 7 days
+                cur.execute("""
+                    SELECT id, first_correct_user_id FROM trivia_sessions
+                    WHERE status = 'completed' AND session_type LIKE 'weekly%'
+                    AND started_at >= NOW() - INTERVAL '7 days'
+                    ORDER BY started_at DESC LIMIT 1
+                """)
+                session = cur.fetchone()
+                if not session:
+                    return {"status": "no_session_found"}
+
+                session_dict = dict(session)
+                session_id = session_dict['id']
+                winner_id = session_dict.get('first_correct_user_id')
+
+                # Find a "notable participant" (someone who answered but didn't win)
+                cur.execute("""
+                    SELECT user_id FROM trivia_answers
+                    WHERE session_id = %s AND conflict_detected = FALSE AND is_correct = FALSE
+                    AND user_id != %s
+                    GROUP BY user_id
+                    ORDER BY COUNT(*) DESC, MAX(submitted_at) DESC
+                    LIMIT 1
+                """, (session_id, winner_id))
+                notable_participant = cur.fetchone()
+                
+                return {
+                    "status": "success",
+                    "winner_id": winner_id,
+                    "notable_participant_id": dict(notable_participant)['user_id'] if notable_participant else None
+                }
+        except Exception as e:
+            logger.error(f"Error getting weekly trivia stats: {e}")
+            return {"status": "error"}
 
     def check_question_duplicate(self, question_text: str,
                                  similarity_threshold: float = 0.8) -> Optional[Dict[str, Any]]:

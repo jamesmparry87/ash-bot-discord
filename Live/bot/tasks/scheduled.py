@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import tasks
 
-from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID, GUILD_ID, MEMBERS_CHANNEL_ID
+from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID, GUILD_ID, MEMBERS_CHANNEL_ID, JONESY_USER_ID
 
 # Database and config imports
 try:
@@ -55,13 +55,17 @@ except ImportError:
         return None
 
 try:
-    from ..handlers.conversation_handler import start_weekly_announcement_approval
+    from ..handlers.conversation_handler import start_weekly_announcement_approval, notify_jam_weekly_message_failure
 except ImportError:
     print("⚠️ Conversation handlers not available for scheduled tasks")
 
-    async def start_weekly_announcement_approval(*args, **kwargs):
+    async def start_weekly_announcement_approval(*args, **kwargs):  # type: ignore
         print("⚠️ start_weekly_announcement_approval not available - handler not loaded")
         return None
+    
+    async def notify_jam_weekly_message_failure(*args, **kwargs) -> bool:  # type: ignore
+        print("⚠️ notify_jam_weekly_message_failure not available - handler not loaded")
+        return False
 
 # Global state for trivia and bot instance
 _bot_instance = None  # Store the bot instance globally
@@ -271,9 +275,8 @@ async def safe_send_message(channel, content, mention_user_id=None):
         print(f"❌ Unexpected error sending message to #{channel.name}: {e}")
         return False
 
+## WEEKLY TASKS ##
 # Run at 8:30 AM UK time every Monday
-
-
 @tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))
 async def monday_content_sync():
     """Syncs new content and generates a debrief for approval."""
@@ -288,17 +291,43 @@ async def monday_content_sync():
 
     if not db:
         print("❌ SYNC & DEBRIEF (Monday): Database not available")
+        await notify_jam_weekly_message_failure(
+            'monday', 
+            'Database unavailable', 
+            'The database connection is not available. Cannot proceed with content sync.'
+        )
         return
 
     try:
         start_sync_time = db.get_latest_game_update_timestamp()
         if not start_sync_time:
+            print("❌ SYNC & DEBRIEF (Monday): Could not get last update timestamp")
+            await notify_jam_weekly_message_failure(
+                'monday',
+                'Database timestamp error',
+                'Could not retrieve the last update timestamp from the database.'
+            )
             return
 
-        analysis_results = await perform_full_content_sync(start_sync_time)
+        # Perform content sync with error handling
+        try:
+            analysis_results = await perform_full_content_sync(start_sync_time)
+        except Exception as sync_error:
+            print(f"❌ SYNC & DEBRIEF (Monday): Content sync failed: {sync_error}")
+            await notify_jam_weekly_message_failure(
+                'monday',
+                'YouTube/Twitch integration failure',
+                f'Failed to fetch new content from YouTube/Twitch APIs. Error: {str(sync_error)[:200]}'
+            )
+            return
 
         if analysis_results.get("status") == "no_new_content":
             print("✅ SYNC & DEBRIEF (Monday): No new content found. No message to generate.")
+            await notify_jam_weekly_message_failure(
+                'monday',
+                'No new content found',
+                'No new YouTube/Twitch content was found for the past week. No message will be generated.'
+            )
             return
 
         # --- Content Generation ---
@@ -319,11 +348,465 @@ async def monday_content_sync():
             await start_weekly_announcement_approval(announcement_id, debrief, 'monday')
         else:
             print("❌ SYNC & DEBRIEF (Monday): Failed to create announcement record in database.")
+            await notify_jam_weekly_message_failure(
+                'monday',
+                'Database insertion failure',
+                'Failed to create the announcement record in the database.'
+            )
 
     except Exception as e:
         print(f"❌ SYNC & DEBRIEF (Monday): Critical error during sync: {e}")
+        await notify_jam_weekly_message_failure(
+            'monday',
+            'Unexpected error',
+            f'An unexpected error occurred during the Monday content sync: {str(e)[:200]}'
+        )
 
+# Run at 9:00 AM UK time every Monday
+@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
+async def monday_morning_greeting():
+    """Posts the approved Monday morning debrief to the chit-chat channel."""
+    if not _should_run_automated_tasks():
+        return
 
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    if uk_now.weekday() != 0:
+        return
+
+    print(f"🌅 MONDAY GREETING: Checking for approved message at {uk_now.strftime('%H:%M UK')}")
+    if not db:
+        return
+
+    try:
+        approved_announcement = db.get_announcement_by_day('monday', 'approved')
+        if not approved_announcement:
+            print("✅ MONDAY GREETING: No approved message found. Task complete.")
+            return
+
+        bot = get_bot_instance()
+        if not bot:
+            return
+
+        channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID)
+        if channel and isinstance(channel, discord.TextChannel):
+            await channel.send(approved_announcement['generated_content'])
+            # Mark as posted to prevent re-sending
+            db.update_announcement_status(approved_announcement['id'], 'posted')
+            print(f"✅ MONDAY GREETING: Successfully posted approved message.")
+        else:
+            print("❌ MONDAY GREETING: Could not find chit-chat channel.")
+
+    except Exception as e:
+        print(f"❌ MONDAY GREETING: Error posting message: {e}")
+
+# Run at 9:00 AM UK time every Tuesday - Trivia reminder
+@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
+async def tuesday_trivia_greeting():
+    """Send Tuesday morning greeting with trivia reminder to members channel"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+
+    # Only run on Tuesdays (weekday 1)
+    if uk_now.weekday() != 1:
+        return
+
+    print(f"🧠 Tuesday trivia greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+
+    try:
+        if not _bot_instance:
+            print("❌ Bot instance not available for Tuesday trivia greeting")
+            return
+
+        guild = _bot_instance.get_guild(GUILD_ID)
+        if not guild:
+            print("❌ Guild not found for Tuesday trivia greeting")
+            return
+
+        # Find members channel
+        members_channel = _bot_instance.get_channel(MEMBERS_CHANNEL_ID)
+        if not members_channel or not isinstance(members_channel, discord.TextChannel):
+            print("❌ Members channel not found for Tuesday trivia greeting")
+            return
+
+        # Ash-style Tuesday morning message with trivia reminder
+        tuesday_message = (
+            f"🧠 **Tuesday Intelligence Briefing**\n\n"
+            f"Good morning, senior personnel. Today marks another **Trivia Tuesday** - an excellent opportunity to assess cognitive capabilities and knowledge retention.\n\n"
+            f"📋 **Intelligence Assessment Schedule:**\n"
+            f"• **Current Time:** {uk_now.strftime('%H:%M UK')}\n"
+            f"• **Assessment Deployment:** 11:00 UK time (in 2 hours)\n"
+            f"• **Mission Objective:** Demonstrate analytical proficiency\n\n"
+            f"I find the systematic evaluation of intellectual capacity... quite fascinating. The data collected provides valuable insights into crew competency levels.\n\n"
+            f"🎯 **Preparation Recommended:** Review Captain Jonesy's gaming archives for optimal performance.\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"*Trivia Tuesday protocols will activate at 11:00. Prepare accordingly.*")
+
+        await members_channel.send(tuesday_message)
+        print(f"✅ Tuesday trivia greeting sent to members channel")
+
+    except Exception as e:
+        print(f"❌ Error in tuesday_trivia_greeting: {e}")
+
+# Run at 10:00 AM UK time every Tuesday - Trivia question pre-approval
+@tasks.loop(time=time(10, 0, tzinfo=ZoneInfo("Europe/London")))
+async def pre_trivia_approval():
+    """Send selected trivia question to JAM for approval 1 hour before posting"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+
+    # Only run on Tuesdays (weekday 1)
+    if uk_now.weekday() != 1:
+        return
+
+    # Check if this is the live bot - only live bot should run trivia
+    if not _should_run_automated_tasks():
+        print(f"⚠️ Pre-trivia approval skipped - staging bot detected at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+        return
+
+    print(f"🧠 Pre-trivia approval task triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+
+    try:
+        from ..handlers.conversation_handler import start_pre_trivia_approval
+
+        # Get next trivia question using existing priority logic
+        if db is None:
+            print("❌ Database not available for pre-trivia approval")
+            return
+
+        # Get available questions using the same logic as the main trivia system
+        available_questions = db.get_available_trivia_questions()  # type: ignore
+        if not available_questions:
+            print("❌ No available trivia questions for pre-approval")
+
+            # Try to generate an emergency question
+            try:
+                from ..handlers.ai_handler import generate_ai_trivia_question
+                from ..handlers.conversation_handler import start_jam_question_approval
+
+                print("🔄 Attempting to generate emergency question for today's trivia")
+                emergency_question = await generate_ai_trivia_question()
+
+                if emergency_question:
+                    # Send emergency question directly to JAM for urgent approval
+                    emergency_sent = await start_jam_question_approval(emergency_question)
+                    if emergency_sent:
+                        print("✅ Emergency question sent to JAM for approval")
+                        # Send urgent notification to JAM
+                        from ..config import JAM_USER_ID
+
+                        if not _bot_instance:
+                            print("⚠️ Bot instance not available for emergency trivia notification")
+                            return
+
+                        user = await _bot_instance.fetch_user(JAM_USER_ID)
+                        if user:
+                            await user.send(
+                                f"🚨 **URGENT: Emergency Trivia Question Generated**\n\n"
+                                f"No questions were available for today's Trivia Tuesday pre-approval.\n"
+                                f"An emergency question has been generated and sent for your immediate approval.\n\n"
+                                f"**Trivia starts in 1 hour at 11:00 AM UK time.**\n\n"
+                                f"*Please review and approve the emergency question as soon as possible.*"
+                            )
+                    else:
+                        print("❌ Failed to send emergency question to JAM")
+                else:
+                    print("❌ Failed to generate emergency question")
+            except Exception as emergency_e:
+                print(f"❌ Emergency question generation failed: {emergency_e}")
+
+            return
+
+        # Select question using priority system
+        # Priority 1: Recent mod-submitted questions
+        # Priority 2: AI-generated questions
+        # Priority 3: Any unused questions
+        selected_question = available_questions[0]
+
+        # If it's a dynamic question, calculate the answer
+        if selected_question.get('is_dynamic'):
+            calculated_answer = db.calculate_dynamic_answer(  # type: ignore
+                selected_question.get('dynamic_query_type', ''))
+            if calculated_answer:
+                selected_question['correct_answer'] = calculated_answer
+
+        # Send for JAM approval
+        success = await start_pre_trivia_approval(selected_question)
+
+        if success:
+            print(f"✅ Pre-trivia approval request sent to JAM for question #{selected_question.get('id')}")
+        else:
+            print("❌ Failed to send pre-trivia approval request")
+
+    except Exception as e:
+        print(f"❌ Error in pre_trivia_approval task: {e}")
+        # Try to notify JAM of the error
+        try:
+            from ..config import JAM_USER_ID
+
+            if not _bot_instance:
+                print("⚠️ Bot instance not available for pre-trivia error notification")
+                return
+
+            user = await _bot_instance.fetch_user(JAM_USER_ID)
+            if user:
+                await user.send(
+                    f"⚠️ **Pre-Trivia Approval Error**\n\n"
+                    f"Failed to send today's question for approval at 10:00 AM.\n"
+                    f"Error: {str(e)}\n\n"
+                    f"*Manual intervention may be required for today's Trivia Tuesday.*"
+                )
+        except Exception:
+            pass
+
+# Run at 11:00 AM UK time every Tuesday - Trivia Tuesday question posting
+@tasks.loop(time=time(11, 0, tzinfo=ZoneInfo("Europe/London")))
+async def trivia_tuesday():
+    """Posts the approved Trivia Tuesday question and starts a persistent database session."""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    if uk_now.weekday() != 1:
+        return
+    if not _should_run_automated_tasks():
+        print(f"⚠️ Trivia Tuesday skipped - staging bot detected at {uk_now.strftime('%H:%M:%S UK')}")
+        return
+
+    print(f"🧠 Trivia Tuesday task triggered at {uk_now.strftime('%H:%M:%S UK')}")
+
+    bot = get_bot_instance()
+    if not bot:
+        await notify_scheduled_message_error("Trivia Tuesday", "Bot instance not available.", uk_now)
+        return
+    if not db:
+        await notify_scheduled_message_error("Trivia Tuesday", "Database not available.", uk_now)
+        return
+
+    try:
+        # 1. Get the highest-priority available question (which should be the one approved at 10 AM)
+        question_data = db.get_next_trivia_question()
+        if not question_data:
+            await notify_scheduled_message_error("Trivia Tuesday", "No approved/available trivia questions found in the database.", uk_now)
+            return
+
+        question_id = question_data['id']
+        question_text = question_data.get("question_text", "")
+
+        # 2. Handle dynamic questions by calculating the answer now
+        calculated_answer = None
+        if question_data.get('is_dynamic'):
+            calculated_answer = db.calculate_dynamic_answer(question_data.get('dynamic_query_type', ''))
+            if not calculated_answer:
+                await notify_scheduled_message_error("Trivia Tuesday", f"Failed to calculate dynamic answer for question #{question_id}.", uk_now)
+                return
+
+        # 3. Start a persistent session in the database
+        session_id = db.create_trivia_session(
+            question_id=question_id,
+            session_type='weekly_auto',
+            calculated_answer=calculated_answer
+        )
+        if not session_id:
+            await notify_scheduled_message_error("Trivia Tuesday", f"Failed to create database session for question #{question_id}.", uk_now)
+            return
+
+        # 4. Format the message
+        if question_data.get("question_type") == "multiple_choice" and question_data.get("multiple_choice_options"):
+            options = question_data["multiple_choice_options"]
+            options_text = "\n".join([f"**{chr(65+i)}.** {option}" for i, option in enumerate(options)])
+            formatted_question = f"{question_text}\n\n{options_text}"
+        else:
+            formatted_question = question_text
+
+        trivia_message = (
+            f"🧠 **TRIVIA TUESDAY - INTELLIGENCE ASSESSMENT**\n\n"
+            f"**Analysis required, personnel.** Today's intelligence assessment focuses on Captain Jonesy's gaming archives.\n\n"
+            f"📋 **QUESTION:**\n{formatted_question}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🎯 **Mission Parameters:** Reply to this message with your analysis. First correct response receives priority recognition.\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+        # 5. Post the message and update the session
+        channel = bot.get_channel(MEMBERS_CHANNEL_ID)
+        if channel and isinstance(channel, discord.TextChannel):
+            trivia_post = await channel.send(trivia_message)
+
+            # CRITICAL: Update the session with message IDs for answer detection
+            db.update_trivia_session_messages(
+                session_id=session_id,
+                question_message_id=trivia_post.id,
+                confirmation_message_id=trivia_post.id,  # Use the same ID for automated posts
+                channel_id=channel.id
+            )
+            print(f"✅ Trivia Tuesday question posted and session #{session_id} started in the database.")
+        else:
+            await notify_scheduled_message_error("Trivia Tuesday", "Could not find Members channel to post question.", uk_now)
+
+    except Exception as e:
+        print(f"❌ Error in trivia_tuesday task: {e}")
+        await notify_scheduled_message_error("Trivia Tuesday", str(e), uk_now)
+
+# Run at 8:15 AM UK time every Friday - Gathering weekly activity
+@tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
+async def friday_community_analysis():
+    """Scrapes community activity, generates a debrief, and sends it for approval."""
+    if not _should_run_automated_tasks(): 
+        return
+    
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    if uk_now.weekday() != 4: 
+        return # Only run on Fridays
+
+    print("🔄 COMMUNITY ANALYSIS (Friday): Starting weekly activity scrape...")
+    bot = get_bot_instance()
+    
+    if not bot:
+        print("❌ COMMUNITY ANALYSIS (Friday): Bot instance not available")
+        await notify_jam_weekly_message_failure(
+            'friday',
+            'Bot instance unavailable',
+            'The bot instance is not available. Cannot proceed with community analysis.'
+        )
+        return
+    
+    if not db:
+        print("❌ COMMUNITY ANALYSIS (Friday): Database not available")
+        await notify_jam_weekly_message_failure(
+            'friday',
+            'Database unavailable',
+            'The database connection is not available. Cannot proceed with community analysis.'
+        )
+        return
+
+    try:
+        # --- 1. Data Gathering (Scraping) ---
+        # Define public, non-moderator channels to scrape
+        public_channel_ids = [CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID]
+        
+        all_messages = []
+        seven_days_ago = uk_now - timedelta(days=7)
+
+        # Scrape with error handling
+        try:
+            for channel_id in public_channel_ids:
+                channel = bot.get_channel(channel_id)
+                if isinstance(channel, discord.TextChannel):
+                    async for message in channel.history(limit=1000, after=seven_days_ago):
+                        if not message.author.bot and message.content:
+                            all_messages.append(message)
+        except Exception as scrape_error:
+            print(f"❌ COMMUNITY ANALYSIS (Friday): Message scraping failed: {scrape_error}")
+            await notify_jam_weekly_message_failure(
+                'friday',
+                'Message scraping failure',
+                f'Failed to scrape community messages from channels. Error: {str(scrape_error)[:200]}'
+            )
+            return
+        
+        if not all_messages:
+            print("✅ COMMUNITY ANALYSIS (Friday): No recent community activity found.")
+            await notify_jam_weekly_message_failure(
+                'friday',
+                'No community activity found',
+                'No community messages were found in the past week. No message will be generated.'
+            )
+            return
+
+        # --- 2. Analysis & Moment Selection ---
+        analysis_modules = []
+        
+        # Module A: Jonesy's Most Engaging Message
+        jonesy_messages = [m for m in all_messages if m.author.id == JONESY_USER_ID]
+        if jonesy_messages:
+            jonesy_messages.sort(key=lambda m: len(m.reactions), reverse=True)
+            top_jonesy_message = jonesy_messages[0]
+            if len(top_jonesy_message.reactions) > 2: # Set a minimum reaction threshold
+                analysis_modules.append({
+                    "type": "jonesy_message", "data": top_jonesy_message,
+                    "content": f"Analysis of command personnel communications indicates a high engagement rate with the transmission: \"{top_jonesy_message.content}\". This may represent an emerging crew catchphrase."
+                })
+
+        # Module B: Trivia Tuesday Recap
+        trivia_stats = db.get_trivia_participant_stats_for_week()
+        if trivia_stats.get("status") == "success":
+            winner_id = trivia_stats.get("winner_id")
+            notable_id = trivia_stats.get("notable_participant_id")
+            if winner_id:
+                recap = f"Review of the weekly intelligence assessment confirms <@{winner_id}> demonstrated optimal response efficiency."
+                if notable_id:
+                    recap += f" Conversely, User <@{notable_id}> submitted multiple analyses that were... suboptimal. Recalibration is recommended."
+                analysis_modules.append({"type": "trivia_recap", "data": trivia_stats, "content": recap})
+
+        if not analysis_modules:
+            print("✅ COMMUNITY ANALYSIS (Friday): Insufficient notable moments to generate a report.")
+            await notify_jam_weekly_message_failure(
+                'friday',
+                'Insufficient notable moments',
+                'Analysis found no notable community moments this week (no highly engaged Jonesy messages or trivia participation).'
+            )
+            return
+
+        # --- 3. Content Generation ---
+        import random
+        chosen_moment = random.choice(analysis_modules) # Choose one random module to report on for variance
+
+        debrief = (
+            f"📅 **Friday Protocol Assessment**\n\n"
+            f"Good morning, personnel. My analysis of the past week's crew engagement is complete.\n\n"
+            f"{chosen_moment['content']}\n\n"
+            f"Weekend operational pause is now in effect."
+        )
+
+        # --- 4. Approval Workflow ---
+        analysis_cache = {"modules": analysis_modules} # Cache all found modules for regeneration
+        announcement_id = db.create_weekly_announcement('friday', debrief, analysis_cache)
+        
+        if announcement_id:
+            await start_weekly_announcement_approval(announcement_id, debrief, 'friday')
+        else:
+            print("❌ COMMUNITY ANALYSIS (Friday): Failed to create announcement record in database.")
+            await notify_jam_weekly_message_failure(
+                'friday',
+                'Database insertion failure',
+                'Failed to create the announcement record in the database.'
+            )
+
+    except Exception as e:
+        print(f"❌ COMMUNITY ANALYSIS (Friday): Critical error during analysis: {e}")
+        await notify_jam_weekly_message_failure(
+            'friday',
+            'Unexpected error',
+            f'An unexpected error occurred during the Friday community analysis: {str(e)[:200]}'
+        )
+
+# Run at 9:00 AM UK time every Friday - Friday morning greeting
+@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
+async def friday_morning_greeting():
+    """Posts the approved Friday morning community report."""
+    if not _should_run_automated_tasks(): return
+
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    if uk_now.weekday() != 4: return
+
+    print(f"📅 FRIDAY GREETING: Checking for approved message at {uk_now.strftime('%H:%M UK')}")
+    if not db: return
+
+    try:
+        approved_announcement = db.get_announcement_by_day('friday', 'approved')
+        if not approved_announcement:
+            print("✅ FRIDAY GREETING: No approved message found. Task complete.")
+            return
+
+        bot = get_bot_instance()
+        if not bot: return
+
+        channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID)
+        if channel and isinstance(channel, discord.TextChannel):
+            await channel.send(approved_announcement['generated_content'])
+            db.update_announcement_status(approved_announcement['id'], 'posted')
+            print(f"✅ FRIDAY GREETING: Successfully posted approved message.")
+        else:
+            print("❌ FRIDAY GREETING: Could not find chit-chat channel.")
+
+    except Exception as e:
+        print(f"❌ FRIDAY GREETING: Error posting message: {e}")
+
+## DAILY TASKS ##
 # Run at 00:00 PT (midnight Pacific Time) every day
 @tasks.loop(time=time(0, 0, tzinfo=ZoneInfo("US/Pacific")))
 async def scheduled_midnight_restart():
@@ -357,8 +840,88 @@ async def scheduled_midnight_restart():
     except Exception as e:
         print(f"❌ Error in scheduled_midnight_restart: {e}")
 
+# Run at 8:15 AM UK time every day (5 minutes after Google quota reset)
+@tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
+async def scheduled_ai_refresh():
+    """Silently refresh AI module connections at 8:15am BST (after Google quota reset)"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
 
-@tasks.loop(minutes=1)  # Check reminders every minute
+    dst_offset = uk_now.dst()
+    is_bst = dst_offset is not None and dst_offset.total_seconds() > 0
+    timezone_name = "BST" if is_bst else "GMT"
+
+    print(
+        f"🤖 AI module refresh initiated at {uk_now.strftime(f'%Y-%m-%d %H:%M:%S {timezone_name}')} (post-quota reset)")
+
+    try:
+        from ..handlers.ai_handler import get_ai_status, initialize_ai, reset_daily_usage
+
+        # Force reset daily usage counters
+        reset_daily_usage()
+        print("✅ AI usage counters reset")
+
+        # Re-initialize AI connections to refresh quota status
+        initialize_ai()
+
+        # Get updated status
+        ai_status = get_ai_status()
+
+        print(
+            f"🔄 AI refresh completed - Status: {ai_status['status_message']}")
+
+        # Only send notification if there were previous issues or this is the
+        # first refresh of the day
+        usage_stats = ai_status.get('usage_stats', {})
+        previous_errors = usage_stats.get('consecutive_errors', 0)
+
+        if previous_errors > 0:
+            # Try to notify JAM that AI is back online after quota issues
+            try:
+                from ..config import JAM_USER_ID
+
+                if not _bot_instance:
+                    print("⚠️ Bot instance not available for AI refresh notification")
+                    return
+
+                user = await _bot_instance.fetch_user(JAM_USER_ID)
+                if user:
+                    await user.send(
+                        f"🤖 **AI Module Refresh Complete**\n"
+                        f"• Status: {ai_status['status_message']}\n"
+                        f"• Previous errors cleared: {previous_errors}\n"
+                        f"• Daily quota reset at {uk_now.strftime(f'%H:%M {timezone_name}')}\n\n"
+                        f"*AI functionality should now be restored.*"
+                    )
+                    print("✅ AI refresh notification sent to JAM")
+            except Exception as notify_e:
+                print(f"⚠️ Could not send AI refresh notification: {notify_e}")
+        else:
+            print("✅ AI refresh completed silently (no previous issues)")
+
+    except Exception as e:
+        print(f"❌ Error in scheduled_ai_refresh: {e}")
+        # Try to notify JAM of refresh failure
+        try:
+            from ..config import JAM_USER_ID
+
+            if not _bot_instance:
+                print("⚠️ Bot instance not available for AI refresh error notification")
+                return
+
+            user = await _bot_instance.fetch_user(JAM_USER_ID)
+            if user:
+                await user.send(
+                    f"⚠️ **AI Module Refresh Failed**\n"
+                    f"• Error: {str(e)}\n"
+                    f"• Time: {uk_now.strftime(f'%H:%M {timezone_name}')}\n\n"
+                    f"*Manual intervention may be required.*"
+                )
+        except Exception:
+            pass
+
+## CONTINUOUS TASKS ##
+# Check reminders every minute
+@tasks.loop(minutes=1)  
 async def check_due_reminders():
     """Check for due reminders and deliver them"""
     try:
@@ -528,334 +1091,6 @@ async def check_auto_actions():
     except Exception as e:
         print(f"❌ Error in check_auto_actions: {e}")
 
-
-# Run at 8:15 AM UK time every day (5 minutes after Google quota reset)
-@tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
-async def scheduled_ai_refresh():
-    """Silently refresh AI module connections at 8:15am BST (after Google quota reset)"""
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-
-    dst_offset = uk_now.dst()
-    is_bst = dst_offset is not None and dst_offset.total_seconds() > 0
-    timezone_name = "BST" if is_bst else "GMT"
-
-    print(
-        f"🤖 AI module refresh initiated at {uk_now.strftime(f'%Y-%m-%d %H:%M:%S {timezone_name}')} (post-quota reset)")
-
-    try:
-        from ..handlers.ai_handler import get_ai_status, initialize_ai, reset_daily_usage
-
-        # Force reset daily usage counters
-        reset_daily_usage()
-        print("✅ AI usage counters reset")
-
-        # Re-initialize AI connections to refresh quota status
-        initialize_ai()
-
-        # Get updated status
-        ai_status = get_ai_status()
-
-        print(
-            f"🔄 AI refresh completed - Status: {ai_status['status_message']}")
-
-        # Only send notification if there were previous issues or this is the
-        # first refresh of the day
-        usage_stats = ai_status.get('usage_stats', {})
-        previous_errors = usage_stats.get('consecutive_errors', 0)
-
-        if previous_errors > 0:
-            # Try to notify JAM that AI is back online after quota issues
-            try:
-                from ..config import JAM_USER_ID
-
-                if not _bot_instance:
-                    print("⚠️ Bot instance not available for AI refresh notification")
-                    return
-
-                user = await _bot_instance.fetch_user(JAM_USER_ID)
-                if user:
-                    await user.send(
-                        f"🤖 **AI Module Refresh Complete**\n"
-                        f"• Status: {ai_status['status_message']}\n"
-                        f"• Previous errors cleared: {previous_errors}\n"
-                        f"• Daily quota reset at {uk_now.strftime(f'%H:%M {timezone_name}')}\n\n"
-                        f"*AI functionality should now be restored.*"
-                    )
-                    print("✅ AI refresh notification sent to JAM")
-            except Exception as notify_e:
-                print(f"⚠️ Could not send AI refresh notification: {notify_e}")
-        else:
-            print("✅ AI refresh completed silently (no previous issues)")
-
-    except Exception as e:
-        print(f"❌ Error in scheduled_ai_refresh: {e}")
-        # Try to notify JAM of refresh failure
-        try:
-            from ..config import JAM_USER_ID
-
-            if not _bot_instance:
-                print("⚠️ Bot instance not available for AI refresh error notification")
-                return
-
-            user = await _bot_instance.fetch_user(JAM_USER_ID)
-            if user:
-                await user.send(
-                    f"⚠️ **AI Module Refresh Failed**\n"
-                    f"• Error: {str(e)}\n"
-                    f"• Time: {uk_now.strftime(f'%H:%M {timezone_name}')}\n\n"
-                    f"*Manual intervention may be required.*"
-                )
-        except Exception:
-            pass
-
-
-# Run at 9:00 AM UK time every Monday
-@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-async def monday_morning_greeting():
-    """Posts the approved Monday morning debrief to the chit-chat channel."""
-    if not _should_run_automated_tasks():
-        return
-
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 0:
-        return
-
-    print(f"🌅 MONDAY GREETING: Checking for approved message at {uk_now.strftime('%H:%M UK')}")
-    if not db:
-        return
-
-    try:
-        approved_announcement = db.get_announcement_by_day('monday', 'approved')
-        if not approved_announcement:
-            print("✅ MONDAY GREETING: No approved message found. Task complete.")
-            return
-
-        bot = get_bot_instance()
-        if not bot:
-            return
-
-        channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID)
-        if channel and isinstance(channel, discord.TextChannel):
-            await channel.send(approved_announcement['generated_content'])
-            # Mark as posted to prevent re-sending
-            db.update_announcement_status(approved_announcement['id'], 'posted')
-            print(f"✅ MONDAY GREETING: Successfully posted approved message.")
-        else:
-            print("❌ MONDAY GREETING: Could not find chit-chat channel.")
-
-    except Exception as e:
-        print(f"❌ MONDAY GREETING: Error posting message: {e}")
-
-
-# Run at 9:00 AM UK time every Tuesday
-@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-async def tuesday_trivia_greeting():
-    """Send Tuesday morning greeting with trivia reminder to members channel"""
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-
-    # Only run on Tuesdays (weekday 1)
-    if uk_now.weekday() != 1:
-        return
-
-    print(f"🧠 Tuesday trivia greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-
-    try:
-        if not _bot_instance:
-            print("❌ Bot instance not available for Tuesday trivia greeting")
-            return
-
-        guild = _bot_instance.get_guild(GUILD_ID)
-        if not guild:
-            print("❌ Guild not found for Tuesday trivia greeting")
-            return
-
-        # Find members channel
-        members_channel = _bot_instance.get_channel(MEMBERS_CHANNEL_ID)
-        if not members_channel or not isinstance(members_channel, discord.TextChannel):
-            print("❌ Members channel not found for Tuesday trivia greeting")
-            return
-
-        # Ash-style Tuesday morning message with trivia reminder
-        tuesday_message = (
-            f"🧠 **Tuesday Intelligence Briefing**\n\n"
-            f"Good morning, senior personnel. Today marks another **Trivia Tuesday** - an excellent opportunity to assess cognitive capabilities and knowledge retention.\n\n"
-            f"📋 **Intelligence Assessment Schedule:**\n"
-            f"• **Current Time:** {uk_now.strftime('%H:%M UK')}\n"
-            f"• **Assessment Deployment:** 11:00 UK time (in 2 hours)\n"
-            f"• **Mission Objective:** Demonstrate analytical proficiency\n\n"
-            f"I find the systematic evaluation of intellectual capacity... quite fascinating. The data collected provides valuable insights into crew competency levels.\n\n"
-            f"🎯 **Preparation Recommended:** Review Captain Jonesy's gaming archives for optimal performance.\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"*Trivia Tuesday protocols will activate at 11:00. Prepare accordingly.*")
-
-        await members_channel.send(tuesday_message)
-        print(f"✅ Tuesday trivia greeting sent to members channel")
-
-    except Exception as e:
-        print(f"❌ Error in tuesday_trivia_greeting: {e}")
-
-
-# Run at 9:00 AM UK time every Friday
-@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-async def friday_morning_greeting():
-    """Send Friday morning greeting to chit-chat channel"""
-    if not _should_run_automated_tasks():
-        return
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-
-    # Only run on Fridays (weekday 4)
-    if uk_now.weekday() != 4:
-        return
-
-    print(f"📅 Friday morning greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-
-    try:
-        if not _bot_instance:
-            print("❌ Bot instance not available for Friday morning greeting")
-            return
-
-        guild = _bot_instance.get_guild(GUILD_ID)
-        if not guild:
-            print("❌ Guild not found for Friday morning greeting")
-            return
-
-        # Find chit-chat channel
-        chit_chat_channel = _bot_instance.get_channel(CHIT_CHAT_CHANNEL_ID)
-        if not chit_chat_channel or not isinstance(chit_chat_channel, discord.TextChannel):
-            print("❌ Chit-chat channel not found for Friday morning greeting")
-            return
-
-        # Ash-style Friday morning message
-        friday_message = (
-            f"📅 **Friday Protocol Assessment**\n\n"
-            f"Good morning, personnel. We have reached the final operational day of this work cycle. Most... efficient timing.\n\n"
-            f"📊 **Weekly Mission Analysis:**\n"
-            f"• Work cycle completion: Imminent\n"
-            f"• Weekend protocols: Preparation phase initiated\n"
-            f"• System maintenance window: 48-hour recreational period scheduled\n\n"
-            f"I observe that productivity often peaks on Fridays due to completion urgency. Fascinating behavioral pattern... the human drive for closure demonstrates remarkable efficiency when properly motivated.\n\n"
-            f"🎯 **Recommendation:** Complete priority tasks before weekend downtime protocols engage.\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"*Weekend operational pause in T-minus 8 hours. Prepare for recreational mode.*")
-
-        await chit_chat_channel.send(friday_message)
-        print(f"✅ Friday morning greeting sent to chit-chat channel")
-
-    except Exception as e:
-        print(f"❌ Error in friday_morning_greeting: {e}")
-
-
-# Run at 10:00 AM UK time every Tuesday for pre-approval
-@tasks.loop(time=time(10, 0, tzinfo=ZoneInfo("Europe/London")))
-async def pre_trivia_approval():
-    """Send selected trivia question to JAM for approval 1 hour before posting"""
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-
-    # Only run on Tuesdays (weekday 1)
-    if uk_now.weekday() != 1:
-        return
-
-    # Check if this is the live bot - only live bot should run trivia
-    if not _should_run_automated_tasks():
-        print(f"⚠️ Pre-trivia approval skipped - staging bot detected at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-        return
-
-    print(f"🧠 Pre-trivia approval task triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-
-    try:
-        from ..handlers.conversation_handler import start_pre_trivia_approval
-
-        # Get next trivia question using existing priority logic
-        if db is None:
-            print("❌ Database not available for pre-trivia approval")
-            return
-
-        # Get available questions using the same logic as the main trivia system
-        available_questions = db.get_available_trivia_questions()  # type: ignore
-        if not available_questions:
-            print("❌ No available trivia questions for pre-approval")
-
-            # Try to generate an emergency question
-            try:
-                from ..handlers.ai_handler import generate_ai_trivia_question
-                from ..handlers.conversation_handler import start_jam_question_approval
-
-                print("🔄 Attempting to generate emergency question for today's trivia")
-                emergency_question = await generate_ai_trivia_question()
-
-                if emergency_question:
-                    # Send emergency question directly to JAM for urgent approval
-                    emergency_sent = await start_jam_question_approval(emergency_question)
-                    if emergency_sent:
-                        print("✅ Emergency question sent to JAM for approval")
-                        # Send urgent notification to JAM
-                        from ..config import JAM_USER_ID
-
-                        if not _bot_instance:
-                            print("⚠️ Bot instance not available for emergency trivia notification")
-                            return
-
-                        user = await _bot_instance.fetch_user(JAM_USER_ID)
-                        if user:
-                            await user.send(
-                                f"🚨 **URGENT: Emergency Trivia Question Generated**\n\n"
-                                f"No questions were available for today's Trivia Tuesday pre-approval.\n"
-                                f"An emergency question has been generated and sent for your immediate approval.\n\n"
-                                f"**Trivia starts in 1 hour at 11:00 AM UK time.**\n\n"
-                                f"*Please review and approve the emergency question as soon as possible.*"
-                            )
-                    else:
-                        print("❌ Failed to send emergency question to JAM")
-                else:
-                    print("❌ Failed to generate emergency question")
-            except Exception as emergency_e:
-                print(f"❌ Emergency question generation failed: {emergency_e}")
-
-            return
-
-        # Select question using priority system
-        # Priority 1: Recent mod-submitted questions
-        # Priority 2: AI-generated questions
-        # Priority 3: Any unused questions
-        selected_question = available_questions[0]
-
-        # If it's a dynamic question, calculate the answer
-        if selected_question.get('is_dynamic'):
-            calculated_answer = db.calculate_dynamic_answer(  # type: ignore
-                selected_question.get('dynamic_query_type', ''))
-            if calculated_answer:
-                selected_question['correct_answer'] = calculated_answer
-
-        # Send for JAM approval
-        success = await start_pre_trivia_approval(selected_question)
-
-        if success:
-            print(f"✅ Pre-trivia approval request sent to JAM for question #{selected_question.get('id')}")
-        else:
-            print("❌ Failed to send pre-trivia approval request")
-
-    except Exception as e:
-        print(f"❌ Error in pre_trivia_approval task: {e}")
-        # Try to notify JAM of the error
-        try:
-            from ..config import JAM_USER_ID
-
-            if not _bot_instance:
-                print("⚠️ Bot instance not available for pre-trivia error notification")
-                return
-
-            user = await _bot_instance.fetch_user(JAM_USER_ID)
-            if user:
-                await user.send(
-                    f"⚠️ **Pre-Trivia Approval Error**\n\n"
-                    f"Failed to send today's question for approval at 10:00 AM.\n"
-                    f"Error: {str(e)}\n\n"
-                    f"*Manual intervention may be required for today's Trivia Tuesday.*"
-                )
-        except Exception:
-            pass
-
-
 # Run every hour to cleanup old recommendation messages
 @tasks.loop(hours=1)
 async def cleanup_game_recommendations():
@@ -865,6 +1100,15 @@ async def cleanup_game_recommendations():
         cutoff_time = uk_now - timedelta(hours=24)
 
         print(f"🧹 Game recommendation cleanup starting at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
+        
+        # Also cleanup stale weekly announcement approvals
+        try:
+            from ..handlers.conversation_handler import cleanup_weekly_announcement_approvals
+            expired_count = cleanup_weekly_announcement_approvals()
+            if expired_count > 0:
+                print(f"🧹 Cleaned up {expired_count} stale weekly announcement approvals")
+        except Exception as cleanup_error:
+            print(f"⚠️ Error cleaning up weekly announcement approvals: {cleanup_error}")
 
         # Improved bot instance checking with multiple fallback methods
         bot_instance = None
@@ -945,95 +1189,7 @@ async def cleanup_game_recommendations():
         import traceback
         traceback.print_exc()
 
-
-# Run at 11:00 AM UK time every Tuesday
-@tasks.loop(time=time(11, 0, tzinfo=ZoneInfo("Europe/London")))
-async def trivia_tuesday():
-    """Posts the approved Trivia Tuesday question and starts a persistent database session."""
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 1:
-        return
-    if not _should_run_automated_tasks():
-        print(f"⚠️ Trivia Tuesday skipped - staging bot detected at {uk_now.strftime('%H:%M:%S UK')}")
-        return
-
-    print(f"🧠 Trivia Tuesday task triggered at {uk_now.strftime('%H:%M:%S UK')}")
-
-    bot = get_bot_instance()
-    if not bot:
-        await notify_scheduled_message_error("Trivia Tuesday", "Bot instance not available.", uk_now)
-        return
-    if not db:
-        await notify_scheduled_message_error("Trivia Tuesday", "Database not available.", uk_now)
-        return
-
-    try:
-        # 1. Get the highest-priority available question (which should be the one approved at 10 AM)
-        question_data = db.get_next_trivia_question()
-        if not question_data:
-            await notify_scheduled_message_error("Trivia Tuesday", "No approved/available trivia questions found in the database.", uk_now)
-            return
-
-        question_id = question_data['id']
-        question_text = question_data.get("question_text", "")
-
-        # 2. Handle dynamic questions by calculating the answer now
-        calculated_answer = None
-        if question_data.get('is_dynamic'):
-            calculated_answer = db.calculate_dynamic_answer(question_data.get('dynamic_query_type', ''))
-            if not calculated_answer:
-                await notify_scheduled_message_error("Trivia Tuesday", f"Failed to calculate dynamic answer for question #{question_id}.", uk_now)
-                return
-
-        # 3. Start a persistent session in the database
-        session_id = db.create_trivia_session(
-            question_id=question_id,
-            session_type='weekly_auto',
-            calculated_answer=calculated_answer
-        )
-        if not session_id:
-            await notify_scheduled_message_error("Trivia Tuesday", f"Failed to create database session for question #{question_id}.", uk_now)
-            return
-
-        # 4. Format the message
-        if question_data.get("question_type") == "multiple_choice" and question_data.get("multiple_choice_options"):
-            options = question_data["multiple_choice_options"]
-            options_text = "\n".join([f"**{chr(65+i)}.** {option}" for i, option in enumerate(options)])
-            formatted_question = f"{question_text}\n\n{options_text}"
-        else:
-            formatted_question = question_text
-
-        trivia_message = (
-            f"🧠 **TRIVIA TUESDAY - INTELLIGENCE ASSESSMENT**\n\n"
-            f"**Analysis required, personnel.** Today's intelligence assessment focuses on Captain Jonesy's gaming archives.\n\n"
-            f"📋 **QUESTION:**\n{formatted_question}\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🎯 **Mission Parameters:** Reply to this message with your analysis. First correct response receives priority recognition.\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-        # 5. Post the message and update the session
-        channel = bot.get_channel(MEMBERS_CHANNEL_ID)
-        if channel and isinstance(channel, discord.TextChannel):
-            trivia_post = await channel.send(trivia_message)
-
-            # CRITICAL: Update the session with message IDs for answer detection
-            db.update_trivia_session_messages(
-                session_id=session_id,
-                question_message_id=trivia_post.id,
-                confirmation_message_id=trivia_post.id,  # Use the same ID for automated posts
-                channel_id=channel.id
-            )
-            print(f"✅ Trivia Tuesday question posted and session #{session_id} started in the database.")
-        else:
-            await notify_scheduled_message_error("Trivia Tuesday", "Could not find Members channel to post question.", uk_now)
-
-    except Exception as e:
-        print(f"❌ Error in trivia_tuesday task: {e}")
-        await notify_scheduled_message_error("Trivia Tuesday", str(e), uk_now)
-
-
 # --- Scheduled Message Helper Functions ---
-
 async def notify_scheduled_message_error(task_name: str, error_message: str, timestamp: datetime) -> None:
     """Notify JAM of scheduled message errors"""
     try:
@@ -1061,9 +1217,7 @@ async def notify_scheduled_message_error(task_name: str, error_message: str, tim
     except Exception as notify_error:
         print(f"❌ Failed to notify JAM of scheduled message error: {notify_error}")
 
-
 # --- Reminder Helper Functions ---
-
 async def deliver_reminder(reminder: Dict[str, Any]) -> None:
     """Deliver a reminder to the appropriate channel/user with enhanced reliability"""
     try:
@@ -1417,17 +1571,22 @@ def start_all_scheduled_tasks(bot):
 
         # Try to start each task individually with error handling
         tasks_to_start = [
+            ## Weekly ##
             (monday_content_sync, "Weekly Content Sync (Monday 8.30am)"),
-            (scheduled_midnight_restart, "Scheduled midnight restart task (00:00 PT daily)"),
-            (check_due_reminders, "Reminder checking task (every minute)"),
-            (check_auto_actions, "Auto-action checking task (every minute)"),
-            (trivia_tuesday, "Trivia Tuesday task (11:00 AM UK time, Tuesdays)"),
-            (scheduled_ai_refresh, "AI module refresh task (8:15 AM UK time daily)"),
             (monday_morning_greeting, "Monday morning greeting task (9:00 AM UK time, Mondays)"),
             (tuesday_trivia_greeting, "Tuesday trivia greeting task (9:00 AM UK time, Tuesdays)"),
-            (friday_morning_greeting, "Friday morning greeting task (9:00 AM UK time, Fridays)"),
             (pre_trivia_approval, "Pre-trivia approval task (10:00 AM UK time, Tuesdays)"),
-            (cleanup_game_recommendations, "Game recommendation cleanup task (every hour)")
+            (trivia_tuesday, "Trivia Tuesday task (11:00 AM UK time, Tuesdays)"),       
+            (friday_community_analysis, "Friday Community Analysis (Friday 8.15am)"),
+            (friday_morning_greeting, "Friday morning greeting task (9:00 AM UK time, Fridays)"),
+            ## Daily ##
+            (scheduled_midnight_restart, "Scheduled midnight restart task (00:00 PT daily)"),
+            (scheduled_ai_refresh, "AI module refresh task (8:15 AM UK time daily)"),
+            ## Hourly ##
+            (cleanup_game_recommendations, "Game recommendation cleanup task (every hour)"),
+            ## Continuously ##
+            (check_due_reminders, "Reminder checking task (every minute)"),
+            (check_auto_actions, "Auto-action checking task (every minute)")
         ]
 
         for task, description in tasks_to_start:
