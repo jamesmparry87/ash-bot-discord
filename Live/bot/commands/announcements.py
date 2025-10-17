@@ -159,9 +159,12 @@ class AnnouncementsCommands(commands.Cog):
         await start_announcement_conversation(ctx)
 
     @commands.command(name="generatemonday")
-    @commands.has_permissions(administrator=True)
     async def generate_monday_manual(self, ctx):
-        """Manually trigger Monday content sync and approval workflow (Admin only)"""
+        """Manually trigger Monday content sync and approval workflow (Captain Jonesy and Sir Decent Jam only)"""
+        # Strict access control - only Captain Jonesy and Sir Decent Jam
+        if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
+            return  # Silent ignore for unauthorized users
+
         try:
             from ..handlers.conversation_handler import start_weekly_announcement_approval
             from ..tasks.scheduled import perform_full_content_sync
@@ -229,15 +232,18 @@ class AnnouncementsCommands(commands.Cog):
             await ctx.send(f"❌ **System Error**\n\nAn unexpected error occurred during Monday content sync: {str(e)[:200]}")
 
     @commands.command(name="generatefriday")
-    @commands.has_permissions(administrator=True)
     async def generate_friday_manual(self, ctx):
-        """Manually trigger Friday community analysis and approval workflow (Admin only)"""
+        """Manually trigger Friday community analysis and approval workflow (Captain Jonesy and Sir Decent Jam only)"""
+        # Strict access control - only Captain Jonesy and Sir Decent Jam
+        if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
+            return  # Silent ignore for unauthorized users
+
         try:
             from datetime import timedelta
 
             import discord
 
-            from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID, JONESY_USER_ID
+            from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID
             from ..handlers.conversation_handler import start_weekly_announcement_approval
 
             uk_now = datetime.now(ZoneInfo("Europe/London"))
