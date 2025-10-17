@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import tasks
 
-from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID, GUILD_ID, MEMBERS_CHANNEL_ID, JONESY_USER_ID
+from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID, GUILD_ID, JONESY_USER_ID, MEMBERS_CHANNEL_ID
 
 # Database and config imports
 try:
@@ -55,7 +55,7 @@ except ImportError:
         return None
 
 try:
-    from ..handlers.conversation_handler import start_weekly_announcement_approval, notify_jam_weekly_message_failure
+    from ..handlers.conversation_handler import notify_jam_weekly_message_failure, start_weekly_announcement_approval
 except ImportError:
     print("⚠️ Conversation handlers not available for scheduled tasks")
 
