@@ -33,10 +33,10 @@ except Exception as db_error:
 
 # Import integrations
 try:
-    from ..integrations.twitch import fetch_new_vods_since
-    from ..integrations.youtube import execute_youtube_auto_post, fetch_new_videos_since
+    from ..integrations.twitch import fetch_new_vods_since, extract_game_name_from_title as extract_game_from_twitch
+    from ..integrations.youtube import execute_youtube_auto_post, fetch_new_videos_since, extract_game_name_from_title as extract_game_from_youtube
 except ImportError:
-    print("⚠️ YouTube integration not available for scheduled tasks")
+    print("⚠️ YouTube/Twitch integration not available for scheduled tasks")
 
     async def execute_youtube_auto_post(*args, **kwargs):
         print("⚠️ YouTube auto-post not available - integration not loaded")
@@ -50,8 +50,12 @@ except ImportError:
         print("⚠️ fetch_new_vods_since not available - integration not loaded")
         return []
 
-    def extract_game_name_from_title(*args, **kwargs):
-        print("⚠️ extract_game_name_from_title not available - integration not loaded")
+    def extract_game_from_youtube(*args, **kwargs) -> Optional[str]:
+        print("⚠️ extract_game_from_youtube not available - integration not loaded")
+        return None
+    
+    def extract_game_from_twitch(*args, **kwargs) -> Optional[str]:
+        print("⚠️ extract_game_from_twitch not available - integration not loaded")
         return None
 
 try:
@@ -1515,15 +1519,21 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
     if total_new_content == 0:
         return {"status": "no_new_content"}
 
-    # --- Processing & Deduplication ---
+    # --- Processing with Enhanced Metadata Extraction ---
     new_views = 0
     total_new_minutes = 0
     most_engaging_video = None
+    games_added = 0
+    games_updated = 0
+    
+    # Track alternative names discovered during sync
+    game_variations = {}  # game_name -> list of title variations
 
     all_content = new_youtube_videos + new_twitch_vods
 
     for item in all_content:
-        game_name = extract_game_name_from_title(item['title'])
+        # Use YouTube's extract function (both have identical logic)
+        game_name = extract_game_from_youtube(item['title'])
         if not game_name:
             continue
 
@@ -1536,32 +1546,54 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
         if views > (most_engaging_video or {}).get('view_count', 0):
             most_engaging_video = item
 
+        # Track title variations for alternative names
+        if game_name not in game_variations:
+            game_variations[game_name] = set()
+        game_variations[game_name].add(item['title'][:50])  # Store shortened titles
+
         existing_game = db.get_played_game(game_name)
         if existing_game:
-            # Update existing game
-            db.update_played_game(
-                existing_game['id'],
-                total_playtime_minutes=existing_game.get('total_playtime_minutes', 0) + duration_minutes,
-                total_episodes=existing_game.get('total_episodes', 0) + 1,
-                youtube_views=existing_game.get('youtube_views', 0) + views
-            )
+            # Update existing game with enhanced metadata
+            update_params = {
+                'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + duration_minutes,
+                'total_episodes': existing_game.get('total_episodes', 0) + 1,
+                'youtube_views': existing_game.get('youtube_views', 0) + views
+            }
+            
+            db.update_played_game(existing_game['id'], **update_params)
             print(f"✅ SYNC: Updated '{game_name}' with {duration_minutes} mins.")
+            games_updated += 1
         else:
-            # Add new game
+            # Add new game with initial metadata
             db.add_played_game(
                 canonical_name=game_name,
                 total_playtime_minutes=duration_minutes,
                 total_episodes=1,
                 youtube_views=views,
                 first_played_date=item['published_at'].date(),
-                notes=f"Auto-discovered from content sync on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}.")
+                notes=f"Auto-discovered from content sync on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}."
+            )
             print(f"✅ SYNC: Added new game '{game_name}' with {duration_minutes} mins.")
+            games_added += 1
 
+    # --- Post-Sync Deduplication ---
+    print("🔄 SYNC: Running deduplication...")
+    try:
+        duplicates_merged = db.deduplicate_played_games()
+        print(f"✅ SYNC: Merged {duplicates_merged} duplicate entries")
+    except Exception as dedup_error:
+        print(f"⚠️ SYNC: Deduplication failed: {dedup_error}")
+        duplicates_merged = 0
+
+    # --- Enhanced Reporting ---
     return {
         "status": "success",
         "new_content_count": total_new_content,
         "new_hours": round(total_new_minutes / 60, 1),
         "new_views": new_views,
+        "games_added": games_added,
+        "games_updated": games_updated,
+        "duplicates_merged": duplicates_merged,
         "top_video": most_engaging_video
     }
 
