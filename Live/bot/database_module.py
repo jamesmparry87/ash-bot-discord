@@ -4415,7 +4415,7 @@ class DatabaseManager:
                 # Ensure newlines are preserved in content (escape them if needed)
                 # PostgreSQL TEXT fields should preserve newlines, but we'll be explicit
                 preserved_content = content
-                
+
                 cur.execute("""
                     INSERT INTO weekly_announcements (day, generated_content, analysis_cache)
                     VALUES (%s, %s, %s) RETURNING id
