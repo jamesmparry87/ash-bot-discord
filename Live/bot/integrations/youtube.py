@@ -334,7 +334,7 @@ def parse_youtube_duration(duration: str) -> int:
 def extract_game_name_from_title(title: str) -> Optional[str]:
     """
     Extract game name from video/playlist title using smart pattern matching.
-    
+
     Handles complex patterns like:
     - "First Time Playing: GAME NAME Road to X"
     - "*DROPS* Prefix - GAME NAME Thanks @sponsor"
@@ -342,9 +342,9 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     """
     if not title or not isinstance(title, str):
         return None
-    
+
     cleaned_title = title.strip()
-    
+
     # Step 1: Remove common prefixes
     prefix_patterns = [
         r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*',  # *DROPS*, *NEW*, etc.
@@ -355,10 +355,10 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         r'^Gameplay:?\s*',
         r'^Playthrough:?\s*',
     ]
-    
+
     for pattern in prefix_patterns:
         cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
-    
+
     # Step 2: Remove suffix annotations (but preserve game subtitles)
     suffix_patterns = [
         r'\s+Road to [^-]+$',                    # "Road to Resi 9"
@@ -370,48 +370,49 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         r'\s+[-|]\s*#\d+.*$',                    # "#5 onwards"
         r'\s+S\d+E\d+.*$',                       # Season/Episode format
     ]
-    
+
     for pattern in suffix_patterns:
         cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
-    
+
     # Step 3: Handle special extraction patterns
     # Pattern: "Descriptor - GAME NAME" or "Descriptor: GAME NAME"
     special_patterns = [
         r'^[^-:]+[-:]\s*(.+)$',  # "Something - GAME NAME" -> extract after dash/colon
     ]
-    
+
     for pattern in special_patterns:
         match = re.match(pattern, cleaned_title)
         if match:
             potential_game = match.group(1).strip()
             # Only use if it looks like a game name (has substance)
-            if len(potential_game) > 10 and not any(word in potential_game.lower() for word in ['episode', 'part', 'stream']):
+            if len(potential_game) > 10 and not any(word in potential_game.lower()
+                                                    for word in ['episode', 'part', 'stream']):
                 cleaned_title = potential_game
                 break
-    
+
     # Step 4: Remove brackets and parentheses (but keep content for subtitles)
     # Remove empty brackets
     cleaned_title = re.sub(r'\s*\[\s*\]', '', cleaned_title)
     cleaned_title = re.sub(r'\s*\(\s*\)', '', cleaned_title)
-    
+
     # Step 5: Clean up whitespace and punctuation
     cleaned_title = re.sub(r'\s+', ' ', cleaned_title).strip()
     cleaned_title = cleaned_title.strip(' -|')
-    
+
     # Step 6: Validation
     if len(cleaned_title) < 3:
         return None
-    
+
     # Reject pure generic terms
     generic_terms = ['live', 'stream', 'streaming', 'gaming', 'playing', 'game', 'gameplay']
     if cleaned_title.lower() in generic_terms:
         return None
-    
+
     # Reject if it's mostly special characters
     alpha_chars = sum(c.isalnum() for c in cleaned_title)
     if alpha_chars < len(cleaned_title) * 0.5:  # Less than 50% alphanumeric
         return None
-    
+
     return cleaned_title
 
 
