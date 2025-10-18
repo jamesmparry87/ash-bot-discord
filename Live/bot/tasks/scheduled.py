@@ -393,7 +393,15 @@ async def monday_morning_greeting():
 
         channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID)
         if channel and isinstance(channel, discord.TextChannel):
-            await channel.send(approved_announcement['generated_content'])
+            # Ensure newlines are preserved (handle both literal \n and actual newlines)
+            content = approved_announcement['generated_content']
+            # Replace literal escape sequences if they exist
+            content = content.replace('\\n', '\n')
+            # Ensure double newlines for proper Discord formatting
+            if '\n\n' not in content and '\n' in content:
+                content = content.replace('\n', '\n\n')
+
+            await channel.send(content)
             # Mark as posted to prevent re-sending
             db.update_announcement_status(approved_announcement['id'], 'posted')
             print(f"✅ MONDAY GREETING: Successfully posted approved message.")
@@ -775,6 +783,11 @@ async def friday_community_analysis():
             f"Weekend operational pause is now in effect."
         )
 
+        # Debug: Verify newlines are present in the generated content
+        print(f"🔍 FRIDAY GREETING DEBUG: Generated content length: {len(debrief)} chars")
+        print(f"🔍 FRIDAY GREETING DEBUG: Newline count in content: {debrief.count(chr(10))}")
+        print(f"🔍 FRIDAY GREETING DEBUG: First 200 chars: {repr(debrief[:200])}")
+
         # --- 4. Approval Workflow ---
         analysis_cache = {"modules": analysis_modules}  # Cache all found modules for regeneration
         announcement_id = db.create_weekly_announcement('friday', debrief, analysis_cache)
@@ -826,7 +839,15 @@ async def friday_morning_greeting():
 
         channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID)
         if channel and isinstance(channel, discord.TextChannel):
-            await channel.send(approved_announcement['generated_content'])
+            # Ensure newlines are preserved (handle both literal \n and actual newlines)
+            content = approved_announcement['generated_content']
+            # Replace literal escape sequences if they exist
+            content = content.replace('\\n', '\n')
+            # Ensure double newlines for proper Discord formatting
+            if '\n\n' not in content and '\n' in content:
+                content = content.replace('\n', '\n\n')
+
+            await channel.send(content)
             db.update_announcement_status(approved_announcement['id'], 'posted')
             print(f"✅ FRIDAY GREETING: Successfully posted approved message.")
         else:

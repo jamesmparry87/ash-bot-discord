@@ -188,7 +188,41 @@ async def notify_jam_weekly_message_failure(day: str, error_type: str, details: 
         print(f"❌ Error sending failure notification to JAM: {e}")
         return False
 
-# Weekly Announcement Approval Regeneration Logic
+# Weekly Announcement Approval Amendment and Regeneration Logic
+
+
+async def amend_weekly_content_with_ai(
+        original_content: str, amendment_instruction: str, day: str) -> Optional[str]:
+    """Uses AI to amend weekly announcement content based on user instructions."""
+    if not ai_enabled:
+        return None
+
+    # Create a prompt that asks AI to modify the content according to the instruction
+    amendment_prompt = f"""
+    You have generated the following {day.title()} announcement content:
+
+    "{original_content}"
+
+    The user has requested the following modification:
+    "{amendment_instruction}"
+
+    Please revise the announcement to incorporate this change. Maintain your analytical Ash persona and the overall structure, but apply the requested modification accurately.
+
+    IMPORTANT:
+    - Apply the user's instruction precisely
+    - Keep the same general format and tone
+    - Maintain all factual information unless the instruction asks you to change it
+    - Do NOT just append the instruction as text - actually modify the content
+
+    Provide ONLY the revised announcement text, with no additional commentary.
+    """
+
+    prompt = apply_ash_persona_to_ai_prompt(amendment_prompt, "announcement_amendment")
+    response_text, status_message = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+
+    if response_text:
+        return filter_ai_response(response_text)
+    return None
 
 
 async def _regenerate_weekly_announcement_content(
@@ -289,11 +323,12 @@ async def start_weekly_announcement_approval(announcement_id: int, content: str,
             f"The following message has been generated for this morning's greeting. Please review and approve.\n\n"
             f"```\n{content}\n```\n"
             f"**Available Actions:**\n"
-            f"**1.** ✅ **Approve** - Post this message as-is.\n"
-            f"**2.** ✏️ **Amend** - Provide instructions to change the message.\n"
-            f"**3.** 🔄 **Regenerate** - Discard this and generate a new version from the same data.\n"
-            f"**4.** ❌ **Cancel** - Do not send a greeting today.\n\n"
-            f"Please respond with **1, 2, 3, or 4**."
+            f"**1.** ✅ **Approve** - Post this message as-is\n"
+            f"**2.** 🤖 **AI Amend** - Provide instructions for AI to modify\n"
+            f"**3.** ✏️ **Manual Edit** - Directly edit the text yourself\n"
+            f"**4.** 🔄 **Regenerate** - Generate new version from data\n"
+            f"**5.** ❌ **Cancel** - Do not send a greeting today\n\n"
+            f"Please respond with **1, 2, 3, 4, or 5**."
         )
         await jam_user.send(approval_msg)
         print(f"✅ Sent {day.title()} announcement to JAM for approval.")
@@ -317,9 +352,17 @@ async def handle_weekly_announcement_approval(message: discord.Message):
             await message.reply("✅ **Approved.** The message will be posted at 9:00 AM.")
             del weekly_announcement_approvals[user_id]
         elif content == '2':
-            convo['step'] = 'amending'
-            await message.reply("✏️ **Amend:** Please provide your instructions (e.g., 'remove the part about views', 'make it shorter').")
-        elif content == '3':  # Regenerate
+            convo['step'] = 'ai_amending'
+            await message.reply("🤖 **AI Amendment:** Please provide your instructions for how the AI should modify the message (e.g., 'make it clear the transmission was said by Jonesy', 'add more emphasis on viewer engagement').")
+        elif content == '3':
+            convo['step'] = 'manual_editing'
+            current_content = convo['original_content']
+            await message.reply(
+                f"✏️ **Manual Edit Mode**\n\n"
+                f"**Current message:**\n```\n{current_content}\n```\n\n"
+                f"Please provide your complete replacement text. This will replace the entire message."
+            )
+        elif content == '4':  # Regenerate
             await message.reply("🔄 **Regenerating...** Analyzing data from a different perspective. Please wait.")
 
             # Fetch the latest announcement record from the DB to get the analysis_cache
@@ -356,19 +399,81 @@ async def handle_weekly_announcement_approval(message: discord.Message):
                 await message.reply(approval_msg)
             else:
                 await message.reply("❌ **Regeneration Failed:** The AI was unable to generate an alternative. Please try amending the message or cancel.")
-        elif content == '4':
+        elif content == '5':
             db.update_announcement_status(announcement_id, 'cancelled')
             await message.reply("❌ **Cancelled.** No message will be sent today.")
             del weekly_announcement_approvals[user_id]
         else:
-            await message.reply("⚠️ Invalid input. Please respond with 1, 2, 3, or 4.")
+            await message.reply("⚠️ Invalid input. Please respond with 1, 2, 3, 4, or 5.")
 
-    elif convo['step'] == 'amending':
-        # Simple amendment for now: append user notes.
-        amended_content = f"{convo['original_content']}\n\n*Creator's Note: {content}*"
-        db.update_announcement_status(announcement_id, 'approved', new_content=amended_content)
-        await message.reply(f"✅ **Amended & Approved.** The following message will be posted at 9:00 AM:\n```\n{amended_content}\n```")
-        del weekly_announcement_approvals[user_id]
+    elif convo['step'] == 'ai_amending':
+        # Use AI to amend the content based on user instructions
+        await message.reply("🔄 **Processing Amendment...** Using AI to apply your requested changes. Please wait.")
+
+        amended_content = await amend_weekly_content_with_ai(
+            original_content=convo['original_content'],
+            amendment_instruction=content,
+            day=convo['day']
+        )
+
+        if amended_content:
+            # Update the conversation state with the amended content
+            convo['original_content'] = amended_content
+            convo['step'] = 'approval'  # Return to approval step for preview
+
+            # Update the database with pending status (not auto-approved)
+            db.update_announcement_status(announcement_id, 'pending_approval', new_content=amended_content)
+
+            # Present the amended version for approval
+            approval_msg = (
+                f"✏️ **Amendment Complete**\n\n"
+                f"Here is the revised {convo['day'].title()} greeting based on your instructions:\n\n"
+                f"```\n{amended_content}\n```\n"
+                f"**Available Actions:**\n"
+                f"**1.** ✅ **Approve** - Post this amended message\n"
+                f"**2.** ✏️ **Amend Again** - Provide additional modification instructions\n"
+                f"**3.** 🔄 **Regenerate** - Discard changes and generate a new version\n"
+                f"**4.** ❌ **Cancel** - Do not send a greeting today\n\n"
+                f"Please respond with **1, 2, 3, or 4**."
+            )
+            await message.reply(approval_msg)
+        else:
+            # AI amendment failed, fall back to simple text append
+            await message.reply(
+                "⚠️ **AI Amendment Failed.** The AI was unable to process your instruction. "
+                "Would you like to:\n\n"
+                "**1.** Try a different instruction\n"
+                "**2.** Proceed with the original message\n"
+                "**3.** Cancel\n\n"
+                "Please respond with **1**, **2**, or **3**."
+            )
+            # Keep the step as 'ai_amending' so they can try again
+
+    elif convo['step'] == 'manual_editing':
+        # User has provided their complete replacement text
+        manually_edited_content = content
+
+        # Update the conversation state with the manually edited content
+        convo['original_content'] = manually_edited_content
+        convo['step'] = 'approval'  # Return to approval step for preview
+
+        # Update the database with pending status (not auto-approved)
+        db.update_announcement_status(announcement_id, 'pending_approval', new_content=manually_edited_content)
+
+        # Present the manually edited version for approval
+        approval_msg = (
+            f"✏️ **Manual Edit Complete**\n\n"
+            f"Here is your manually edited {convo['day'].title()} greeting:\n\n"
+            f"```\n{manually_edited_content}\n```\n"
+            f"**Available Actions:**\n"
+            f"**1.** ✅ **Approve** - Post this edited message\n"
+            f"**2.** 🤖 **AI Amend** - Use AI to further modify this version\n"
+            f"**3.** ✏️ **Manual Edit Again** - Provide a new replacement text\n"
+            f"**4.** 🔄 **Regenerate** - Discard changes and generate new version\n"
+            f"**5.** ❌ **Cancel** - Do not send a greeting today\n\n"
+            f"Please respond with **1, 2, 3, 4, or 5**."
+        )
+        await message.reply(approval_msg)
 
 
 async def create_ai_announcement_content(
@@ -677,10 +782,11 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                         f"✨ **Content created in Ash's analytical style based on your specifications**\n\n"
                         f"📚 **Available Actions:**\n"
                         f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
-                        f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
-                        f"**3.** 📝 **Add Creator Notes** - Include personal notes from the creator\n"
-                        f"**4.** ❌ **Cancel** - Abort announcement creation\n\n"
-                        f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
+                        f"**2.** 🤖 **AI Amend** - Provide instructions for AI to modify\n"
+                        f"**3.** ✏️ **Manual Edit** - Directly edit the text yourself\n"
+                        f"**4.** 📝 **Add Creator Notes** - Include personal notes\n"
+                        f"**5.** ❌ **Cancel** - Abort announcement creation\n\n"
+                        f"Please respond with **1, 2, 3, 4, or 5**.\n\n"
                         f"*Review mission parameters carefully before deployment.*")
 
                     await message.reply(preview_msg)
@@ -733,19 +839,27 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                     )
                 return  # Exit immediately after cleanup
 
-            elif content in ['2', 'edit', 'revise']:
-                # Return to content input with edit mode flag
-                data['edit_mode'] = True  # Flag to skip AI enhancement on edits
-                conversation['step'] = 'content_input'
-
+            elif content in ['2', 'ai amend', 'ai', 'amend']:
+                # AI amendment mode
+                conversation['step'] = 'ai_amending'
                 await message.reply(
-                    f"✏️ **Content Revision Mode**\n\n"
-                    f"Please provide your updated announcement content. Your text will be used exactly as written, "
-                    f"without AI enhancement.\n\n"
-                    f"*Precision and clarity are paramount for effective mission communication.*"
+                    f"🤖 **AI Amendment Mode**\n\n"
+                    f"Please provide instructions for how the AI should modify the announcement "
+                    f"(e.g., 'make it more technical', 'add emphasis on user benefits', 'make it shorter').\n\n"
+                    f"*The AI will revise the content based on your guidance.*"
                 )
 
-            elif content in ['3', 'notes', 'creator notes']:
+            elif content in ['3', 'manual edit', 'edit', 'revise']:
+                # Manual edit mode
+                conversation['step'] = 'manual_editing'
+                current_content = data.get('content', data.get('raw_content', ''))
+                await message.reply(
+                    f"✏️ **Manual Edit Mode**\n\n"
+                    f"**Current content:**\n```\n{current_content}\n```\n\n"
+                    f"Please provide your complete replacement text. This will replace the entire announcement content."
+                )
+
+            elif content in ['4', 'notes', 'creator notes']:
                 # Add creator notes step
                 conversation['step'] = 'creator_notes_input'
 
@@ -763,7 +877,7 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                     f"*Your notes will be clearly attributed and formatted appropriately for the target audience.*"
                 )
 
-            elif content in ['4', 'cancel', 'abort']:
+            elif content in ['5', 'cancel', 'abort']:
                 # Clean up conversation BEFORE cancelling to ensure it ends properly
                 if user_id in announcement_conversations:
                     del announcement_conversations[user_id]
@@ -782,6 +896,75 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                     f"⚠️ **Invalid command.** Please respond with **1** (Post), **2** (Edit), **3** (Creator Notes), or **4** (Cancel).\n\n"
                     f"*Precise input required for proper protocol execution.*"
                 )
+
+        elif step == 'ai_amending':
+            # Use AI to amend the announcement based on user instructions
+            await message.reply("🔄 **Processing Amendment...** Using AI to apply your requested changes. Please wait.")
+
+            current_content = data.get('content', data.get('raw_content', ''))
+            amended_content = await amend_weekly_content_with_ai(
+                original_content=current_content,
+                amendment_instruction=content,
+                day='announcement'  # Generic day for regular announcements
+            )
+
+            if amended_content:
+                # Update with amended content
+                data['content'] = amended_content
+                conversation['step'] = 'preview'
+
+                # Regenerate formatted preview
+                target_channel = data.get('target_channel', 'mod')
+                preview_content = await format_announcement_content(
+                    amended_content, target_channel, user_id, creator_notes=data.get('creator_notes')
+                )
+                data['formatted_content'] = preview_content
+
+                await message.reply(
+                    f"✏️ **Amendment Complete**\n\n"
+                    f"Here is the revised announcement:\n\n"
+                    f"```\n{preview_content}\n```\n\n"
+                    f"📚 **Available Actions:**\n"
+                    f"**1.** ✅ **Post** - Deploy this amended version\n"
+                    f"**2.** 🤖 **AI Amend Again** - Further modifications\n"
+                    f"**3.** ✏️ **Manual Edit** - Direct text replacement\n"
+                    f"**4.** 📝 **Add/Edit Notes** - Creator notes\n"
+                    f"**5.** ❌ **Cancel**\n\n"
+                    f"Please respond with **1, 2, 3, 4, or 5**."
+                )
+            else:
+                await message.reply(
+                    "⚠️ **AI Amendment Failed.** Would you like to:\n\n"
+                    "**1.** Try a different instruction\n"
+                    "**2.** Manual edit instead\n"
+                    "**3.** Cancel\n\n"
+                    "Please respond with **1**, **2**, or **3**."
+                )
+
+        elif step == 'manual_editing':
+            # User provided complete replacement text
+            data['content'] = content
+            conversation['step'] = 'preview'
+
+            # Regenerate formatted preview with manual edit
+            target_channel = data.get('target_channel', 'mod')
+            preview_content = await format_announcement_content(
+                content, target_channel, user_id, creator_notes=data.get('creator_notes')
+            )
+            data['formatted_content'] = preview_content
+
+            await message.reply(
+                f"✏️ **Manual Edit Complete**\n\n"
+                f"Here is your manually edited announcement:\n\n"
+                f"```\n{preview_content}\n```\n\n"
+                f"📚 **Available Actions:**\n"
+                f"**1.** ✅ **Post** - Deploy this version\n"
+                f"**2.** 🤖 **AI Amend** - Use AI to modify further\n"
+                f"**3.** ✏️ **Edit Again** - Provide new replacement text\n"
+                f"**4.** 📝 **Add/Edit Notes** - Creator notes\n"
+                f"**5.** ❌ **Cancel**\n\n"
+                f"Please respond with **1, 2, 3, 4, or 5**."
+            )
 
         elif step == 'creator_notes_input':
             # Handle creator notes input
@@ -808,9 +991,10 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                 f"✅ **Creator notes successfully integrated, {greeting}.**\n\n"
                 f"📚 **Available Actions:**\n"
                 f"**1.** ✅ **Post Announcement** - Deploy this update immediately\n"
-                f"**2.** ✏️ **Edit Content** - Revise the announcement text\n"
-                f"**3.** 📝 **Edit Creator Notes** - Modify your personal notes\n"
-                f"**4.** ❌ **Cancel** - Abort announcement creation\n\n"
+                f"**2.** 🤖 **AI Amend** - Provide instructions for AI to modify\n"
+                f"**3.** ✏️ **Manual Edit** - Directly edit the text yourself\n"
+                f"**4.** 📝 **Edit Creator Notes** - Modify your personal notes\n"
+                f"**5.** ❌ **Cancel** - Abort announcement creation\n\n"
                 f"*Review mission parameters carefully before deployment.*")
 
             await message.reply(preview_msg)
