@@ -332,53 +332,86 @@ def parse_youtube_duration(duration: str) -> int:
 
 
 def extract_game_name_from_title(title: str) -> Optional[str]:
-    """Extract game name from video/playlist title using various patterns"""
-    # Remove common prefixes/suffixes
-    cleaned_title = title.strip()
-
-    # Remove episode numbers and common patterns
-    patterns_to_remove = [
-        r'\s*-\s*Episode\s*\d+.*$',
-        r'\s*-\s*Part\s*\d+.*$',
-        r'\s*-\s*#\d+.*$',
-        r'\s*\|\s*Episode\s*\d+.*$',
-        r'\s*\|\s*Part\s*\d+.*$',
-        r'\s*\[.*?\]',
-        r'\s*\(.*?\)',
-        r'\s*-\s*Ep\s*\d+.*$',
-        r'\s*S\d+E\d+.*$',
-    ]
-
-    for pattern in patterns_to_remove:
-        cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
-
-    # Remove common streaming/gaming words
-    streaming_words = [
-        'stream',
-        'streaming',
-        'gameplay',
-        'playthrough',
-        'let\'s play',
-        'gaming']
-    for word in streaming_words:
-        cleaned_title = re.sub(
-            rf'\b{word}\b',
-            '',
-            cleaned_title,
-            flags=re.IGNORECASE)
-
-    # Clean up whitespace and punctuation
-    cleaned_title = re.sub(r'\s+', ' ', cleaned_title).strip()
-    cleaned_title = cleaned_title.strip(' -|:')
-
-    # Return None if title is too short or generic
-    if len(cleaned_title) < 2:
+    """
+    Extract game name from video/playlist title using smart pattern matching.
+    
+    Handles complex patterns like:
+    - "First Time Playing: GAME NAME Road to X"
+    - "*DROPS* Prefix - GAME NAME Thanks @sponsor"
+    - "GAME NAME - Episode 5"
+    """
+    if not title or not isinstance(title, str):
         return None
-
-    generic_terms = ['live', 'stream', 'gaming', 'playing', 'game']
+    
+    cleaned_title = title.strip()
+    
+    # Step 1: Remove common prefixes
+    prefix_patterns = [
+        r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*',  # *DROPS*, *NEW*, etc.
+        r'^First Time Playing:?\s*',
+        r'^Let\'?s Play:?\s*',
+        r'^Playing:?\s*',
+        r'^Stream(?:ing)?:?\s*',
+        r'^Gameplay:?\s*',
+        r'^Playthrough:?\s*',
+    ]
+    
+    for pattern in prefix_patterns:
+        cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
+    
+    # Step 2: Remove suffix annotations (but preserve game subtitles)
+    suffix_patterns = [
+        r'\s+Road to [^-]+$',                    # "Road to Resi 9"
+        r'\s+Thanks?(?:\s+to)?\s+@\w+.*$',      # "Thanks @playstation #ad"
+        r'\s+(?:End|Final) Game\??$',            # "End Game?"
+        r'\s+#\w+(?:\s+#\w+)*$',                 # Trailing hashtags
+        r'\s+\*.*\*$',                           # Trailing *text*
+        r'\s+[-|]\s*(?:Episode|Part|Ep)\s*\d+.*$',  # Episode numbers
+        r'\s+[-|]\s*#\d+.*$',                    # "#5 onwards"
+        r'\s+S\d+E\d+.*$',                       # Season/Episode format
+    ]
+    
+    for pattern in suffix_patterns:
+        cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
+    
+    # Step 3: Handle special extraction patterns
+    # Pattern: "Descriptor - GAME NAME" or "Descriptor: GAME NAME"
+    special_patterns = [
+        r'^[^-:]+[-:]\s*(.+)$',  # "Something - GAME NAME" -> extract after dash/colon
+    ]
+    
+    for pattern in special_patterns:
+        match = re.match(pattern, cleaned_title)
+        if match:
+            potential_game = match.group(1).strip()
+            # Only use if it looks like a game name (has substance)
+            if len(potential_game) > 10 and not any(word in potential_game.lower() for word in ['episode', 'part', 'stream']):
+                cleaned_title = potential_game
+                break
+    
+    # Step 4: Remove brackets and parentheses (but keep content for subtitles)
+    # Remove empty brackets
+    cleaned_title = re.sub(r'\s*\[\s*\]', '', cleaned_title)
+    cleaned_title = re.sub(r'\s*\(\s*\)', '', cleaned_title)
+    
+    # Step 5: Clean up whitespace and punctuation
+    cleaned_title = re.sub(r'\s+', ' ', cleaned_title).strip()
+    cleaned_title = cleaned_title.strip(' -|')
+    
+    # Step 6: Validation
+    if len(cleaned_title) < 3:
+        return None
+    
+    # Reject pure generic terms
+    generic_terms = ['live', 'stream', 'streaming', 'gaming', 'playing', 'game', 'gameplay']
     if cleaned_title.lower() in generic_terms:
         return None
-
+    
+    # Reject if it's mostly special characters
+    alpha_chars = sum(c.isalnum() for c in cleaned_title)
+    if alpha_chars < len(cleaned_title) * 0.5:  # Less than 50% alphanumeric
+        return None
+    
     return cleaned_title
 
 
