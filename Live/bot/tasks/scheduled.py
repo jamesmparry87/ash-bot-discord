@@ -400,7 +400,7 @@ async def monday_morning_greeting():
             # Ensure double newlines for proper Discord formatting
             if '\n\n' not in content and '\n' in content:
                 content = content.replace('\n', '\n\n')
-            
+
             await channel.send(content)
             # Mark as posted to prevent re-sending
             db.update_announcement_status(approved_announcement['id'], 'posted')
@@ -782,7 +782,7 @@ async def friday_community_analysis():
             f"{chosen_moment['content']}\n\n"
             f"Weekend operational pause is now in effect."
         )
-        
+
         # Debug: Verify newlines are present in the generated content
         print(f"🔍 FRIDAY GREETING DEBUG: Generated content length: {len(debrief)} chars")
         print(f"🔍 FRIDAY GREETING DEBUG: Newline count in content: {debrief.count(chr(10))}")
@@ -846,7 +846,7 @@ async def friday_morning_greeting():
             # Ensure double newlines for proper Discord formatting
             if '\n\n' not in content and '\n' in content:
                 content = content.replace('\n', '\n\n')
-            
+
             await channel.send(content)
             db.update_announcement_status(approved_announcement['id'], 'posted')
             print(f"✅ FRIDAY GREETING: Successfully posted approved message.")
