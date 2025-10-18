@@ -56,7 +56,7 @@ except ImportError:
     def extract_game_from_youtube(*args, **kwargs) -> Optional[str]:
         print("⚠️ extract_game_from_youtube not available - integration not loaded")
         return None
-    
+
     def extract_game_from_twitch(*args, **kwargs) -> Optional[str]:
         print("⚠️ extract_game_from_twitch not available - integration not loaded")
         return None
@@ -1528,7 +1528,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
     most_engaging_video = None
     games_added = 0
     games_updated = 0
-    
+
     # Track alternative names discovered during sync
     game_variations = {}  # game_name -> list of title variations
 
@@ -1562,7 +1562,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                 'total_episodes': existing_game.get('total_episodes', 0) + 1,
                 'youtube_views': existing_game.get('youtube_views', 0) + views
             }
-            
+
             db.update_played_game(existing_game['id'], **update_params)
             print(f"✅ SYNC: Updated '{game_name}' with {duration_minutes} mins.")
             games_updated += 1
@@ -1574,8 +1574,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                 total_episodes=1,
                 youtube_views=views,
                 first_played_date=item['published_at'].date(),
-                notes=f"Auto-discovered from content sync on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}."
-            )
+                notes=f"Auto-discovered from content sync on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}.")
             print(f"✅ SYNC: Added new game '{game_name}' with {duration_minutes} mins.")
             games_added += 1
 
