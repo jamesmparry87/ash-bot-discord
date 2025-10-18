@@ -33,8 +33,11 @@ except Exception as db_error:
 
 # Import integrations
 try:
-    from ..integrations.twitch import fetch_new_vods_since, extract_game_name_from_title as extract_game_from_twitch
-    from ..integrations.youtube import execute_youtube_auto_post, fetch_new_videos_since, extract_game_name_from_title as extract_game_from_youtube
+    from ..integrations.twitch import extract_game_name_from_title as extract_game_from_twitch
+    from ..integrations.twitch import fetch_new_vods_since
+    from ..integrations.youtube import execute_youtube_auto_post
+    from ..integrations.youtube import extract_game_name_from_title as extract_game_from_youtube
+    from ..integrations.youtube import fetch_new_videos_since
 except ImportError:
     print("⚠️ YouTube/Twitch integration not available for scheduled tasks")
 
