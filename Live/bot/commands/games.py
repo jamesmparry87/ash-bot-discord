@@ -9,7 +9,7 @@ from typing import Optional
 import discord
 from discord.ext import commands
 
-from ..config import JAM_USER_ID
+from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..database_module import get_database
 from ..tasks.scheduled import perform_full_content_sync
 
@@ -693,12 +693,15 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         # ... (This is the !listplayedgames code from our previous discussion, it's correct) ...
 
     @commands.command(name="syncgames")
-    @commands.has_permissions(administrator=True)
     async def sync_games(self, ctx, mode: str = "standard"):
         """
         Triggers a content sync. Use `full` to re-scan all content.
         Usage: `!syncgames` (syncs new content) or `!syncgames full`
         """
+        # Strict access control - only Captain Jonesy and Sir Decent Jam
+        if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
+            return  # Silent ignore for unauthorized users
+        
         database = self._get_db()
         if mode.lower() == 'full':
             # A full rescan ignores the last sync time and goes back a long time (e.g., years)
@@ -719,9 +722,11 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             await ctx.send(f"❌ **Sync Failed:** {str(e)}")
 
     @commands.command(name="deduplicategames")
-    @commands.has_permissions(administrator=True)
     async def deduplicate_games(self, ctx):
         """Manually triggers the game deduplication process."""
+        # Strict access control - only Captain Jonesy and Sir Decent Jam
+        if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
+            return  # Silent ignore for unauthorized users
 
 
 def setup(bot):

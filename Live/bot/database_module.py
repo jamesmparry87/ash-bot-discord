@@ -4412,10 +4412,14 @@ class DatabaseManager:
                 # Clean up any old pending messages for that day first
                 cur.execute("DELETE FROM weekly_announcements WHERE day = %s AND status = 'pending_approval'", (day,))
 
+                # Ensure newlines are preserved in content (escape them if needed)
+                # PostgreSQL TEXT fields should preserve newlines, but we'll be explicit
+                preserved_content = content
+                
                 cur.execute("""
                     INSERT INTO weekly_announcements (day, generated_content, analysis_cache)
                     VALUES (%s, %s, %s) RETURNING id
-                """, (day, content, json.dumps(cache)))
+                """, (day, preserved_content, json.dumps(cache)))
                 result = cur.fetchone()
                 conn.commit()
                 if result:
