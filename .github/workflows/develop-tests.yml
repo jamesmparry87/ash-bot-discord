@@ -316,7 +316,8 @@ jobs:
         required_files=(
           "Live/requirements.txt"
           "Live/bot_modular.py"
-          "Live/database.py"
+          "Live/bot/database_module.py"
+          "Live/bot/config.py"
           "Live/Procfile"
         )
         
