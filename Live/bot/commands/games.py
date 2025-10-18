@@ -5,6 +5,7 @@ Handles adding, listing, and managing game recommendations
 
 from datetime import datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import discord
 from discord.ext import commands
@@ -701,18 +702,21 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         # Strict access control - only Captain Jonesy and Sir Decent Jam
         if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
             return  # Silent ignore for unauthorized users
-
+        
         database = self._get_db()
         if mode.lower() == 'full':
             # A full rescan ignores the last sync time and goes back a long time (e.g., years)
-            start_time = datetime.now() - timedelta(days=365 * 5)  # 5 years
+            start_time = datetime.now(ZoneInfo("Europe/London")) - timedelta(days=365 * 5)  # 5 years
             await ctx.send(f"🚀 **Full Content Sync Initiated.** Re-scanning all content from the last 5 years. This may take several minutes.")
         else:
             # Standard sync uses the most recent update timestamp
             start_time = database.get_latest_game_update_timestamp()
             # Add None-check with default fallback
             if start_time is None:
-                start_time = datetime.now() - timedelta(days=7)  # Default to last week
+                start_time = datetime.now(ZoneInfo("Europe/London")) - timedelta(days=7)  # Default to last week
+            # Make timezone-aware if it's naive (fix for datetime comparison)
+            elif start_time.tzinfo is None:
+                start_time = start_time.replace(tzinfo=ZoneInfo("Europe/London"))
             await ctx.send(f"🚀 **Standard Content Sync Initiated.** Scanning for new content since {start_time.strftime('%Y-%m-%d')}.")
 
         try:

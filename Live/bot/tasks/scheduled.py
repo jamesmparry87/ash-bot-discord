@@ -310,6 +310,10 @@ async def monday_content_sync():
                 'Could not retrieve the last update timestamp from the database.'
             )
             return
+        
+        # Make timezone-aware if it's naive (fix for datetime comparison with APIs)
+        if start_sync_time.tzinfo is None:
+            start_sync_time = start_sync_time.replace(tzinfo=ZoneInfo("Europe/London"))
 
         # Perform content sync with error handling
         try:
