@@ -702,7 +702,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         # Strict access control - only Captain Jonesy and Sir Decent Jam
         if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
             return  # Silent ignore for unauthorized users
-        
+
         database = self._get_db()
         if mode.lower() == 'full':
             # A full rescan ignores the last sync time and goes back a long time (e.g., years)
