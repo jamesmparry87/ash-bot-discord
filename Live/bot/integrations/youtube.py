@@ -363,7 +363,7 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
 
     # Step 2: Remove episode information in parentheses (e.g., "(First Time Playing Part 8)", "(day 6)")
     cleaned_title = re.sub(r'\s*\([^)]*(?:day|part|episode|ep|pt)\s*\d+[^)]*\)', '', cleaned_title, flags=re.IGNORECASE)
-    
+
     # Step 3: Remove episode titles after dash (e.g., "GAME NAME - Episode Title")
     # Match pattern: "GAME NAME - Something (optional parens)" and keep only "GAME NAME"
     match = re.match(r'^([^-]+?)\s*-\s*[A-Z]', cleaned_title)

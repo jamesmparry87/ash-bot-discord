@@ -310,12 +310,13 @@ async def monday_content_sync():
     try:
         # Always use exactly 7 days for Monday greeting (matches "168-hour operational cycle" message)
         start_sync_time = uk_now - timedelta(days=7)
-        
+
         # Ensure timezone-aware
         if start_sync_time.tzinfo is None:
             start_sync_time = start_sync_time.replace(tzinfo=ZoneInfo("Europe/London"))
-        
-        print(f"🔄 SYNC & DEBRIEF (Monday): Using fixed 7-day window from {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+        print(
+            f"🔄 SYNC & DEBRIEF (Monday): Using fixed 7-day window from {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
         # Perform content sync with error handling
         try:
