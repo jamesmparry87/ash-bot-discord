@@ -308,19 +308,14 @@ async def monday_content_sync():
         return
 
     try:
-        start_sync_time = db.get_latest_game_update_timestamp()
-        if not start_sync_time:
-            print("❌ SYNC & DEBRIEF (Monday): Could not get last update timestamp")
-            await notify_jam_weekly_message_failure(
-                'monday',
-                'Database timestamp error',
-                'Could not retrieve the last update timestamp from the database.'
-            )
-            return
-
-        # Make timezone-aware if it's naive (fix for datetime comparison with APIs)
+        # Always use exactly 7 days for Monday greeting (matches "168-hour operational cycle" message)
+        start_sync_time = uk_now - timedelta(days=7)
+        
+        # Ensure timezone-aware
         if start_sync_time.tzinfo is None:
             start_sync_time = start_sync_time.replace(tzinfo=ZoneInfo("Europe/London"))
+        
+        print(f"🔄 SYNC & DEBRIEF (Monday): Using fixed 7-day window from {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
         # Perform content sync with error handling
         try:

@@ -681,7 +681,7 @@ class DatabaseManager:
                         release_year, platform, first_played_date, completion_status, total_episodes,
                         total_playtime_minutes, youtube_playlist_url, twitch_vod_urls, notes, youtube_views,
                         created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """, (
                     canonical_name,
                     alt_names_str,
@@ -695,7 +695,8 @@ class DatabaseManager:
                     total_playtime_minutes,
                     youtube_playlist_url,
                     vod_urls_str,
-                    notes
+                    notes,
+                    youtube_views
                 ))
                 conn.commit()
                 logger.info(f"Added played game: {canonical_name}")
@@ -1391,7 +1392,7 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 # Find games with duplicate canonical names
                 cur.execute("""
-                    SELECT canonical_name, COUNT(*) as count
+                    SELECT LOWER(TRIM(canonical_name)) as canonical_name, COUNT(*) as count
                     FROM played_games
                     GROUP BY LOWER(TRIM(canonical_name))
                     HAVING COUNT(*) > 1

@@ -339,6 +339,8 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     - "First Time Playing: GAME NAME Road to X"
     - "*DROPS* Prefix - GAME NAME Thanks @sponsor"
     - "GAME NAME - Episode 5"
+    - "GAME NAME - Episode Title (First Time Playing Part X)"
+    - "GAME NAME (day X)"
     """
     if not title or not isinstance(title, str):
         return None
@@ -359,7 +361,19 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     for pattern in prefix_patterns:
         cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
 
-    # Step 2: Remove suffix annotations (but preserve game subtitles)
+    # Step 2: Remove episode information in parentheses (e.g., "(First Time Playing Part 8)", "(day 6)")
+    cleaned_title = re.sub(r'\s*\([^)]*(?:day|part|episode|ep|pt)\s*\d+[^)]*\)', '', cleaned_title, flags=re.IGNORECASE)
+    
+    # Step 3: Remove episode titles after dash (e.g., "GAME NAME - Episode Title")
+    # Match pattern: "GAME NAME - Something (optional parens)" and keep only "GAME NAME"
+    match = re.match(r'^([^-]+?)\s*-\s*[A-Z]', cleaned_title)
+    if match:
+        # Keep the game name before the dash if what follows looks like an episode title (starts with capital)
+        potential_game = match.group(1).strip()
+        if len(potential_game) > 3:
+            cleaned_title = potential_game
+
+    # Step 4: Remove suffix annotations (but preserve game subtitles)
     suffix_patterns = [
         r'\s+Road to [^-]+$',                    # "Road to Resi 9"
         r'\s+Thanks?(?:\s+to)?\s+@\w+.*$',      # "Thanks @playstation #ad"
@@ -374,32 +388,15 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     for pattern in suffix_patterns:
         cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
 
-    # Step 3: Handle special extraction patterns
-    # Pattern: "Descriptor - GAME NAME" or "Descriptor: GAME NAME"
-    special_patterns = [
-        r'^[^-:]+[-:]\s*(.+)$',  # "Something - GAME NAME" -> extract after dash/colon
-    ]
+    # Step 5: Remove remaining brackets and parentheses content
+    cleaned_title = re.sub(r'\s*\([^)]*\)', '', cleaned_title)
+    cleaned_title = re.sub(r'\s*\[[^\]]*\]', '', cleaned_title)
 
-    for pattern in special_patterns:
-        match = re.match(pattern, cleaned_title)
-        if match:
-            potential_game = match.group(1).strip()
-            # Only use if it looks like a game name (has substance)
-            if len(potential_game) > 10 and not any(word in potential_game.lower()
-                                                    for word in ['episode', 'part', 'stream']):
-                cleaned_title = potential_game
-                break
-
-    # Step 4: Remove brackets and parentheses (but keep content for subtitles)
-    # Remove empty brackets
-    cleaned_title = re.sub(r'\s*\[\s*\]', '', cleaned_title)
-    cleaned_title = re.sub(r'\s*\(\s*\)', '', cleaned_title)
-
-    # Step 5: Clean up whitespace and punctuation
+    # Step 6: Clean up whitespace and punctuation
     cleaned_title = re.sub(r'\s+', ' ', cleaned_title).strip()
     cleaned_title = cleaned_title.strip(' -|')
 
-    # Step 6: Validation
+    # Step 7: Validation
     if len(cleaned_title) < 3:
         return None
 
