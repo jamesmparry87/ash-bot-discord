@@ -1536,9 +1536,14 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
 
     for item in all_content:
         # Use YouTube's extract function (both have identical logic)
-        game_name = extract_game_from_youtube(item['title'])
+        title = item['title']
+        game_name = extract_game_from_youtube(title)
+        
         if not game_name:
+            print(f"⚠️ SYNC: Could not extract game from title: '{title}'")
             continue
+        
+        print(f"✅ SYNC: Extracted '{game_name}' from '{title[:60]}...'")
 
         duration_minutes = item.get('duration_seconds', 0) // 60
         views = item.get('view_count', 0)
@@ -1586,6 +1591,14 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
     except Exception as dedup_error:
         print(f"⚠️ SYNC: Deduplication failed: {dedup_error}")
         duplicates_merged = 0
+
+    # --- Update Last Sync Timestamp ---
+    try:
+        sync_completion_time = datetime.now(ZoneInfo("Europe/London"))
+        db.update_last_sync_timestamp(sync_completion_time)
+        print(f"✅ SYNC: Updated last sync timestamp to {sync_completion_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    except Exception as timestamp_error:
+        print(f"⚠️ SYNC: Failed to update last sync timestamp: {timestamp_error}")
 
     # --- Enhanced Reporting ---
     return {

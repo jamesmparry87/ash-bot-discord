@@ -731,6 +731,23 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         # Strict access control - only Captain Jonesy and Sir Decent Jam
         if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
             return  # Silent ignore for unauthorized users
+        
+        try:
+            database = self._get_db()
+            await ctx.send("🔄 **Deduplication process starting...** Analyzing database for duplicate entries.")
+            
+            # Run deduplication
+            merged_count = database.deduplicate_played_games()
+            
+            if merged_count > 0:
+                await ctx.send(f"✅ **Deduplication complete:** Merged {merged_count} duplicate entries.\n\n*Duplicate games have been consolidated and their data merged.*")
+            else:
+                await ctx.send("✅ **No duplicates found.** Database is clean.\n\n*All game entries are unique.*")
+                
+        except RuntimeError:
+            await ctx.send("❌ Database unavailable")
+        except Exception as e:
+            await ctx.send(f"❌ **Deduplication failed:** {str(e)}\n\n*Check bot logs for details.*")
 
 
 def setup(bot):

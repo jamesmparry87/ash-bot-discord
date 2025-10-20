@@ -1082,12 +1082,15 @@ class DatabaseManager:
                     cur.execute("""
                         SELECT * FROM played_games
                         WHERE LOWER(series_name) = %s
-                        ORDER BY release_year ASC, canonical_name ASC
+                        ORDER BY release_year ASC NULLS LAST, canonical_name ASC
                     """, (series_name.lower(),))
                 else:
                     cur.execute("""
                         SELECT * FROM played_games
-                        ORDER BY series_name ASC, release_year ASC, canonical_name ASC
+                        ORDER BY 
+                            COALESCE(series_name, canonical_name) ASC,
+                            release_year ASC NULLS LAST,
+                            canonical_name ASC
                     """)
                 results = cur.fetchall()
                 return [dict(row) for row in results]
@@ -1643,7 +1646,16 @@ class DatabaseManager:
             completion_status="ongoing" if new_episode_count > 1 else "completed")
 
     def get_latest_game_update_timestamp(self) -> Optional[datetime]:
-        """Gets the most recent 'updated_at' timestamp from the played_games table."""
+        """Gets the most recent 'updated_at' timestamp from the played_games table or last sync time."""
+        # First check if we have a stored last sync timestamp
+        last_sync_str = self.get_config_value('last_content_sync_timestamp')
+        if last_sync_str:
+            try:
+                return datetime.fromisoformat(last_sync_str)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid last_content_sync_timestamp format: {last_sync_str}")
+        
+        # Fallback to checking played_games updated_at
         conn = self.get_connection()
         if not conn:
             return None
@@ -1668,6 +1680,17 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting latest game update timestamp: {e}")
             return None
+
+    def update_last_sync_timestamp(self, timestamp: datetime) -> bool:
+        """Update the last content sync timestamp in config"""
+        try:
+            timestamp_str = timestamp.isoformat()
+            self.set_config_value('last_content_sync_timestamp', timestamp_str)
+            logger.info(f"Updated last sync timestamp to {timestamp_str}")
+            return True
+        except Exception as e:
+            logger.error(f"Error updating last sync timestamp: {e}")
+            return False
 
     def get_games_by_genre(self, genre: str) -> List[Dict[str, Any]]:
         """Get all games in a specific genre"""
