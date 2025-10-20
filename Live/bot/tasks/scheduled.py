@@ -1538,11 +1538,11 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
         # Use YouTube's extract function (both have identical logic)
         title = item['title']
         game_name = extract_game_from_youtube(title)
-        
+
         if not game_name:
             print(f"⚠️ SYNC: Could not extract game from title: '{title}'")
             continue
-        
+
         print(f"✅ SYNC: Extracted '{game_name}' from '{title[:60]}...'")
 
         duration_minutes = item.get('duration_seconds', 0) // 60

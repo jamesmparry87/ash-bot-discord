@@ -1087,7 +1087,7 @@ class DatabaseManager:
                 else:
                     cur.execute("""
                         SELECT * FROM played_games
-                        ORDER BY 
+                        ORDER BY
                             COALESCE(series_name, canonical_name) ASC,
                             release_year ASC NULLS LAST,
                             canonical_name ASC
@@ -1654,7 +1654,7 @@ class DatabaseManager:
                 return datetime.fromisoformat(last_sync_str)
             except (ValueError, TypeError):
                 logger.warning(f"Invalid last_content_sync_timestamp format: {last_sync_str}")
-        
+
         # Fallback to checking played_games updated_at
         conn = self.get_connection()
         if not conn:
