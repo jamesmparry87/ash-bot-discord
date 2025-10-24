@@ -7,6 +7,7 @@ Provides commands for manually cleaning up and normalizing database data.
 import discord
 from discord.ext import commands
 
+from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..database_module import get_database
 from ..utils.data_quality import audit_data_quality, cleanup_all_genres, cleanup_series_names
 
@@ -20,7 +21,6 @@ class DataCleanupCommands(commands.Cog):
         self.bot = bot
 
     @commands.command(name='cleanupdata')
-    @commands.has_permissions(manage_messages=True)
     async def cleanup_data(self, ctx):
         """
         Run comprehensive data cleanup on the games database.
@@ -33,6 +33,9 @@ class DataCleanupCommands(commands.Cog):
 
         Usage: !cleanupdata
         """
+        # Strict access control - only Jonesy and JAM
+        if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
+            return  # Silent ignore for unauthorized users
 
         if not db:
             await ctx.send("❌ Database not available.")
@@ -99,7 +102,6 @@ class DataCleanupCommands(commands.Cog):
             print(f"❌ Data cleanup error: {e}")
 
     @commands.command(name='auditdata')
-    @commands.has_permissions(manage_messages=True)
     async def audit_data(self, ctx):
         """
         Generate a data quality audit report.
@@ -112,6 +114,9 @@ class DataCleanupCommands(commands.Cog):
 
         Usage: !auditdata
         """
+        # Strict access control - only Jonesy and JAM
+        if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
+            return  # Silent ignore for unauthorized users
 
         if not db:
             await ctx.send("❌ Database not available.")
