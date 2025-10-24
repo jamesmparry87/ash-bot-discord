@@ -537,14 +537,14 @@ async def fetch_new_videos_since(channel_id: str, start_timestamp: datetime) -> 
 async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: datetime) -> List[Dict[str, Any]]:
     """
     Fetch new content from YouTube playlists since a given timestamp.
-    
+
     This function:
     - Groups videos by their playlists
     - Extracts game names from playlist titles (not individual video titles)
     - Detects [COMPLETED] status from playlist titles
     - Populates complete metadata: series_name, youtube_playlist_url, completion_status, etc.
     - Aggregates views, playtime, and episode count per playlist
-    
+
     Returns a list of game data dictionaries with complete metadata.
     """
     youtube_api_key = os.getenv('YOUTUBE_API_KEY')
@@ -553,7 +553,7 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
         return []
 
     games_data = []
-    
+
     async with aiohttp.ClientSession() as session:
         try:
             # Step 1: Get all playlists from the channel
@@ -592,7 +592,7 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                         has_new_content = await playlist_has_new_content(
                             session, playlist_id, start_timestamp, youtube_api_key
                         )
-                        
+
                         if not has_new_content:
                             continue
 
@@ -600,18 +600,18 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
 
                         # Detect completion status from playlist title
                         completion_status = 'completed' if '[COMPLETED]' in playlist_title.upper() else 'in_progress'
-                        
+
                         # Extract clean canonical name (remove [COMPLETED] and other markers)
                         clean_title = playlist_title.replace('[COMPLETED]', '').replace('[completed]', '').strip()
                         canonical_name = extract_game_name_from_title(clean_title)
-                        
+
                         if not canonical_name:
                             print(f"⚠️ Could not extract game name from: {playlist_title}")
                             continue
 
                         # Get all videos from this playlist with statistics
                         videos_data = await get_playlist_videos_with_views(session, playlist_id, youtube_api_key)
-                        
+
                         if not videos_data:
                             continue
 
@@ -648,10 +648,12 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                         }
 
                         games_data.append(game_data)
-                        print(f"✅ Processed: {canonical_name} - {total_episodes} episodes, {total_views:,} views, status: {completion_status}")
+                        print(
+                            f"✅ Processed: {canonical_name} - {total_episodes} episodes, {total_views:,} views, status: {completion_status}")
 
                     except Exception as playlist_error:
-                        print(f"⚠️ Error processing playlist '{playlist.get('snippet', {}).get('title', 'Unknown')}': {playlist_error}")
+                        print(
+                            f"⚠️ Error processing playlist '{playlist.get('snippet', {}).get('title', 'Unknown')}': {playlist_error}")
                         continue
 
         except Exception as e:
@@ -678,7 +680,7 @@ async def playlist_has_new_content(session, playlist_id: str, start_timestamp: d
                 return False
 
             data = await response.json()
-            
+
             for item in data.get('items', []):
                 published_at = datetime.fromisoformat(item['snippet']['publishedAt'].replace('Z', '+00:00'))
                 if published_at >= start_timestamp:

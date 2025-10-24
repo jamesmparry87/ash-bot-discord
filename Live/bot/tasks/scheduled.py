@@ -1502,7 +1502,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
 async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]:
     """
     Performs a full sync of new content from YouTube using playlist-based extraction.
-    
+
     This function:
     - Fetches playlists from YouTube with new content since start_sync_time
     - Extracts complete metadata including series_name, completion_status, etc.
@@ -1518,14 +1518,14 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
     # --- Data Gathering: Use playlist-based extraction ---
     try:
         from ..integrations.youtube import fetch_playlist_based_content_since
-        
+
         playlist_games = await fetch_playlist_based_content_since(
             "UCPoUxLHeTnE9SUDAkqfJzDQ",  # Jonesy's channel
             start_sync_time
         )
-        
+
         print(f"🔄 SYNC: Found {len(playlist_games)} game playlists with new content")
-        
+
     except Exception as fetch_error:
         print(f"❌ SYNC: Failed to fetch playlist-based content: {fetch_error}")
         return {"status": "no_new_content"}
@@ -1545,7 +1545,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
             canonical_name = game_data['canonical_name']
             series_name = game_data.get('series_name', canonical_name)
             completion_status = game_data.get('completion_status', 'in_progress')
-            
+
             print(f"✅ SYNC: Processing '{canonical_name}' ({completion_status})")
 
             # Aggregate statistics
@@ -1554,7 +1554,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
 
             # Check if game exists in database
             existing_game = db.get_played_game(canonical_name)
-            
+
             if existing_game:
                 # Update existing game with aggregated data
                 update_params = {
@@ -1569,24 +1569,35 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                 }
 
                 db.update_played_game(existing_game['id'], **update_params)
-                print(f"✅ SYNC: Updated '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, status: {completion_status}")
+                print(
+                    f"✅ SYNC: Updated '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, status: {completion_status}")
                 games_updated += 1
-                
+
             else:
                 # Add new game with complete metadata
                 db.add_played_game(
                     canonical_name=canonical_name,
                     series_name=series_name,
-                    total_playtime_minutes=game_data.get('total_playtime_minutes', 0),
-                    total_episodes=game_data.get('total_episodes', 0),
-                    youtube_views=game_data.get('youtube_views', 0),
+                    total_playtime_minutes=game_data.get(
+                        'total_playtime_minutes',
+                        0),
+                    total_episodes=game_data.get(
+                        'total_episodes',
+                        0),
+                    youtube_views=game_data.get(
+                        'youtube_views',
+                        0),
                     youtube_playlist_url=game_data.get('youtube_playlist_url'),
                     completion_status=completion_status,
-                    alternative_names=game_data.get('alternative_names', []),
+                    alternative_names=game_data.get(
+                        'alternative_names',
+                        []),
                     first_played_date=game_data.get('first_played_date'),
-                    notes=game_data.get('notes', f"Auto-synced from YouTube on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}")
-                )
-                print(f"✅ SYNC: Added '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, {game_data.get('youtube_views', 0):,} views")
+                    notes=game_data.get(
+                        'notes',
+                        f"Auto-synced from YouTube on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"))
+                print(
+                    f"✅ SYNC: Added '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, {game_data.get('youtube_views', 0):,} views")
                 games_added += 1
 
         except Exception as game_error:
@@ -1612,7 +1623,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
 
     # --- Enhanced Reporting ---
     total_content_count = sum(game.get('total_episodes', 0) for game in playlist_games)
-    
+
     return {
         "status": "success",
         "new_content_count": total_content_count,
