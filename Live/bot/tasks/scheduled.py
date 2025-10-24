@@ -20,6 +20,16 @@ from discord.ext import tasks
 
 from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID, GUILD_ID, JONESY_USER_ID, MEMBERS_CHANNEL_ID
 
+# Data quality utilities
+try:
+    from ..utils.data_quality import GameDataValidator
+    print("✅ Scheduled tasks: Data quality utilities loaded")
+    DATA_QUALITY_AVAILABLE = True
+except ImportError:
+    print("⚠️ Data quality utilities not available for scheduled tasks")
+    DATA_QUALITY_AVAILABLE = False
+    GameDataValidator = None  # type: ignore
+
 # Database and config imports
 try:
     from ..database_module import DatabaseManager, get_database
@@ -344,6 +354,14 @@ async def monday_content_sync():
             f"🌅 **Monday Morning Protocol Initiated**\n\n"
             f"Analysis of the previous 168-hour operational cycle is complete. **{analysis_results.get('new_content_count', 0)}** new transmissions were logged, "
             f"accumulating **{analysis_results.get('new_hours', 0)} hours** of new mission data and **{analysis_results.get('new_views', 0):,}** viewer engagements.")
+        
+        # Add completion status announcements
+        completed_games = analysis_results.get('completed_games', [])
+        if completed_games:
+            debrief += "\n\n🎯 **Mission Completion Detected:**"
+            for game in completed_games:
+                debrief += f"\n• **{game['series_name']}** - All {game['total_episodes']} episodes archived ({game['total_playtime_hours']}h total). Mission parameters fulfilled."
+        
         top_video = analysis_results.get("top_video")
         if top_video:
             debrief += f"\n\nMaximum engagement was recorded on the transmission titled **'{top_video['title']}'**."
@@ -1501,10 +1519,11 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
 
 async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]:
     """
-    Performs a full sync of new content from YouTube using playlist-based extraction.
-
+    Performs a full sync of new content from YouTube and Twitch.
+    
     This function:
     - Fetches playlists from YouTube with new content since start_sync_time
+    - Fetches VODs from Twitch since start_sync_time
     - Extracts complete metadata including series_name, completion_status, etc.
     - Updates or adds games to the database with full metadata
     - Deduplicates and aggregates statistics
@@ -1515,22 +1534,31 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
 
     print(f"🔄 SYNC: Fetching new content since {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-    # --- Data Gathering: Use playlist-based extraction ---
+    # --- Data Gathering: YouTube playlists ---
+    playlist_games = []
     try:
         from ..integrations.youtube import fetch_playlist_based_content_since
-
+        
         playlist_games = await fetch_playlist_based_content_since(
             "UCPoUxLHeTnE9SUDAkqfJzDQ",  # Jonesy's channel
             start_sync_time
         )
-
-        print(f"🔄 SYNC: Found {len(playlist_games)} game playlists with new content")
-
+        
+        print(f"🔄 SYNC: Found {len(playlist_games)} game playlists with new content (YouTube)")
+        
     except Exception as fetch_error:
-        print(f"❌ SYNC: Failed to fetch playlist-based content: {fetch_error}")
-        return {"status": "no_new_content"}
+        print(f"❌ SYNC: Failed to fetch YouTube playlist-based content: {fetch_error}")
 
-    if not playlist_games:
+    # --- Data Gathering: Twitch VODs ---
+    twitch_vods = []
+    try:
+        twitch_vods = await fetch_new_vods_since("jonesyspacecat", start_sync_time)
+        print(f"🔄 SYNC: Found {len(twitch_vods)} new Twitch VODs")
+    except Exception as twitch_error:
+        print(f"❌ SYNC: Failed to fetch Twitch VODs: {twitch_error}")
+
+    # Check if we have any content
+    if not playlist_games and not twitch_vods:
         return {"status": "no_new_content"}
 
     # --- Processing with Complete Metadata ---
@@ -1539,9 +1567,21 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
     most_engaging_video = None
     games_added = 0
     games_updated = 0
+    completed_games = []  # Track games that changed to 'completed'
 
+    # Process YouTube playlist games
     for game_data in playlist_games:
         try:
+            # Normalize data before processing (if available)
+            if DATA_QUALITY_AVAILABLE and GameDataValidator:
+                game_data = GameDataValidator.normalize_game_data(game_data)
+                
+                # Validate data quality
+                is_valid, errors = GameDataValidator.validate_game_data(game_data)
+                if not is_valid:
+                    print(f"⚠️ SYNC: Data validation errors for '{game_data.get('canonical_name', 'Unknown')}': {errors}")
+                    continue
+            
             canonical_name = game_data['canonical_name']
             series_name = game_data.get('series_name', canonical_name)
             completion_status = game_data.get('completion_status', 'in_progress')
@@ -1556,6 +1596,19 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
             existing_game = db.get_played_game(canonical_name)
 
             if existing_game:
+                # Detect completion status change
+                old_status = existing_game.get('completion_status', 'in_progress')
+                new_status = completion_status
+                
+                if old_status == 'in_progress' and new_status == 'completed':
+                    completed_games.append({
+                        'name': canonical_name,
+                        'series_name': series_name,
+                        'total_episodes': game_data.get('total_episodes', 0),
+                        'total_playtime_hours': round(game_data.get('total_playtime_minutes', 0) / 60, 1)
+                    })
+                    print(f"🎯 SYNC: Detected completion for '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes")
+                
                 # Update existing game with aggregated data
                 update_params = {
                     'series_name': series_name,
@@ -1604,6 +1657,52 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
             print(f"⚠️ SYNC: Error processing game '{game_data.get('canonical_name', 'Unknown')}': {game_error}")
             continue
 
+    # Process Twitch VODs
+    for vod in twitch_vods:
+        try:
+            title = vod['title']
+            game_name = extract_game_from_twitch(title)
+            
+            if not game_name:
+                print(f"⚠️ SYNC: Could not extract game from Twitch title: '{title}'")
+                continue
+            
+            print(f"✅ SYNC: Processing Twitch VOD '{game_name}'")
+            
+            duration_minutes = vod.get('duration_seconds', 0) // 60
+            total_new_minutes += duration_minutes
+            
+            # Check if game exists in database
+            existing_game = db.get_played_game(game_name)
+            
+            if existing_game:
+                # Update existing game - add to totals
+                update_params = {
+                    'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + duration_minutes,
+                    'total_episodes': existing_game.get('total_episodes', 0) + 1
+                }
+                
+                db.update_played_game(existing_game['id'], **update_params)
+                print(f"✅ SYNC: Updated '{game_name}' with Twitch VOD ({duration_minutes} mins)")
+                games_updated += 1
+                
+            else:
+                # Add new game from Twitch VOD
+                db.add_played_game(
+                    canonical_name=game_name,
+                    series_name=game_name,
+                    total_playtime_minutes=duration_minutes,
+                    total_episodes=1,
+                    first_played_date=vod['published_at'].date(),
+                    notes=f"Auto-synced from Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"
+                )
+                print(f"✅ SYNC: Added '{game_name}' from Twitch VOD ({duration_minutes} mins)")
+                games_added += 1
+                
+        except Exception as vod_error:
+            print(f"⚠️ SYNC: Error processing Twitch VOD '{vod.get('title', 'Unknown')}': {vod_error}")
+            continue
+
     # --- Post-Sync Deduplication ---
     print("🔄 SYNC: Running deduplication...")
     try:
@@ -1622,7 +1721,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
         print(f"⚠️ SYNC: Failed to update last sync timestamp: {timestamp_error}")
 
     # --- Enhanced Reporting ---
-    total_content_count = sum(game.get('total_episodes', 0) for game in playlist_games)
+    total_content_count = sum(game.get('total_episodes', 0) for game in playlist_games) + len(twitch_vods)
 
     return {
         "status": "success",
@@ -1632,6 +1731,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
         "games_added": games_added,
         "games_updated": games_updated,
         "duplicates_merged": duplicates_merged,
+        "completed_games": completed_games,  # Games that changed to 'completed' status
         "top_video": None  # Can be enhanced later if needed for specific video tracking
     }
 
