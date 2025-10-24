@@ -339,6 +339,10 @@ async def initialize_modular_components():
                        {"name": "trivia",
                         "module": "bot.commands.trivia",
                         "class": "TriviaCommands",
+                        "critical": False},
+                       {"name": "data_cleanup",
+                        "module": "bot.commands.data_cleanup",
+                        "class": "DataCleanupCommands",
                         "critical": False}]
 
     command_modules_loaded = 0
