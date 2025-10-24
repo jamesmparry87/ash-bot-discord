@@ -20,6 +20,7 @@ class DataCleanupCommands(commands.Cog):
         self.bot = bot
 
     @commands.command(name='cleanupdata')
+    @commands.has_permissions(manage_messages=True)
     async def cleanup_data(self, ctx):
         """
         Run comprehensive data cleanup on the games database.
@@ -32,10 +33,6 @@ class DataCleanupCommands(commands.Cog):
 
         Usage: !cleanupdata
         """
-        # Check if user has moderator permissions
-        if not ctx.author.guild_permissions.manage_messages:
-            await ctx.send("⚠️ This command requires moderator permissions.")
-            return
 
         if not db:
             await ctx.send("❌ Database not available.")
@@ -102,6 +99,7 @@ class DataCleanupCommands(commands.Cog):
             print(f"❌ Data cleanup error: {e}")
 
     @commands.command(name='auditdata')
+    @commands.has_permissions(manage_messages=True)
     async def audit_data(self, ctx):
         """
         Generate a data quality audit report.
@@ -114,10 +112,6 @@ class DataCleanupCommands(commands.Cog):
 
         Usage: !auditdata
         """
-        # Check if user has moderator permissions
-        if not ctx.author.guild_permissions.manage_messages:
-            await ctx.send("⚠️ This command requires moderator permissions.")
-            return
 
         if not db:
             await ctx.send("❌ Database not available.")
