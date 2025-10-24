@@ -8,11 +8,7 @@ import discord
 from discord.ext import commands
 
 from ..database_module import get_database
-from ..utils.data_quality import (
-    audit_data_quality,
-    cleanup_all_genres,
-    cleanup_series_names
-)
+from ..utils.data_quality import audit_data_quality, cleanup_all_genres, cleanup_series_names
 
 db = get_database()
 
