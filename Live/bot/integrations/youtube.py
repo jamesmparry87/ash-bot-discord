@@ -534,6 +534,163 @@ async def fetch_new_videos_since(channel_id: str, start_timestamp: datetime) -> 
     return new_videos
 
 
+async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: datetime) -> List[Dict[str, Any]]:
+    """
+    Fetch new content from YouTube playlists since a given timestamp.
+    
+    This function:
+    - Groups videos by their playlists
+    - Extracts game names from playlist titles (not individual video titles)
+    - Detects [COMPLETED] status from playlist titles
+    - Populates complete metadata: series_name, youtube_playlist_url, completion_status, etc.
+    - Aggregates views, playtime, and episode count per playlist
+    
+    Returns a list of game data dictionaries with complete metadata.
+    """
+    youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+    if not youtube_api_key:
+        print("⚠️ YOUTUBE_API_KEY not configured")
+        return []
+
+    games_data = []
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            # Step 1: Get all playlists from the channel
+            print(f"🔄 Fetching playlists from channel {channel_id}")
+            url = f"https://www.googleapis.com/youtube/v3/playlists"
+            params = {
+                'part': 'snippet,contentDetails',
+                'channelId': channel_id,
+                'maxResults': 50,
+                'key': youtube_api_key
+            }
+
+            async with session.get(url, params=params) as response:
+                if response.status != 200:
+                    print(f"❌ YouTube API error: {response.status}")
+                    return []
+
+                data = await response.json()
+
+                # Step 2: Process each playlist
+                for playlist in data['items']:
+                    try:
+                        playlist_id = playlist['id']
+                        playlist_title = playlist['snippet']['title']
+                        video_count = playlist['contentDetails']['itemCount']
+
+                        # Skip non-game playlists
+                        if video_count < 3:
+                            continue
+
+                        skip_patterns = ['shorts', 'live', 'stream', 'highlight', 'clip']
+                        if any(pattern in playlist_title.lower() for pattern in skip_patterns):
+                            continue
+
+                        # Check if playlist has content since start_timestamp
+                        has_new_content = await playlist_has_new_content(
+                            session, playlist_id, start_timestamp, youtube_api_key
+                        )
+                        
+                        if not has_new_content:
+                            continue
+
+                        print(f"✅ Processing playlist: {playlist_title}")
+
+                        # Detect completion status from playlist title
+                        completion_status = 'completed' if '[COMPLETED]' in playlist_title.upper() else 'in_progress'
+                        
+                        # Extract clean canonical name (remove [COMPLETED] and other markers)
+                        clean_title = playlist_title.replace('[COMPLETED]', '').replace('[completed]', '').strip()
+                        canonical_name = extract_game_name_from_title(clean_title)
+                        
+                        if not canonical_name:
+                            print(f"⚠️ Could not extract game name from: {playlist_title}")
+                            continue
+
+                        # Get all videos from this playlist with statistics
+                        videos_data = await get_playlist_videos_with_views(session, playlist_id, youtube_api_key)
+                        
+                        if not videos_data:
+                            continue
+
+                        # Calculate aggregated statistics
+                        total_views = sum(v.get('view_count', 0) for v in videos_data)
+                        total_playtime_seconds = sum(v.get('duration_seconds', 0) for v in videos_data)
+                        total_playtime_minutes = total_playtime_seconds // 60
+                        total_episodes = len(videos_data)
+
+                        # Get first video date
+                        first_video_date = None
+                        if videos_data:
+                            first_video_date = videos_data[0].get('published_at')
+
+                        # Build alternative names from video titles
+                        alternative_names = [playlist_title, canonical_name]
+                        for video in videos_data[:5]:  # Sample first 5 video titles
+                            alt_name = extract_game_name_from_title(video['title'])
+                            if alt_name and alt_name not in alternative_names:
+                                alternative_names.append(alt_name)
+
+                        # Create complete game data entry
+                        game_data = {
+                            'canonical_name': canonical_name,
+                            'series_name': playlist_title,  # Full playlist title
+                            'total_playtime_minutes': total_playtime_minutes,
+                            'total_episodes': total_episodes,
+                            'youtube_playlist_url': f"https://youtube.com/playlist?list={playlist_id}",
+                            'youtube_views': total_views,
+                            'completion_status': completion_status,
+                            'alternative_names': alternative_names,
+                            'first_played_date': first_video_date,
+                            'notes': f"Auto-synced from YouTube playlist. {total_episodes} episodes, {total_playtime_minutes//60}h {total_playtime_minutes%60}m total."
+                        }
+
+                        games_data.append(game_data)
+                        print(f"✅ Processed: {canonical_name} - {total_episodes} episodes, {total_views:,} views, status: {completion_status}")
+
+                    except Exception as playlist_error:
+                        print(f"⚠️ Error processing playlist '{playlist.get('snippet', {}).get('title', 'Unknown')}': {playlist_error}")
+                        continue
+
+        except Exception as e:
+            print(f"❌ Failed to fetch playlist-based content: {e}")
+            return []
+
+    print(f"✅ Fetched {len(games_data)} games from playlists")
+    return games_data
+
+
+async def playlist_has_new_content(session, playlist_id: str, start_timestamp: datetime, api_key: str) -> bool:
+    """Check if a playlist has any videos published since the start timestamp."""
+    try:
+        url = f"https://www.googleapis.com/youtube/v3/playlistItems"
+        params = {
+            'part': 'snippet',
+            'playlistId': playlist_id,
+            'maxResults': 5,  # Just check the most recent videos
+            'key': api_key
+        }
+
+        async with session.get(url, params=params) as response:
+            if response.status != 200:
+                return False
+
+            data = await response.json()
+            
+            for item in data.get('items', []):
+                published_at = datetime.fromisoformat(item['snippet']['publishedAt'].replace('Z', '+00:00'))
+                if published_at >= start_timestamp:
+                    return True
+
+            return False
+
+    except Exception as e:
+        print(f"⚠️ Error checking playlist for new content: {e}")
+        return False
+
+
 def extract_youtube_urls(text: str) -> List[str]:
     """Extract YouTube URLs from text"""
     youtube_url_pattern = r'https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)'

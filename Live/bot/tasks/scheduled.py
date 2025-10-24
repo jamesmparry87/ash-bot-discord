@@ -1501,83 +1501,97 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
 
 async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]:
     """
-    Performs a full sync of new content from YouTube and Twitch,
-    deduplicates, and updates the database. Returns an analysis dictionary.
+    Performs a full sync of new content from YouTube using playlist-based extraction.
+    
+    This function:
+    - Fetches playlists from YouTube with new content since start_sync_time
+    - Extracts complete metadata including series_name, completion_status, etc.
+    - Updates or adds games to the database with full metadata
+    - Deduplicates and aggregates statistics
+    - Returns analysis dictionary for Monday morning message
     """
     if not db:
         raise RuntimeError("Database not available for sync.")
 
     print(f"🔄 SYNC: Fetching new content since {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-    # --- Data Gathering ---
-    new_youtube_videos = await fetch_new_videos_since("UCPoUxLHeTnE9SUDAkqfJzDQ", start_sync_time)
-    new_twitch_vods = await fetch_new_vods_since("jonesyspacecat", start_sync_time)
-    print(f"🔄 SYNC: Found {len(new_youtube_videos)} new YouTube videos and {len(new_twitch_vods)} new Twitch VODs.")
-
-    total_new_content = len(new_youtube_videos) + len(new_twitch_vods)
-    if total_new_content == 0:
+    # --- Data Gathering: Use playlist-based extraction ---
+    try:
+        from ..integrations.youtube import fetch_playlist_based_content_since
+        
+        playlist_games = await fetch_playlist_based_content_since(
+            "UCPoUxLHeTnE9SUDAkqfJzDQ",  # Jonesy's channel
+            start_sync_time
+        )
+        
+        print(f"🔄 SYNC: Found {len(playlist_games)} game playlists with new content")
+        
+    except Exception as fetch_error:
+        print(f"❌ SYNC: Failed to fetch playlist-based content: {fetch_error}")
         return {"status": "no_new_content"}
 
-    # --- Processing with Enhanced Metadata Extraction ---
+    if not playlist_games:
+        return {"status": "no_new_content"}
+
+    # --- Processing with Complete Metadata ---
     new_views = 0
     total_new_minutes = 0
     most_engaging_video = None
     games_added = 0
     games_updated = 0
 
-    # Track alternative names discovered during sync
-    game_variations = {}  # game_name -> list of title variations
+    for game_data in playlist_games:
+        try:
+            canonical_name = game_data['canonical_name']
+            series_name = game_data.get('series_name', canonical_name)
+            completion_status = game_data.get('completion_status', 'in_progress')
+            
+            print(f"✅ SYNC: Processing '{canonical_name}' ({completion_status})")
 
-    all_content = new_youtube_videos + new_twitch_vods
+            # Aggregate statistics
+            new_views += game_data.get('youtube_views', 0)
+            total_new_minutes += game_data.get('total_playtime_minutes', 0)
 
-    for item in all_content:
-        # Use YouTube's extract function (both have identical logic)
-        title = item['title']
-        game_name = extract_game_from_youtube(title)
+            # Check if game exists in database
+            existing_game = db.get_played_game(canonical_name)
+            
+            if existing_game:
+                # Update existing game with aggregated data
+                update_params = {
+                    'series_name': series_name,
+                    'total_playtime_minutes': game_data.get('total_playtime_minutes', 0),
+                    'total_episodes': game_data.get('total_episodes', 0),
+                    'youtube_views': game_data.get('youtube_views', 0),
+                    'youtube_playlist_url': game_data.get('youtube_playlist_url'),
+                    'completion_status': completion_status,
+                    'alternative_names': game_data.get('alternative_names', []),
+                    'notes': game_data.get('notes', '')
+                }
 
-        if not game_name:
-            print(f"⚠️ SYNC: Could not extract game from title: '{title}'")
+                db.update_played_game(existing_game['id'], **update_params)
+                print(f"✅ SYNC: Updated '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, status: {completion_status}")
+                games_updated += 1
+                
+            else:
+                # Add new game with complete metadata
+                db.add_played_game(
+                    canonical_name=canonical_name,
+                    series_name=series_name,
+                    total_playtime_minutes=game_data.get('total_playtime_minutes', 0),
+                    total_episodes=game_data.get('total_episodes', 0),
+                    youtube_views=game_data.get('youtube_views', 0),
+                    youtube_playlist_url=game_data.get('youtube_playlist_url'),
+                    completion_status=completion_status,
+                    alternative_names=game_data.get('alternative_names', []),
+                    first_played_date=game_data.get('first_played_date'),
+                    notes=game_data.get('notes', f"Auto-synced from YouTube on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}")
+                )
+                print(f"✅ SYNC: Added '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, {game_data.get('youtube_views', 0):,} views")
+                games_added += 1
+
+        except Exception as game_error:
+            print(f"⚠️ SYNC: Error processing game '{game_data.get('canonical_name', 'Unknown')}': {game_error}")
             continue
-
-        print(f"✅ SYNC: Extracted '{game_name}' from '{title[:60]}...'")
-
-        duration_minutes = item.get('duration_seconds', 0) // 60
-        views = item.get('view_count', 0)
-
-        total_new_minutes += duration_minutes
-        new_views += views
-
-        if views > (most_engaging_video or {}).get('view_count', 0):
-            most_engaging_video = item
-
-        # Track title variations for alternative names
-        if game_name not in game_variations:
-            game_variations[game_name] = set()
-        game_variations[game_name].add(item['title'][:50])  # Store shortened titles
-
-        existing_game = db.get_played_game(game_name)
-        if existing_game:
-            # Update existing game with enhanced metadata
-            update_params = {
-                'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + duration_minutes,
-                'total_episodes': existing_game.get('total_episodes', 0) + 1,
-                'youtube_views': existing_game.get('youtube_views', 0) + views
-            }
-
-            db.update_played_game(existing_game['id'], **update_params)
-            print(f"✅ SYNC: Updated '{game_name}' with {duration_minutes} mins.")
-            games_updated += 1
-        else:
-            # Add new game with initial metadata
-            db.add_played_game(
-                canonical_name=game_name,
-                total_playtime_minutes=duration_minutes,
-                total_episodes=1,
-                youtube_views=views,
-                first_played_date=item['published_at'].date(),
-                notes=f"Auto-discovered from content sync on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}.")
-            print(f"✅ SYNC: Added new game '{game_name}' with {duration_minutes} mins.")
-            games_added += 1
 
     # --- Post-Sync Deduplication ---
     print("🔄 SYNC: Running deduplication...")
@@ -1597,15 +1611,17 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
         print(f"⚠️ SYNC: Failed to update last sync timestamp: {timestamp_error}")
 
     # --- Enhanced Reporting ---
+    total_content_count = sum(game.get('total_episodes', 0) for game in playlist_games)
+    
     return {
         "status": "success",
-        "new_content_count": total_new_content,
+        "new_content_count": total_content_count,
         "new_hours": round(total_new_minutes / 60, 1),
         "new_views": new_views,
         "games_added": games_added,
         "games_updated": games_updated,
         "duplicates_merged": duplicates_merged,
-        "top_video": most_engaging_video
+        "top_video": None  # Can be enhanced later if needed for specific video tracking
     }
 
 
