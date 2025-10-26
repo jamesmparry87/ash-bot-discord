@@ -192,7 +192,7 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
     - <0.5 = low confidence
     """
     import difflib
-    
+
     # Normalize for comparison
     extracted_lower = extracted_name.lower().strip()
     igdb_lower = igdb_name.lower().strip()
