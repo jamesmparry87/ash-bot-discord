@@ -69,14 +69,17 @@ async def _rate_limit():
 async def search_igdb(game_name: str, access_token: str) -> List[Dict[str, Any]]:
     """Search IGDB for a game by name"""
     await _rate_limit()
-
+    
     client_id = os.getenv('IGDB_CLIENT_ID') or os.getenv('TWITCH_CLIENT_ID')
-
+    
     if not client_id:
         print("⚠️ IGDB Client ID not configured")
         return []
-
+    
     try:
+        # Escape double quotes to prevent query injection
+        game_name_escaped = game_name.replace('"', '\\"')
+        
         async with aiohttp.ClientSession() as session:
             # IGDB uses Twitch API-like syntax with POST and body query
             async with session.post(
@@ -85,7 +88,7 @@ async def search_igdb(game_name: str, access_token: str) -> List[Dict[str, Any]]
                     'Client-ID': client_id,
                     'Authorization': f'Bearer {access_token}'
                 },
-                data=f'search "{game_name}"; fields name,alternative_names.name,franchises.name,genres.name,release_dates.y,cover.url; limit 5;'
+                data=f'search "{game_name_escaped}"; fields name,alternative_names.name,franchises.name,genres.name,release_dates.y,cover.url; limit 5;'
             ) as response:
                 if response.status == 200:
                     return await response.json()
