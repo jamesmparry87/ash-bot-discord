@@ -528,7 +528,8 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
 
                         # Extract clean canonical name (remove [COMPLETED] and other markers)
                         clean_title = playlist_title.replace('[COMPLETED]', '').replace('[completed]', '').strip()
-                        extracted_name = extract_game_name_from_title(clean_title)
+                        # Use cleaned playlist title directly (don't use video title extraction for playlists)
+                        extracted_name = clean_title
 
                         if not extracted_name:
                             print(f"⚠️ Could not extract game name from: {playlist_title}")
