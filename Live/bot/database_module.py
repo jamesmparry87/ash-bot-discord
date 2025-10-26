@@ -1442,13 +1442,15 @@ class DatabaseManager:
                     # Merge data from all duplicates into the master record
                     # Handle NULL values from TEXT fields properly with explicit checks
                     master_alt_names = master_game.get("alternative_names")
-                    if master_alt_names and master_alt_names != "" and isinstance(master_alt_names, str) and master_alt_names.lower() != "null":
+                    if master_alt_names and master_alt_names != "" and isinstance(
+                            master_alt_names, str) and master_alt_names.lower() != "null":
                         master_alt_names_list = self._parse_comma_separated_list(master_alt_names)
                     else:
                         master_alt_names_list = []
 
                     master_vod_urls = master_game.get("twitch_vod_urls")
-                    if master_vod_urls and master_vod_urls != "" and isinstance(master_vod_urls, str) and master_vod_urls.lower() != "null":
+                    if master_vod_urls and master_vod_urls != "" and isinstance(
+                            master_vod_urls, str) and master_vod_urls.lower() != "null":
                         master_vod_urls_list = self._parse_comma_separated_list(master_vod_urls)
                     else:
                         master_vod_urls_list = []

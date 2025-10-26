@@ -169,11 +169,11 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                             igdb_genre = igdb_result.get('genre')
                             igdb_series = igdb_result.get('series_name')
                             igdb_year = igdb_result.get('release_year')
-                            
+
                             # Get alternative names ONLY from IGDB
                             if igdb_result.get('alternative_names'):
                                 alternative_names = igdb_result['alternative_names'][:5]
-                            
+
                             print(
                                 f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
                         else:

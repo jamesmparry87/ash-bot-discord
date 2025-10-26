@@ -580,7 +580,7 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                         alternative_names = []
                         if igdb_result.get('alternative_names'):
                             alternative_names = igdb_result['alternative_names'][:5]  # Limit to 5 IGDB alternatives
-                        
+
                         # If no IGDB alternatives but we have the canonical name, add it
                         if not alternative_names and canonical_name != extracted_name:
                             alternative_names = [extracted_name]
@@ -591,7 +591,8 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                             # Extract series from playlist title (remove brackets, episode markers, etc.)
                             clean_title = playlist_title.replace('[COMPLETED]', '').replace('[completed]', '').strip()
                             # Remove common patterns like "- Part 1", "Episode 5", etc.
-                            series_name = re.sub(r'\s*-\s*(Part|Episode|Ep|#)\s*\d+.*$', '', clean_title, flags=re.IGNORECASE)
+                            series_name = re.sub(r'\s*-\s*(Part|Episode|Ep|#)\s*\d+.*$',
+                                                 '', clean_title, flags=re.IGNORECASE)
                             series_name = re.sub(r'\s*\d+\s*$', '', series_name).strip()  # Remove trailing numbers
                             # If it looks like a full game name with subtitle, try to extract just the series
                             if ':' in series_name or '–' in series_name or '—' in series_name:
