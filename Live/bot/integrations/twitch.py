@@ -144,8 +144,9 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
 
                     title = video['title']
 
-                    # Clean the VOD title first (remove [Completed], markers, etc.)
-                    clean_title = cleanup_game_name(title)
+                    # Clean the VOD title (remove [Completed] markers case-insensitively, then cleanup)
+                    clean_title = re.sub(r'\[completed\]', '', title, flags=re.IGNORECASE).strip()
+                    clean_title = cleanup_game_name(clean_title)
                     # Use cleaned title directly (VOD titles don't need episode extraction)
                     extracted_name = clean_title
 

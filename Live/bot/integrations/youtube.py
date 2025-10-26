@@ -526,8 +526,8 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                         # Detect completion status from playlist title
                         completion_status = 'completed' if '[COMPLETED]' in playlist_title.upper() else 'in_progress'
 
-                        # Extract clean canonical name (remove [COMPLETED] and other markers)
-                        clean_title = playlist_title.replace('[COMPLETED]', '').replace('[completed]', '').strip()
+                        # Extract clean canonical name (remove [COMPLETED] and other markers - case insensitive)
+                        clean_title = re.sub(r'\[completed\]', '', playlist_title, flags=re.IGNORECASE).strip()
                         # Use cleaned playlist title directly (don't use video title extraction for playlists)
                         extracted_name = clean_title
 
