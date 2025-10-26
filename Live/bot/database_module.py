@@ -212,10 +212,21 @@ class DatabaseManager:
                         notes TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        -- ADD THESE TWO NEW COLUMNS --
                         youtube_views INTEGER DEFAULT 0,
-                        last_youtube_sync TIMESTAMP
+                        last_youtube_sync TIMESTAMP,
+                        -- IGDB Integration Fields --
+                        igdb_id INTEGER,
+                        data_confidence FLOAT,
+                        igdb_last_validated TIMESTAMP
                     )
+                """)
+                
+                # Add IGDB columns to existing table if they don't exist
+                cur.execute("""
+                    ALTER TABLE played_games
+                    ADD COLUMN IF NOT EXISTS igdb_id INTEGER,
+                    ADD COLUMN IF NOT EXISTS data_confidence FLOAT,
+                    ADD COLUMN IF NOT EXISTS igdb_last_validated TIMESTAMP
                 """)
 
                 # Migrate existing array columns to TEXT format for manual
@@ -1431,10 +1442,21 @@ class DatabaseManager:
                                       for game in duplicate_games[1:]]
 
                     # Merge data from all duplicates into the master record
+                    # Handle NULL values from TEXT fields properly
+                    master_alt_names = master_game.get("alternative_names")
+                    if master_alt_names and isinstance(master_alt_names, str):
+                        master_alt_names_list = self._parse_comma_separated_list(master_alt_names)
+                    else:
+                        master_alt_names_list = []
+                    
+                    master_vod_urls = master_game.get("twitch_vod_urls")
+                    if master_vod_urls and isinstance(master_vod_urls, str):
+                        master_vod_urls_list = self._parse_comma_separated_list(master_vod_urls)
+                    else:
+                        master_vod_urls_list = []
+                    
                     merged_data = {
-                        "alternative_names": master_game.get(
-                            "alternative_names",
-                            []) or [],
+                        "alternative_names": master_alt_names_list,
                         "series_name": master_game.get("series_name"),
                         "genre": master_game.get("genre"),
                         "release_year": master_game.get("release_year"),
@@ -1445,17 +1467,13 @@ class DatabaseManager:
                             "unknown"),
                         "total_episodes": master_game.get(
                             "total_episodes",
-                            0),
+                            0) or 0,
                         "total_playtime_minutes": master_game.get(
                             "total_playtime_minutes",
-                            0),
+                            0) or 0,
                         "youtube_playlist_url": master_game.get("youtube_playlist_url"),
-                        "twitch_vod_urls": master_game.get(
-                            "twitch_vod_urls",
-                            []) or [],
-                        "notes": master_game.get(
-                            "notes",
-                            ""),
+                        "twitch_vod_urls": master_vod_urls_list,
+                        "notes": master_game.get("notes") or "",
                     }
 
                     # Merge data from duplicates
