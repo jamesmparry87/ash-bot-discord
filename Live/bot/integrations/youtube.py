@@ -20,11 +20,11 @@ import aiohttp
 # Database import
 from ..database import DatabaseManager, db
 
-# IGDB integration
-from . import igdb
-
 # Text processing utilities
 from ..utils.text_processing import extract_game_name_from_title
+
+# IGDB integration
+from . import igdb
 
 
 async def fetch_youtube_games(channel_id: str) -> List[str]:

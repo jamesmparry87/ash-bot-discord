@@ -19,11 +19,11 @@ import aiohttp
 # Database import
 from ..database import db
 
+# Text processing utilities
+from ..utils.text_processing import cleanup_game_name, extract_game_name_from_title, is_generic_term
+
 # IGDB integration
 from . import igdb
-
-# Text processing utilities
-from ..utils.text_processing import cleanup_game_name, is_generic_term, extract_game_name_from_title
 
 
 async def fetch_twitch_games(username: str) -> List[str]:
