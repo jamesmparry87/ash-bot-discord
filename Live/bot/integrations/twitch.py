@@ -140,15 +140,15 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                         break  # Stop when we find videos older than our sync time
 
                     title = video['title']
-                    
+
                     # Extract game name from title
                     extracted_name = extract_game_name_from_title(title)
-                    
+
                     if extracted_name:
                         # Validate with IGDB for better accuracy
                         print(f"🔍 Validating '{extracted_name}' with IGDB...")
                         igdb_result = await igdb.validate_and_enrich(extracted_name)
-                        
+
                         # Use IGDB data if confidence is high enough
                         if igdb_result.get('confidence', 0) >= 0.8:
                             canonical_name = igdb_result.get('canonical_name', extracted_name)
@@ -157,7 +157,8 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                             igdb_series = igdb_result.get('series_name')
                             igdb_year = igdb_result.get('release_year')
                             data_confidence = igdb_result['confidence']
-                            print(f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
+                            print(
+                                f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
                         else:
                             # Low confidence - use extracted name but flag for review
                             canonical_name = extracted_name
@@ -166,7 +167,8 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                             igdb_series = None
                             igdb_year = None
                             data_confidence = igdb_result.get('confidence', 0.0)
-                            print(f"⚠️ Low IGDB confidence for '{extracted_name}': {data_confidence:.2f} - flagging for review")
+                            print(
+                                f"⚠️ Low IGDB confidence for '{extracted_name}': {data_confidence:.2f} - flagging for review")
                     else:
                         # No game name extracted
                         canonical_name = None
@@ -359,18 +361,18 @@ def parse_twitch_duration(duration: str) -> int:
 def extract_game_name_from_title(title: str) -> Optional[str]:
     """
     Extract game name from video/stream title using priority-based pattern matching.
-    
+
     Handles common Twitch streaming title formats with focus on reliable indicators
     like "(day X)", "(part X)", "(episode X)" that typically precede the actual game name.
-    
+
     Example: "Samurai School Dropout - Ghost of Yotei (day 9) Thanks @playstation #ad/gift"
              Would extract: "Ghost of Yotei"
     """
     if not title or len(title.strip()) < 2:
         return None
-    
+
     cleaned_title = title.strip()
-    
+
     # PRIORITY 1: Extract game name that appears before day/part/episode indicators
     # These are the most reliable patterns as they explicitly mark ongoing series
     priority_patterns = [
@@ -383,31 +385,31 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         # Matches: "Game Name - day 9" (less parentheses version)
         r'[-|]\s*([^-|]+?)\s*-\s*(?:day|part|episode|ep)\s+\d+',
     ]
-    
+
     for pattern in priority_patterns:
         match = re.search(pattern, cleaned_title, re.IGNORECASE)
         if match:
             game_name = match.group(1).strip()
-            
+
             # Clean up trailing metadata (Thanks, @mentions, #hashtags, etc.)
             game_name = re.sub(r'\s+(?:Thanks|Thx|@|#).*$', '', game_name, flags=re.IGNORECASE)
             game_name = re.sub(r'\s+(?:ft\.|feat\.|featuring).*$', '', game_name, flags=re.IGNORECASE)
             game_name = re.sub(r'\s*[|:]\s*$', '', game_name)  # Remove trailing separators
-            
+
             # Final cleanup
             game_name = game_name.strip(' -|:')
-            
+
             # Validate extracted name
             if len(game_name) >= 2 and not _is_generic_term(game_name):
                 return game_name
-    
+
     # PRIORITY 2: Look for clear game title before episode/part numbers
     # Handles formats like "Game Name - Episode 5" or "Game Name | Part 3"
     episode_patterns = [
         r'^([^-|]+?)\s*[-|]\s*(?:Episode|Part|Ep|Stream|VOD)\s*[#\d]',
         r'^([^-|]+?)\s*[-|]\s*S\d+E\d+',  # Season/Episode format
     ]
-    
+
     for pattern in episode_patterns:
         match = re.search(pattern, cleaned_title, re.IGNORECASE)
         if match:
@@ -415,7 +417,7 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
             game_name = _cleanup_game_name(game_name)
             if len(game_name) >= 2 and not _is_generic_term(game_name):
                 return game_name
-    
+
     # PRIORITY 3: Fallback to general cleanup (existing logic)
     # Remove episode/part numbers and common patterns
     patterns_to_remove = [
@@ -431,10 +433,10 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         r'\s*-\s*Stream\s*\d+.*$',
         r'\s*-\s*VOD.*$',
     ]
-    
+
     for pattern in patterns_to_remove:
         cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
-    
+
     # Remove common streaming/gaming words
     streaming_words = [
         'stream', 'streaming', 'gameplay', 'playthrough',
@@ -442,14 +444,14 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     ]
     for word in streaming_words:
         cleaned_title = re.sub(rf'\b{word}\b', '', cleaned_title, flags=re.IGNORECASE)
-    
+
     # Final cleanup
     cleaned_title = _cleanup_game_name(cleaned_title)
-    
+
     # Validate final result
     if len(cleaned_title) < 2 or _is_generic_term(cleaned_title):
         return None
-    
+
     return cleaned_title
 
 
@@ -458,10 +460,10 @@ def _cleanup_game_name(name: str) -> str:
     # Clean up whitespace and punctuation
     name = re.sub(r'\s+', ' ', name).strip()
     name = name.strip(' -|:')
-    
+
     # Remove trailing metadata
     name = re.sub(r'\s+(?:Thanks|Thx|@|#).*$', '', name, flags=re.IGNORECASE)
-    
+
     return name
 
 

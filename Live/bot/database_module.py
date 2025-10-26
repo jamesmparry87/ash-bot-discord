@@ -220,7 +220,7 @@ class DatabaseManager:
                         igdb_last_validated TIMESTAMP
                     )
                 """)
-                
+
                 # Add IGDB columns to existing table if they don't exist
                 cur.execute("""
                     ALTER TABLE played_games
@@ -1448,13 +1448,13 @@ class DatabaseManager:
                         master_alt_names_list = self._parse_comma_separated_list(master_alt_names)
                     else:
                         master_alt_names_list = []
-                    
+
                     master_vod_urls = master_game.get("twitch_vod_urls")
                     if master_vod_urls and isinstance(master_vod_urls, str):
                         master_vod_urls_list = self._parse_comma_separated_list(master_vod_urls)
                     else:
                         master_vod_urls_list = []
-                    
+
                     merged_data = {
                         "alternative_names": master_alt_names_list,
                         "series_name": master_game.get("series_name"),

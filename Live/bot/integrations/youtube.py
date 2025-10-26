@@ -338,10 +338,10 @@ def parse_youtube_duration(duration: str) -> int:
 def extract_game_name_from_title(title: str) -> Optional[str]:
     """
     Extract game name from video/playlist title using priority-based pattern matching.
-    
+
     Handles common YouTube/Twitch streaming title formats with focus on reliable indicators
     like "(day X)", "(part X)", "(episode X)" that typically mark the actual game name.
-    
+
     Examples:
     - "Samurai School Dropout - Ghost of Yotei (day 9) Thanks @playstation #ad/gift"
       → "Ghost of Yotei"
@@ -351,9 +351,9 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     """
     if not title or not isinstance(title, str):
         return None
-    
+
     cleaned_title = title.strip()
-    
+
     # PRIORITY 1: Extract game name that appears before day/part/episode indicators
     # These are the most reliable patterns as they explicitly mark ongoing series
     priority_patterns = [
@@ -366,31 +366,31 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         # Matches: "Game Name - day 9" (less parentheses version)
         r'[-|]\s*([^-|]+?)\s*-\s*(?:day|part|episode|ep)\s+\d+',
     ]
-    
+
     for pattern in priority_patterns:
         match = re.search(pattern, cleaned_title, re.IGNORECASE)
         if match:
             game_name = match.group(1).strip()
-            
+
             # Clean up trailing metadata (Thanks, @mentions, #hashtags, etc.)
             game_name = re.sub(r'\s+(?:Thanks|Thx|@|#).*$', '', game_name, flags=re.IGNORECASE)
             game_name = re.sub(r'\s+(?:ft\.|feat\.|featuring).*$', '', game_name, flags=re.IGNORECASE)
             game_name = re.sub(r'\s*[|:]\s*$', '', game_name)  # Remove trailing separators
-            
+
             # Final cleanup
             game_name = _cleanup_game_name(game_name)
-            
+
             # Validate extracted name
             if len(game_name) >= 2 and not _is_generic_term(game_name):
                 return game_name
-    
+
     # PRIORITY 2: Look for clear game title before episode/part numbers
     # Handles formats like "Game Name - Episode 5" or "Game Name | Part 3"
     episode_patterns = [
         r'^([^-|]+?)\s*[-|]\s*(?:Episode|Part|Ep|Stream|VOD)\s*[#\d]',
         r'^([^-|]+?)\s*[-|]\s*S\d+E\d+',  # Season/Episode format
     ]
-    
+
     for pattern in episode_patterns:
         match = re.search(pattern, cleaned_title, re.IGNORECASE)
         if match:
@@ -398,7 +398,7 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
             game_name = _cleanup_game_name(game_name)
             if len(game_name) >= 2 and not _is_generic_term(game_name):
                 return game_name
-    
+
     # PRIORITY 3: Remove common prefixes
     prefix_patterns = [
         r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*',
@@ -409,21 +409,21 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         r'^Gameplay:?\s*',
         r'^Playthrough:?\s*',
     ]
-    
+
     for pattern in prefix_patterns:
         cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
-    
+
     # PRIORITY 4: General cleanup (preserve [COMPLETED] for YouTube playlist detection)
     # Remove episode information in parentheses
     cleaned_title = re.sub(r'\s*\([^)]*(?:day|part|episode|ep|pt)\s*\d+[^)]*\)', '', cleaned_title, flags=re.IGNORECASE)
-    
+
     # Remove episode titles after dash if followed by capital letter
     match = re.match(r'^([^-]+?)\s*-\s*[A-Z]', cleaned_title)
     if match:
         potential_game = match.group(1).strip()
         if len(potential_game) > 3:
             cleaned_title = potential_game
-    
+
     # Remove suffix annotations
     suffix_patterns = [
         r'\s+Road to [^-]+$',
@@ -435,25 +435,25 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         r'\s+[-|]\s*#\d+.*$',
         r'\s+S\d+E\d+.*$',
     ]
-    
+
     for pattern in suffix_patterns:
         cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
-    
+
     # Remove parentheses content (but preserve [COMPLETED] in brackets for YouTube)
     cleaned_title = re.sub(r'\s*\([^)]*\)', '', cleaned_title)
-    
+
     # Final cleanup
     cleaned_title = _cleanup_game_name(cleaned_title)
-    
+
     # Validation
     if len(cleaned_title) < 3 or _is_generic_term(cleaned_title):
         return None
-    
+
     # Reject if mostly special characters
     alpha_chars = sum(c.isalnum() for c in cleaned_title)
     if alpha_chars < len(cleaned_title) * 0.5:
         return None
-    
+
     return cleaned_title
 
 
@@ -462,10 +462,10 @@ def _cleanup_game_name(name: str) -> str:
     # Clean up whitespace and punctuation
     name = re.sub(r'\s+', ' ', name).strip()
     name = name.strip(' -|:')
-    
+
     # Remove trailing metadata
     name = re.sub(r'\s+(?:Thanks|Thx|@|#).*$', '', name, flags=re.IGNORECASE)
-    
+
     return name
 
 
@@ -677,7 +677,7 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                         # Validate with IGDB for better accuracy
                         print(f"🔍 Validating '{extracted_name}' with IGDB...")
                         igdb_result = await igdb.validate_and_enrich(extracted_name)
-                        
+
                         # Use IGDB data if confidence is high enough
                         if igdb_result.get('confidence', 0) >= 0.8:
                             canonical_name = igdb_result.get('canonical_name', extracted_name)
@@ -686,7 +686,8 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                             igdb_series = igdb_result.get('series_name')
                             igdb_year = igdb_result.get('release_year')
                             data_confidence = igdb_result['confidence']
-                            print(f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
+                            print(
+                                f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
                         else:
                             # Low confidence - use extracted name but flag for review
                             canonical_name = extracted_name
@@ -695,7 +696,8 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                             igdb_series = None
                             igdb_year = None
                             data_confidence = igdb_result.get('confidence', 0.0)
-                            print(f"⚠️ Low IGDB confidence for '{extracted_name}': {data_confidence:.2f} - flagging for review")
+                            print(
+                                f"⚠️ Low IGDB confidence for '{extracted_name}': {data_confidence:.2f} - flagging for review")
 
                         # Get all videos from this playlist with statistics
                         videos_data = await get_playlist_videos_with_views(session, playlist_id, youtube_api_key)

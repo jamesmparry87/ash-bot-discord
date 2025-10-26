@@ -693,19 +693,19 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         # Strict access control - only Jonesy and JAM
         if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
             return  # Silent ignore for unauthorized users
-        
+
         try:
             database = self._get_db()
             games = database.get_all_played_games()
-            
+
             if not games:
                 await ctx.send("📋 No played games found in database.")
                 return
-            
+
             # Group games by series
             series_groups = {}
             standalone_games = []
-            
+
             for game in games:
                 series = game.get('series_name')
                 if series and series.strip():
@@ -714,10 +714,10 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                     series_groups[series].append(game)
                 else:
                     standalone_games.append(game)
-            
+
             # Build response
             response = f"📋 **Played Games Database** ({len(games)} total)\n\n"
-            
+
             # List series alphabetically
             for series in sorted(series_groups.keys()):
                 series_games = series_groups[series]
@@ -730,7 +730,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                         response += f" ({episodes} eps)"
                     response += f" - {status}\n"
                 response += "\n"
-            
+
             # List standalone games
             if standalone_games:
                 response += f"**Standalone Games** ({len(standalone_games)})\n"
@@ -741,7 +741,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                     if episodes > 0:
                         response += f" ({episodes} eps)"
                     response += f" - {status}\n"
-            
+
             # Split into multiple messages if too long
             if len(response) > 2000:
                 parts = []
@@ -754,12 +754,12 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                         current += line + '\n'
                 if current:
                     parts.append(current)
-                
+
                 for part in parts:
                     await ctx.send(part)
             else:
                 await ctx.send(response)
-                
+
         except RuntimeError:
             await ctx.send("❌ Database unavailable")
         except Exception as e:
