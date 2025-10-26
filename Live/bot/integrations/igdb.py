@@ -69,17 +69,17 @@ async def _rate_limit():
 async def search_igdb(game_name: str, access_token: str) -> List[Dict[str, Any]]:
     """Search IGDB for a game by name"""
     await _rate_limit()
-    
+
     client_id = os.getenv('IGDB_CLIENT_ID') or os.getenv('TWITCH_CLIENT_ID')
-    
+
     if not client_id:
         print("⚠️ IGDB Client ID not configured")
         return []
-    
+
     try:
         # Escape double quotes to prevent query injection
         game_name_escaped = game_name.replace('"', '\\"')
-        
+
         async with aiohttp.ClientSession() as session:
             # IGDB uses Twitch API-like syntax with POST and body query
             async with session.post(
