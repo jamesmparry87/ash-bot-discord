@@ -154,6 +154,7 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                     igdb_series = None
                     igdb_year = None
                     data_confidence = 0.0
+                    alternative_names = []
 
                     if extracted_name:
                         # Validate with IGDB for better accuracy
@@ -168,11 +169,36 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                             igdb_genre = igdb_result.get('genre')
                             igdb_series = igdb_result.get('series_name')
                             igdb_year = igdb_result.get('release_year')
+                            
+                            # Get alternative names ONLY from IGDB
+                            if igdb_result.get('alternative_names'):
+                                alternative_names = igdb_result['alternative_names'][:5]
+                            
                             print(
                                 f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
                         else:
                             print(
                                 f"⚠️ Low IGDB confidence for '{extracted_name}': {data_confidence:.2f} - flagging for review")
+                            # For low confidence, only keep extracted name as alternative
+                            if canonical_name != extracted_name:
+                                alternative_names = [extracted_name]
+
+                    # Fallback series name extraction if IGDB doesn't provide one
+                    series_name = igdb_series
+                    if not series_name and extracted_name:
+                        # Try to extract series from game name
+                        # For titles like "God of War 3", extract "God of War"
+                        # For titles like "Uncharted: The Lost Legacy", extract "Uncharted"
+                        if ':' in extracted_name or '–' in extracted_name or '—' in extracted_name:
+                            parts = re.split(r'[:\–\—]', extracted_name)
+                            if parts and len(parts[0].strip()) >= 3:
+                                series_name = parts[0].strip()
+                        else:
+                            # Remove numbers from end (e.g., "God of War 3" → "God of War")
+                            series_name = re.sub(r'\s+\d+\s*$', '', extracted_name).strip()
+                            # If we removed something, use that as series, otherwise use canonical
+                            if series_name == extracted_name:
+                                series_name = canonical_name
 
                     new_vods.append({
                         'title': title,
@@ -180,7 +206,8 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                         'duration_seconds': parse_twitch_duration(video.get('duration', '0s')),
                         'published_at': created_at,
                         'canonical_name': canonical_name,
-                        'series_name': igdb_series,
+                        'alternative_names': alternative_names,
+                        'series_name': series_name or canonical_name,
                         'genre': igdb_genre,
                         'release_year': igdb_year,
                         'igdb_id': igdb_id,

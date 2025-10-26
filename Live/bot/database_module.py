@@ -664,7 +664,6 @@ class DatabaseManager:
                         series_name: Optional[str] = None,
                         genre: Optional[str] = None,
                         release_year: Optional[int] = None,
-                        platform: Optional[str] = None,
                         first_played_date: Optional[str] = None,
                         completion_status: str = "unknown",
                         total_episodes: int = 0,
@@ -689,17 +688,16 @@ class DatabaseManager:
                 cur.execute("""
                     INSERT INTO played_games (
                         canonical_name, alternative_names, series_name, genre,
-                        release_year, platform, first_played_date, completion_status, total_episodes,
+                        release_year, first_played_date, completion_status, total_episodes,
                         total_playtime_minutes, youtube_playlist_url, twitch_vod_urls, notes, youtube_views,
                         created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """, (
                     canonical_name,
                     alt_names_str,
                     series_name,
                     genre,
                     release_year,
-                    platform,
                     first_played_date,
                     completion_status,
                     total_episodes,
@@ -1442,15 +1440,15 @@ class DatabaseManager:
                                       for game in duplicate_games[1:]]
 
                     # Merge data from all duplicates into the master record
-                    # Handle NULL values from TEXT fields properly
+                    # Handle NULL values from TEXT fields properly with explicit checks
                     master_alt_names = master_game.get("alternative_names")
-                    if master_alt_names and isinstance(master_alt_names, str):
+                    if master_alt_names and master_alt_names != "" and isinstance(master_alt_names, str) and master_alt_names.lower() != "null":
                         master_alt_names_list = self._parse_comma_separated_list(master_alt_names)
                     else:
                         master_alt_names_list = []
 
                     master_vod_urls = master_game.get("twitch_vod_urls")
-                    if master_vod_urls and isinstance(master_vod_urls, str):
+                    if master_vod_urls and master_vod_urls != "" and isinstance(master_vod_urls, str) and master_vod_urls.lower() != "null":
                         master_vod_urls_list = self._parse_comma_separated_list(master_vod_urls)
                     else:
                         master_vod_urls_list = []
@@ -1478,33 +1476,41 @@ class DatabaseManager:
 
                     # Merge data from duplicates
                     for duplicate_game in games_to_merge:
-                        # Merge alternative names
-                        if duplicate_game.get('alternative_names'):
-                            if isinstance(
-                                    duplicate_game['alternative_names'], str):
+                        # Merge alternative names with NULL-safe handling
+                        dup_alt_names = duplicate_game.get('alternative_names')
+                        if dup_alt_names and dup_alt_names != "" and str(dup_alt_names).lower() != "null":
+                            if isinstance(dup_alt_names, str):
                                 # Handle TEXT format
-                                alt_names = self._parse_comma_separated_list(
-                                    duplicate_game["alternative_names"])
+                                alt_names = self._parse_comma_separated_list(dup_alt_names)
                             else:
                                 # Handle list format
-                                alt_names = duplicate_game["alternative_names"]
+                                alt_names = dup_alt_names if isinstance(dup_alt_names, list) else []
 
-                            merged_data["alternative_names"] = list(
-                                set(merged_data["alternative_names"] + alt_names))
+                            if alt_names:
+                                # Filter out empty strings and deduplicate (case-insensitive)
+                                existing_lower = {name.lower() for name in merged_data["alternative_names"] if name}
+                                for name in alt_names:
+                                    if name and name.strip() and name.lower() not in existing_lower:
+                                        merged_data["alternative_names"].append(name.strip())
+                                        existing_lower.add(name.lower())
 
-                        # Merge Twitch VOD URLs
-                        if duplicate_game.get('twitch_vod_urls'):
-                            if isinstance(
-                                    duplicate_game['twitch_vod_urls'], str):
+                        # Merge Twitch VOD URLs with NULL-safe handling
+                        dup_vod_urls = duplicate_game.get('twitch_vod_urls')
+                        if dup_vod_urls and dup_vod_urls != "" and str(dup_vod_urls).lower() != "null":
+                            if isinstance(dup_vod_urls, str):
                                 # Handle TEXT format
-                                vod_urls = self._parse_comma_separated_list(
-                                    duplicate_game["twitch_vod_urls"])
+                                vod_urls = self._parse_comma_separated_list(dup_vod_urls)
                             else:
                                 # Handle list format
-                                vod_urls = duplicate_game["twitch_vod_urls"]
+                                vod_urls = dup_vod_urls if isinstance(dup_vod_urls, list) else []
 
-                            merged_data["twitch_vod_urls"] = list(
-                                set(merged_data["twitch_vod_urls"] + vod_urls))
+                            if vod_urls:
+                                # Deduplicate URLs
+                                existing_urls = set(merged_data["twitch_vod_urls"])
+                                for url in vod_urls:
+                                    if url and url.strip() and url not in existing_urls:
+                                        merged_data["twitch_vod_urls"].append(url.strip())
+                                        existing_urls.add(url)
 
                         # Use non-empty values from duplicates
                         for field in [

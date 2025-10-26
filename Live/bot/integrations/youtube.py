@@ -576,17 +576,34 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                         if videos_data:
                             first_video_date = videos_data[0].get('published_at')
 
-                        # Build alternative names from video titles
-                        alternative_names = [playlist_title, canonical_name]
-                        for video in videos_data[:5]:  # Sample first 5 video titles
-                            alt_name = extract_game_name_from_title(video['title'])
-                            if alt_name and alt_name not in alternative_names:
-                                alternative_names.append(alt_name)
+                        # Build alternative names ONLY from IGDB (no video titles or playlist names)
+                        alternative_names = []
+                        if igdb_result.get('alternative_names'):
+                            alternative_names = igdb_result['alternative_names'][:5]  # Limit to 5 IGDB alternatives
+                        
+                        # If no IGDB alternatives but we have the canonical name, add it
+                        if not alternative_names and canonical_name != extracted_name:
+                            alternative_names = [extracted_name]
+
+                        # Fallback series name extraction from playlist title if IGDB doesn't provide one
+                        series_name = igdb_series
+                        if not series_name:
+                            # Extract series from playlist title (remove brackets, episode markers, etc.)
+                            clean_title = playlist_title.replace('[COMPLETED]', '').replace('[completed]', '').strip()
+                            # Remove common patterns like "- Part 1", "Episode 5", etc.
+                            series_name = re.sub(r'\s*-\s*(Part|Episode|Ep|#)\s*\d+.*$', '', clean_title, flags=re.IGNORECASE)
+                            series_name = re.sub(r'\s*\d+\s*$', '', series_name).strip()  # Remove trailing numbers
+                            # If it looks like a full game name with subtitle, try to extract just the series
+                            if ':' in series_name or '–' in series_name or '—' in series_name:
+                                # For titles like "Uncharted 3: Drake's Deception", extract "Uncharted"
+                                parts = re.split(r'[:\–\—]', series_name)
+                                if parts and len(parts[0].strip()) >= 3:
+                                    series_name = parts[0].strip()
 
                         # Create complete game data entry with IGDB enrichment
                         game_data = {
                             'canonical_name': canonical_name,
-                            'series_name': igdb_series or playlist_title,  # Use IGDB series if available
+                            'series_name': series_name or canonical_name,  # Use extracted series or canonical as fallback
                             'genre': igdb_genre,  # From IGDB
                             'release_year': igdb_year,  # From IGDB
                             'total_playtime_minutes': total_playtime_minutes,
