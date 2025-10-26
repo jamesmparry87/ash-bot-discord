@@ -688,10 +688,82 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             await ctx.send("❌ System error occurred while updating played game.")
 
     @commands.command(name="listplayedgames")
-    @commands.has_permissions(manage_messages=True)
     async def list_played_games(self, ctx):
         """Lists all played games, sorted alphabetically by series."""
-        # ... (This is the !listplayedgames code from our previous discussion, it's correct) ...
+        # Strict access control - only Jonesy and JAM
+        if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
+            return  # Silent ignore for unauthorized users
+
+        try:
+            database = self._get_db()
+            games = database.get_all_played_games()
+
+            if not games:
+                await ctx.send("📋 No played games found in database.")
+                return
+
+            # Group games by series
+            series_groups = {}
+            standalone_games = []
+
+            for game in games:
+                series = game.get('series_name')
+                if series and series.strip():
+                    if series not in series_groups:
+                        series_groups[series] = []
+                    series_groups[series].append(game)
+                else:
+                    standalone_games.append(game)
+
+            # Build response
+            response = f"📋 **Played Games Database** ({len(games)} total)\n\n"
+
+            # List series alphabetically
+            for series in sorted(series_groups.keys()):
+                series_games = series_groups[series]
+                response += f"**{series}** ({len(series_games)} games)\n"
+                for game in series_games:
+                    episodes = game.get('total_episodes', 0)
+                    status = game.get('completion_status', 'unknown')
+                    response += f"  • {game['canonical_name']}"
+                    if episodes > 0:
+                        response += f" ({episodes} eps)"
+                    response += f" - {status}\n"
+                response += "\n"
+
+            # List standalone games
+            if standalone_games:
+                response += f"**Standalone Games** ({len(standalone_games)})\n"
+                for game in sorted(standalone_games, key=lambda g: g['canonical_name']):
+                    episodes = game.get('total_episodes', 0)
+                    status = game.get('completion_status', 'unknown')
+                    response += f"  • {game['canonical_name']}"
+                    if episodes > 0:
+                        response += f" ({episodes} eps)"
+                    response += f" - {status}\n"
+
+            # Split into multiple messages if too long
+            if len(response) > 2000:
+                parts = []
+                current = ""
+                for line in response.split('\n'):
+                    if len(current) + len(line) + 1 > 1900:
+                        parts.append(current)
+                        current = line + '\n'
+                    else:
+                        current += line + '\n'
+                if current:
+                    parts.append(current)
+
+                for part in parts:
+                    await ctx.send(part)
+            else:
+                await ctx.send(response)
+
+        except RuntimeError:
+            await ctx.send("❌ Database unavailable")
+        except Exception as e:
+            await ctx.send(f"❌ Error listing played games: {str(e)}")
 
     @commands.command(name="syncgames")
     async def sync_games(self, ctx, mode: str = "standard"):

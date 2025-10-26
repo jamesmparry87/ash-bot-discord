@@ -6,6 +6,7 @@ Handles all YouTube API interactions including:
 - Parsing video metadata
 - Auto-posting functionality
 - Playlist management
+- IGDB validation for game names
 """
 
 import asyncio
@@ -18,6 +19,12 @@ import aiohttp
 
 # Database import
 from ..database import DatabaseManager, db
+
+# IGDB integration
+from . import igdb
+
+# Text processing utilities
+from ..utils.text_processing import extract_game_name_from_title
 
 
 async def fetch_youtube_games(channel_id: str) -> List[str]:
@@ -331,88 +338,6 @@ def parse_youtube_duration(duration: str) -> int:
     return total_seconds
 
 
-def extract_game_name_from_title(title: str) -> Optional[str]:
-    """
-    Extract game name from video/playlist title using smart pattern matching.
-
-    Handles complex patterns like:
-    - "First Time Playing: GAME NAME Road to X"
-    - "*DROPS* Prefix - GAME NAME Thanks @sponsor"
-    - "GAME NAME - Episode 5"
-    - "GAME NAME - Episode Title (First Time Playing Part X)"
-    - "GAME NAME (day X)"
-    """
-    if not title or not isinstance(title, str):
-        return None
-
-    cleaned_title = title.strip()
-
-    # Step 1: Remove common prefixes
-    prefix_patterns = [
-        r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*',  # *DROPS*, *NEW*, etc.
-        r'^First Time Playing:?\s*',
-        r'^Let\'?s Play:?\s*',
-        r'^Playing:?\s*',
-        r'^Stream(?:ing)?:?\s*',
-        r'^Gameplay:?\s*',
-        r'^Playthrough:?\s*',
-    ]
-
-    for pattern in prefix_patterns:
-        cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
-
-    # Step 2: Remove episode information in parentheses (e.g., "(First Time Playing Part 8)", "(day 6)")
-    cleaned_title = re.sub(r'\s*\([^)]*(?:day|part|episode|ep|pt)\s*\d+[^)]*\)', '', cleaned_title, flags=re.IGNORECASE)
-
-    # Step 3: Remove episode titles after dash (e.g., "GAME NAME - Episode Title")
-    # Match pattern: "GAME NAME - Something (optional parens)" and keep only "GAME NAME"
-    match = re.match(r'^([^-]+?)\s*-\s*[A-Z]', cleaned_title)
-    if match:
-        # Keep the game name before the dash if what follows looks like an episode title (starts with capital)
-        potential_game = match.group(1).strip()
-        if len(potential_game) > 3:
-            cleaned_title = potential_game
-
-    # Step 4: Remove suffix annotations (but preserve game subtitles)
-    suffix_patterns = [
-        r'\s+Road to [^-]+$',                    # "Road to Resi 9"
-        r'\s+Thanks?(?:\s+to)?\s+@\w+.*$',      # "Thanks @playstation #ad"
-        r'\s+(?:End|Final) Game\??$',            # "End Game?"
-        r'\s+#\w+(?:\s+#\w+)*$',                 # Trailing hashtags
-        r'\s+\*.*\*$',                           # Trailing *text*
-        r'\s+[-|]\s*(?:Episode|Part|Ep)\s*\d+.*$',  # Episode numbers
-        r'\s+[-|]\s*#\d+.*$',                    # "#5 onwards"
-        r'\s+S\d+E\d+.*$',                       # Season/Episode format
-    ]
-
-    for pattern in suffix_patterns:
-        cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
-
-    # Step 5: Remove remaining brackets and parentheses content
-    cleaned_title = re.sub(r'\s*\([^)]*\)', '', cleaned_title)
-    cleaned_title = re.sub(r'\s*\[[^\]]*\]', '', cleaned_title)
-
-    # Step 6: Clean up whitespace and punctuation
-    cleaned_title = re.sub(r'\s+', ' ', cleaned_title).strip()
-    cleaned_title = cleaned_title.strip(' -|')
-
-    # Step 7: Validation
-    if len(cleaned_title) < 3:
-        return None
-
-    # Reject pure generic terms
-    generic_terms = ['live', 'stream', 'streaming', 'gaming', 'playing', 'game', 'gameplay']
-    if cleaned_title.lower() in generic_terms:
-        return None
-
-    # Reject if it's mostly special characters
-    alpha_chars = sum(c.isalnum() for c in cleaned_title)
-    if alpha_chars < len(cleaned_title) * 0.5:  # Less than 50% alphanumeric
-        return None
-
-    return cleaned_title
-
-
 async def execute_youtube_auto_post(
         reminder: Dict[str, Any], auto_action_data: Dict[str, Any]) -> None:
     """Execute automatic YouTube post to youtube-uploads channel"""
@@ -603,11 +528,36 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
 
                         # Extract clean canonical name (remove [COMPLETED] and other markers)
                         clean_title = playlist_title.replace('[COMPLETED]', '').replace('[completed]', '').strip()
-                        canonical_name = extract_game_name_from_title(clean_title)
+                        extracted_name = extract_game_name_from_title(clean_title)
 
-                        if not canonical_name:
+                        if not extracted_name:
                             print(f"⚠️ Could not extract game name from: {playlist_title}")
                             continue
+
+                        # Validate with IGDB for better accuracy
+                        print(f"🔍 Validating '{extracted_name}' with IGDB...")
+                        igdb_result = await igdb.validate_and_enrich(extracted_name)
+
+                        # Set defaults for low-confidence or no-match scenarios
+                        canonical_name = extracted_name
+                        igdb_id = None
+                        igdb_genre = None
+                        igdb_series = None
+                        igdb_year = None
+                        data_confidence = igdb_result.get('confidence', 0.0)
+
+                        # Use IGDB data if confidence is high enough
+                        if data_confidence >= 0.8:
+                            canonical_name = igdb_result.get('canonical_name', extracted_name)
+                            igdb_id = igdb_result.get('igdb_id')
+                            igdb_genre = igdb_result.get('genre')
+                            igdb_series = igdb_result.get('series_name')
+                            igdb_year = igdb_result.get('release_year')
+                            print(
+                                f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
+                        else:
+                            print(
+                                f"⚠️ Low IGDB confidence for '{extracted_name}': {data_confidence:.2f} - flagging for review")
 
                         # Get all videos from this playlist with statistics
                         videos_data = await get_playlist_videos_with_views(session, playlist_id, youtube_api_key)
@@ -633,10 +583,12 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                             if alt_name and alt_name not in alternative_names:
                                 alternative_names.append(alt_name)
 
-                        # Create complete game data entry
+                        # Create complete game data entry with IGDB enrichment
                         game_data = {
                             'canonical_name': canonical_name,
-                            'series_name': playlist_title,  # Full playlist title
+                            'series_name': igdb_series or playlist_title,  # Use IGDB series if available
+                            'genre': igdb_genre,  # From IGDB
+                            'release_year': igdb_year,  # From IGDB
                             'total_playtime_minutes': total_playtime_minutes,
                             'total_episodes': total_episodes,
                             'youtube_playlist_url': f"https://youtube.com/playlist?list={playlist_id}",
@@ -644,6 +596,8 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                             'completion_status': completion_status,
                             'alternative_names': alternative_names,
                             'first_played_date': first_video_date,
+                            'igdb_id': igdb_id,  # IGDB tracking
+                            'data_confidence': data_confidence,  # Confidence score
                             'notes': f"Auto-synced from YouTube playlist. {total_episodes} episodes, {total_playtime_minutes//60}h {total_playtime_minutes%60}m total."
                         }
 

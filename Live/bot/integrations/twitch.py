@@ -19,6 +19,12 @@ import aiohttp
 # Database import
 from ..database import db
 
+# IGDB integration
+from . import igdb
+
+# Text processing utilities
+from ..utils.text_processing import cleanup_game_name, is_generic_term, extract_game_name_from_title
+
 
 async def fetch_twitch_games(username: str) -> List[str]:
     """Fetch game titles from Twitch channel using Twitch API"""
@@ -136,11 +142,49 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                     if created_at < start_timestamp:
                         break  # Stop when we find videos older than our sync time
 
+                    title = video['title']
+
+                    # Extract game name from title
+                    extracted_name = extract_game_name_from_title(title)
+
+                    # Set defaults for low-confidence or no-match scenarios
+                    canonical_name = extracted_name
+                    igdb_id = None
+                    igdb_genre = None
+                    igdb_series = None
+                    igdb_year = None
+                    data_confidence = 0.0
+
+                    if extracted_name:
+                        # Validate with IGDB for better accuracy
+                        print(f"🔍 Validating '{extracted_name}' with IGDB...")
+                        igdb_result = await igdb.validate_and_enrich(extracted_name)
+                        data_confidence = igdb_result.get('confidence', 0.0)
+
+                        # Use IGDB data if confidence is high enough
+                        if data_confidence >= 0.8:
+                            canonical_name = igdb_result.get('canonical_name', extracted_name)
+                            igdb_id = igdb_result.get('igdb_id')
+                            igdb_genre = igdb_result.get('genre')
+                            igdb_series = igdb_result.get('series_name')
+                            igdb_year = igdb_result.get('release_year')
+                            print(
+                                f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
+                        else:
+                            print(
+                                f"⚠️ Low IGDB confidence for '{extracted_name}': {data_confidence:.2f} - flagging for review")
+
                     new_vods.append({
-                        'title': video['title'],
+                        'title': title,
                         'url': video['url'],
                         'duration_seconds': parse_twitch_duration(video.get('duration', '0s')),
-                        'published_at': created_at
+                        'published_at': created_at,
+                        'canonical_name': canonical_name,
+                        'series_name': igdb_series,
+                        'genre': igdb_genre,
+                        'release_year': igdb_year,
+                        'igdb_id': igdb_id,
+                        'data_confidence': data_confidence
                     })
         except Exception as e:
             print(f"❌ Failed to fetch new Twitch VODs: {e}")
@@ -308,68 +352,6 @@ def parse_twitch_duration(duration: str) -> int:
         total_seconds += int(seconds_match.group(1))
 
     return total_seconds
-
-
-def extract_game_name_from_title(title: str) -> Optional[str]:
-    """Extract game name from video/stream title using various patterns"""
-    # Remove common prefixes/suffixes
-    cleaned_title = title.strip()
-
-    # Remove episode/part numbers and common patterns
-    patterns_to_remove = [
-        r'\s*-\s*Episode\s*\d+.*$',
-        r'\s*-\s*Part\s*\d+.*$',
-        r'\s*-\s*#\d+.*$',
-        r'\s*\|\s*Episode\s*\d+.*$',
-        r'\s*\|\s*Part\s*\d+.*$',
-        r'\s*\[.*?\]',
-        r'\s*\(.*?\)',
-        r'\s*-\s*Ep\s*\d+.*$',
-        r'\s*S\d+E\d+.*$',
-        r'\s*-\s*Stream\s*\d+.*$',
-        r'\s*-\s*VOD.*$',
-    ]
-
-    for pattern in patterns_to_remove:
-        cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
-
-    # Remove common streaming/gaming words
-    streaming_words = [
-        'stream',
-        'streaming',
-        'gameplay',
-        'playthrough',
-        'let\'s play',
-        'gaming',
-        'live',
-        'vod']
-    for word in streaming_words:
-        cleaned_title = re.sub(
-            rf'\b{word}\b',
-            '',
-            cleaned_title,
-            flags=re.IGNORECASE)
-
-    # Clean up whitespace and punctuation
-    cleaned_title = re.sub(r'\s+', ' ', cleaned_title).strip()
-    cleaned_title = cleaned_title.strip(' -|:')
-
-    # Return None if title is too short or generic
-    if len(cleaned_title) < 2:
-        return None
-
-    generic_terms = [
-        'live',
-        'stream',
-        'gaming',
-        'playing',
-        'game',
-        'twitch',
-        'vod']
-    if cleaned_title.lower() in generic_terms:
-        return None
-
-    return cleaned_title
 
 
 def format_twitch_vod_urls(vod_urls: List[str], max_display: int = 5) -> str:
