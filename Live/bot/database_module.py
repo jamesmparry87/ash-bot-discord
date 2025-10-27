@@ -870,9 +870,22 @@ class DatabaseManager:
             return 0
 
     def _parse_comma_separated_list(self, text: Optional[str]) -> List[str]:
-        """Convert a comma-separated string to a list of stripped, non-empty items"""
+        """Convert a comma-separated string OR PostgreSQL array to a list of stripped, non-empty items"""
         if not text or not isinstance(text, str):
             return []
+        
+        text = text.strip()
+        
+        # Handle PostgreSQL array syntax: {"item1","item2","item3"}
+        if text.startswith('{') and text.endswith('}'):
+            # Remove outer braces
+            text = text[1:-1]
+            # Split by comma and clean up quotes
+            import re
+            items = re.findall(r'"([^"]*)"', text)
+            return [item.strip() for item in items if item.strip()]
+        
+        # Handle regular comma-separated format
         return [item.strip() for item in text.split(',') if item.strip()]
 
     def _convert_text_to_arrays(
@@ -1578,7 +1591,6 @@ class DatabaseManager:
                             series_name = %s,
                             genre = %s,
                             release_year = %s,
-                            platform = %s,
                             first_played_date = %s,
                             completion_status = %s,
                             total_episodes = %s,
@@ -1593,7 +1605,6 @@ class DatabaseManager:
                         merged_data['series_name'],
                         merged_data['genre'],
                         merged_data['release_year'],
-                        merged_data['platform'],
                         merged_data['first_played_date'],
                         merged_data['completion_status'],
                         merged_data['total_episodes'],
