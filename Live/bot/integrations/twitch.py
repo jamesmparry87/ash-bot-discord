@@ -240,7 +240,7 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
 
                     # Use smart extraction with IGDB validation and fallback strategies
                     extracted_name, data_confidence = await smart_extract_with_validation(title)
-                    
+
                     # Null safety checks
                     if not extracted_name:
                         extracted_name = ''
