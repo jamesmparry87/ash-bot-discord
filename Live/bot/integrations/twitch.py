@@ -29,13 +29,13 @@ from . import igdb
 async def smart_extract_with_validation(title: str) -> tuple[Optional[str], float]:
     """
     Intelligently extract game name with IGDB validation and fallback strategies.
-    
+
     If initial extraction fails IGDB validation (low confidence), tries alternative
     extraction methods and returns the one with highest confidence.
-    
+
     Args:
         title: Video/stream title to extract from
-        
+
     Returns:
         Tuple of (extracted_name, confidence_score)
     """
@@ -43,42 +43,46 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
     extracted = extract_game_name_from_title(title)
     best_name = extracted
     best_confidence = 0.0
-    
+
     if extracted:
         print(f"🔍 Validating '{extracted}' with IGDB...")
         igdb_result = await igdb.validate_and_enrich(extracted)
         best_confidence = igdb_result.get('confidence', 0.0)
-        
+
         # If we got good confidence, use it
         if best_confidence >= 0.8:
             return extracted, best_confidence
-        
+
         print(f"⚠️ Low confidence ({best_confidence:.2f}), trying alternative extractions...")
-    
+
     # Strategy 2: Try extracting part BEFORE the dash (for titles like "Game Name - Episode Title")
     if ' - ' in title or ' | ' in title:
         separator = ' - ' if ' - ' in title else ' | '
         parts = title.split(separator)
-        
+
         # Try the FIRST part (before separator)
         if len(parts) > 1:
             before_dash = parts[0].strip()
             # Clean common prefixes
-            before_dash = re.sub(r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*', '', before_dash, flags=re.IGNORECASE)
+            before_dash = re.sub(
+                r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*',
+                '',
+                before_dash,
+                flags=re.IGNORECASE)
             before_dash = cleanup_game_name(before_dash)
-            
+
             if len(before_dash) >= 3 and not is_generic_term(before_dash):
                 igdb_result = await igdb.validate_and_enrich(before_dash)
                 confidence = igdb_result.get('confidence', 0.0)
                 print(f"  Trying part before dash: '{before_dash}' → confidence: {confidence:.2f}")
-                
+
                 if confidence > best_confidence:
                     best_name = before_dash
                     best_confidence = confidence
-                    
+
                     if confidence >= 0.8:
                         return best_name, best_confidence
-        
+
         # Try the SECOND part (after separator) - but remove day/episode markers
         if len(parts) > 1:
             after_dash = parts[1].strip()
@@ -86,16 +90,16 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
             after_dash = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', after_dash, flags=re.IGNORECASE)
             after_dash = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]', '', after_dash, flags=re.IGNORECASE)
             after_dash = cleanup_game_name(after_dash)
-            
+
             if len(after_dash) >= 3 and not is_generic_term(after_dash):
                 igdb_result = await igdb.validate_and_enrich(after_dash)
                 confidence = igdb_result.get('confidence', 0.0)
                 print(f"  Trying part after dash: '{after_dash}' → confidence: {confidence:.2f}")
-                
+
                 if confidence > best_confidence:
                     best_name = after_dash
                     best_confidence = confidence
-    
+
     # Strategy 3: Try just removing prefixes and suffixes without complex pattern matching
     simple_clean = title
     simple_clean = re.sub(r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*', '', simple_clean, flags=re.IGNORECASE)
@@ -103,16 +107,16 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
     simple_clean = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]', '', simple_clean, flags=re.IGNORECASE)
     simple_clean = re.sub(r'\s+(?:Thanks|Thx|@|#).*$', '', simple_clean, flags=re.IGNORECASE)
     simple_clean = cleanup_game_name(simple_clean)
-    
+
     if len(simple_clean) >= 3 and not is_generic_term(simple_clean) and simple_clean != best_name:
         igdb_result = await igdb.validate_and_enrich(simple_clean)
         confidence = igdb_result.get('confidence', 0.0)
         print(f"  Trying simple clean: '{simple_clean}' → confidence: {confidence:.2f}")
-        
+
         if confidence > best_confidence:
             best_name = simple_clean
             best_confidence = confidence
-    
+
     return best_name, best_confidence
 
 
@@ -258,9 +262,11 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                         if igdb_result.get('alternative_names'):
                             alternative_names = igdb_result['alternative_names'][:5]
 
-                        print(f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
+                        print(
+                            f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
                     elif extracted_name:
-                        print(f"⚠️ Low IGDB confidence for '{extracted_name}': {data_confidence:.2f} - flagging for review")
+                        print(
+                            f"⚠️ Low IGDB confidence for '{extracted_name}': {data_confidence:.2f} - flagging for review")
                         # For low confidence, only keep extracted name as alternative
                         if canonical_name != extracted_name:
                             alternative_names = [extracted_name]
