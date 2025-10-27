@@ -1416,8 +1416,10 @@ class DatabaseManager:
                 merged_count = 0
 
                 for duplicate in duplicates:
-                    canonical_name = duplicate[0]
-                    duplicate_count = duplicate[1]
+                    # Use dict key access for RealDictCursor compatibility
+                    duplicate_dict = dict(duplicate)
+                    canonical_name = duplicate_dict['canonical_name']
+                    duplicate_count = duplicate_dict['count']
 
                     logger.info(
                         f"Processing {duplicate_count} duplicates of '{canonical_name}'")
