@@ -222,7 +222,7 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
 
 def should_use_igdb_data(confidence: float) -> bool:
     """Determine if IGDB data is trustworthy enough to use"""
-    return confidence >= 0.8  # 80% threshold for auto-approval
+    return confidence >= 0.85  # 85% threshold for auto-approval
 
 
 async def bulk_validate_games(game_names: List[str]) -> List[Dict[str, Any]]:

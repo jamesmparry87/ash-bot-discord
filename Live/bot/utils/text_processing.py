@@ -73,14 +73,14 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     # PRIORITY 1: Extract game name that appears before day/part/episode indicators
     # These are the most reliable patterns as they explicitly mark ongoing series
     priority_patterns = [
-        # Matches: "- Game Name (day 9)" or "| Game Name (day 9)"
-        r'[-|]\s*([^-|()\[\]]+?)\s*\((?:day|part|episode|ep)\s+\d+\)',
-        # Matches: "- Game Name [day 9]" or "| Game Name [day 9]"
-        r'[-|]\s*([^-|()\[\]]+?)\s*\[(?:day|part|episode|ep)\s+\d+\]',
-        # Matches without separator: "Game Name (day 9)"
-        r'^([^-|()\[\]]+?)\s*\((?:day|part|episode|ep)\s+\d+\)',
+        # Matches Twitch format: "Stream Title - Game Name (day 9)" - GREEDY CAPTURE
+        r'[-|]\s*([^()\[\]]+)\s*\((?:day|part|episode|ep)\s+\d+\)',
+        # Matches: "- Game Name [day 9]" or "| Game Name [day 9]" - GREEDY CAPTURE
+        r'[-|]\s*([^()\[\]]+)\s*\[(?:day|part|episode|ep)\s+\d+\]',
+        # Matches without separator: "Game Name (day 9)" - GREEDY CAPTURE
+        r'^([^()\[\]]+)\s*\((?:day|part|episode|ep)\s+\d+\)',
         # Matches: "Game Name - day 9" (less parentheses version)
-        r'[-|]\s*([^-|]+?)\s*-\s*(?:day|part|episode|ep)\s+\d+',
+        r'[-|]\s*([^|-]+)\s+[-|]\s*(?:day|part|episode|ep)\s+\d+',
     ]
 
     for pattern in priority_patterns:
