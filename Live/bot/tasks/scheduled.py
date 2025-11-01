@@ -1672,7 +1672,7 @@ def clean_series_name(series_name: str) -> str:
     import re
     if not series_name:
         return series_name
-    
+
     # Remove (Completed), [Completed], (completed), [completed] patterns
     cleaned = re.sub(r'\s*[\(\[]completed[\)\]]\s*', '', series_name, flags=re.IGNORECASE)
     return cleaned.strip()
@@ -1681,15 +1681,15 @@ def clean_series_name(series_name: str) -> str:
 def map_genre_to_standard(igdb_genre: str) -> str:
     """Map IGDB genre to standardized genre list"""
     from ..config import DEFAULT_GENRE, STANDARD_GENRES
-    
+
     if not igdb_genre:
         return DEFAULT_GENRE
-    
+
     # Try direct match first (case-insensitive)
     genre_lower = igdb_genre.lower().strip()
     if genre_lower in STANDARD_GENRES:
         return STANDARD_GENRES[genre_lower]
-    
+
     # Return default if no match
     return DEFAULT_GENRE
 
@@ -1713,7 +1713,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
         raise RuntimeError("Database not available for sync.")
 
     print(f"🔄 SYNC: Fetching new content since {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    
+
     # Import IGDB integration
     try:
         from ..integrations.igdb import should_use_igdb_data, validate_and_enrich
@@ -1723,8 +1723,10 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
         igdb_available = False
         print("⚠️ SYNC: IGDB integration not available, proceeding without enrichment")
         # Define stub functions for type safety
+
         async def validate_and_enrich(game_name: str) -> Dict[str, Any]:
             return {'match_found': False}
+
         def should_use_igdb_data(confidence: float) -> bool:
             return False
 
@@ -1782,34 +1784,34 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
             completion_status = game_data.get('completion_status', 'in_progress')
 
             print(f"✅ SYNC: Processing '{canonical_name}' ({completion_status})")
-            
+
             # IGDB Enrichment - validate and enrich game data
             if igdb_available:
                 try:
                     print(f"🔍 SYNC: Querying IGDB for '{canonical_name}'...")
                     igdb_data = await validate_and_enrich(canonical_name)
-                    
+
                     if igdb_data and igdb_data.get('match_found'):
                         confidence = igdb_data.get('confidence', 0.0)
                         print(f"✅ SYNC: IGDB match found (confidence: {confidence:.2f})")
-                        
+
                         # Use IGDB data if confidence is high enough
                         if should_use_igdb_data(confidence):
                             # Update canonical name if IGDB provides better one
                             if igdb_data.get('canonical_name') and confidence >= 0.95:
                                 canonical_name = igdb_data['canonical_name']
                                 print(f"📝 SYNC: Updated canonical name from IGDB: '{canonical_name}'")
-                            
+
                             # Enrich missing fields with IGDB data
                             if not game_data.get('genre') and igdb_data.get('genre'):
                                 standardized_genre = map_genre_to_standard(igdb_data['genre'])
                                 game_data['genre'] = standardized_genre
                                 print(f"🎮 SYNC: Added genre from IGDB: {standardized_genre}")
-                            
+
                             if not game_data.get('release_year') and igdb_data.get('release_year'):
                                 game_data['release_year'] = igdb_data['release_year']
                                 print(f"📅 SYNC: Added release year from IGDB: {igdb_data['release_year']}")
-                            
+
                             # Merge alternative names
                             existing_alt_names = game_data.get('alternative_names', [])
                             igdb_alt_names = igdb_data.get('alternative_names', [])
@@ -1818,7 +1820,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                 all_alt_names = list(set(existing_alt_names + igdb_alt_names))
                                 game_data['alternative_names'] = all_alt_names[:10]  # Limit to 10
                                 print(f"🔤 SYNC: Merged alternative names ({len(all_alt_names)} total)")
-                            
+
                             # Use IGDB series name if not present
                             if not series_name or series_name == canonical_name:
                                 if igdb_data.get('series_name'):
@@ -1828,11 +1830,11 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                             print(f"⚠️ SYNC: IGDB confidence too low ({confidence:.2f}), keeping original data")
                     else:
                         print(f"ℹ️ SYNC: No IGDB match found for '{canonical_name}'")
-                        
+
                 except Exception as igdb_error:
                     print(f"⚠️ SYNC: IGDB enrichment failed for '{canonical_name}': {igdb_error}")
                     # Continue with original data
-            
+
             # Clean series name (remove completion markers)
             if series_name:
                 cleaned_series = clean_series_name(series_name)
@@ -1840,7 +1842,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                     print(f"🧹 SYNC: Cleaned series name: '{series_name}' -> '{cleaned_series}'")
                     series_name = cleaned_series
                 game_data['series_name'] = series_name
-            
+
             # Ensure genre is standardized
             if game_data.get('genre'):
                 standardized_genre = map_genre_to_standard(game_data['genre'])
