@@ -266,7 +266,7 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                         # Get alternative names ONLY from IGDB
                         if igdb_result.get('alternative_names'):
                             alternative_names = igdb_result['alternative_names'][:5]
-                        
+
                         # DATA QUALITY CHECK: Empty alternative names = likely bad match
                         if not alternative_names or len(alternative_names) == 0:
                             print(

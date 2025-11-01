@@ -873,9 +873,9 @@ class DatabaseManager:
         """Convert a comma-separated string OR PostgreSQL array to a list of stripped, non-empty items"""
         if not text or not isinstance(text, str):
             return []
-        
+
         text = text.strip()
-        
+
         # Handle PostgreSQL array syntax: {"item1","item2","item3"}
         if text.startswith('{') and text.endswith('}'):
             # Remove outer braces
@@ -884,7 +884,7 @@ class DatabaseManager:
             import re
             items = re.findall(r'"([^"]*)"', text)
             return [item.strip() for item in items if item.strip()]
-        
+
         # Handle regular comma-separated format
         return [item.strip() for item in text.split(',') if item.strip()]
 
