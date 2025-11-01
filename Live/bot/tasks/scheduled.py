@@ -612,7 +612,8 @@ async def trivia_tuesday():
 
     # Check if scheduled trivia is disabled for manual override
     if db and db.get_config_value('trivia_scheduled_disabled') == 'true':
-        print(f"⚠️ Trivia Tuesday skipped - scheduled trivia disabled for manual override at {uk_now.strftime('%H:%M:%S UK')}")
+        print(
+            f"⚠️ Trivia Tuesday skipped - scheduled trivia disabled for manual override at {uk_now.strftime('%H:%M:%S UK')}")
         # Auto-reset after 24 hours
         try:
             disabled_time_str = db.get_config_value('trivia_scheduled_disabled_at')
@@ -714,7 +715,7 @@ async def check_stale_trivia_sessions():
 
         # Get active sessions older than 2 hours
         active_session = db.get_active_trivia_session()
-        
+
         if not active_session:
             return  # No active sessions
 
@@ -758,8 +759,7 @@ async def check_stale_trivia_sessions():
                         title="🏆 **Trivia Tuesday - Auto-Completed Results!**",
                         description=f"**Question #{active_session['question_id']}:** {session_results['question']}\n\n*Session automatically ended after 2 hours.*",
                         color=0xffd700,
-                        timestamp=uk_now
-                    )
+                        timestamp=uk_now)
 
                     # Show correct answer
                     embed.add_field(
@@ -769,11 +769,13 @@ async def check_stale_trivia_sessions():
                     )
 
                     # Show winner if present
-                    winner_id = session_results.get('first_correct', {}).get('user_id') if session_results.get('first_correct') else None
+                    winner_id = session_results.get('first_correct', {}).get(
+                        'user_id') if session_results.get('first_correct') else None
                     correct_user_ids = session_results.get('correct_user_ids', [])
                     incorrect_user_ids = session_results.get('incorrect_user_ids', [])
 
-                    other_correct_ids = [uid for uid in correct_user_ids if uid != winner_id] if winner_id else correct_user_ids
+                    other_correct_ids = [uid for uid in correct_user_ids if uid !=
+                                         winner_id] if winner_id else correct_user_ids
 
                     if winner_id:
                         try:
@@ -785,8 +787,7 @@ async def check_stale_trivia_sessions():
                         embed.add_field(
                             name="🎯 **Primary Objective: Achieved**",
                             value=f"**{winner_name}** demonstrated optimal response efficiency. First correct analysis recorded.",
-                            inline=False
-                        )
+                            inline=False)
 
                     if other_correct_ids:
                         mentions = [f"<@{uid}>" for uid in other_correct_ids]
@@ -813,10 +814,10 @@ async def check_stale_trivia_sessions():
                         embed.add_field(
                             name="📊 **Session Stats:**",
                             value=f"**Participants:** {total_participants}\n**Correct:** {correct_answers}\n**Accuracy:** {accuracy}%",
-                            inline=True
-                        )
+                            inline=True)
 
-                    embed.set_footer(text=f"Session #{session_id} auto-ended after 2 hours | Use !trivialeaderboard to see standings")
+                    embed.set_footer(
+                        text=f"Session #{session_id} auto-ended after 2 hours | Use !trivialeaderboard to see standings")
 
                     await channel.send(embed=embed)
                     print(f"✅ AUTO-END TRIVIA: Successfully auto-ended session {session_id} and posted results")

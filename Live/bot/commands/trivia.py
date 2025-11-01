@@ -1878,8 +1878,8 @@ class TriviaCommands(commands.Cog):
                 title="⚠️ **Scheduled Trivia Disabled**",
                 description="The automated Trivia Tuesday deployment has been **suspended** for manual override operations.",
                 color=0xffaa00,
-                timestamp=datetime.now(ZoneInfo("Europe/London"))
-            )
+                timestamp=datetime.now(
+                    ZoneInfo("Europe/London")))
 
             embed.add_field(
                 name="🔧 **Override Status**",
