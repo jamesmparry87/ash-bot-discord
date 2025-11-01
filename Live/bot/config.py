@@ -107,6 +107,43 @@ RATE_LIMIT_COOLDOWN = 30
 BUSY_MESSAGE = "My apologies, I am currently engaged in a critical diagnostic procedure. I will re-evaluate your request upon the completion of this vital task. *[Processing capacity temporarily exceeded.]*"
 ERROR_MESSAGE = "System malfunction detected. Unable to process query. Diagnostic protocols engaged. Please retry your request. *[Anomalous readings detected.]*"
 
+# Standardized Game Genre List (for IGDB mapping consistency)
+STANDARD_GENRES = {
+    # Map IGDB genres to our standardized list
+    "action": "Action",
+    "adventure": "Adventure",
+    "rpg": "RPG",
+    "role-playing (rpg)": "RPG",
+    "strategy": "Strategy",
+    "simulation": "Simulation",
+    "sports": "Sports",
+    "racing": "Racing",
+    "puzzle": "Puzzle",
+    "platformer": "Platformer",
+    "platform": "Platformer",
+    "fighting": "Fighting",
+    "shooter": "Shooter",
+    "hack and slash/beat 'em up": "Action",
+    "beat 'em up": "Action",
+    "arcade": "Arcade",
+    "indie": "Indie",
+    "horror": "Horror",
+    "survival": "Survival",
+    "survival horror": "Horror",
+    "tactical": "Strategy",
+    "turn-based strategy (tbs)": "Strategy",
+    "real time strategy (rts)": "Strategy",
+    "card & board game": "Puzzle",
+    "quiz/trivia": "Puzzle",
+    "music": "Music",
+    "visual novel": "Visual Novel",
+    "point-and-click": "Adventure",
+    "stealth": "Stealth"
+}
+
+# Default genre if no match found
+DEFAULT_GENRE = "Action-Adventure"
+
 # FAQ Responses (comprehensive set - preserving all original responses)
 FAQ_RESPONSES = {
     # Core functionality FAQs
