@@ -837,7 +837,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
 
             # Import IGDB integration and helper functions
             try:
-                from ..integrations.igdb import validate_and_enrich, should_use_igdb_data
+                from ..integrations.igdb import should_use_igdb_data, validate_and_enrich
                 from ..tasks.scheduled import clean_series_name, map_genre_to_standard
                 igdb_available = True
             except ImportError as import_error:
@@ -846,9 +846,9 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
 
             # Get all games from database
             await ctx.send("🔄 **Bulk Enrichment Initiated**\n\nAnalyzing database... Please wait.")
-            
+
             all_games = database.get_all_played_games()
-            
+
             if not all_games:
                 await ctx.send("❌ **No games found in database.** Nothing to enrich.")
                 return
@@ -874,7 +874,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 canonical_name = game.get('canonical_name', 'Unknown')  # Initialize before try block
                 try:
                     game_id = game.get('id')
-                    
+
                     if not game_id or not canonical_name:
                         print(f"⚠️ ENRICH: Skipping game with missing ID or name")
                         skipped_count += 1
@@ -886,20 +886,20 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                     # 1. IGDB Enrichment
                     try:
                         igdb_data = await validate_and_enrich(canonical_name)
-                        
+
                         if igdb_data and igdb_data.get('match_found'):
                             confidence = igdb_data.get('confidence', 0.0)
-                            
+
                             if should_use_igdb_data(confidence):
                                 igdb_matches += 1
-                                
+
                                 # Enrich genre if missing
                                 if not game.get('genre') and igdb_data.get('genre'):
                                     standardized_genre = map_genre_to_standard(igdb_data['genre'])
                                     updates['genre'] = standardized_genre
                                     genres_standardized += 1
                                     changed = True
-                                
+
                                 # Enrich release year if missing
                                 if not game.get('release_year') and igdb_data.get('release_year'):
                                     updates['release_year'] = igdb_data['release_year']
@@ -907,8 +907,29 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                                 
                                 # Merge alternative names
                                 existing_alt_names = game.get('alternative_names', [])
+                                
+                                # Handle various type issues from database
+                                if not isinstance(existing_alt_names, list):
+                                    # Check for empty JSON strings
+                                    if isinstance(existing_alt_names, str) and existing_alt_names in ["{}", "[]", ""]:
+                                        existing_alt_names = []
+                                    elif existing_alt_names:
+                                        existing_alt_names = [existing_alt_names]
+                                    else:
+                                        existing_alt_names = []
+                                
                                 igdb_alt_names = igdb_data.get('alternative_names', [])
                                 
+                                # Ensure IGDB alt names are also a list
+                                if not isinstance(igdb_alt_names, list):
+                                    if isinstance(igdb_alt_names, str) and igdb_alt_names in ["{}", "[]", ""]:
+                                        igdb_alt_names = []
+                                    elif igdb_alt_names:
+                                        igdb_alt_names = [igdb_alt_names]
+                                    else:
+                                        igdb_alt_names = []
+                                
+
                                 if igdb_alt_names:
                                     # Combine and deduplicate
                                     combined = list(set(existing_alt_names + igdb_alt_names))
@@ -916,11 +937,25 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                                         updates['alternative_names'] = combined[:10]  # Limit to 10
                                         alt_names_added += 1
                                         changed = True
+                                        print(f"✅ ENRICH: Added {len(combined) - len(existing_alt_names)} alternative names to '{canonical_name}'")
                                 
+                                # Use IGDB series if not present - BUT validate it's related
+
                                 # Use IGDB series if not present
                                 if not game.get('series_name') and igdb_data.get('series_name'):
-                                    updates['series_name'] = igdb_data['series_name']
-                                    changed = True
+                                    igdb_series = igdb_data['series_name']
+                                    
+                                    # Validate series is related to game name
+                                    # Import calculate_confidence for validation
+                                    from ..integrations.igdb import calculate_confidence
+                                    series_similarity = calculate_confidence(canonical_name, igdb_series)
+                                    
+                                    if series_similarity >= 0.4:  # At least 40% similarity
+                                        updates['series_name'] = igdb_series
+                                        changed = True
+                                        print(f"✅ ENRICH: Associated '{canonical_name}' with series '{igdb_series}' (similarity: {series_similarity:.2f})")
+                                    else:
+                                        print(f"⚠️ ENRICH: Rejected unrelated series '{igdb_series}' for '{canonical_name}' (similarity: {series_similarity:.2f})")
 
                     except Exception as igdb_error:
                         print(f"⚠️ ENRICH: IGDB error for '{canonical_name}': {igdb_error}")
