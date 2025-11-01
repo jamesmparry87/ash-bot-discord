@@ -1680,7 +1680,7 @@ def clean_series_name(series_name: str) -> str:
 
 def map_genre_to_standard(igdb_genre: str) -> str:
     """Map IGDB genre to standardized genre list"""
-    from ..config import STANDARD_GENRES, DEFAULT_GENRE
+    from ..config import DEFAULT_GENRE, STANDARD_GENRES
     
     if not igdb_genre:
         return DEFAULT_GENRE
@@ -1716,7 +1716,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
     
     # Import IGDB integration
     try:
-        from ..integrations.igdb import validate_and_enrich, should_use_igdb_data
+        from ..integrations.igdb import should_use_igdb_data, validate_and_enrich
         igdb_available = True
         print("✅ SYNC: IGDB integration available for data enrichment")
     except ImportError:

@@ -837,7 +837,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
 
             # Import IGDB integration and helper functions
             try:
-                from ..integrations.igdb import validate_and_enrich, should_use_igdb_data
+                from ..integrations.igdb import should_use_igdb_data, validate_and_enrich
                 from ..tasks.scheduled import clean_series_name, map_genre_to_standard
                 igdb_available = True
             except ImportError as import_error:
