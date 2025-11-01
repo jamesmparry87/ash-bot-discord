@@ -2330,13 +2330,13 @@ async def start_game_review_approval(game_data: Dict[str, Any]) -> bool:
         # Build approval message
         alt_names = game_data.get('alternative_names', [])
         igdb_matched = len(alt_names) > 0
-        
+
         # Build IGDB match string safely
         if not igdb_matched:
             igdb_match_text = "❌ No match found"
         else:
             igdb_match_text = f"✓ {', '.join(alt_names[:3])}"
-        
+
         approval_msg = (
             f"🎮 **GAME MATCH REVIEW REQUIRED**\n\n"
             f"Low-confidence game extraction detected during {game_data['source'].title()} sync:\n\n"
@@ -2345,10 +2345,10 @@ async def start_game_review_approval(game_data: Dict[str, Any]) -> bool:
             f"**Confidence:** {game_data['confidence_score']:.2f} (LOW)\n"
             f"**IGDB Match:** {igdb_match_text}\n"
         )
-        
+
         if game_data.get('video_url'):
             approval_msg += f"**Video:** {game_data['video_url']}\n"
-        
+
         approval_msg += (
             "\n**Actions:**\n"
             "**1.** ✅ Accept - Use extracted name as-is\n"
@@ -2370,22 +2370,22 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
     """Handle game review approval conversation"""
     user_id = message.author.id
     conversation = game_review_conversations.get(user_id)
-    
+
     if not conversation or user_id != JAM_USER_ID:
         return
-    
+
     content = message.content.strip()
     step = conversation.get('step', 'review')
     data = conversation.get('data', {})
     session_id = conversation.get('session_id')
-    
+
     try:
         if not session_id:
             await message.reply("❌ Error: Invalid session")
             if user_id in game_review_conversations:
                 del game_review_conversations[user_id]
             return
-            
+
         if step == 'review':
             if content in ['1', 'accept', 'yes']:
                 # Accept extracted name
@@ -2394,7 +2394,7 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
                     f"✅ **Accepted** - Game will be imported as `{data['extracted_name']}`"
                 )
                 del game_review_conversations[user_id]
-                
+
             elif content in ['2', 'correct', 'fix']:
                 # Request correct name
                 conversation['step'] = 'correction'
@@ -2403,7 +2403,7 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
                     f"Original title: `{data['original_title']}`\n\n"
                     f"What's the real game name? (I'll re-validate with IGDB)"
                 )
-                
+
             elif content in ['3', 'skip', 'no']:
                 # Skip this entry
                 db.complete_game_review_session(session_id, 'rejected')
@@ -2411,16 +2411,16 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
                     f"❌ **Skipped** - This entry won't be imported"
                 )
                 del game_review_conversations[user_id]
-                
+
             else:
                 await message.reply("⚠️ Invalid. Respond with **1** (Accept), **2** (Correct), or **3** (Skip).")
-        
+
         elif step == 'correction':
             # User provided correct name - re-validate with IGDB
             corrected_name = content.strip()
-            
+
             await message.reply(f"🔍 **Re-validating** `{corrected_name}` with IGDB...")
-            
+
             # Re-validate with IGDB using the correct function
             try:
                 from ..integrations.igdb import validate_and_enrich
@@ -2428,7 +2428,7 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
             except Exception as e:
                 print(f"⚠️ IGDB validation failed: {e}")
                 igdb_result = None
-            
+
             if igdb_result and igdb_result.get('confidence', 0) >= 0.7:
                 # Good match found
                 db.update_game_review_session(
@@ -2437,7 +2437,7 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
                     approved_data={'igdb': igdb_result}
                 )
                 db.complete_game_review_session(session_id, 'approved')
-                
+
                 await message.reply(
                     f"✅ **Correction Approved**\n\n"
                     f"**Your Input:** {corrected_name}\n"
@@ -2458,7 +2458,7 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
                     f"**3.** Skip entry\n\n"
                     f"Respond with **1**, **2**, or **3**."
                 )
-        
+
         elif step == 'correction_failed':
             if content == '1':
                 conversation['step'] = 'correction'
@@ -2471,9 +2471,9 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
                 db.complete_game_review_session(session_id, 'rejected')
                 await message.reply(f"❌ Skipped")
                 del game_review_conversations[user_id]
-                
+
         game_review_conversations[user_id] = conversation
-        
+
     except Exception as e:
         print(f"❌ Error in game review conversation: {e}")
         if user_id in game_review_conversations:

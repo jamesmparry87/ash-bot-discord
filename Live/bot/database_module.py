@@ -4793,10 +4793,10 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 uk_now = datetime.now(ZoneInfo("Europe/London"))
                 expires_at = uk_now + timedelta(hours=timeout_hours)
-                
+
                 # Convert alternative names list to comma-separated string
                 alt_names_str = ','.join(alternative_names) if alternative_names else ''
-                
+
                 cur.execute("""
                     INSERT INTO game_review_sessions (
                         user_id, original_title, extracted_name, confidence_score,
@@ -4809,10 +4809,10 @@ class DatabaseManager:
                     alt_names_str, source, json.dumps(igdb_data), video_url,
                     'review', uk_now, uk_now, expires_at
                 ))
-                
+
                 result = cur.fetchone()
                 conn.commit()
-                
+
                 if result:
                     session_id = int(result['id'])  # type: ignore
                     logger.info(f"Created game review session {session_id} for user {user_id}")
@@ -4839,7 +4839,7 @@ class DatabaseManager:
                     ORDER BY created_at ASC
                     LIMIT 1
                 """, (user_id,))
-                
+
                 result = cur.fetchone()
                 if result:
                     session_dict = dict(result)
@@ -4870,37 +4870,37 @@ class DatabaseManager:
         try:
             with conn.cursor() as cur:
                 uk_now = datetime.now(ZoneInfo("Europe/London"))
-                
+
                 set_clauses = ["last_activity = %s"]
                 params: List[Any] = [uk_now]
-                
+
                 if conversation_step:
                     set_clauses.append("conversation_step = %s")
                     params.append(conversation_step)
-                
+
                 if conversation_data:
                     set_clauses.append("conversation_data = %s")
                     params.append(json.dumps(conversation_data))
-                
+
                 if approved_name:
                     set_clauses.append("approved_name = %s")
                     params.append(approved_name)
-                
+
                 if approved_data:
                     set_clauses.append("approved_data = %s")
                     params.append(json.dumps(approved_data))
-                
+
                 params.append(session_id)
-                
+
                 query = f"""
                     UPDATE game_review_sessions
                     SET {', '.join(set_clauses)}
                     WHERE id = %s AND status = 'pending'
                 """
-                
+
                 cur.execute(query, params)
                 conn.commit()
-                
+
                 return cur.rowcount > 0
         except Exception as e:
             logger.error(f"Error updating game review session {session_id}: {e}")
@@ -4920,7 +4920,7 @@ class DatabaseManager:
                     SET status = %s, last_activity = CURRENT_TIMESTAMP
                     WHERE id = %s
                 """, (status, session_id))
-                
+
                 conn.commit()
                 success = cur.rowcount > 0
                 if success:
@@ -4946,7 +4946,7 @@ class DatabaseManager:
                     AND expires_at > CURRENT_TIMESTAMP
                     ORDER BY created_at ASC
                 """, (user_id,))
-                
+
                 results = cur.fetchall()
                 sessions = []
                 for row in results:
@@ -4975,7 +4975,7 @@ class DatabaseManager:
                     WHERE status = 'pending'
                     AND expires_at <= CURRENT_TIMESTAMP
                 """)
-                
+
                 conn.commit()
                 expired_count = cur.rowcount
                 if expired_count > 0:
