@@ -1778,6 +1778,200 @@ class TriviaCommands(commands.Cog):
             logger.error(f"Error checking trivia pool status: {e}")
             await ctx.send(f"❌ **Pool status check failed:** {str(e)}")
 
+    @commands.command(name="triviahelp")
+    @commands.has_permissions(manage_messages=True)
+    async def trivia_help(self, ctx):
+        """Display comprehensive trivia command summary (moderators only)"""
+        try:
+            # Create Ash-styled help embed
+            embed = discord.Embed(
+                title="📋 **TRIVIA TUESDAY PROTOCOL SUMMARY**",
+                description="*Systematic assessment of personnel knowledge acquisition capabilities.*",
+                color=0x00ff00,
+                timestamp=datetime.now(ZoneInfo("Europe/London"))
+            )
+
+            # Scheduled Operations
+            embed.add_field(
+                name="⏰ **Scheduled Operations**",
+                value=(
+                    "**Automated deployment:** Tuesdays at 11:00 UK time\n"
+                    "**Auto-completion:** 2 hours after deployment\n"
+                    "**Target channel:** #members\n"
+                    "**Pre-approval:** 10:00 UK time (1 hour before)"
+                ),
+                inline=False
+            )
+
+            # Question Management
+            embed.add_field(
+                name="📝 **Question Management**",
+                value=(
+                    "`!addtrivia` - Submit question to database\n"
+                    "`!approvequestion auto` - Send next priority question for review\n"
+                    "`!approvequestion generate` - Generate AI question for approval\n"
+                    "`!listpendingquestions` - Review available question inventory\n"
+                    "`!generatequestions <count>` - Generate multiple AI questions"
+                ),
+                inline=False
+            )
+
+            # Session Control
+            embed.add_field(
+                name="🎮 **Session Control**",
+                value=(
+                    "`!starttrivia [id]` - Initialize trivia session (manual override)\n"
+                    "`!endtrivia` - Complete active session and post results\n"
+                    "`!disabletrivia` - Skip next scheduled trivia (for special events)\n"
+                    "`!enabletrivia` - Re-enable scheduled trivia automation"
+                ),
+                inline=False
+            )
+
+            # Status & Analytics
+            embed.add_field(
+                name="📊 **Status & Analytics**",
+                value=(
+                    "`!trivialeaderboard` - Access performance analytics\n"
+                    "`!triviapoolstatus` - Current question inventory assessment\n"
+                    "`!approvestatus` - Check pending approval workflows\n"
+                    "`!resettrivia` - Reset answered questions to available"
+                ),
+                inline=False
+            )
+
+            # Mission Parameters
+            embed.add_field(
+                name="🎯 **Mission Parameters**",
+                value=(
+                    "• Maintain minimum **5-question pool** for optimal operations\n"
+                    "• Sessions **auto-end after 2 hours** with results posted\n"
+                    "• Questions marked as **'answered'** after session completion\n"
+                    "• Manual override available for **special events**"
+                ),
+                inline=False
+            )
+
+            embed.set_footer(text="TRIVIA TUESDAY OPERATIONAL MANUAL | All systems nominal")
+
+            await ctx.send(embed=embed)
+
+        except Exception as e:
+            logger.error(f"Error displaying trivia help: {e}")
+            await ctx.send(f"❌ **Help system error:** {str(e)}")
+
+    @commands.command(name="disabletrivia")
+    @commands.has_permissions(manage_messages=True)
+    async def disable_trivia(self, ctx):
+        """Disable scheduled Trivia Tuesday for manual override (moderators only)"""
+        try:
+            if db is None:
+                await ctx.send("❌ **Database offline.** Cannot modify trivia schedule.")
+                return
+
+            # Set the disable flag
+            db.set_config_value('trivia_scheduled_disabled', 'true')
+            db.set_config_value('trivia_scheduled_disabled_at', datetime.now(ZoneInfo("Europe/London")).isoformat())
+
+            # Create confirmation embed
+            embed = discord.Embed(
+                title="⚠️ **Scheduled Trivia Disabled**",
+                description="The automated Trivia Tuesday deployment has been **suspended** for manual override operations.",
+                color=0xffaa00,
+                timestamp=datetime.now(ZoneInfo("Europe/London"))
+            )
+
+            embed.add_field(
+                name="🔧 **Override Status**",
+                value=(
+                    "**Scheduled Task:** Disabled\n"
+                    "**Auto-reset:** 24 hours\n"
+                    "**Manual Control:** Enabled"
+                ),
+                inline=False
+            )
+
+            embed.add_field(
+                name="💡 **Manual Operations**",
+                value=(
+                    "You can now run trivia manually using:\n"
+                    "• `!starttrivia` - Start with auto-selected question\n"
+                    "• `!starttrivia <id>` - Start with specific question\n"
+                    "• Use in **any channel** (e.g., #chit-chat for special events)\n"
+                    "• Combine generated and manual questions as needed"
+                ),
+                inline=False
+            )
+
+            embed.add_field(
+                name="🔄 **Re-enabling**",
+                value=(
+                    "Use `!enabletrivia` to re-enable scheduled trivia\n"
+                    "**Auto-reset:** Trivia will auto-reset after 24 hours\n\n"
+                    "*This allows you to run special event trivia on Jonesy's birthday or other occasions.*"
+                ),
+                inline=False
+            )
+
+            embed.set_footer(text="Manual override active • Use !enabletrivia to restore automation")
+
+            await ctx.send(embed=embed)
+
+        except Exception as e:
+            logger.error(f"Error disabling trivia: {e}")
+            await ctx.send(f"❌ **Failed to disable trivia:** {str(e)}")
+
+    @commands.command(name="enabletrivia")
+    @commands.has_permissions(manage_messages=True)
+    async def enable_trivia(self, ctx):
+        """Re-enable scheduled Trivia Tuesday automation (moderators only)"""
+        try:
+            if db is None:
+                await ctx.send("❌ **Database offline.** Cannot modify trivia schedule.")
+                return
+
+            # Clear the disable flag
+            db.set_config_value('trivia_scheduled_disabled', 'false')
+            db.set_config_value('trivia_scheduled_disabled_at', '')
+
+            # Create confirmation embed
+            embed = discord.Embed(
+                title="✅ **Scheduled Trivia Re-enabled**",
+                description="The automated Trivia Tuesday deployment has been **restored** to normal operations.",
+                color=0x00ff00,
+                timestamp=datetime.now(ZoneInfo("Europe/London"))
+            )
+
+            embed.add_field(
+                name="🔧 **Automation Status**",
+                value=(
+                    "**Scheduled Task:** Enabled\n"
+                    "**Next Deployment:** Tuesday at 11:00 UK time\n"
+                    "**Target Channel:** #members\n"
+                    "**Auto-end:** 2 hours after start"
+                ),
+                inline=False
+            )
+
+            embed.add_field(
+                name="📋 **Normal Operations**",
+                value=(
+                    "• Pre-approval at 10:00 UK time (Tuesdays)\n"
+                    "• Automatic question deployment at 11:00 UK time\n"
+                    "• Auto-completion after 2 hours\n"
+                    "• Results posted automatically"
+                ),
+                inline=False
+            )
+
+            embed.set_footer(text="Automation restored • Use !disabletrivia to suspend for special events")
+
+            await ctx.send(embed=embed)
+
+        except Exception as e:
+            logger.error(f"Error enabling trivia: {e}")
+            await ctx.send(f"❌ **Failed to enable trivia:** {str(e)}")
+
 
 async def setup(bot):
     """Load the trivia cog"""

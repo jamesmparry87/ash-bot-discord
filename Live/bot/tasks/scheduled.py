@@ -610,6 +610,21 @@ async def trivia_tuesday():
         print(f"⚠️ Trivia Tuesday skipped - staging bot detected at {uk_now.strftime('%H:%M:%S UK')}")
         return
 
+    # Check if scheduled trivia is disabled for manual override
+    if db and db.get_config_value('trivia_scheduled_disabled') == 'true':
+        print(f"⚠️ Trivia Tuesday skipped - scheduled trivia disabled for manual override at {uk_now.strftime('%H:%M:%S UK')}")
+        # Auto-reset after 24 hours
+        try:
+            disabled_time_str = db.get_config_value('trivia_scheduled_disabled_at')
+            if disabled_time_str:
+                disabled_time = datetime.fromisoformat(disabled_time_str)
+                if (uk_now - disabled_time).total_seconds() > 86400:  # 24 hours
+                    db.set_config_value('trivia_scheduled_disabled', 'false')
+                    print("✅ Auto-reset: Re-enabled scheduled trivia after 24 hours")
+        except Exception as reset_error:
+            print(f"⚠️ Error auto-resetting trivia toggle: {reset_error}")
+        return
+
     print(f"🧠 Trivia Tuesday task triggered at {uk_now.strftime('%H:%M:%S UK')}")
 
     bot = get_bot_instance()
@@ -683,6 +698,140 @@ async def trivia_tuesday():
     except Exception as e:
         print(f"❌ Error in trivia_tuesday task: {e}")
         await notify_scheduled_message_error("Trivia Tuesday", str(e), uk_now)
+
+# Run every 15 minutes to check for stale trivia sessions
+
+
+@tasks.loop(minutes=15)
+async def check_stale_trivia_sessions():
+    """Auto-end trivia sessions that have been active for more than 2 hours"""
+    try:
+        if not db:
+            return
+
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        cutoff_time = uk_now - timedelta(hours=2)
+
+        # Get active sessions older than 2 hours
+        active_session = db.get_active_trivia_session()
+        
+        if not active_session:
+            return  # No active sessions
+
+        session_started = active_session.get('started_at')
+        if not session_started:
+            return
+
+        # Ensure timezone awareness
+        if session_started.tzinfo is None:
+            session_started = session_started.replace(tzinfo=ZoneInfo("Europe/London"))
+
+        # Check if session is older than 2 hours
+        if session_started < cutoff_time:
+            session_id = active_session['id']
+            print(f"⏰ AUTO-END TRIVIA: Session {session_id} has been active for more than 2 hours, auto-ending...")
+
+            # Get the bot instance
+            bot = get_bot_instance()
+            if not bot:
+                print("❌ AUTO-END TRIVIA: Bot instance not available")
+                return
+
+            # Get the channel where trivia was posted
+            channel_id = active_session.get('channel_id')
+            if not channel_id:
+                print("❌ AUTO-END TRIVIA: No channel ID found for session")
+                return
+
+            channel = bot.get_channel(channel_id)
+            if not channel or not isinstance(channel, discord.TextChannel):
+                print(f"❌ AUTO-END TRIVIA: Could not find channel {channel_id}")
+                return
+
+            # End the session using the same logic as !endtrivia
+            try:
+                session_results = db.end_trivia_session(session_id, ended_by=bot.user.id if bot.user else 0)
+
+                if session_results:
+                    # Create results embed (same as manual !endtrivia)
+                    embed = discord.Embed(
+                        title="🏆 **Trivia Tuesday - Auto-Completed Results!**",
+                        description=f"**Question #{active_session['question_id']}:** {session_results['question']}\n\n*Session automatically ended after 2 hours.*",
+                        color=0xffd700,
+                        timestamp=uk_now
+                    )
+
+                    # Show correct answer
+                    embed.add_field(
+                        name="✅ **Correct Answer:**",
+                        value=f"**{session_results['correct_answer']}**",
+                        inline=False
+                    )
+
+                    # Show winner if present
+                    winner_id = session_results.get('first_correct', {}).get('user_id') if session_results.get('first_correct') else None
+                    correct_user_ids = session_results.get('correct_user_ids', [])
+                    incorrect_user_ids = session_results.get('incorrect_user_ids', [])
+
+                    other_correct_ids = [uid for uid in correct_user_ids if uid != winner_id] if winner_id else correct_user_ids
+
+                    if winner_id:
+                        try:
+                            winner_user = await bot.fetch_user(winner_id)
+                            winner_name = winner_user.display_name if winner_user else f"User {winner_id}"
+                        except Exception:
+                            winner_name = f"User {winner_id}"
+
+                        embed.add_field(
+                            name="🎯 **Primary Objective: Achieved**",
+                            value=f"**{winner_name}** demonstrated optimal response efficiency. First correct analysis recorded.",
+                            inline=False
+                        )
+
+                    if other_correct_ids:
+                        mentions = [f"<@{uid}>" for uid in other_correct_ids]
+                        embed.add_field(
+                            name="📊 **Acceptable Performance**",
+                            value=f"Additional personnel {', '.join(mentions)} also provided correct data.",
+                            inline=False
+                        )
+
+                    if incorrect_user_ids:
+                        mentions = [f"<@{uid}>" for uid in incorrect_user_ids]
+                        embed.add_field(
+                            name="⚠️ **Mission Assessment: Performance Insufficient**",
+                            value=f"Personnel {', '.join(mentions)} require recalibration.",
+                            inline=False
+                        )
+
+                    # Show participation stats
+                    total_participants = session_results.get('total_participants', 0)
+                    correct_answers = session_results.get('correct_answers', 0)
+
+                    if total_participants > 0:
+                        accuracy = round((correct_answers / total_participants) * 100, 1)
+                        embed.add_field(
+                            name="📊 **Session Stats:**",
+                            value=f"**Participants:** {total_participants}\n**Correct:** {correct_answers}\n**Accuracy:** {accuracy}%",
+                            inline=True
+                        )
+
+                    embed.set_footer(text=f"Session #{session_id} auto-ended after 2 hours | Use !trivialeaderboard to see standings")
+
+                    await channel.send(embed=embed)
+                    print(f"✅ AUTO-END TRIVIA: Successfully auto-ended session {session_id} and posted results")
+
+                else:
+                    print(f"❌ AUTO-END TRIVIA: Failed to end session {session_id}")
+
+            except Exception as end_error:
+                print(f"❌ AUTO-END TRIVIA: Error ending session {session_id}: {end_error}")
+
+    except Exception as e:
+        print(f"❌ Error in check_stale_trivia_sessions: {e}")
+        import traceback
+        traceback.print_exc()
+
 
 # Run at 8:15 AM UK time every Friday - Gathering weekly activity
 
@@ -1821,6 +1970,8 @@ def start_all_scheduled_tasks(bot):
             (scheduled_ai_refresh, "AI module refresh task (8:15 AM UK time daily)"),
             ## Hourly ##
             (cleanup_game_recommendations, "Game recommendation cleanup task (every hour)"),
+            ## Every 15 minutes ##
+            (check_stale_trivia_sessions, "Stale trivia session checker (every 15 minutes)"),
             ## Continuously ##
             (check_due_reminders, "Reminder checking task (every minute)"),
             (check_auto_actions, "Auto-action checking task (every minute)")
