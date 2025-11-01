@@ -2472,7 +2472,9 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
                 await message.reply(f"❌ Skipped")
                 del game_review_conversations[user_id]
 
-        game_review_conversations[user_id] = conversation
+        # Only update conversation if it's still active (not deleted)
+        if user_id in game_review_conversations:
+            game_review_conversations[user_id] = conversation
 
     except Exception as e:
         print(f"❌ Error in game review conversation: {e}")
