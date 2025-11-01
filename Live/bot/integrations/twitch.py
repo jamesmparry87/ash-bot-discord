@@ -237,12 +237,12 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                         break  # Stop when we find videos older than our sync time
 
                     title = video['title']
-                    
+
                     # PRIMARY METHOD: Use Twitch API's game field (most reliable)
                     extracted_name = None
                     data_confidence = 0.0
                     twitch_game_name = None
-                    
+
                     # Try to fetch game name from Twitch API's game_id
                     game_id = video.get('game_id')
                     if game_id and game_id != '0' and game_id != '':
@@ -260,7 +260,7 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                                             data_confidence = 1.0  # High confidence since it's from Twitch API
                         except Exception as game_fetch_error:
                             print(f"⚠️ Failed to fetch game name from Twitch API: {game_fetch_error}")
-                    
+
                     # FALLBACK METHOD: Parse title if no game_id available
                     if not extracted_name:
                         print(f"⚠️ No game_id for VOD '{title}', falling back to title parsing")

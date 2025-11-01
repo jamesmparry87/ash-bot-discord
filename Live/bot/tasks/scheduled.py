@@ -1828,12 +1828,13 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                     print(f"📚 SYNC: Added series from IGDB: '{series_name}'")
                         else:
                             print(f"⚠️ SYNC: IGDB confidence too low ({confidence:.2f}), keeping original data")
-                            
-                            # Trigger manual review for low-confidence matches (between minimum match threshold and auto-approval threshold)
+
+                            # Trigger manual review for low-confidence matches (between minimum match
+                            # threshold and auto-approval threshold)
                             if 0.3 <= confidence < 0.75:
                                 try:
                                     from ..handlers.conversation_handler import start_game_review_approval
-                                    
+
                                     review_data = {
                                         'original_title': game_data.get('canonical_name', canonical_name),
                                         'extracted_name': canonical_name,
@@ -1847,9 +1848,10 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                         'genre': igdb_data.get('genre'),
                                         'release_year': igdb_data.get('release_year')
                                     }
-                                    
+
                                     await start_game_review_approval(review_data)
-                                    print(f"📤 SYNC: Sent '{canonical_name}' for manual review (confidence: {confidence:.2f})")
+                                    print(
+                                        f"📤 SYNC: Sent '{canonical_name}' for manual review (confidence: {confidence:.2f})")
                                 except Exception as review_error:
                                     print(f"❌ SYNC: Failed to send game for review: {review_error}")
                     else:
