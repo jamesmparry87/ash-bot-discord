@@ -905,9 +905,29 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                                     updates['release_year'] = igdb_data['release_year']
                                     changed = True
                                 
-                                # Merge alternative names
+                                # Merge alternative names with enhanced type safety
                                 existing_alt_names = game.get('alternative_names', [])
+                                
+                                # Handle various type issues from database
+                                if not isinstance(existing_alt_names, list):
+                                    # Check for empty JSON strings
+                                    if isinstance(existing_alt_names, str) and existing_alt_names in ["{}", "[]", ""]:
+                                        existing_alt_names = []
+                                    elif existing_alt_names:
+                                        existing_alt_names = [existing_alt_names]
+                                    else:
+                                        existing_alt_names = []
+                                
                                 igdb_alt_names = igdb_data.get('alternative_names', [])
+                                
+                                # Ensure IGDB alt names are also a list
+                                if not isinstance(igdb_alt_names, list):
+                                    if isinstance(igdb_alt_names, str) and igdb_alt_names in ["{}", "[]", ""]:
+                                        igdb_alt_names = []
+                                    elif igdb_alt_names:
+                                        igdb_alt_names = [igdb_alt_names]
+                                    else:
+                                        igdb_alt_names = []
                                 
                                 if igdb_alt_names:
                                     # Combine and deduplicate
@@ -916,11 +936,23 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                                         updates['alternative_names'] = combined[:10]  # Limit to 10
                                         alt_names_added += 1
                                         changed = True
+                                        print(f"✅ ENRICH: Added {len(combined) - len(existing_alt_names)} alternative names to '{canonical_name}'")
                                 
-                                # Use IGDB series if not present
+                                # Use IGDB series if not present - BUT validate it's related
                                 if not game.get('series_name') and igdb_data.get('series_name'):
-                                    updates['series_name'] = igdb_data['series_name']
-                                    changed = True
+                                    igdb_series = igdb_data['series_name']
+                                    
+                                    # Validate series is related to game name
+                                    # Import calculate_confidence for validation
+                                    from ..integrations.igdb import calculate_confidence
+                                    series_similarity = calculate_confidence(canonical_name, igdb_series)
+                                    
+                                    if series_similarity >= 0.4:  # At least 40% similarity
+                                        updates['series_name'] = igdb_series
+                                        changed = True
+                                        print(f"✅ ENRICH: Associated '{canonical_name}' with series '{igdb_series}' (similarity: {series_similarity:.2f})")
+                                    else:
+                                        print(f"⚠️ ENRICH: Rejected unrelated series '{igdb_series}' for '{canonical_name}' (similarity: {series_similarity:.2f})")
 
                     except Exception as igdb_error:
                         print(f"⚠️ ENRICH: IGDB error for '{canonical_name}': {igdb_error}")

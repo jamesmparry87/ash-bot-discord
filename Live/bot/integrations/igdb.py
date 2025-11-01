@@ -134,12 +134,30 @@ async def validate_and_enrich(game_name: str) -> Dict[str, Any]:
             'match_found': False
         }
 
-    # Take best match (first result)
-    best_match = results[0]
+    # Find best match from results (don't just take first)
+    best_match = None
+    best_confidence = 0.0
+    
+    for result in results[:5]:  # Check up to 5 results
+        igdb_name = result.get('name', '')
+        confidence = calculate_confidence(game_name, igdb_name)
+        
+        if confidence > best_confidence:
+            best_confidence = confidence
+            best_match = result
+    
+    # If no decent match found, return no match
+    if best_match is None or best_confidence < 0.3:
+        print(f"⚠️ IGDB: No acceptable match for '{game_name}' (best confidence: {best_confidence:.2f})")
+        return {
+            'canonical_name': game_name,
+            'confidence': best_confidence,
+            'match_found': False
+        }
 
-    # Calculate confidence based on name similarity
+    # Use best match
     igdb_name = best_match.get('name', '')
-    confidence = calculate_confidence(game_name, igdb_name)
+    confidence = best_confidence
 
     # Extract enrichment data
     enrichment = {
@@ -187,7 +205,7 @@ async def validate_and_enrich(game_name: str) -> Dict[str, Any]:
 
 def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
     """
-    Calculate confidence score for name match.
+    Calculate confidence score for name match with gaming-specific rules.
     Returns 0.0-1.0 where:
     - 1.0 = exact match
     - 0.8+ = high confidence
@@ -195,6 +213,7 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
     - <0.5 = low confidence
     """
     import difflib
+    import re
 
     # Normalize for comparison
     extracted_lower = extracted_name.lower().strip()
@@ -204,25 +223,91 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
     if extracted_lower == igdb_lower:
         return 1.0
 
-    # Calculate similarity ratio
-    similarity = difflib.SequenceMatcher(None, extracted_lower, igdb_lower).ratio()
+    # Gaming abbreviation mapping
+    abbreviations = {
+        'gta': 'grand theft auto',
+        'cod': 'call of duty',
+        'tlou': 'the last of us',
+        'rdr': 'red dead redemption',
+        'mgs': 'metal gear solid',
+        'ffvii': 'final fantasy vii',
+        'ffxv': 'final fantasy xv',
+        'rottr': 'rise of the tomb raider',
+        'sottr': 'shadow of the tomb raider',
+    }
+
+    # Expand abbreviations in extracted name
+    expanded_extracted = extracted_lower
+    for abbr, full in abbreviations.items():
+        # Match word boundaries to avoid partial matches
+        pattern = r'\b' + re.escape(abbr) + r'\b'
+        expanded_extracted = re.sub(pattern, full, expanded_extracted)
+
+    # Roman numeral to Arabic number mapping
+    roman_to_arabic = {
+        'i': '1', 'ii': '2', 'iii': '3', 'iv': '4', 'v': '5',
+        'vi': '6', 'vii': '7', 'viii': '8', 'ix': '9', 'x': '10'
+    }
+    
+    # Convert Roman numerals to Arabic in both names for comparison
+    def normalize_numbers(text):
+        # Replace Roman numerals at word boundaries
+        for roman, arabic in roman_to_arabic.items():
+            text = re.sub(r'\b' + roman + r'\b', arabic, text)
+        return text
+    
+    normalized_extracted = normalize_numbers(expanded_extracted)
+    normalized_igdb = normalize_numbers(igdb_lower)
+
+    # Remove edition suffixes for comparison
+    edition_suffixes = [
+        'remake', 'remastered', 'definitive edition', 'goty edition',
+        'game of the year', 'complete edition', 'enhanced edition',
+        'special edition', 'deluxe edition', 'ultimate edition',
+        'directors cut', "director's cut", 'redux'
+    ]
+    
+    def remove_editions(text):
+        for suffix in edition_suffixes:
+            # Remove suffix if it appears at the end
+            if text.endswith(suffix):
+                text = text[:-len(suffix)].strip()
+            # Also try with parentheses/brackets
+            text = re.sub(r'\s*[\(\[]' + re.escape(suffix) + r'[\)\]]', '', text, flags=re.IGNORECASE)
+        return text.strip()
+    
+    cleaned_extracted = remove_editions(normalized_extracted)
+    cleaned_igdb = remove_editions(normalized_igdb)
+
+    # Check for match after all normalizations
+    if cleaned_extracted == cleaned_igdb:
+        return 0.95  # Very high confidence but not perfect since we did transformations
+
+    # Calculate similarity ratio on normalized names
+    similarity = difflib.SequenceMatcher(None, cleaned_extracted, cleaned_igdb).ratio()
 
     # Word-based matching for multi-word names
-    if len(extracted_lower.split()) > 1:
-        extracted_words = set(extracted_lower.split())
-        igdb_words = set(igdb_lower.split())
+    if len(cleaned_extracted.split()) > 1:
+        extracted_words = set(cleaned_extracted.split())
+        igdb_words = set(cleaned_igdb.split())
 
         if len(igdb_words) > 0:
             word_overlap = len(extracted_words & igdb_words) / len(igdb_words)
             # Use the higher of the two scores
             similarity = max(similarity, word_overlap)
+    
+    # Bonus for partial number matches (e.g., "5" in both names)
+    extracted_numbers = set(re.findall(r'\d+', cleaned_extracted))
+    igdb_numbers = set(re.findall(r'\d+', cleaned_igdb))
+    if extracted_numbers and igdb_numbers and extracted_numbers & igdb_numbers:
+        similarity = min(1.0, similarity + 0.1)  # Small bonus for matching numbers
 
     return round(similarity, 2)
 
 
 def should_use_igdb_data(confidence: float) -> bool:
     """Determine if IGDB data is trustworthy enough to use"""
-    return confidence >= 0.85  # 85% threshold for auto-approval
+    return confidence >= 0.75  # 75% threshold for auto-approval (lowered to handle gaming abbreviations and variations)
 
 
 async def bulk_validate_games(game_names: List[str]) -> List[Dict[str, Any]]:
