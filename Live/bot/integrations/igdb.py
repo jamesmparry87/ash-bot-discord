@@ -137,15 +137,15 @@ async def validate_and_enrich(game_name: str) -> Dict[str, Any]:
     # Find best match from results (don't just take first)
     best_match = None
     best_confidence = 0.0
-    
+
     for result in results[:5]:  # Check up to 5 results
         igdb_name = result.get('name', '')
         confidence = calculate_confidence(game_name, igdb_name)
-        
+
         if confidence > best_confidence:
             best_confidence = confidence
             best_match = result
-    
+
     # If no decent match found, return no match
     if best_match is None or best_confidence < 0.3:
         print(f"⚠️ IGDB: No acceptable match for '{game_name}' (best confidence: {best_confidence:.2f})")
@@ -248,14 +248,14 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
         'i': '1', 'ii': '2', 'iii': '3', 'iv': '4', 'v': '5',
         'vi': '6', 'vii': '7', 'viii': '8', 'ix': '9', 'x': '10'
     }
-    
+
     # Convert Roman numerals to Arabic in both names for comparison
     def normalize_numbers(text):
         # Replace Roman numerals at word boundaries
         for roman, arabic in roman_to_arabic.items():
             text = re.sub(r'\b' + roman + r'\b', arabic, text)
         return text
-    
+
     normalized_extracted = normalize_numbers(expanded_extracted)
     normalized_igdb = normalize_numbers(igdb_lower)
 
@@ -266,7 +266,7 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
         'special edition', 'deluxe edition', 'ultimate edition',
         'directors cut', "director's cut", 'redux'
     ]
-    
+
     def remove_editions(text):
         for suffix in edition_suffixes:
             # Remove suffix if it appears at the end
@@ -275,7 +275,7 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
             # Also try with parentheses/brackets
             text = re.sub(r'\s*[\(\[]' + re.escape(suffix) + r'[\)\]]', '', text, flags=re.IGNORECASE)
         return text.strip()
-    
+
     cleaned_extracted = remove_editions(normalized_extracted)
     cleaned_igdb = remove_editions(normalized_igdb)
 
@@ -295,7 +295,7 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
             word_overlap = len(extracted_words & igdb_words) / len(igdb_words)
             # Use the higher of the two scores
             similarity = max(similarity, word_overlap)
-    
+
     # Bonus for partial number matches (e.g., "5" in both names)
     extracted_numbers = set(re.findall(r'\d+', cleaned_extracted))
     igdb_numbers = set(re.findall(r'\d+', cleaned_igdb))
