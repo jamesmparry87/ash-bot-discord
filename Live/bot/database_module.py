@@ -298,6 +298,41 @@ class DatabaseManager:
                     )
                 """)
 
+                # Create game_review_sessions table for low-confidence game match reviews
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS game_review_sessions (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        session_type VARCHAR(50) NOT NULL DEFAULT 'game_review',
+                        original_title TEXT NOT NULL,
+                        extracted_name TEXT NOT NULL,
+                        confidence_score FLOAT NOT NULL,
+                        alternative_names TEXT,
+                        source VARCHAR(20) NOT NULL,
+                        igdb_data JSONB,
+                        video_url TEXT,
+                        conversation_step VARCHAR(50) NOT NULL,
+                        conversation_data JSONB DEFAULT '{}',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        expires_at TIMESTAMP,
+                        status VARCHAR(20) DEFAULT 'pending',
+                        approved_name TEXT,
+                        approved_data JSONB,
+                        bot_restart_count INTEGER DEFAULT 0
+                    )
+                """)
+
+                # Create index for faster lookups
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_game_review_user_status
+                    ON game_review_sessions(user_id, status)
+                """)
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_game_review_expires
+                    ON game_review_sessions(expires_at, status)
+                """)
+
                 # Create index for faster lookups
                 cur.execute("""
                     CREATE INDEX IF NOT EXISTS idx_trivia_approval_user_status
@@ -870,9 +905,22 @@ class DatabaseManager:
             return 0
 
     def _parse_comma_separated_list(self, text: Optional[str]) -> List[str]:
-        """Convert a comma-separated string to a list of stripped, non-empty items"""
+        """Convert a comma-separated string OR PostgreSQL array to a list of stripped, non-empty items"""
         if not text or not isinstance(text, str):
             return []
+
+        text = text.strip()
+
+        # Handle PostgreSQL array syntax: {"item1","item2","item3"}
+        if text.startswith('{') and text.endswith('}'):
+            # Remove outer braces
+            text = text[1:-1]
+            # Split by comma and clean up quotes
+            import re
+            items = re.findall(r'"([^"]*)"', text)
+            return [item.strip() for item in items if item.strip()]
+
+        # Handle regular comma-separated format
         return [item.strip() for item in text.split(',') if item.strip()]
 
     def _convert_text_to_arrays(
@@ -1578,7 +1626,6 @@ class DatabaseManager:
                             series_name = %s,
                             genre = %s,
                             release_year = %s,
-                            platform = %s,
                             first_played_date = %s,
                             completion_status = %s,
                             total_episodes = %s,
@@ -1593,7 +1640,6 @@ class DatabaseManager:
                         merged_data['series_name'],
                         merged_data['genre'],
                         merged_data['release_year'],
-                        merged_data['platform'],
                         merged_data['first_played_date'],
                         merged_data['completion_status'],
                         merged_data['total_episodes'],
@@ -4723,6 +4769,222 @@ class DatabaseManager:
             else:
                 # Re-raise non-sequence related errors
                 raise e
+
+    # --- Game Review Sessions for Low-Confidence Matches ---
+
+    def create_game_review_session(
+        self,
+        user_id: int,
+        original_title: str,
+        extracted_name: str,
+        confidence_score: float,
+        alternative_names: List[str],
+        source: str,
+        igdb_data: Dict[str, Any],
+        video_url: Optional[str] = None,
+        timeout_hours: int = 24
+    ) -> Optional[int]:
+        """Create a new game review session for low-confidence matches"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+                expires_at = uk_now + timedelta(hours=timeout_hours)
+
+                # Convert alternative names list to comma-separated string
+                alt_names_str = ','.join(alternative_names) if alternative_names else ''
+
+                cur.execute("""
+                    INSERT INTO game_review_sessions (
+                        user_id, original_title, extracted_name, confidence_score,
+                        alternative_names, source, igdb_data, video_url,
+                        conversation_step, created_at, last_activity, expires_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (
+                    user_id, original_title, extracted_name, confidence_score,
+                    alt_names_str, source, json.dumps(igdb_data), video_url,
+                    'review', uk_now, uk_now, expires_at
+                ))
+
+                result = cur.fetchone()
+                conn.commit()
+
+                if result:
+                    session_id = int(result['id'])  # type: ignore
+                    logger.info(f"Created game review session {session_id} for user {user_id}")
+                    return session_id
+                return None
+        except Exception as e:
+            logger.error(f"Error creating game review session: {e}")
+            conn.rollback()
+            return None
+
+    def get_game_review_session(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Get active game review session for user"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT * FROM game_review_sessions
+                    WHERE user_id = %s
+                    AND status = 'pending'
+                    AND expires_at > CURRENT_TIMESTAMP
+                    ORDER BY created_at ASC
+                    LIMIT 1
+                """, (user_id,))
+
+                result = cur.fetchone()
+                if result:
+                    session_dict = dict(result)
+                    # Parse JSON and convert alternative_names back to list
+                    session_dict['igdb_data'] = json.loads(session_dict.get('igdb_data', '{}'))
+                    session_dict['conversation_data'] = json.loads(session_dict.get('conversation_data', '{}'))
+                    alt_names = session_dict.get('alternative_names', '')
+                    session_dict['alternative_names'] = self._parse_comma_separated_list(alt_names) if alt_names else []
+                    return session_dict
+                return None
+        except Exception as e:
+            logger.error(f"Error getting game review session for user {user_id}: {e}")
+            return None
+
+    def update_game_review_session(
+        self,
+        session_id: int,
+        conversation_step: Optional[str] = None,
+        conversation_data: Optional[Dict[str, Any]] = None,
+        approved_name: Optional[str] = None,
+        approved_data: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """Update game review session"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+
+                set_clauses = ["last_activity = %s"]
+                params: List[Any] = [uk_now]
+
+                if conversation_step:
+                    set_clauses.append("conversation_step = %s")
+                    params.append(conversation_step)
+
+                if conversation_data:
+                    set_clauses.append("conversation_data = %s")
+                    params.append(json.dumps(conversation_data))
+
+                if approved_name:
+                    set_clauses.append("approved_name = %s")
+                    params.append(approved_name)
+
+                if approved_data:
+                    set_clauses.append("approved_data = %s")
+                    params.append(json.dumps(approved_data))
+
+                params.append(session_id)
+
+                query = f"""
+                    UPDATE game_review_sessions
+                    SET {', '.join(set_clauses)}
+                    WHERE id = %s AND status = 'pending'
+                """
+
+                cur.execute(query, params)
+                conn.commit()
+
+                return cur.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error updating game review session {session_id}: {e}")
+            conn.rollback()
+            return False
+
+    def complete_game_review_session(self, session_id: int, status: str = 'approved') -> bool:
+        """Complete game review session with final status"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE game_review_sessions
+                    SET status = %s, last_activity = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, (status, session_id))
+
+                conn.commit()
+                success = cur.rowcount > 0
+                if success:
+                    logger.info(f"Completed game review session {session_id} with status: {status}")
+                return success
+        except Exception as e:
+            logger.error(f"Error completing game review session {session_id}: {e}")
+            conn.rollback()
+            return False
+
+    def get_pending_game_reviews(self, user_id: int) -> List[Dict[str, Any]]:
+        """Get all pending game review sessions for a user"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT * FROM game_review_sessions
+                    WHERE user_id = %s
+                    AND status = 'pending'
+                    AND expires_at > CURRENT_TIMESTAMP
+                    ORDER BY created_at ASC
+                """, (user_id,))
+
+                results = cur.fetchall()
+                sessions = []
+                for row in results:
+                    session_dict = dict(row)
+                    session_dict['igdb_data'] = json.loads(session_dict.get('igdb_data', '{}'))
+                    session_dict['conversation_data'] = json.loads(session_dict.get('conversation_data', '{}'))
+                    alt_names = session_dict.get('alternative_names', '')
+                    session_dict['alternative_names'] = self._parse_comma_separated_list(alt_names) if alt_names else []
+                    sessions.append(session_dict)
+                return sessions
+        except Exception as e:
+            logger.error(f"Error getting pending game reviews for user {user_id}: {e}")
+            return []
+
+    def cleanup_expired_game_review_sessions(self) -> int:
+        """Clean up expired game review sessions"""
+        conn = self.get_connection()
+        if not conn:
+            return 0
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE game_review_sessions
+                    SET status = 'expired'
+                    WHERE status = 'pending'
+                    AND expires_at <= CURRENT_TIMESTAMP
+                """)
+
+                conn.commit()
+                expired_count = cur.rowcount
+                if expired_count > 0:
+                    logger.info(f"Cleaned up {expired_count} expired game review sessions")
+                return expired_count
+        except Exception as e:
+            logger.error(f"Error cleaning up expired game review sessions: {e}")
+            conn.rollback()
+            return 0
 
 
 # Singleton database manager instance

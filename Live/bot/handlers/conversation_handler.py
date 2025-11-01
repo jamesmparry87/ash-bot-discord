@@ -54,6 +54,7 @@ announcement_conversations: Dict[int, Dict[str, Any]] = {}
 mod_trivia_conversations: Dict[int, Dict[str, Any]] = {}
 jam_approval_conversations: Dict[int, Dict[str, Any]] = {}
 weekly_announcement_approvals: Dict[int, Dict[str, Any]] = {}
+game_review_conversations: Dict[int, Dict[str, Any]] = {}
 
 
 def cleanup_announcement_conversations():
@@ -2286,6 +2287,199 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
             "restored_sessions": 0,
             "success": False
         }
+
+
+async def start_game_review_approval(game_data: Dict[str, Any]) -> bool:
+    """Start game review approval workflow for low-confidence matches"""
+    try:
+        bot = _get_bot_instance()
+        if not bot:
+            print("❌ Cannot start game review - bot instance not available")
+            return False
+
+        jam_user = await bot.fetch_user(JAM_USER_ID)
+        if not jam_user:
+            print(f"❌ Cannot reach JAM for game review")
+            return False
+
+        # Create session in database
+        session_id = db.create_game_review_session(
+            user_id=JAM_USER_ID,
+            original_title=game_data['original_title'],
+            extracted_name=game_data['extracted_name'],
+            confidence_score=game_data['confidence_score'],
+            alternative_names=game_data.get('alternative_names', []),
+            source=game_data['source'],
+            igdb_data=game_data.get('igdb_data', {}),
+            video_url=game_data.get('video_url')
+        )
+
+        if not session_id:
+            print("❌ Failed to create game review session")
+            return False
+
+        # Initialize conversation
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        game_review_conversations[JAM_USER_ID] = {
+            'step': 'review',
+            'session_id': session_id,
+            'data': game_data,
+            'last_activity': uk_now
+        }
+
+        # Build approval message
+        alt_names = game_data.get('alternative_names', [])
+        igdb_matched = len(alt_names) > 0
+
+        # Build IGDB match string safely
+        if not igdb_matched:
+            igdb_match_text = "❌ No match found"
+        else:
+            igdb_match_text = f"✓ {', '.join(alt_names[:3])}"
+
+        approval_msg = (
+            f"🎮 **GAME MATCH REVIEW REQUIRED**\n\n"
+            f"Low-confidence game extraction detected during {game_data['source'].title()} sync:\n\n"
+            f"**Original Title:** {game_data['original_title']}\n"
+            f"**Extracted Name:** `{game_data['extracted_name']}`\n"
+            f"**Confidence:** {game_data['confidence_score']:.2f} (LOW)\n"
+            f"**IGDB Match:** {igdb_match_text}\n"
+        )
+
+        if game_data.get('video_url'):
+            approval_msg += f"**Video:** {game_data['video_url']}\n"
+
+        approval_msg += (
+            "\n**Actions:**\n"
+            "**1.** ✅ Accept - Use extracted name as-is\n"
+            "**2.** 🔧 Correct - Provide the real game name\n"
+            "**3.** ❌ Skip - Don't import this entry\n\n"
+            "Respond with **1**, **2**, or **3**."
+        )
+
+        await jam_user.send(approval_msg)
+        print(f"✅ Started game review session {session_id}")
+        return True
+
+    except Exception as e:
+        print(f"❌ Error starting game review: {e}")
+        return False
+
+
+async def handle_game_review_conversation(message: discord.Message) -> None:
+    """Handle game review approval conversation"""
+    user_id = message.author.id
+    conversation = game_review_conversations.get(user_id)
+
+    if not conversation or user_id != JAM_USER_ID:
+        return
+
+    content = message.content.strip()
+    step = conversation.get('step', 'review')
+    data = conversation.get('data', {})
+    session_id = conversation.get('session_id')
+
+    try:
+        if not session_id:
+            await message.reply("❌ Error: Invalid session")
+            if user_id in game_review_conversations:
+                del game_review_conversations[user_id]
+            return
+
+        if step == 'review':
+            if content in ['1', 'accept', 'yes']:
+                # Accept extracted name
+                db.complete_game_review_session(session_id, 'approved')
+                await message.reply(
+                    f"✅ **Accepted** - Game will be imported as `{data['extracted_name']}`"
+                )
+                del game_review_conversations[user_id]
+
+            elif content in ['2', 'correct', 'fix']:
+                # Request correct name
+                conversation['step'] = 'correction'
+                await message.reply(
+                    f"🔧 **Provide Correct Name**\n\n"
+                    f"Original title: `{data['original_title']}`\n\n"
+                    f"What's the real game name? (I'll re-validate with IGDB)"
+                )
+
+            elif content in ['3', 'skip', 'no']:
+                # Skip this entry
+                db.complete_game_review_session(session_id, 'rejected')
+                await message.reply(
+                    f"❌ **Skipped** - This entry won't be imported"
+                )
+                del game_review_conversations[user_id]
+
+            else:
+                await message.reply("⚠️ Invalid. Respond with **1** (Accept), **2** (Correct), or **3** (Skip).")
+
+        elif step == 'correction':
+            # User provided correct name - re-validate with IGDB
+            corrected_name = content.strip()
+
+            await message.reply(f"🔍 **Re-validating** `{corrected_name}` with IGDB...")
+
+            # Re-validate with IGDB using the correct function
+            try:
+                from ..integrations.igdb import validate_and_enrich
+                igdb_result = await validate_and_enrich(corrected_name)
+            except Exception as e:
+                print(f"⚠️ IGDB validation failed: {e}")
+                igdb_result = None
+
+            if igdb_result and igdb_result.get('confidence', 0) >= 0.7:
+                # Good match found
+                db.update_game_review_session(
+                    session_id,
+                    approved_name=corrected_name,
+                    approved_data={'igdb': igdb_result}
+                )
+                db.complete_game_review_session(session_id, 'approved')
+
+                await message.reply(
+                    f"✅ **Correction Approved**\n\n"
+                    f"**Your Input:** {corrected_name}\n"
+                    f"**IGDB Match:** {igdb_result.get('name')} (confidence: {igdb_result.get('confidence', 0):.2f})\n"
+                    f"**Genre:** {igdb_result.get('genre', 'Unknown')}\n\n"
+                    f"Game will be imported with IGDB data."
+                )
+                del game_review_conversations[user_id]
+            else:
+                # Still low confidence - ask to try again or skip
+                conversation['step'] = 'correction_failed'
+                confidence_score = igdb_result.get('confidence', 0) if igdb_result else 0
+                await message.reply(
+                    f"⚠️ **Still Low Confidence**\n\n"
+                    f"IGDB match: {confidence_score:.2f}\n\n"
+                    f"**1.** Try different name\n"
+                    f"**2.** Accept anyway\n"
+                    f"**3.** Skip entry\n\n"
+                    f"Respond with **1**, **2**, or **3**."
+                )
+
+        elif step == 'correction_failed':
+            if content == '1':
+                conversation['step'] = 'correction'
+                await message.reply(f"🔧 Try another name:")
+            elif content == '2':
+                db.complete_game_review_session(session_id, 'approved')
+                await message.reply(f"✅ Accepted with low confidence")
+                del game_review_conversations[user_id]
+            elif content == '3':
+                db.complete_game_review_session(session_id, 'rejected')
+                await message.reply(f"❌ Skipped")
+                del game_review_conversations[user_id]
+
+        # Only update conversation if it's still active (not deleted)
+        if user_id in game_review_conversations:
+            game_review_conversations[user_id] = conversation
+
+    except Exception as e:
+        print(f"❌ Error in game review conversation: {e}")
+        if user_id in game_review_conversations:
+            del game_review_conversations[user_id]
 
 
 async def get_restoration_status() -> Dict[str, Any]:

@@ -3,6 +3,7 @@ Game recommendation commands for Ash Bot
 Handles adding, listing, and managing game recommendations
 """
 
+import asyncio
 from datetime import datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -820,6 +821,183 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             await ctx.send("❌ Database unavailable")
         except Exception as e:
             await ctx.send(f"❌ **Deduplication failed:** {str(e)}\n\n*Check bot logs for details.*")
+
+    @commands.command(name="enrichallgames")
+    async def enrich_all_games(self, ctx):
+        """
+        One-time bulk enrichment of ALL games in database with IGDB data.
+        Cleans series names, standardizes genres, adds missing metadata.
+        """
+        # Strict access control - only Captain Jonesy and Sir Decent Jam
+        if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
+            return  # Silent ignore for unauthorized users
+
+        try:
+            database = self._get_db()
+
+            # Import IGDB integration and helper functions
+            try:
+                from ..integrations.igdb import validate_and_enrich, should_use_igdb_data
+                from ..tasks.scheduled import clean_series_name, map_genre_to_standard
+                igdb_available = True
+            except ImportError as import_error:
+                await ctx.send(f"❌ **IGDB integration not available:** {str(import_error)}\n\n*Cannot proceed without IGDB module.*")
+                return
+
+            # Get all games from database
+            await ctx.send("🔄 **Bulk Enrichment Initiated**\n\nAnalyzing database... Please wait.")
+            
+            all_games = database.get_all_played_games()
+            
+            if not all_games:
+                await ctx.send("❌ **No games found in database.** Nothing to enrich.")
+                return
+
+            total_games = len(all_games)
+            await ctx.send(f"📊 **Found {total_games} games in database.**\n\nStarting IGDB enrichment with rate limiting (4 seconds per game).\n\n*Estimated time: {(total_games * 4) // 60} minutes*")
+
+            # Stats tracking
+            enriched_count = 0
+            igdb_matches = 0
+            series_cleaned = 0
+            genres_standardized = 0
+            alt_names_added = 0
+            errors = 0
+            skipped_count = 0
+
+            # Progress tracking
+            last_progress_update = 0
+            progress_interval = 10  # Update every 10 games
+
+            # Process each game
+            for idx, game in enumerate(all_games, 1):
+                canonical_name = game.get('canonical_name', 'Unknown')  # Initialize before try block
+                try:
+                    game_id = game.get('id')
+                    
+                    if not game_id or not canonical_name:
+                        print(f"⚠️ ENRICH: Skipping game with missing ID or name")
+                        skipped_count += 1
+                        continue
+
+                    updates = {}
+                    changed = False
+
+                    # 1. IGDB Enrichment
+                    try:
+                        igdb_data = await validate_and_enrich(canonical_name)
+                        
+                        if igdb_data and igdb_data.get('match_found'):
+                            confidence = igdb_data.get('confidence', 0.0)
+                            
+                            if should_use_igdb_data(confidence):
+                                igdb_matches += 1
+                                
+                                # Enrich genre if missing
+                                if not game.get('genre') and igdb_data.get('genre'):
+                                    standardized_genre = map_genre_to_standard(igdb_data['genre'])
+                                    updates['genre'] = standardized_genre
+                                    genres_standardized += 1
+                                    changed = True
+                                
+                                # Enrich release year if missing
+                                if not game.get('release_year') and igdb_data.get('release_year'):
+                                    updates['release_year'] = igdb_data['release_year']
+                                    changed = True
+                                
+                                # Merge alternative names
+                                existing_alt_names = game.get('alternative_names', [])
+                                igdb_alt_names = igdb_data.get('alternative_names', [])
+                                
+                                if igdb_alt_names:
+                                    # Combine and deduplicate
+                                    combined = list(set(existing_alt_names + igdb_alt_names))
+                                    if len(combined) > len(existing_alt_names):
+                                        updates['alternative_names'] = combined[:10]  # Limit to 10
+                                        alt_names_added += 1
+                                        changed = True
+                                
+                                # Use IGDB series if not present
+                                if not game.get('series_name') and igdb_data.get('series_name'):
+                                    updates['series_name'] = igdb_data['series_name']
+                                    changed = True
+
+                    except Exception as igdb_error:
+                        print(f"⚠️ ENRICH: IGDB error for '{canonical_name}': {igdb_error}")
+                        # Continue processing other fields
+
+                    # 2. Clean series name (remove completion markers)
+                    series_name = game.get('series_name')
+                    if series_name:
+                        cleaned_series = clean_series_name(series_name)
+                        if cleaned_series != series_name:
+                            updates['series_name'] = cleaned_series
+                            series_cleaned += 1
+                            changed = True
+
+                    # 3. Standardize genre if present
+                    current_genre = game.get('genre')
+                    if current_genre:
+                        standardized_genre = map_genre_to_standard(current_genre)
+                        if standardized_genre != current_genre:
+                            updates['genre'] = standardized_genre
+                            genres_standardized += 1
+                            changed = True
+
+                    # Update database if any changes
+                    if changed and updates:
+                        success = database.update_played_game(game_id, **updates)
+                        if success:
+                            enriched_count += 1
+                        else:
+                            errors += 1
+                            print(f"❌ ENRICH: Failed to update game ID {game_id}")
+
+                    # Progress updates
+                    if idx - last_progress_update >= progress_interval:
+                        progress_pct = round((idx / total_games) * 100)
+                        await ctx.send(f"⏳ **Progress: {idx}/{total_games} games processed ({progress_pct}%)**\n• Enriched: {enriched_count}\n• IGDB matches: {igdb_matches}\n• Errors: {errors}")
+                        last_progress_update = idx
+
+                    # Rate limiting (4 seconds between IGDB requests)
+                    if idx < total_games:  # Don't wait after last game
+                        await asyncio.sleep(4)
+
+                except Exception as game_error:
+                    print(f"❌ ENRICH: Error processing game '{canonical_name}': {game_error}")
+                    errors += 1
+                    continue
+
+            # Final summary report
+            summary = (
+                f"✅ **Bulk Enrichment Complete!**\n\n"
+                f"**Statistics:**\n"
+                f"• Total games processed: {total_games}\n"
+                f"• Games enriched: {enriched_count}\n"
+                f"• IGDB matches found: {igdb_matches}\n"
+                f"• Series names cleaned: {series_cleaned}\n"
+                f"• Genres standardized: {genres_standardized}\n"
+                f"• Alternative names added: {alt_names_added}\n"
+                f"• Errors encountered: {errors}\n"
+                f"• Skipped (missing data): {skipped_count}\n\n"
+                f"**Changes Applied:**\n"
+                f"• Series names no longer have '(Completed)' markers\n"
+                f"• All genres mapped to standardized list\n"
+                f"• Missing metadata populated from IGDB\n"
+                f"• Alternative names merged and deduplicated\n\n"
+                f"*Database has been fully enriched with IGDB data.*"
+            )
+
+            await ctx.send(summary)
+
+            # Log final summary
+            print(f"🎯 ENRICH ALL GAMES: Complete - {enriched_count}/{total_games} games enriched")
+
+        except RuntimeError:
+            await ctx.send("❌ Database unavailable")
+        except Exception as e:
+            await ctx.send(f"❌ **Bulk enrichment failed:** {str(e)}\n\n*Check bot logs for details.*")
+            print(f"❌ ENRICH ALL GAMES: Critical error - {e}")
 
 
 def setup(bot):

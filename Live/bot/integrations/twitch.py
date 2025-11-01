@@ -240,7 +240,7 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
 
                     # Use smart extraction with IGDB validation and fallback strategies
                     extracted_name, data_confidence = await smart_extract_with_validation(title)
-                    
+
                     # Null safety checks
                     if not extracted_name:
                         extracted_name = ''
@@ -266,6 +266,14 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                         # Get alternative names ONLY from IGDB
                         if igdb_result.get('alternative_names'):
                             alternative_names = igdb_result['alternative_names'][:5]
+
+                        # DATA QUALITY CHECK: Empty alternative names = likely bad match
+                        if not alternative_names or len(alternative_names) == 0:
+                            print(
+                                f"⚠️ DATA QUALITY WARNING: '{canonical_name}' has NO alternative names in IGDB - likely incorrect extraction")
+                            print(f"   Original title: '{title}'")
+                            # Lower confidence to trigger manual review
+                            data_confidence = 0.5
 
                         print(
                             f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
