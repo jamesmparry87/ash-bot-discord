@@ -936,10 +936,15 @@ class TriviaCommands(commands.Cog):
             await ctx.send("❌ System error occurred while ending trivia.")
 
     @commands.command(name="trivialeaderboard")
-    @commands.has_permissions(manage_messages=True)
     async def trivia_leaderboard(self, ctx, timeframe: str = "all"):
         """Show trivia participation and success statistics (moderators only)"""
         try:
+            # Check if user is a moderator (works in both DM and server context)
+            from ..utils.permissions import user_is_mod_by_id
+            if not await user_is_mod_by_id(ctx.author.id, self.bot):
+                await ctx.send("❌ **Access denied.** This command requires moderator privileges.")
+                return
+
             if db is None:
                 await ctx.send("❌ **Database offline.** Cannot show leaderboard without database connection.")
                 return
@@ -1023,10 +1028,15 @@ class TriviaCommands(commands.Cog):
             await ctx.send("❌ System error occurred while retrieving leaderboard.")
 
     @commands.command(name="listpendingquestions")
-    @commands.has_permissions(manage_messages=True)
     async def list_pending_questions(self, ctx):
         """View submitted trivia questions awaiting use (moderators only)"""
         try:
+            # Check if user is a moderator (works in both DM and server context)
+            from ..utils.permissions import user_is_mod_by_id
+            if not await user_is_mod_by_id(ctx.author.id, self.bot):
+                await ctx.send("❌ **Access denied.** This command requires moderator privileges.")
+                return
+
             if db is None:
                 await ctx.send("❌ **Database offline.** Cannot list questions without database connection.")
                 return
@@ -1088,10 +1098,15 @@ class TriviaCommands(commands.Cog):
             await ctx.send("❌ System error occurred while listing questions.")
 
     @commands.command(name="resettrivia")
-    @commands.has_permissions(manage_messages=True)
     async def reset_trivia(self, ctx):
         """Reset answered questions to available status (moderators only)"""
         try:
+            # Check if user is a moderator (works in both DM and server context)
+            from ..utils.permissions import user_is_mod_by_id
+            if not await user_is_mod_by_id(ctx.author.id, self.bot):
+                await ctx.send("❌ **Access denied.** This command requires moderator privileges.")
+                return
+
             if db is None:
                 await ctx.send("❌ **Database offline.** Cannot reset trivia without database connection.")
                 return
@@ -1145,10 +1160,15 @@ class TriviaCommands(commands.Cog):
             await ctx.send("❌ Trivia submission system not available - conversation handler not loaded.")
 
     @commands.command(name="approvequestion")
-    @commands.has_permissions(manage_messages=True)
     async def approve_question(self, ctx, target: Optional[str] = None):
         """Send trivia question to JAM for manual approval (moderators only)"""
         try:
+            # Check if user is a moderator (works in both DM and server context)
+            from ..utils.permissions import user_is_mod_by_id
+            if not await user_is_mod_by_id(ctx.author.id, self.bot):
+                await ctx.send("❌ **Access denied.** This command requires moderator privileges.")
+                return
+
             if db is None:
                 await ctx.send("❌ **Database offline.** Cannot access trivia questions without database connection.")
                 return
@@ -1274,10 +1294,15 @@ class TriviaCommands(commands.Cog):
             await ctx.send("❌ System error occurred while processing approval request.")
 
     @commands.command(name="approvestatus")
-    @commands.has_permissions(manage_messages=True)
     async def approval_status(self, ctx):
         """Check status of pending JAM approvals (moderators only)"""
         try:
+            # Check if user is a moderator (works in both DM and server context)
+            from ..utils.permissions import user_is_mod_by_id
+            if not await user_is_mod_by_id(ctx.author.id, self.bot):
+                await ctx.send("❌ **Access denied.** This command requires moderator privileges.")
+                return
+
             from ..config import JAM_USER_ID
             from ..handlers.conversation_handler import jam_approval_conversations
 
@@ -1632,10 +1657,15 @@ class TriviaCommands(commands.Cog):
             await ctx.send(f"❌ **Comprehensive trivia test failed:** {str(e)}")
 
     @commands.command(name="generatequestions")
-    @commands.has_permissions(manage_messages=True)
     async def generate_questions_manually(self, ctx, count: int = 1):
         """Manually generate trivia questions for testing and approval (moderators only)"""
         try:
+            # Check if user is a moderator (works in both DM and server context)
+            from ..utils.permissions import user_is_mod_by_id
+            if not await user_is_mod_by_id(ctx.author.id, self.bot):
+                await ctx.send("❌ **Access denied.** This command requires moderator privileges.")
+                return
+
             if db is None:
                 await ctx.send("❌ **Database offline.** Cannot generate questions without database connection.")
                 return
@@ -1698,10 +1728,15 @@ class TriviaCommands(commands.Cog):
             await ctx.send(f"❌ **Manual generation failed:** {str(e)}")
 
     @commands.command(name="triviapoolstatus")
-    @commands.has_permissions(manage_messages=True)
     async def trivia_pool_status(self, ctx):
         """Check the current trivia question pool status (moderators only)"""
         try:
+            # Check if user is a moderator (works in both DM and server context)
+            from ..utils.permissions import user_is_mod_by_id
+            if not await user_is_mod_by_id(ctx.author.id, self.bot):
+                await ctx.send("❌ **Access denied.** This command requires moderator privileges.")
+                return
+
             if db is None:
                 await ctx.send("❌ **Database offline.** Cannot check question pool status.")
                 return
@@ -1779,10 +1814,15 @@ class TriviaCommands(commands.Cog):
             await ctx.send(f"❌ **Pool status check failed:** {str(e)}")
 
     @commands.command(name="triviahelp")
-    @commands.has_permissions(manage_messages=True)
     async def trivia_help(self, ctx):
         """Display comprehensive trivia command summary (moderators only)"""
         try:
+            # Check if user is a moderator (works in both DM and server context)
+            from ..utils.permissions import user_is_mod_by_id
+            if not await user_is_mod_by_id(ctx.author.id, self.bot):
+                await ctx.send("❌ **Access denied.** This command requires moderator privileges.")
+                return
+
             # Create Ash-styled help embed
             embed = discord.Embed(
                 title="📋 **TRIVIA TUESDAY PROTOCOL SUMMARY**",
@@ -1861,10 +1901,15 @@ class TriviaCommands(commands.Cog):
             await ctx.send(f"❌ **Help system error:** {str(e)}")
 
     @commands.command(name="disabletrivia")
-    @commands.has_permissions(manage_messages=True)
     async def disable_trivia(self, ctx):
         """Disable scheduled Trivia Tuesday for manual override (moderators only)"""
         try:
+            # Check if user is a moderator (works in both DM and server context)
+            from ..utils.permissions import user_is_mod_by_id
+            if not await user_is_mod_by_id(ctx.author.id, self.bot):
+                await ctx.send("❌ **Access denied.** This command requires moderator privileges.")
+                return
+
             if db is None:
                 await ctx.send("❌ **Database offline.** Cannot modify trivia schedule.")
                 return
@@ -1922,10 +1967,15 @@ class TriviaCommands(commands.Cog):
             await ctx.send(f"❌ **Failed to disable trivia:** {str(e)}")
 
     @commands.command(name="enabletrivia")
-    @commands.has_permissions(manage_messages=True)
     async def enable_trivia(self, ctx):
         """Re-enable scheduled Trivia Tuesday automation (moderators only)"""
         try:
+            # Check if user is a moderator (works in both DM and server context)
+            from ..utils.permissions import user_is_mod_by_id
+            if not await user_is_mod_by_id(ctx.author.id, self.bot):
+                await ctx.send("❌ **Access denied.** This command requires moderator privileges.")
+                return
+
             if db is None:
                 await ctx.send("❌ **Database offline.** Cannot modify trivia schedule.")
                 return
