@@ -2151,8 +2151,10 @@ class DatabaseManager:
             return []
 
         try:
+            # Validate order direction to prevent SQL injection
+            order_clause = self._validate_order_direction(order)
+            
             with conn.cursor() as cur:
-                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
                 cur.execute(f"""
                     SELECT
                         canonical_name,
@@ -2204,7 +2206,7 @@ class DatabaseManager:
 
         Args:
             platform: 'youtube', 'twitch', or 'both'
-            order_by: Column to sort by
+            order_by: Column to sort by (validated against whitelist)
 
         Returns:
             List of game dictionaries
@@ -2214,6 +2216,13 @@ class DatabaseManager:
             return []
 
         try:
+            # Validate order_by column to prevent SQL injection
+            try:
+                validated_order_by = self._validate_column_name(order_by, self.PLAYED_GAMES_COLUMNS)
+            except ValueError as e:
+                logger.error(f"Invalid order_by parameter in get_games_by_platform: {e}")
+                return []
+
             with conn.cursor() as cur:
                 if platform == 'youtube':
                     condition = "youtube_playlist_url IS NOT NULL AND youtube_playlist_url != ''"
@@ -2231,7 +2240,7 @@ class DatabaseManager:
                 query = f"""
                     SELECT * FROM played_games
                     WHERE {condition}
-                    ORDER BY {order_by} ASC
+                    ORDER BY {validated_order_by} ASC
                 """
 
                 cur.execute(query)
@@ -2252,8 +2261,10 @@ class DatabaseManager:
             return []
 
         try:
+            # Validate order direction to prevent SQL injection
+            order_clause = self._validate_order_direction(order)
+            
             with conn.cursor() as cur:
-                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
                 cur.execute(f"""
                     SELECT
                         canonical_name,
@@ -2288,8 +2299,10 @@ class DatabaseManager:
             return []
 
         try:
+            # Validate order direction to prevent SQL injection
+            order_clause = self._validate_order_direction(order)
+            
             with conn.cursor() as cur:
-                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
                 cur.execute(f"""
                     SELECT
                         canonical_name,
@@ -2324,8 +2337,10 @@ class DatabaseManager:
             return []
 
         try:
+            # Validate order direction to prevent SQL injection
+            order_clause = self._validate_order_direction(order)
+            
             with conn.cursor() as cur:
-                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
                 cur.execute(f"""
                     SELECT
                         canonical_name,
@@ -2360,8 +2375,10 @@ class DatabaseManager:
             return []
 
         try:
+            # Validate order direction to prevent SQL injection
+            order_clause = self._validate_order_direction(order)
+            
             with conn.cursor() as cur:
-                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
                 cur.execute(f"""
                     SELECT
                         canonical_name,
@@ -2440,8 +2457,10 @@ class DatabaseManager:
             return []
 
         try:
+            # Validate order direction to prevent SQL injection
+            order_clause = self._validate_order_direction(order)
+            
             with conn.cursor() as cur:
-                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
                 cur.execute(f"""
                         SELECT
                             canonical_name,
@@ -2467,8 +2486,10 @@ class DatabaseManager:
         if not conn:
             return []
         try:
+            # Validate order direction to prevent SQL injection
+            order_clause = self._validate_order_direction(order)
+            
             with conn.cursor() as cur:
-                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
                 cur.execute(f"""
                         SELECT canonical_name, first_played_date FROM played_games
                         WHERE first_played_date IS NOT NULL
@@ -2487,8 +2508,10 @@ class DatabaseManager:
         if not conn:
             return []
         try:
+            # Validate order direction to prevent SQL injection
+            order_clause = self._validate_order_direction(order)
+            
             with conn.cursor() as cur:
-                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
                 cur.execute(f"""
                     SELECT canonical_name, release_year FROM played_games
                     WHERE release_year IS NOT NULL AND release_year > 0
