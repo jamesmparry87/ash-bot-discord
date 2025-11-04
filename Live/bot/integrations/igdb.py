@@ -223,6 +223,22 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
     if extracted_lower == igdb_lower:
         return 1.0
 
+    # Function to remove articles for comparison
+    def remove_articles(text):
+        """Remove common articles (the, a, an) for comparison"""
+        # Remove articles at the beginning
+        text = re.sub(r'^\s*(the|a|an)\s+', '', text, flags=re.IGNORECASE)
+        # Remove articles after colons (e.g., "Game: The Subtitle")
+        text = re.sub(r':\s*(the|a|an)\s+', ': ', text, flags=re.IGNORECASE)
+        return text.strip()
+
+    # Check match without articles (handles "Cronos: A New Dawn" vs "Cronos: The New Dawn")
+    extracted_no_articles = remove_articles(extracted_lower)
+    igdb_no_articles = remove_articles(igdb_lower)
+    
+    if extracted_no_articles == igdb_no_articles:
+        return 0.95  # Very high confidence - only difference is articles
+
     # Gaming abbreviation mapping
     abbreviations = {
         'gta': 'grand theft auto',
@@ -256,8 +272,9 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
             text = re.sub(r'\b' + roman + r'\b', arabic, text)
         return text
 
-    normalized_extracted = normalize_numbers(expanded_extracted)
-    normalized_igdb = normalize_numbers(igdb_lower)
+    # Apply article removal to expanded/normalized versions too
+    normalized_extracted = remove_articles(normalize_numbers(expanded_extracted))
+    normalized_igdb = remove_articles(normalize_numbers(igdb_lower))
 
     # Remove edition suffixes for comparison
     edition_suffixes = [
@@ -274,6 +291,8 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
                 text = text[:-len(suffix)].strip()
             # Also try with parentheses/brackets
             text = re.sub(r'\s*[\(\[]' + re.escape(suffix) + r'[\)\]]', '', text, flags=re.IGNORECASE)
+        # Handle common typos
+        text = text.replace('compleated', 'completed')
         return text.strip()
 
     cleaned_extracted = remove_editions(normalized_extracted)
@@ -281,7 +300,7 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
 
     # Check for match after all normalizations
     if cleaned_extracted == cleaned_igdb:
-        return 0.95  # Very high confidence but not perfect since we did transformations
+        return 0.92  # Very high confidence but not perfect since we did transformations
 
     # Calculate similarity ratio on normalized names
     similarity = difflib.SequenceMatcher(None, cleaned_extracted, cleaned_igdb).ratio()

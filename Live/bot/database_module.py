@@ -2129,6 +2129,266 @@ class DatabaseManager:
             logger.error(f"Error getting games by playtime: {e}")
             return []
 
+    # --- Platform-Specific Helper Methods ---
+
+    def detect_game_platform(self, game_dict: Dict[str, Any]) -> str:
+        """
+        Detect which platform a game was played on based on available data.
+        
+        Returns: 'youtube', 'twitch', 'both', or 'unknown'
+        """
+        has_youtube = bool(game_dict.get('youtube_playlist_url'))
+        has_twitch = bool(game_dict.get('twitch_vod_urls')) and game_dict.get('twitch_vod_urls') not in ['', '{}']
+        
+        if has_youtube and has_twitch:
+            return 'both'
+        elif has_youtube:
+            return 'youtube'
+        elif has_twitch:
+            return 'twitch'
+        else:
+            # Fallback: Check notes for platform mentions
+            notes = game_dict.get('notes', '').lower()
+            if 'youtube' in notes:
+                return 'youtube'
+            elif 'twitch' in notes:
+                return 'twitch'
+            return 'unknown'
+
+    def get_games_by_platform(self, platform: str, order_by: str = 'canonical_name') -> List[Dict[str, Any]]:
+        """
+        Get games filtered by platform (youtube/twitch/both).
+        
+        Args:
+            platform: 'youtube', 'twitch', or 'both'
+            order_by: Column to sort by
+            
+        Returns:
+            List of game dictionaries
+        """
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                if platform == 'youtube':
+                    condition = "youtube_playlist_url IS NOT NULL AND youtube_playlist_url != ''"
+                elif platform == 'twitch':
+                    condition = "twitch_vod_urls IS NOT NULL AND twitch_vod_urls != '' AND twitch_vod_urls != '{}'"
+                elif platform == 'both':
+                    condition = """
+                        youtube_playlist_url IS NOT NULL AND youtube_playlist_url != ''
+                        AND twitch_vod_urls IS NOT NULL AND twitch_vod_urls != '' AND twitch_vod_urls != '{}'
+                    """
+                else:
+                    logger.error(f"Invalid platform specification: {platform}")
+                    return []
+
+                query = f"""
+                    SELECT * FROM played_games
+                    WHERE {condition}
+                    ORDER BY {order_by} ASC
+                """
+                
+                cur.execute(query)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting games by platform {platform}: {e}")
+            return []
+
+    def get_youtube_games_by_episodes(self, order: str = 'DESC', limit: int = 15) -> List[Dict[str, Any]]:
+        """
+        Get YouTube playthroughs ranked by episode count.
+        
+        Only includes games with YouTube playlist URLs to ensure platform accuracy.
+        """
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
+                cur.execute(f"""
+                    SELECT
+                        canonical_name,
+                        series_name,
+                        total_episodes,
+                        total_playtime_minutes,
+                        completion_status,
+                        genre,
+                        youtube_playlist_url,
+                        youtube_views
+                    FROM played_games
+                    WHERE youtube_playlist_url IS NOT NULL 
+                    AND youtube_playlist_url != ''
+                    AND total_episodes > 0
+                    ORDER BY total_episodes {order_clause}
+                    LIMIT %s
+                """, (limit,))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting YouTube games by episodes: {e}")
+            return []
+
+    def get_twitch_games_by_vods(self, order: str = 'DESC', limit: int = 15) -> List[Dict[str, Any]]:
+        """
+        Get Twitch streams ranked by VOD count.
+        
+        Only includes games with Twitch VOD URLs to ensure platform accuracy.
+        """
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
+                cur.execute(f"""
+                    SELECT
+                        canonical_name,
+                        series_name,
+                        total_episodes,
+                        total_playtime_minutes,
+                        completion_status,
+                        genre,
+                        twitch_vod_urls
+                    FROM played_games
+                    WHERE twitch_vod_urls IS NOT NULL 
+                    AND twitch_vod_urls != ''
+                    AND twitch_vod_urls != '{{}}'
+                    AND total_episodes > 0
+                    ORDER BY total_episodes {order_clause}
+                    LIMIT %s
+                """, (limit,))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting Twitch games by VODs: {e}")
+            return []
+
+    def get_youtube_games_by_playtime(self, order: str = 'DESC', limit: int = 15) -> List[Dict[str, Any]]:
+        """
+        Get YouTube playthroughs ranked by total playtime.
+        
+        Only includes games with YouTube playlist URLs.
+        """
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
+                cur.execute(f"""
+                    SELECT
+                        canonical_name,
+                        series_name,
+                        total_episodes,
+                        total_playtime_minutes,
+                        completion_status,
+                        genre,
+                        youtube_playlist_url,
+                        youtube_views
+                    FROM played_games
+                    WHERE youtube_playlist_url IS NOT NULL 
+                    AND youtube_playlist_url != ''
+                    AND total_playtime_minutes > 0
+                    ORDER BY total_playtime_minutes {order_clause}
+                    LIMIT %s
+                """, (limit,))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting YouTube games by playtime: {e}")
+            return []
+
+    def get_twitch_games_by_playtime(self, order: str = 'DESC', limit: int = 15) -> List[Dict[str, Any]]:
+        """
+        Get Twitch streams ranked by total playtime.
+        
+        Only includes games with Twitch VOD URLs.
+        """
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                order_clause = "DESC" if order.upper() == "DESC" else "ASC"
+                cur.execute(f"""
+                    SELECT
+                        canonical_name,
+                        series_name,
+                        total_episodes,
+                        total_playtime_minutes,
+                        completion_status,
+                        genre,
+                        twitch_vod_urls
+                    FROM played_games
+                    WHERE twitch_vod_urls IS NOT NULL 
+                    AND twitch_vod_urls != ''
+                    AND twitch_vod_urls != '{{}}'
+                    AND total_playtime_minutes > 0
+                    ORDER BY total_playtime_minutes {order_clause}
+                    LIMIT %s
+                """, (limit,))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting Twitch games by playtime: {e}")
+            return []
+
+    def get_platform_statistics(self) -> Dict[str, Any]:
+        """
+        Get statistics about games by platform.
+        
+        Returns counts and totals for YouTube vs Twitch vs Both platforms.
+        """
+        conn = self.get_connection()
+        if not conn:
+            return {}
+
+        try:
+            with conn.cursor() as cur:
+                # Count games by platform
+                cur.execute("""
+                    SELECT
+                        COUNT(CASE WHEN youtube_playlist_url IS NOT NULL AND youtube_playlist_url != '' THEN 1 END) as youtube_count,
+                        COUNT(CASE WHEN twitch_vod_urls IS NOT NULL AND twitch_vod_urls != '' AND twitch_vod_urls != '{}' THEN 1 END) as twitch_count,
+                        COUNT(CASE WHEN 
+                            (youtube_playlist_url IS NOT NULL AND youtube_playlist_url != '')
+                            AND (twitch_vod_urls IS NOT NULL AND twitch_vod_urls != '' AND twitch_vod_urls != '{}')
+                            THEN 1 END) as both_platforms_count,
+                        SUM(CASE WHEN youtube_playlist_url IS NOT NULL AND youtube_playlist_url != '' THEN total_episodes ELSE 0 END) as youtube_total_episodes,
+                        SUM(CASE WHEN twitch_vod_urls IS NOT NULL AND twitch_vod_urls != '' AND twitch_vod_urls != '{}' THEN total_episodes ELSE 0 END) as twitch_total_vods,
+                        SUM(CASE WHEN youtube_playlist_url IS NOT NULL AND youtube_playlist_url != '' THEN total_playtime_minutes ELSE 0 END) as youtube_total_playtime,
+                        SUM(CASE WHEN twitch_vod_urls IS NOT NULL AND twitch_vod_urls != '' AND twitch_vod_urls != '{}' THEN total_playtime_minutes ELSE 0 END) as twitch_total_playtime
+                    FROM played_games
+                """)
+                
+                result = cur.fetchone()
+                if result:
+                    result_dict = dict(result)
+                    return {
+                        'youtube_games': int(result_dict.get('youtube_count', 0)),
+                        'twitch_games': int(result_dict.get('twitch_count', 0)),
+                        'both_platforms': int(result_dict.get('both_platforms_count', 0)),
+                        'youtube_total_episodes': int(result_dict.get('youtube_total_episodes', 0)),
+                        'twitch_total_vods': int(result_dict.get('twitch_total_vods', 0)),
+                        'youtube_total_playtime_minutes': int(result_dict.get('youtube_total_playtime', 0)),
+                        'twitch_total_playtime_minutes': int(result_dict.get('twitch_total_playtime', 0)),
+                        'youtube_total_playtime_hours': round(int(result_dict.get('youtube_total_playtime', 0)) / 60, 1),
+                        'twitch_total_playtime_hours': round(int(result_dict.get('twitch_total_playtime', 0)) / 60, 1)
+                    }
+                return {}
+        except Exception as e:
+            logger.error(f"Error getting platform statistics: {e}")
+            return {}
+
     def get_games_by_episode_count(
             self, order: str = 'DESC', limit: int = 15) -> List[Dict[str, Any]]:
         """Get games ranked by episode count"""
@@ -3483,7 +3743,11 @@ class DatabaseManager:
         return False
 
     def calculate_dynamic_answer(self, dynamic_query_type: str, parameter: Optional[str] = None) -> Optional[str]:
-        """Calculate the current answer for a dynamic question, with optional filtering."""
+        """
+        Calculate the current answer for a dynamic question, with optional filtering.
+        
+        Supports platform-specific queries to distinguish YouTube playthroughs from Twitch VODs.
+        """
         conn = self.get_connection()
         if not conn:
             return None
@@ -3491,7 +3755,7 @@ class DatabaseManager:
         try:
             with conn.cursor() as cur:
                 base_query = "SELECT canonical_name FROM played_games"
-                where_clauses = ["total_playtime_minutes > 0"]
+                where_clauses = []
                 params = []
                 order_by = ""
 
@@ -3500,16 +3764,35 @@ class DatabaseManager:
                     where_clauses.append("(LOWER(series_name) = %s OR LOWER(genre) = %s)")
                     params.extend([parameter.lower(), parameter.lower()])
 
-                # Define query logic
+                # Define query logic with platform-specific options
                 if dynamic_query_type == "most_popular_by_views":
-                    where_clauses.append("youtube_views > 0")
+                    where_clauses.extend(["youtube_views > 0", "youtube_playlist_url IS NOT NULL", "youtube_playlist_url != ''"])
                     order_by = "ORDER BY youtube_views DESC"
+                
+                # YouTube-specific queries
+                elif dynamic_query_type == "most_youtube_episodes":
+                    where_clauses.extend(["total_episodes > 0", "youtube_playlist_url IS NOT NULL", "youtube_playlist_url != ''"])
+                    order_by = "ORDER BY total_episodes DESC"
+                elif dynamic_query_type == "longest_youtube_playthrough":
+                    where_clauses.extend(["total_playtime_minutes > 0", "youtube_playlist_url IS NOT NULL", "youtube_playlist_url != ''"])
+                    order_by = "ORDER BY total_playtime_minutes DESC"
+                
+                # Twitch-specific queries
+                elif dynamic_query_type == "most_twitch_vods":
+                    where_clauses.extend(["total_episodes > 0", "twitch_vod_urls IS NOT NULL", "twitch_vod_urls != ''", "twitch_vod_urls != '{}'"])
+                    order_by = "ORDER BY total_episodes DESC"
+                elif dynamic_query_type == "longest_twitch_stream":
+                    where_clauses.extend(["total_playtime_minutes > 0", "twitch_vod_urls IS NOT NULL", "twitch_vod_urls != ''", "twitch_vod_urls != '{}'"])
+                    order_by = "ORDER BY total_playtime_minutes DESC"
+                
+                # Generic queries (mixed platforms)
                 elif dynamic_query_type == "longest_playtime":
+                    where_clauses.append("total_playtime_minutes > 0")
                     order_by = "ORDER BY total_playtime_minutes DESC"
                 elif dynamic_query_type == "shortest_playtime":
+                    where_clauses.append("total_playtime_minutes > 0")
                     order_by = "ORDER BY total_playtime_minutes ASC"
                 elif dynamic_query_type == "most_episodes":
-                    where_clauses.remove("total_playtime_minutes > 0")  # Episodes don't require playtime
                     where_clauses.append("total_episodes > 0")
                     order_by = "ORDER BY total_episodes DESC"
                 else:
