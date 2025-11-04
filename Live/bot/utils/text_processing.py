@@ -58,6 +58,7 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     - "First Time Playing: GAME NAME Road to X" → "GAME NAME"
     - "*DROPS* - GAME NAME Thanks @sponsor" → "GAME NAME"
     - "GAME NAME [COMPLETED]" → "GAME NAME" (preserves [COMPLETED] for playlist processing)
+    - "Horror + Monsters = Cronos: A New Dawn" → "Cronos: A New Dawn"
 
     Args:
         title: Video or stream title string
@@ -70,34 +71,61 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
 
     cleaned_title = title.strip()
 
-    # PRIORITY 1: Extract game name that appears before day/part/episode indicators
-    # These are the most reliable patterns as they explicitly mark ongoing series
-    priority_patterns = [
-        # Matches Twitch format: "Stream Title - Game Name (day 9)" - GREEDY CAPTURE
-        r'[-|]\s*([^()\[\]]+)\s*\((?:day|part|episode|ep)\s+\d+\)',
-        # Matches: "- Game Name [day 9]" or "| Game Name [day 9]" - GREEDY CAPTURE
-        r'[-|]\s*([^()\[\]]+)\s*\[(?:day|part|episode|ep)\s+\d+\]',
-        # Matches without separator: "Game Name (day 9)" - GREEDY CAPTURE
-        r'^([^()\[\]]+)\s*\((?:day|part|episode|ep)\s+\d+\)',
-        # Matches: "Game Name - day 9" (less parentheses version)
-        r'[-|]\s*([^|-]+)\s+[-|]\s*(?:day|part|episode|ep)\s+\d+',
-    ]
+    # PRIORITY 0: Handle "=" separator for creative titles (e.g., "Episode Title = Game Name")
+    # This is common for creative stream titles
+    if '=' in cleaned_title:
+        parts = cleaned_title.split('=')
+        if len(parts) == 2:
+            # Take everything after the "=" as the game name
+            after_equals = parts[1].strip()
+            # Remove day/episode markers
+            after_equals = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', after_equals, flags=re.IGNORECASE)
+            after_equals = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]', '', after_equals, flags=re.IGNORECASE)
+            # Remove common suffixes
+            after_equals = re.sub(r'\s+(?:Thanks|Thx|@|#).*$', '', after_equals, flags=re.IGNORECASE)
+            after_equals = cleanup_game_name(after_equals)
 
-    for pattern in priority_patterns:
-        match = re.search(pattern, cleaned_title, re.IGNORECASE)
-        if match:
-            game_name = match.group(1).strip()
+            if len(after_equals) >= 3 and not is_generic_term(after_equals):
+                return after_equals
 
-            # Clean up trailing metadata (Thanks, @mentions, #hashtags, etc.)
-            game_name = re.sub(r'\s+(?:Thanks|Thx|@|#).*$', '', game_name, flags=re.IGNORECASE)
-            game_name = re.sub(r'\s+(?:ft\.|feat\.|featuring).*$', '', game_name, flags=re.IGNORECASE)
-            game_name = re.sub(r'\s*[|:]\s*$', '', game_name)  # Remove trailing separators
+    # PRIORITY 1: Extract game name that appears IMMEDIATELY before day/part/episode indicators
+    # Match the LAST segment before the marker to avoid episode titles
+    # Allow for optional text before "day" like "First Playthrough day 5"
+    day_marker_match = re.search(r'\([^)]*(?:day|part|episode|ep)\s+\d+[^)]*\)', cleaned_title, re.IGNORECASE)
+    bracket_marker_match = re.search(r'\[[^\]]*(?:day|part|episode|ep)\s+\d+[^\]]*\]', cleaned_title, re.IGNORECASE)
 
-            # Final cleanup
-            game_name = cleanup_game_name(game_name)
+    if day_marker_match or bracket_marker_match:
+        # Find the position of the marker (prioritize parentheses over brackets)
+        if day_marker_match:
+            marker_pos = day_marker_match.start()
+        else:
+            marker_pos = bracket_marker_match.start() if bracket_marker_match else 0
 
-            # Validate extracted name
-            if len(game_name) >= 2 and not is_generic_term(game_name):
+        # Extract everything before the marker
+        before_marker = cleaned_title[:marker_pos].strip()
+
+        # If there's a dash or pipe, take the LAST segment (closest to marker)
+        if ' - ' in before_marker or ' | ' in before_marker:
+            # Split by separators and take the last part
+            parts = re.split(r'\s*[-|]\s*', before_marker)
+            if parts:
+                game_name = parts[-1].strip()  # Last part before the marker
+            else:
+                game_name = before_marker
+        else:
+            game_name = before_marker
+
+        # Clean up trailing metadata
+        game_name = re.sub(r'\s+(?:Thanks|Thx|@|#).*$', '', game_name, flags=re.IGNORECASE)
+        game_name = re.sub(r'\s+(?:ft\.|feat\.|featuring).*$', '', game_name, flags=re.IGNORECASE)
+        game_name = cleanup_game_name(game_name)
+
+        # Validate
+        if len(game_name) >= 3 and not is_generic_term(game_name):
+            # Reject short exclamatory phrases (episode titles)
+            if len(game_name) < 25 and game_name.endswith('!') and game_name.count(' ') <= 5:
+                pass  # Continue to fallback patterns
+            else:
                 return game_name
 
     # PRIORITY 2: Look for clear game title before episode/part numbers
@@ -130,8 +158,9 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         cleaned_title = re.sub(pattern, '', cleaned_title, flags=re.IGNORECASE)
 
     # PRIORITY 4: General cleanup (preserve [COMPLETED] for YouTube playlist detection)
-    # Remove episode information in parentheses
+    # Remove episode information in parentheses and brackets
     cleaned_title = re.sub(r'\s*\([^)]*(?:day|part|episode|ep|pt)\s*\d+[^)]*\)', '', cleaned_title, flags=re.IGNORECASE)
+    cleaned_title = re.sub(r'\s*\[(?:day|part|episode|ep|pt)\s*\d+[^\]]*\]', '', cleaned_title, flags=re.IGNORECASE)
 
     # Remove episode titles after dash if followed by capital letter
     match = re.match(r'^([^-]+?)\s*-\s*[A-Z]', cleaned_title)
@@ -168,6 +197,21 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     # Reject if mostly special characters
     alpha_chars = sum(c.isalnum() for c in cleaned_title)
     if alpha_chars < len(cleaned_title) * 0.5:
+        return None
+
+    # Reject short exclamatory episode titles
+    if len(cleaned_title) < 25 and cleaned_title.endswith('!') and cleaned_title.count(' ') <= 5:
+        return None
+
+    # Reject vague questions
+    if cleaned_title.endswith('?') and len(cleaned_title) < 15:
+        return None
+
+    # Reject conversational episode titles (contains personal pronouns or emotions)
+    conversational_words = ['you', 'i', 'me', 'we', 'scared', 'happy', 'sad', 'angry']
+    words_lower = cleaned_title.lower().split()
+    if len(words_lower) <= 6 and any(word in conversational_words for word in words_lower):
+        # Only reject if it's relatively short and conversational
         return None
 
     return cleaned_title
