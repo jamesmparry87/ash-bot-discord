@@ -767,16 +767,27 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             await ctx.send(f"❌ Error listing played games: {str(e)}")
 
     @commands.command(name="syncgames")
-    async def sync_games(self, ctx, mode: str = "standard"):
+    async def sync_games(self, ctx, mode: str = "standard", option: str = ""):
         """
-        Triggers a content sync. Use `full` to re-scan all content.
-        Usage: `!syncgames` (syncs new content) or `!syncgames full`
+        Triggers a content sync. Use `full` to re-scan all content, or `verify` to check episode counts.
+        Usage: 
+        - `!syncgames` (syncs new content)
+        - `!syncgames full` (full rescan)
+        - `!syncgames verify` (check episode counts against YouTube)
+        - `!syncgames verify --fix` (fix discrepancies with fresh YouTube data)
         """
         # Strict access control - only Captain Jonesy and Sir Decent Jam
         if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
             return  # Silent ignore for unauthorized users
 
         database = self._get_db()
+        
+        # Handle verify mode
+        if mode.lower() == 'verify':
+            await self._verify_youtube_episodes(ctx, fix_discrepancies=(option.lower() == '--fix'))
+            return
+        
+        # Handle standard and full sync modes
         if mode.lower() == 'full':
             # A full rescan ignores the last sync time and goes back a long time (e.g., years)
             start_time = datetime.now(ZoneInfo("Europe/London")) - timedelta(days=365 * 5)  # 5 years
@@ -797,6 +808,178 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             await ctx.send(f"✅ **Sync Complete.**\n- Status: {results.get('status')}\n- New Content Found: {results.get('new_content_count', 0)}")
         except Exception as e:
             await ctx.send(f"❌ **Sync Failed:** {str(e)}")
+
+    async def _verify_youtube_episodes(self, ctx, fix_discrepancies: bool = False):
+        """Verify episode counts against YouTube playlists and optionally fix discrepancies."""
+        import os
+        import re
+        import aiohttp
+        from ..integrations.youtube import get_playlist_videos_with_views
+        
+        database = self._get_db()
+        youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+        
+        if not youtube_api_key:
+            await ctx.send("❌ **YouTube API key not configured.** Cannot verify episode counts.")
+            return
+        
+        # Get all games with YouTube playlists
+        all_games = database.get_all_played_games()
+        games_with_playlists = []
+        for game in all_games:
+            playlist_url = game.get('youtube_playlist_url')
+            if playlist_url and isinstance(playlist_url, str) and playlist_url.strip():
+                games_with_playlists.append(game)
+        
+        if not games_with_playlists:
+            await ctx.send("📊 **No games with YouTube playlists found.** Nothing to verify.")
+            return
+        
+        mode_text = "verification and correction" if fix_discrepancies else "verification"
+        await ctx.send(f"🔍 **YouTube Episode {mode_text.title()} Initiated**\n\nChecking {len(games_with_playlists)} games with YouTube playlists...\n\n*Rate limiting active: 4 seconds per game*")
+        
+        discrepancies = []
+        verified_count = 0
+        error_count = 0
+        fixed_count = 0
+        
+        async with aiohttp.ClientSession() as session:
+            for idx, game in enumerate(games_with_playlists, 1):
+                try:
+                    game_name = game.get('canonical_name', 'Unknown')
+                    game_id = game.get('id')
+                    playlist_url = game.get('youtube_playlist_url')
+                    db_episodes = game.get('total_episodes', 0)
+                    db_views = game.get('youtube_views', 0)
+                    db_playtime = game.get('total_playtime_minutes', 0)
+                    
+                    # Type safety checks
+                    if not playlist_url or not isinstance(playlist_url, str):
+                        print(f"⚠️ VERIFY: Invalid playlist URL for {game_name}")
+                        error_count += 1
+                        continue
+                    
+                    if not game_id or not isinstance(game_id, int):
+                        print(f"⚠️ VERIFY: Invalid game ID for {game_name}")
+                        error_count += 1
+                        continue
+                    
+                    # Extract playlist ID from URL
+                    playlist_id_match = re.search(r'list=([a-zA-Z0-9_-]+)', playlist_url)
+                    if not playlist_id_match:
+                        print(f"⚠️ VERIFY: Could not extract playlist ID from {playlist_url}")
+                        error_count += 1
+                        continue
+                    
+                    playlist_id = playlist_id_match.group(1)
+                    
+                    # Get fresh data from YouTube
+                    playlist_videos = await get_playlist_videos_with_views(session, playlist_id, youtube_api_key)
+                    
+                    if not playlist_videos:
+                        print(f"⚠️ VERIFY: Could not fetch playlist data for {game_name}")
+                        error_count += 1
+                        continue
+                    
+                    # Calculate fresh statistics
+                    youtube_episodes = len(playlist_videos)
+                    youtube_views = sum(video.get('view_count', 0) for video in playlist_videos)
+                    youtube_playtime_seconds = sum(video.get('duration_seconds', 0) for video in playlist_videos)
+                    youtube_playtime_minutes = youtube_playtime_seconds // 60
+                    
+                    # Check for discrepancy
+                    if db_episodes > youtube_episodes:
+                        discrepancy_info = {
+                            'game_name': game_name,
+                            'game_id': game_id,
+                            'db_episodes': db_episodes,
+                            'youtube_episodes': youtube_episodes,
+                            'db_views': db_views,
+                            'youtube_views': youtube_views,
+                            'db_playtime': db_playtime,
+                            'youtube_playtime': youtube_playtime_minutes,
+                            'over_count': db_episodes - youtube_episodes
+                        }
+                        discrepancies.append(discrepancy_info)
+                        
+                        # Fix if requested
+                        if fix_discrepancies:
+                            success = database.update_played_game(
+                                game_id,
+                                total_episodes=youtube_episodes,
+                                youtube_views=youtube_views,
+                                total_playtime_minutes=youtube_playtime_minutes
+                            )
+                            
+                            if success:
+                                fixed_count += 1
+                                print(f"✅ VERIFY: Fixed {game_name} - {db_episodes}→{youtube_episodes} episodes, refreshed views and playtime")
+                            else:
+                                print(f"❌ VERIFY: Failed to update {game_name}")
+                    else:
+                        verified_count += 1
+                    
+                    # Progress update every 10 games
+                    if idx % 10 == 0:
+                        await ctx.send(f"⏳ **Progress: {idx}/{len(games_with_playlists)} games processed...**")
+                    
+                    # Rate limiting
+                    if idx < len(games_with_playlists):
+                        await asyncio.sleep(4)
+                
+                except Exception as game_error:
+                    print(f"❌ VERIFY: Error processing {game.get('canonical_name', 'Unknown')}: {game_error}")
+                    error_count += 1
+                    continue
+        
+        # Build report
+        report = f"🔍 **YouTube Episode Verification Report**\n\n"
+        report += f"**Summary:**\n"
+        report += f"• Games checked: {len(games_with_playlists)}\n"
+        report += f"• Verified correct: {verified_count}\n"
+        report += f"• Discrepancies found: {len(discrepancies)}\n"
+        report += f"• Errors: {error_count}\n"
+        
+        if fix_discrepancies:
+            report += f"• Fixed: {fixed_count}\n"
+        
+        report += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        if discrepancies:
+            report += f"**Discrepancies Detected:**\n\n"
+            for disc in discrepancies[:10]:  # Show first 10
+                report += f"⚠️ **{disc['game_name']}**\n"
+                report += f"   Database: {disc['db_episodes']} episodes | YouTube: {disc['youtube_episodes']} episodes\n"
+                report += f"   → Over-counted by {disc['over_count']} episodes\n"
+                
+                if fix_discrepancies:
+                    report += f"   ✅ Updated with fresh YouTube data:\n"
+                    report += f"      • Episodes: {disc['youtube_episodes']}\n"
+                    report += f"      • Views: {disc['youtube_views']:,}\n"
+                    report += f"      • Playtime: {disc['youtube_playtime']//60}h {disc['youtube_playtime']%60}m\n"
+                else:
+                    report += f"   → Would refresh:\n"
+                    report += f"      • Episodes: {disc['db_episodes']} → {disc['youtube_episodes']}\n"
+                    report += f"      • Views: refreshed ({disc['youtube_views']:,})\n"
+                    report += f"      • Playtime: refreshed ({disc['youtube_playtime']//60}h {disc['youtube_playtime']%60}m)\n"
+                
+                report += "\n"
+            
+            if len(discrepancies) > 10:
+                report += f"\n... and {len(discrepancies) - 10} more discrepancies\n"
+        else:
+            report += "✅ **All games verified correctly!** No discrepancies found.\n"
+        
+        if not fix_discrepancies and discrepancies:
+            report += f"\n💡 **Next Steps:**\n"
+            report += f"Run `!syncgames verify --fix` to automatically correct these discrepancies with fresh YouTube data.\n"
+        
+        await ctx.send(report[:2000])  # Discord character limit
+        
+        # Send additional details if report is too long
+        if len(report) > 2000:
+            remaining = report[2000:]
+            await ctx.send(remaining[:2000])
 
     @commands.command(name="deduplicategames")
     async def deduplicate_games(self, ctx):
