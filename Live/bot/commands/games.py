@@ -813,7 +813,9 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         """Verify episode counts against YouTube playlists and optionally fix discrepancies."""
         import os
         import re
+
         import aiohttp
+
         from ..integrations.youtube import get_playlist_videos_with_views
         
         database = self._get_db()
