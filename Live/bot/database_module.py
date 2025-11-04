@@ -21,7 +21,7 @@ class DatabaseManager:
         'total_playtime_minutes', 'youtube_views', 'youtube_playlist_url',
         'created_at', 'updated_at', 'last_youtube_sync'
     ]
-    
+
     def __init__(self):
         self.database_url = os.getenv('DATABASE_URL')
         if not self.database_url:
@@ -31,18 +31,18 @@ class DatabaseManager:
         else:
             self.connection = None
             self.init_database()
-    
+
     def _validate_column_name(self, column: str, allowed_columns: List[str]) -> str:
         """
         Validate column name against whitelist to prevent SQL injection.
-        
+
         Args:
             column: Column name to validate
             allowed_columns: List of allowed column names
-            
+
         Returns:
             Validated column name
-            
+
         Raises:
             ValueError: If column name is not in whitelist
         """
@@ -50,14 +50,14 @@ class DatabaseManager:
             logger.error(f"SQL Injection attempt detected - Invalid column name: {column}")
             raise ValueError(f"Invalid column name: {column}")
         return column
-    
+
     def _validate_order_direction(self, order: str) -> str:
         """
         Validate ORDER BY direction (ASC/DESC) to prevent SQL injection.
-        
+
         Args:
             order: Order direction string
-            
+
         Returns:
             Validated order direction (ASC or DESC)
         """
@@ -2153,7 +2153,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                     SELECT
@@ -2263,7 +2263,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                     SELECT
@@ -2301,7 +2301,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                     SELECT
@@ -2339,7 +2339,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                     SELECT
@@ -2377,7 +2377,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                     SELECT
@@ -2459,7 +2459,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                         SELECT
@@ -2488,7 +2488,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                         SELECT canonical_name, first_played_date FROM played_games
@@ -2510,7 +2510,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                     SELECT canonical_name, release_year FROM played_games
