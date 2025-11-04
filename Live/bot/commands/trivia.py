@@ -1063,17 +1063,17 @@ class TriviaCommands(commands.Cog):
 
                 for i, question in enumerate(
                         pending_questions[:10], 1):  # Show first 10
-                    question_text = question['question'][:80] + "..." if len(
-                        question['question']) > 80 else question['question']
+                    question_text = question['question_text'][:80] + "..." if len(
+                        question['question_text']) > 80 else question['question_text']
                     question_type = question.get(
                         'question_type', 'single').title()
 
                     # Get creator name
                     try:
-                        creator = await self.bot.fetch_user(question['created_by'])
-                        creator_name = creator.display_name if creator else f"User {question['created_by']}"
+                        creator = await self.bot.fetch_user(question['submitted_by_user_id'])
+                        creator_name = creator.display_name if creator else f"User {question['submitted_by_user_id']}"
                     except BaseException:
-                        creator_name = f"User {question['created_by']}"
+                        creator_name = f"User {question['submitted_by_user_id']}"
 
                     embed.add_field(
                         name=f"#{question['id']} - {question_type} Choice",
