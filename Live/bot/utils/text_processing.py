@@ -84,7 +84,7 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
             # Remove common suffixes
             after_equals = re.sub(r'\s+(?:Thanks|Thx|@|#).*$', '', after_equals, flags=re.IGNORECASE)
             after_equals = cleanup_game_name(after_equals)
-            
+
             if len(after_equals) >= 3 and not is_generic_term(after_equals):
                 return after_equals
 
@@ -93,17 +93,17 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     # Allow for optional text before "day" like "First Playthrough day 5"
     day_marker_match = re.search(r'\([^)]*(?:day|part|episode|ep)\s+\d+[^)]*\)', cleaned_title, re.IGNORECASE)
     bracket_marker_match = re.search(r'\[[^\]]*(?:day|part|episode|ep)\s+\d+[^\]]*\]', cleaned_title, re.IGNORECASE)
-    
+
     if day_marker_match or bracket_marker_match:
         # Find the position of the marker (prioritize parentheses over brackets)
         if day_marker_match:
             marker_pos = day_marker_match.start()
         else:
             marker_pos = bracket_marker_match.start() if bracket_marker_match else 0
-        
+
         # Extract everything before the marker
         before_marker = cleaned_title[:marker_pos].strip()
-        
+
         # If there's a dash or pipe, take the LAST segment (closest to marker)
         if ' - ' in before_marker or ' | ' in before_marker:
             # Split by separators and take the last part
@@ -114,12 +114,12 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
                 game_name = before_marker
         else:
             game_name = before_marker
-        
+
         # Clean up trailing metadata
         game_name = re.sub(r'\s+(?:Thanks|Thx|@|#).*$', '', game_name, flags=re.IGNORECASE)
         game_name = re.sub(r'\s+(?:ft\.|feat\.|featuring).*$', '', game_name, flags=re.IGNORECASE)
         game_name = cleanup_game_name(game_name)
-        
+
         # Validate
         if len(game_name) >= 3 and not is_generic_term(game_name):
             # Reject short exclamatory phrases (episode titles)
@@ -198,15 +198,15 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     alpha_chars = sum(c.isalnum() for c in cleaned_title)
     if alpha_chars < len(cleaned_title) * 0.5:
         return None
-    
+
     # Reject short exclamatory episode titles
     if len(cleaned_title) < 25 and cleaned_title.endswith('!') and cleaned_title.count(' ') <= 5:
         return None
-    
+
     # Reject vague questions
     if cleaned_title.endswith('?') and len(cleaned_title) < 15:
         return None
-    
+
     # Reject conversational episode titles (contains personal pronouns or emotions)
     conversational_words = ['you', 'i', 'me', 'we', 'scared', 'happy', 'sad', 'angry']
     words_lower = cleaned_title.lower().split()

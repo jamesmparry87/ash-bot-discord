@@ -235,7 +235,7 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
     # Check match without articles (handles "Cronos: A New Dawn" vs "Cronos: The New Dawn")
     extracted_no_articles = remove_articles(extracted_lower)
     igdb_no_articles = remove_articles(igdb_lower)
-    
+
     if extracted_no_articles == igdb_no_articles:
         return 0.95  # Very high confidence - only difference is articles
 
