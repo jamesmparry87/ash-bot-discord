@@ -14,6 +14,14 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
+    # SQL Injection Prevention: Whitelisted columns for ORDER BY clauses
+    PLAYED_GAMES_COLUMNS = [
+        'id', 'canonical_name', 'series_name', 'genre', 'release_year',
+        'platform', 'first_played_date', 'completion_status', 'total_episodes',
+        'total_playtime_minutes', 'youtube_views', 'youtube_playlist_url',
+        'created_at', 'updated_at', 'last_youtube_sync'
+    ]
+    
     def __init__(self):
         self.database_url = os.getenv('DATABASE_URL')
         if not self.database_url:
@@ -23,6 +31,41 @@ class DatabaseManager:
         else:
             self.connection = None
             self.init_database()
+    
+    def _validate_column_name(self, column: str, allowed_columns: List[str]) -> str:
+        """
+        Validate column name against whitelist to prevent SQL injection.
+        
+        Args:
+            column: Column name to validate
+            allowed_columns: List of allowed column names
+            
+        Returns:
+            Validated column name
+            
+        Raises:
+            ValueError: If column name is not in whitelist
+        """
+        if column not in allowed_columns:
+            logger.error(f"SQL Injection attempt detected - Invalid column name: {column}")
+            raise ValueError(f"Invalid column name: {column}")
+        return column
+    
+    def _validate_order_direction(self, order: str) -> str:
+        """
+        Validate ORDER BY direction (ASC/DESC) to prevent SQL injection.
+        
+        Args:
+            order: Order direction string
+            
+        Returns:
+            Validated order direction (ASC or DESC)
+        """
+        order_upper = order.upper().strip()
+        if order_upper not in ['ASC', 'DESC']:
+            logger.warning(f"Invalid order direction '{order}', defaulting to DESC")
+            return 'DESC'  # Safe default
+        return order_upper
 
     def get_connection(self):
         """Get database connection with retry logic"""
