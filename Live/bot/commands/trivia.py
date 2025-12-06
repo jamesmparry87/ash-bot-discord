@@ -1341,6 +1341,33 @@ class TriviaCommands(commands.Cog):
             logger.error(f"Error checking approval status: {e}")
             await ctx.send("❌ System error occurred while checking approval status.")
 
+    @commands.command(name="resetapproval")
+    async def reset_approval(self, ctx):
+        """Force reset any stuck approval sessions (moderators only)"""
+        try:
+            # Check if user is a moderator (works in both DM and server context)
+            from ..utils.permissions import user_is_mod_by_id
+            if not await user_is_mod_by_id(ctx.author.id, self.bot):
+                await ctx.send("❌ **Access denied.** This command requires moderator privileges.")
+                return
+
+            from ..config import JAM_USER_ID
+            from ..handlers.conversation_handler import force_reset_approval_session
+
+            # Reset for JAM
+            success = await force_reset_approval_session(JAM_USER_ID)
+
+            if success:
+                await ctx.send("✅ **Approval session reset successfully.** Any stuck conversations have been cleared.")
+            else:
+                await ctx.send("ℹ️ **No active approval session found to reset.**")
+
+        except ImportError:
+            await ctx.send("❌ **Approval system not available.** Conversation handler not loaded.")
+        except Exception as e:
+            logger.error(f"Error resetting approval session: {e}")
+            await ctx.send("❌ System error occurred while resetting approval session.")
+
     @commands.command(name="triviatest")
     @commands.has_permissions(manage_messages=True)
     async def trivia_test(self, ctx):

@@ -623,7 +623,8 @@ async def call_ai_with_rate_limiting(
                     "temperature": 0.7}
 
                 # Determine timeout based on context priority
-                timeout_duration = 15.0 if context == "startup_validation" else 30.0
+                # Increased startup timeout to 25s to prevent premature failures on cold starts
+                timeout_duration = 25.0 if context == "startup_validation" else 30.0
 
                 # Create truly async wrapper using thread pool to prevent blocking
                 import asyncio

@@ -481,25 +481,39 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
 
     async with aiohttp.ClientSession() as session:
         try:
-            # Step 1: Get all playlists from the channel
+            # Step 1: Get all playlists from the channel (with pagination)
             print(f"🔄 Fetching playlists from channel {channel_id}")
-            url = f"https://www.googleapis.com/youtube/v3/playlists"
-            params = {
-                'part': 'snippet,contentDetails',
-                'channelId': channel_id,
-                'maxResults': 50,
-                'key': youtube_api_key
-            }
+            
+            all_playlists = []
+            next_page_token = None
+            
+            while True:
+                url = f"https://www.googleapis.com/youtube/v3/playlists"
+                params = {
+                    'part': 'snippet,contentDetails',
+                    'channelId': channel_id,
+                    'maxResults': 50,
+                    'key': youtube_api_key
+                }
+                if next_page_token:
+                    params['pageToken'] = next_page_token
 
-            async with session.get(url, params=params) as response:
-                if response.status != 200:
-                    print(f"❌ YouTube API error: {response.status}")
-                    return []
+                async with session.get(url, params=params) as response:
+                    if response.status != 200:
+                        print(f"❌ YouTube API error fetching playlists: {response.status}")
+                        break
 
-                data = await response.json()
+                    data = await response.json()
+                    all_playlists.extend(data.get('items', []))
+                    
+                    next_page_token = data.get('nextPageToken')
+                    if not next_page_token:
+                        break
+            
+            print(f"✅ Found {len(all_playlists)} total playlists")
 
-                # Step 2: Process each playlist
-                for playlist in data['items']:
+            # Step 2: Process each playlist
+            for playlist in all_playlists:
                     try:
                         playlist_id = playlist['id']
                         playlist_title = playlist['snippet']['title']
@@ -756,132 +770,6 @@ async def get_most_viewed_game_overall(channel_id: str = "UCPoUxLHeTnE9SUDAkqfJz
                 # Return the full list in the format expected by the message handler
                 return {'full_rankings': game_analytics}
                 # --- MODIFICATION END ---
-
-    except Exception as e:
-        print(f"❌ Error in get_most_viewed_game_overall: {e}")
-        return None
-
-    """
-    Query YouTube API to find the most viewed game across all of Jonesy's content.
-
-    Returns:
-        Dict with most viewed game data or None if unavailable
-    """
-    try:
-        youtube_api_key = os.getenv('YOUTUBE_API_KEY')
-        if not youtube_api_key:
-            print("⚠️ YouTube API key not configured for overall analytics")
-            return None
-
-        print(f"🔄 Fetching overall YouTube analytics for channel: {channel_id}")
-
-        async with aiohttp.ClientSession() as session:
-            # Step 1: Get all playlists from the channel
-            url = f"https://www.googleapis.com/youtube/v3/playlists"
-            params = {
-                'part': 'snippet,contentDetails',
-                'channelId': channel_id,
-                'maxResults': 50,
-                'key': youtube_api_key
-            }
-
-            async with session.get(url, params=params) as response:
-                if response.status != 200:
-                    print(f"YouTube API error: {response.status}")
-                    return None
-
-                data = await response.json()
-
-                game_analytics = []
-
-                # Step 2: Process each playlist to calculate total views
-                for playlist in data['items']:
-                    try:
-                        playlist_id = playlist['id']
-                        playlist_title = playlist['snippet']['title']
-                        video_count = playlist['contentDetails']['itemCount']
-
-                        # Skip playlists with very few videos or non-game content
-                        if video_count < 3:
-                            continue
-
-                        skip_patterns = ['shorts', 'live', 'stream', 'highlight', 'clip']
-                        if any(pattern in playlist_title.lower() for pattern in skip_patterns):
-                            continue
-
-                        # Extract canonical game name
-                        canonical_name = extract_game_name_from_title(playlist_title)
-                        if not canonical_name:
-                            continue
-
-                        print(f"📊 Analyzing playlist: {playlist_title} ({video_count} videos)")
-
-                        # Get all videos from this playlist with view counts
-                        videos_data = await get_playlist_videos_with_views(session, playlist_id, youtube_api_key)
-
-                        if videos_data:
-                            total_views = sum(video.get('view_count', 0) for video in videos_data)
-                            total_likes = sum(video.get('like_count', 0) for video in videos_data)
-                            average_views = total_views / len(videos_data) if videos_data else 0
-
-                            game_analytics.append({
-                                'canonical_name': canonical_name,
-                                'playlist_title': playlist_title,
-                                'total_views': total_views,
-                                'total_videos': len(videos_data),
-                                'average_views_per_episode': round(average_views),
-                                'total_likes': total_likes,
-                                'playlist_id': playlist_id,
-                                'videos_data': videos_data[:5]  # Keep top 5 videos for detailed analysis
-                            })
-
-                    except Exception as playlist_error:
-                        print(
-                            f"⚠️ Error processing playlist {playlist.get('snippet', {}).get('title', 'Unknown')}: {playlist_error}")
-                        continue
-
-                # Step 3: Find the most viewed game
-                if not game_analytics:
-                    print("❌ No valid game playlists found for analysis")
-                    return None
-
-                # Sort by total views
-                game_analytics.sort(key=lambda x: x['total_views'], reverse=True)
-                most_viewed = game_analytics[0]
-
-                # Find most viewed individual episode
-                most_viewed_episode = max(
-                    most_viewed['videos_data'], key=lambda x: x.get(
-                        'view_count', 0)) if most_viewed['videos_data'] else None
-
-                result = {
-                    'query_type': 'most_viewed_overall',
-                    'most_viewed_game': {
-                        'name': most_viewed['canonical_name'],
-                        'playlist_title': most_viewed['playlist_title'],
-                        'total_views': most_viewed['total_views'],
-                        'total_episodes': most_viewed['total_videos'],
-                        'average_views_per_episode': most_viewed['average_views_per_episode'],
-                        'total_likes': most_viewed['total_likes']
-                    },
-                    'runner_up': {
-                        'name': game_analytics[1]['canonical_name'],
-                        'total_views': game_analytics[1]['total_views']
-                    } if len(game_analytics) > 1 else None,
-                    'total_games_analyzed': len(game_analytics),
-                    'most_viewed_episode': {
-                        'title': most_viewed_episode['title'],
-                        'view_count': most_viewed_episode.get('view_count', 0),
-                        'episode_number': most_viewed_episode.get('position', 0) + 1
-                    } if most_viewed_episode else None
-                }
-
-                print(
-                    f"✅ Overall YouTube analytics complete: '{most_viewed['canonical_name']}' with {most_viewed['total_views']:,} total views")
-                print(f"📊 DEBUG - Result structure: {result}")
-                print(f"📊 DEBUG - Most viewed game name: {result['most_viewed_game']['name']}")
-                print(f"📊 DEBUG - Total views: {result['most_viewed_game']['total_views']}")
-                return result
 
     except Exception as e:
         print(f"❌ Error in get_most_viewed_game_overall: {e}")

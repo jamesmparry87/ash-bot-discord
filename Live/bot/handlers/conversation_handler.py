@@ -1111,16 +1111,14 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
 
             elif content in ['2', 'manual', 'question answer', 'both']:
                 data['question_type'] = 'manual_answer'
-                conversation['step'] = 'question_input'
+                conversation['step'] = 'format_selection'
 
                 await message.reply(
                     f"🎯 **Manual Question+Answer Selected**\n\n"
-                    f"Please provide your trivia question. You'll provide the answer in the next step.\n\n"
-                    f"**Examples of good manual questions:**\n"
-                    f"• Which of the following is a well-known Jonesy catchphrase? A) Shit on it! B) Oh crumbles C) Nuke 'em from orbit\n"
-                    f"• What happened during Jonesy's playthrough of [specific game] that became a running joke?\n"
-                    f"• Which game did Jonesy famously rage-quit after [specific incident]?\n\n"
-                    f"**Please provide your question text:**"
+                    f"Please select the question format:\n\n"
+                    f"**1.** 📝 **Single Answer** - Users type the answer directly\n"
+                    f"**2.** 🔤 **Multiple Choice** - Users select from A, B, C, D\n\n"
+                    f"Please respond with **1** or **2**."
                 )
             else:
                 await message.reply(
@@ -1128,18 +1126,51 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                     f"*Precision is essential for proper protocol execution.*"
                 )
 
+        elif step == 'format_selection':
+            if content in ['1', 'single', 'single answer']:
+                data['format'] = 'single_answer'
+                conversation['step'] = 'question_input'
+                await message.reply(
+                    f"📝 **Single Answer Format Selected**\n\n"
+                    f"Please provide your trivia question text.\n\n"
+                    f"**Example:** What was the first game Jonesy streamed on Twitch?\n\n"
+                    f"**Please provide your question text:**"
+                )
+            elif content in ['2', 'multiple', 'multiple choice']:
+                data['format'] = 'multiple_choice'
+                conversation['step'] = 'question_input'
+                await message.reply(
+                    f"🔤 **Multiple Choice Format Selected**\n\n"
+                    f"Please provide your trivia question text (without the choices).\n\n"
+                    f"**Example:** Which of these games has Jonesy NOT played?\n\n"
+                    f"**Please provide your question text:**"
+                )
+            else:
+                await message.reply("⚠️ **Invalid selection.** Please respond with **1** (Single Answer) or **2** (Multiple Choice).")
+
         elif step == 'question_input':
             # Store the question and determine next step based on type
             data['question_text'] = content
 
             if data.get('question_type') == 'manual_answer':
-                conversation['step'] = 'answer_input'
-                await message.reply(
-                    f"📝 **Question Recorded**\n\n"
-                    f"**Your Question:** {content}\n\n"
-                    f"**Now provide the correct answer.** If this is a multiple choice question, please specify which option (A, B, C, D) is correct.\n\n"
-                    f"**Please provide the correct answer:**"
-                )
+                if data.get('format') == 'multiple_choice':
+                    # Start asking for choices one at a time
+                    conversation['step'] = 'choice_a_input'
+                    data['choices'] = []  # Initialize empty choices list
+                    await message.reply(
+                        f"🔤 **Question Recorded**\n\n"
+                        f"**Your Question:** {content}\n\n"
+                        f"Now let's add the multiple choice options one at a time.\n\n"
+                        f"**What should choice A be?**"
+                    )
+                else:
+                    conversation['step'] = 'answer_input'
+                    await message.reply(
+                        f"📝 **Question Recorded**\n\n"
+                        f"**Your Question:** {content}\n\n"
+                        f"**Now provide the correct answer.**\n\n"
+                        f"**Please provide the correct answer:**"
+                    )
             else:
                 conversation['step'] = 'preview'
                 question_text = data['question_text']
@@ -1173,20 +1204,77 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                 )
                 await message.reply(preview_msg)
 
+        elif step == 'choice_a_input':
+            # Store choice A and ask for choice B
+            data['choices'].append(content.strip())
+            conversation['step'] = 'choice_b_input'
+            await message.reply(
+                f"✅ **Choice A recorded:** {content}\n\n"
+                f"**What should choice B be?**"
+            )
+
+        elif step == 'choice_b_input':
+            # Store choice B and ask for choice C
+            data['choices'].append(content.strip())
+            conversation['step'] = 'choice_c_input'
+            await message.reply(
+                f"✅ **Choice B recorded:** {content}\n\n"
+                f"**What should choice C be?**"
+            )
+
+        elif step == 'choice_c_input':
+            # Store choice C and ask for choice D
+            data['choices'].append(content.strip())
+            conversation['step'] = 'choice_d_input'
+            await message.reply(
+                f"✅ **Choice C recorded:** {content}\n\n"
+                f"**What should choice D be?**"
+            )
+
+        elif step == 'choice_d_input':
+            # Store choice D and move to answer input
+            data['choices'].append(content.strip())
+            conversation['step'] = 'answer_input'
+            
+            # Show all choices for review
+            choices_text = "\n".join([f"**{chr(65+i)}.** {choice}" for i, choice in enumerate(data['choices'])])
+            
+            await message.reply(
+                f"✅ **Choice D recorded:** {content}\n\n"
+                f"**All Choices:**\n{choices_text}\n\n"
+                f"**Now provide the correct answer letter (A, B, C, or D).**\n\n"
+                f"**Please provide the correct letter:**"
+            )
+
         elif step == 'answer_input':
             # Store the answer and move to preview
             data['correct_answer'] = content
             conversation['step'] = 'preview'
 
-            # Determine if it's multiple choice based on question content
             question_text = data['question_text']
-            is_multiple_choice = bool(re.search(r'\b[A-D]\)', question_text))
+            is_multiple_choice = data.get('format') == 'multiple_choice'
+            
+            # Validate multiple choice answer
+            if is_multiple_choice:
+                answer_upper = content.strip().upper()
+                if answer_upper not in ['A', 'B', 'C', 'D']:
+                    await message.reply("⚠️ **Invalid answer.** Please provide a single letter: A, B, C, or D.")
+                    return
+                data['correct_answer'] = answer_upper
 
             # Show preview
             preview_msg = (
                 f"📋 **Trivia Question Preview**\n\n"
-                f"**Question:** {question_text}\n\n"
-                f"**Answer:** {content}\n\n"
+                f"**Question:** {question_text}\n"
+            )
+            
+            if is_multiple_choice:
+                choices = data.get('choices', [])
+                choices_text = "\n".join([f"**{chr(65+i)}.** {choice}" for i, choice in enumerate(choices)])
+                preview_msg += f"\n**Choices:**\n{choices_text}\n"
+            
+            preview_msg += (
+                f"\n**Answer:** {data['correct_answer']}\n\n"
                 f"**Type:** {'Multiple Choice' if is_multiple_choice else 'Single Answer'}\n"
                 f"**Source:** Moderator Submission\n\n"
                 f"📚 **Available Actions:**\n"
@@ -1508,7 +1596,14 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
         # Inform the user and stop processing.
         question_id_for_command = (conversation.get('data', {}).get('question_data', {}).get('id', 'Unknown'))
-        await message.reply(f"⌛️ **Approval session timed out.** Your previous conversation has ended. To restart the approval for this question, please use `!approvequestion {question_id_for_command}` in a channel.")
+        await message.reply(
+            f"⌛️ **Approval session timed out.**\n\n"
+            f"Your previous conversation has ended due to inactivity.\n\n"
+            f"**To Resume:**\n"
+            f"• Use `!approvequestion auto` to pick up the next pending question\n"
+            f"• Use `!approvequestion {question_id_for_command}` to restart approval for this specific question\n"
+            f"• Use `!resetapproval` if you encounter any issues starting a new session"
+        )
         return
 
     # Only JAM can use this conversation
@@ -2480,6 +2575,40 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
         print(f"❌ Error in game review conversation: {e}")
         if user_id in game_review_conversations:
             del game_review_conversations[user_id]
+
+
+async def force_reset_approval_session(user_id: int) -> bool:
+    """Force reset any active approval session for a user (manual override)"""
+    try:
+        print(f"🔄 FORCE RESET: Initiating manual reset for user {user_id}")
+        reset_performed = False
+
+        # 1. Clear in-memory conversation state
+        if user_id in jam_approval_conversations:
+            del jam_approval_conversations[user_id]
+            print(f"✅ FORCE RESET: Cleared in-memory conversation state")
+            reset_performed = True
+
+        # 2. Cancel any active database sessions
+        if db:
+            try:
+                # Find active sessions
+                active_sessions = db.get_all_active_approval_sessions()
+                user_sessions = [s for s in active_sessions if s['user_id'] == user_id]
+
+                for session in user_sessions:
+                    db.complete_approval_session(session['id'], 'cancelled_manual')
+                    print(f"✅ FORCE RESET: Cancelled database session {session['id']}")
+                    reset_performed = True
+
+            except Exception as db_e:
+                print(f"⚠️ FORCE RESET: Database cleanup error: {db_e}")
+
+        return reset_performed
+
+    except Exception as e:
+        print(f"❌ FORCE RESET: Critical error: {e}")
+        return False
 
 
 async def get_restoration_status() -> Dict[str, Any]:
