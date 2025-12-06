@@ -1,6 +1,8 @@
+import asyncio
 import json
 import logging
 import os
+import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from zoneinfo import ZoneInfo
@@ -3701,7 +3703,8 @@ class DatabaseManager:
 
                             if retry_count < max_retries:
                                 print(f"🔄 TRIVIA: Retrying status update for question {question_id}...")
-                                import time
+                                # Note: This is a synchronous method called from sync context
+                                # If this becomes a problem, refactor to async or use loop.run_in_executor
                                 time.sleep(0.5)  # Brief pause before retry
 
                     if not status_updated:

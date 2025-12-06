@@ -11,6 +11,7 @@ Handles comprehensive trivia management including:
 import asyncio
 import logging
 import random
+import re
 from datetime import datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -21,7 +22,14 @@ from discord.ext import commands
 from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..database_module import DatabaseManager, get_database
 from ..handlers.ai_handler import call_ai_with_rate_limiting
+from ..handlers.conversation_handler import (
+    force_reset_approval_session,
+    jam_approval_conversations,
+    start_jam_question_approval,
+    start_trivia_conversation,
+)
 from ..integrations.youtube import get_most_viewed_game_overall, get_youtube_analytics_for_game
+from ..utils.permissions import user_is_mod_by_id
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -54,8 +62,6 @@ class TriviaCommands(commands.Cog):
         Returns:
             bool: True if content matches natural multiple choice format
         """
-        import re
-
         # Split content into individual lines for analysis
         lines = content.strip().split('\n')
 
@@ -83,8 +89,6 @@ class TriviaCommands(commands.Cog):
 
     def _parse_natural_multiple_choice(self, content: str) -> Optional[dict]:
         """Parse natural multiple choice format into structured data"""
-        import re
-
         lines = [line.strip() for line in content.strip().split('\n') if line.strip()]
         if not lines:
             return None
@@ -279,8 +283,6 @@ class TriviaCommands(commands.Cog):
     async def _generate_ai_enhanced_question(self, prompt_data: dict):
         """Generate AI question enhanced with real YouTube data"""
         try:
-            from ..handlers.ai_handler import call_ai_with_rate_limiting
-
             # Create data-rich prompt for AI
             prompt = (
                 f"Generate a trivia question about Captain Jonesy's YouTube gaming content using this REAL data:\n\n"
@@ -351,10 +353,6 @@ class TriviaCommands(commands.Cog):
     async def _generate_ai_question_fallback(self):
         """Enhanced AI question generation with YouTube analytics integration and fan-accessible questions"""
         try:
-            import random
-
-            from ..handlers.ai_handler import call_ai_with_rate_limiting
-
             # Try YouTube analytics integration first for data-driven questions
             youtube_question = await self._generate_youtube_analytics_question()
             if youtube_question:
