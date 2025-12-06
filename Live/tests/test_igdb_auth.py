@@ -76,21 +76,21 @@ async def test_oauth_token_success(twitch_credentials, mock_oauth_response):
         mock_response = AsyncMock()
         mock_response.status = 200
         mock_response.json = AsyncMock(return_value=mock_oauth_response)
-        
+
         mock_post = AsyncMock()
         mock_post.__aenter__.return_value = mock_response
         mock_post.__aexit__.return_value = None
-        
+
         mock_session_instance = MagicMock()
         mock_session_instance.post.return_value = mock_post
         mock_session_instance.__aenter__.return_value = mock_session_instance
         mock_session_instance.__aexit__.return_value = None
-        
+
         mock_session.return_value = mock_session_instance
-        
+
         # Import and test the OAuth functionality
         import aiohttp
-        
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 'https://id.twitch.tv/oauth2/token',
@@ -114,20 +114,20 @@ async def test_oauth_token_failure(twitch_credentials):
         mock_response = AsyncMock()
         mock_response.status = 401
         mock_response.text = AsyncMock(return_value='{"error": "invalid_client"}')
-        
+
         mock_post = AsyncMock()
         mock_post.__aenter__.return_value = mock_response
         mock_post.__aexit__.return_value = None
-        
+
         mock_session_instance = MagicMock()
         mock_session_instance.post.return_value = mock_post
         mock_session_instance.__aenter__.return_value = mock_session_instance
         mock_session_instance.__aexit__.return_value = None
-        
+
         mock_session.return_value = mock_session_instance
-        
+
         import aiohttp
-        
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 'https://id.twitch.tv/oauth2/token',
@@ -148,23 +148,23 @@ async def test_igdb_search_success(mock_igdb_game_response):
         mock_response = AsyncMock()
         mock_response.status = 200
         mock_response.json = AsyncMock(return_value=mock_igdb_game_response)
-        
+
         mock_post = AsyncMock()
         mock_post.__aenter__.return_value = mock_response
         mock_post.__aexit__.return_value = None
-        
+
         mock_session_instance = MagicMock()
         mock_session_instance.post.return_value = mock_post
         mock_session_instance.__aenter__.return_value = mock_session_instance
         mock_session_instance.__aexit__.return_value = None
-        
+
         mock_session.return_value = mock_session_instance
-        
+
         import aiohttp
-        
+
         game_name = "Resident Evil 4"
         query = f'search "{game_name}"; fields name,alternative_names.name,franchises.name,genres.name,release_dates.y,cover.url; limit 3;'
-        
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 'https://api.igdb.com/v4/games',
@@ -192,9 +192,9 @@ def test_igdb_query_formatting():
     """Test IGDB query string formatting."""
     game_name = "Resident Evil 4"
     game_name_escaped = game_name.replace('"', '\\"')
-    
+
     query = f'search "{game_name_escaped}"; fields name,alternative_names.name,franchises.name,genres.name,release_dates.y,cover.url; limit 3;'
-    
+
     # Verify query format
     assert 'search "Resident Evil 4"' in query
     assert 'fields name,alternative_names.name' in query
@@ -204,31 +204,31 @@ def test_igdb_query_formatting():
 def test_igdb_response_parsing(mock_igdb_game_response):
     """Test parsing of IGDB game response data."""
     game_data = mock_igdb_game_response[0]
-    
+
     # Test basic fields
     assert game_data['name'] == 'Resident Evil 4'
     assert game_data['id'] == 1942
-    
+
     # Test alternative names
     assert len(game_data['alternative_names']) == 2
     alt_names = [alt['name'] for alt in game_data['alternative_names']]
     assert 'RE4' in alt_names
     assert 'Biohazard 4' in alt_names
-    
+
     # Test genres
     assert len(game_data['genres']) == 2
     genres = [genre['name'] for genre in game_data['genres']]
     assert 'Shooter' in genres
     assert 'Adventure' in genres
-    
+
     # Test franchise/series
     assert len(game_data['franchises']) == 1
     assert game_data['franchises'][0]['name'] == 'Resident Evil'
-    
+
     # Test release year
     assert len(game_data['release_dates']) == 1
     assert game_data['release_dates'][0]['y'] == 2005
-    
+
     # Test cover URL
     assert 'cover' in game_data
     assert game_data['cover']['url'].startswith('//')
@@ -239,14 +239,14 @@ async def test_igdb_integration_module():
     """Test that the IGDB integration module can be imported."""
     try:
         from bot.integrations import igdb
-        
+
         # Verify key functions exist (using actual function names from module)
         assert hasattr(igdb, 'validate_and_enrich')
         assert hasattr(igdb, 'get_igdb_access_token')
         assert hasattr(igdb, 'search_igdb')
         assert hasattr(igdb, 'calculate_confidence')
         assert hasattr(igdb, 'should_use_igdb_data')
-        
+
     except ImportError as e:
         pytest.skip(f"IGDB module not available: {e}")
 
@@ -256,14 +256,14 @@ def test_igdb_error_handling():
     # Test empty response
     empty_response = []
     assert len(empty_response) == 0
-    
+
     # Test missing fields
     incomplete_game = {
         'id': 123,
         'name': 'Test Game'
         # Missing other fields
     }
-    
+
     # Verify we can handle missing fields gracefully
     assert incomplete_game.get('alternative_names', []) == []
     assert incomplete_game.get('genres', []) == []
