@@ -1572,13 +1572,61 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
     if conversation.get('context') == 'pre_trivia':
         if content == '1':  # Approve
             await message.reply("✅ **Pre-Trivia Question Approved.** It will be posted automatically at 11:00 AM.")
+            del jam_approval_conversations[user_id]
         elif content == '2':  # Reject
-            await message.reply("❌ **Pre-Trivia Question Rejected.** An alternative will be selected. You may need to start trivia manually if a replacement cannot be found in time.")
-            # We would add logic here to mark the question as 'retired' or similar.
+            # Mark the rejected question as retired
+            question_data = conversation.get('data', {}).get('question_data', {})
+            question_id = question_data.get('id')
+            
+            if question_id and db:
+                try:
+                    db.update_trivia_question_status(question_id, 'retired')
+                    print(f"✅ Marked question {question_id} as retired")
+                except Exception as e:
+                    print(f"⚠️ Error marking question as retired: {e}")
+            
+            await message.reply("🔄 **Question Rejected.** Searching for alternative question...")
+            
+            # Automatically fetch next available question
+            try:
+                next_question = db.get_next_trivia_question(exclude_user_id=JAM_USER_ID)
+                
+                if next_question:
+                    # Calculate dynamic answer if needed
+                    if next_question.get('is_dynamic') and next_question.get('dynamic_query_type'):
+                        calculated_answer = db.calculate_dynamic_answer(next_question['dynamic_query_type'])
+                        next_question['correct_answer'] = calculated_answer
+                    
+                    # Start new approval workflow for replacement question
+                    await message.reply(
+                        f"🎯 **Alternative Question Found**\n\n"
+                        f"Presenting replacement question for your approval:"
+                    )
+                    
+                    # Send the new question for approval (reuse the approval workflow)
+                    success = await start_pre_trivia_approval(next_question)
+                    
+                    if not success:
+                        await message.reply(
+                            "⚠️ **Could not start approval for replacement.** "
+                            "Please use `!starttrivia` manually at 11:00 AM."
+                        )
+                else:
+                    await message.reply(
+                        "⚠️ **No Alternative Questions Available**\n\n"
+                        "The question pool is empty. You'll need to either:\n"
+                        "• Generate a new question with `!generatequestions 1`\n"
+                        "• Start trivia manually with `!starttrivia` at 11:00 AM"
+                    )
+            except Exception as e:
+                print(f"❌ Error fetching replacement question: {e}")
+                await message.reply(
+                    "❌ **Error finding replacement.** Please start trivia manually at 11:00 AM."
+                )
+            
+            del jam_approval_conversations[user_id]
         else:
             await message.reply("⚠️ Invalid input. Please respond with **1** (Approve) or **2** (Reject).")
-
-        del jam_approval_conversations[user_id]
         return
 
     timeout_minutes = 15
@@ -2031,9 +2079,10 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
         approval_msg += (
             f"📚 **Available Actions:**\n"
             f"**1.** ✅ **Approve** - Add this question to the database as-is\n"
-            f"**2.** ✏️ **Modify** - Edit the question before approving\n"
-            f"**3.** ❌ **Reject** - Discard this question and generate an alternative\n\n"
-            f"Please respond with **1**, **2**, or **3**.\n\n"
+            f"**2.** ✏️ **Modify Question** - Edit the question text\n"
+            f"**3.** 🔧 **Modify Answer** - Edit the answer only\n"
+            f"**4.** ❌ **Reject** - Discard this question and generate an alternative\n\n"
+            f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
             f"*Question approval required for Trivia Tuesday deployment.*"
         )
 

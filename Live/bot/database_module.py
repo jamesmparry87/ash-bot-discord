@@ -4028,6 +4028,37 @@ class DatabaseManager:
             logger.error(f"Error getting answered trivia questions: {e}")
             return []
 
+    def update_trivia_question_status(
+            self,
+            question_id: int,
+            new_status: str) -> bool:
+        """Update a trivia question's status to any valid value"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE trivia_questions
+                    SET status = %s
+                    WHERE id = %s
+                """,
+                    (new_status, question_id),
+                )
+                conn.commit()
+
+                if cur.rowcount > 0:
+                    logger.info(
+                        f"Updated trivia question {question_id} status to '{new_status}'")
+                    return True
+                return False
+        except Exception as e:
+            logger.error(f"Error updating trivia question status: {e}")
+            conn.rollback()
+            return False
+
     def reset_trivia_question_status(
             self,
             question_id: int,
