@@ -1235,10 +1235,10 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
             # Store choice D and move to answer input
             data['choices'].append(content.strip())
             conversation['step'] = 'answer_input'
-            
+
             # Show all choices for review
             choices_text = "\n".join([f"**{chr(65+i)}.** {choice}" for i, choice in enumerate(data['choices'])])
-            
+
             await message.reply(
                 f"✅ **Choice D recorded:** {content}\n\n"
                 f"**All Choices:**\n{choices_text}\n\n"
@@ -1253,7 +1253,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
 
             question_text = data['question_text']
             is_multiple_choice = data.get('format') == 'multiple_choice'
-            
+
             # Validate multiple choice answer
             if is_multiple_choice:
                 answer_upper = content.strip().upper()
@@ -1267,12 +1267,12 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                 f"📋 **Trivia Question Preview**\n\n"
                 f"**Question:** {question_text}\n"
             )
-            
+
             if is_multiple_choice:
                 choices = data.get('choices', [])
                 choices_text = "\n".join([f"**{chr(65+i)}.** {choice}" for i, choice in enumerate(choices)])
                 preview_msg += f"\n**Choices:**\n{choices_text}\n"
-            
+
             preview_msg += (
                 f"\n**Answer:** {data['correct_answer']}\n\n"
                 f"**Type:** {'Multiple Choice' if is_multiple_choice else 'Single Answer'}\n"

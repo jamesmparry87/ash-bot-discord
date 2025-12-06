@@ -3639,7 +3639,7 @@ class DatabaseManager:
                     max_retries = 3
                     retry_count = 0
                     status_updated = False
-                    
+
                     while retry_count < max_retries and not status_updated:
                         try:
                             # Verify question exists first
@@ -3647,24 +3647,24 @@ class DatabaseManager:
                                 SELECT id, status FROM trivia_questions
                                 WHERE id = %s
                             """, (question_id,))
-                            
+
                             question_check = cur.fetchone()
-                            
+
                             if not question_check:
                                 print(f"❌ TRIVIA: Question {question_id} not found in database!")
                                 logger.error(f"Question {question_id} not found for status update")
                                 break
-                            
+
                             current_status = dict(question_check).get('status')
                             print(f"📝 TRIVIA: Question {question_id} current status: '{current_status}'")
-                            
+
                             # Update to 'answered' status
                             cur.execute("""
                                 UPDATE trivia_questions
                                 SET status = 'answered'
                                 WHERE id = %s
                             """, (question_id,))
-                            
+
                             # Verify the update succeeded
                             if cur.rowcount > 0:
                                 # Double-check by reading back the status
@@ -3672,36 +3672,43 @@ class DatabaseManager:
                                     SELECT status FROM trivia_questions
                                     WHERE id = %s
                                 """, (question_id,))
-                                
+
                                 verify_result = cur.fetchone()
                                 if verify_result:
                                     new_status = dict(verify_result).get('status')
                                     if new_status == 'answered':
-                                        print(f"✅ TRIVIA: Successfully marked question {question_id} as 'answered' (verified)")
+                                        print(
+                                            f"✅ TRIVIA: Successfully marked question {question_id} as 'answered' (verified)")
                                         logger.info(f"Question {question_id} marked as 'answered'")
                                         status_updated = True
                                     else:
-                                        print(f"⚠️ TRIVIA: Status update verification failed - status is '{new_status}' instead of 'answered'")
-                                        logger.warning(f"Question {question_id} status verification failed: {new_status}")
+                                        print(
+                                            f"⚠️ TRIVIA: Status update verification failed - status is '{new_status}' instead of 'answered'")
+                                        logger.warning(
+                                            f"Question {question_id} status verification failed: {new_status}")
                                 else:
                                     print(f"⚠️ TRIVIA: Could not verify status update for question {question_id}")
                             else:
                                 print(f"⚠️ TRIVIA: UPDATE returned 0 rows affected for question {question_id}")
                                 logger.warning(f"Question {question_id} status update affected 0 rows")
-                                
+
                         except Exception as status_error:
                             retry_count += 1
-                            print(f"❌ TRIVIA: Error updating question status (attempt {retry_count}/{max_retries}): {status_error}")
-                            logger.error(f"Question {question_id} status update error (attempt {retry_count}): {status_error}")
-                            
+                            print(
+                                f"❌ TRIVIA: Error updating question status (attempt {retry_count}/{max_retries}): {status_error}")
+                            logger.error(
+                                f"Question {question_id} status update error (attempt {retry_count}): {status_error}")
+
                             if retry_count < max_retries:
                                 print(f"🔄 TRIVIA: Retrying status update for question {question_id}...")
                                 import time
                                 time.sleep(0.5)  # Brief pause before retry
-                    
+
                     if not status_updated:
-                        print(f"❌ TRIVIA: FAILED to mark question {question_id} as 'answered' after {max_retries} attempts")
-                        logger.error(f"Critical: Question {question_id} could not be marked as 'answered' after {max_retries} attempts")
+                        print(
+                            f"❌ TRIVIA: FAILED to mark question {question_id} as 'answered' after {max_retries} attempts")
+                        logger.error(
+                            f"Critical: Question {question_id} could not be marked as 'answered' after {max_retries} attempts")
                 else:
                     print(f"⚠️ TRIVIA: No question_id found in session {session_id}, cannot mark as answered")
                     logger.warning(f"Session {session_id} has no question_id")

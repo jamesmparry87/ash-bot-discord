@@ -237,7 +237,7 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                     if response.status != 200:
                         print(f"❌ Twitch API error: {response.status}")
                         break
-                    
+
                     videos_data = await response.json()
                     if not videos_data.get('data'):
                         break
@@ -351,7 +351,7 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                             'igdb_id': igdb_id,
                             'data_confidence': data_confidence
                         })
-                    
+
                     cursor = videos_data.get('pagination', {}).get('cursor')
                     if not cursor:
                         break
