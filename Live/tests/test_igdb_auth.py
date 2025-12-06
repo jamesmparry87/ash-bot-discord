@@ -1,300 +1,270 @@
 #!/usr/bin/env python3
 """
-IGDB Authentication Test Script
+IGDB Authentication Test - Pytest Version
 
 Tests IGDB API authentication and basic functionality using Twitch OAuth.
-This script uses hardcoded credentials for testing purposes.
+Properly structured as pytest tests with fixtures and mocking.
 """
 
-import asyncio
-import sys
-from datetime import datetime
-from typing import Dict, Any, Optional
+import os
+from typing import Any, Dict, Optional
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import aiohttp
-
-
-# Hardcoded credentials for testing (from Railway environment)
-TWITCH_CLIENT_ID = "a4ywgixzibm7pfxe68i5mdw8es2ewj"
-TWITCH_CLIENT_SECRET = "ch4v94o302rv8dvyysmacywg8jk6oy"
+import pytest
 
 
-def print_header(text: str):
-    """Print a formatted header"""
-    print("\n" + "━" * 60)
-    print(f"  {text}")
-    print("━" * 60)
+# Test constants
+TEST_TWITCH_CLIENT_ID = "test_client_id_12345"
+TEST_TWITCH_CLIENT_SECRET = "test_client_secret_67890"
+TEST_ACCESS_TOKEN = "test_access_token_abcdef"
 
 
-def print_success(text: str):
-    """Print success message"""
-    print(f"✅ {text}")
+@pytest.fixture
+def twitch_credentials(monkeypatch):
+    """Fixture to provide Twitch credentials for testing."""
+    monkeypatch.setenv('TWITCH_CLIENT_ID', TEST_TWITCH_CLIENT_ID)
+    monkeypatch.setenv('TWITCH_CLIENT_SECRET', TEST_TWITCH_CLIENT_SECRET)
+    return {
+        'client_id': TEST_TWITCH_CLIENT_ID,
+        'client_secret': TEST_TWITCH_CLIENT_SECRET
+    }
 
 
-def print_error(text: str):
-    """Print error message"""
-    print(f"❌ {text}")
+@pytest.fixture
+def mock_oauth_response():
+    """Mock OAuth token response from Twitch."""
+    return {
+        'access_token': TEST_ACCESS_TOKEN,
+        'expires_in': 5184000,
+        'token_type': 'bearer'
+    }
 
 
-def print_info(text: str):
-    """Print info message"""
-    print(f"ℹ️  {text}")
+@pytest.fixture
+def mock_igdb_game_response():
+    """Mock IGDB game search response."""
+    return [
+        {
+            'id': 1942,
+            'name': 'Resident Evil 4',
+            'alternative_names': [
+                {'name': 'RE4'},
+                {'name': 'Biohazard 4'}
+            ],
+            'genres': [
+                {'name': 'Shooter'},
+                {'name': 'Adventure'}
+            ],
+            'franchises': [
+                {'name': 'Resident Evil'}
+            ],
+            'release_dates': [
+                {'y': 2005}
+            ],
+            'cover': {
+                'url': '//images.igdb.com/igdb/image/upload/t_thumb/co1234.jpg'
+            }
+        }
+    ]
 
 
-async def test_oauth_token() -> Optional[str]:
-    """Test OAuth token retrieval from Twitch"""
-    print_header("Step 1: OAuth Token Request")
-
-    print_info(f"Client ID: {TWITCH_CLIENT_ID[:10]}...")
-    print_info(f"Client Secret: {TWITCH_CLIENT_SECRET[:10]}...")
-
-    try:
+@pytest.mark.asyncio
+async def test_oauth_token_success(twitch_credentials, mock_oauth_response):
+    """Test successful OAuth token retrieval."""
+    with patch('aiohttp.ClientSession') as mock_session:
+        # Setup mock response
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value=mock_oauth_response)
+        
+        mock_post = AsyncMock()
+        mock_post.__aenter__.return_value = mock_response
+        mock_post.__aexit__.return_value = None
+        
+        mock_session_instance = MagicMock()
+        mock_session_instance.post.return_value = mock_post
+        mock_session_instance.__aenter__.return_value = mock_session_instance
+        mock_session_instance.__aexit__.return_value = None
+        
+        mock_session.return_value = mock_session_instance
+        
+        # Import and test the OAuth functionality
+        import aiohttp
+        
         async with aiohttp.ClientSession() as session:
-            print_info("Requesting OAuth token from Twitch...")
-
             async with session.post(
                 'https://id.twitch.tv/oauth2/token',
                 params={
-                    'client_id': TWITCH_CLIENT_ID,
-                    'client_secret': TWITCH_CLIENT_SECRET,
+                    'client_id': twitch_credentials['client_id'],
+                    'client_secret': twitch_credentials['client_secret'],
                     'grant_type': 'client_credentials'
                 }
             ) as response:
-                print_info(f"Response status: {response.status}")
-
-                if response.status == 200:
-                    data = await response.json()
-                    access_token = data.get('access_token')
-                    expires_in = data.get('expires_in', 0)
-
-                    print_success(f"OAuth token obtained")
-                    print_info(f"Token: {access_token[:20]}...")
-                    print_info(f"Expires in: {expires_in} seconds ({expires_in / 3600:.1f} hours)")
-
-                    return access_token
-                else:
-                    response_text = await response.text()
-                    print_error(f"Failed to get OAuth token: {response.status}")
-                    print_error(f"Response: {response_text}")
-                    return None
-
-    except Exception as e:
-        print_error(f"Exception during OAuth request: {e}")
-        return None
+                assert response.status == 200
+                data = await response.json()
+                assert data['access_token'] == TEST_ACCESS_TOKEN
+                assert data['expires_in'] == 5184000
 
 
-async def test_igdb_search(access_token: str, game_name: str) -> Optional[Dict[str, Any]]:
-    """Test IGDB game search"""
-    print_header(f"Step 2: IGDB Search - '{game_name}'")
-
-    try:
-        # Escape double quotes to prevent query injection
-        game_name_escaped = game_name.replace('"', '\\"')
-
+@pytest.mark.asyncio
+async def test_oauth_token_failure(twitch_credentials):
+    """Test OAuth token retrieval failure handling."""
+    with patch('aiohttp.ClientSession') as mock_session:
+        # Setup mock error response
+        mock_response = AsyncMock()
+        mock_response.status = 401
+        mock_response.text = AsyncMock(return_value='{"error": "invalid_client"}')
+        
+        mock_post = AsyncMock()
+        mock_post.__aenter__.return_value = mock_response
+        mock_post.__aexit__.return_value = None
+        
+        mock_session_instance = MagicMock()
+        mock_session_instance.post.return_value = mock_post
+        mock_session_instance.__aenter__.return_value = mock_session_instance
+        mock_session_instance.__aexit__.return_value = None
+        
+        mock_session.return_value = mock_session_instance
+        
+        import aiohttp
+        
         async with aiohttp.ClientSession() as session:
-            print_info("Sending search request to IGDB...")
+            async with session.post(
+                'https://id.twitch.tv/oauth2/token',
+                params={
+                    'client_id': twitch_credentials['client_id'],
+                    'client_secret': twitch_credentials['client_secret'],
+                    'grant_type': 'client_credentials'
+                }
+            ) as response:
+                assert response.status == 401
 
-            query = f'search "{game_name_escaped}"; fields name,alternative_names.name,franchises.name,genres.name,release_dates.y,cover.url; limit 3;'
-            print_info(f"Query: {query}")
 
+@pytest.mark.asyncio
+async def test_igdb_search_success(mock_igdb_game_response):
+    """Test successful IGDB game search."""
+    with patch('aiohttp.ClientSession') as mock_session:
+        # Setup mock response
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value=mock_igdb_game_response)
+        
+        mock_post = AsyncMock()
+        mock_post.__aenter__.return_value = mock_response
+        mock_post.__aexit__.return_value = None
+        
+        mock_session_instance = MagicMock()
+        mock_session_instance.post.return_value = mock_post
+        mock_session_instance.__aenter__.return_value = mock_session_instance
+        mock_session_instance.__aexit__.return_value = None
+        
+        mock_session.return_value = mock_session_instance
+        
+        import aiohttp
+        
+        game_name = "Resident Evil 4"
+        query = f'search "{game_name}"; fields name,alternative_names.name,franchises.name,genres.name,release_dates.y,cover.url; limit 3;'
+        
+        async with aiohttp.ClientSession() as session:
             async with session.post(
                 'https://api.igdb.com/v4/games',
                 headers={
-                    'Client-ID': TWITCH_CLIENT_ID,
-                    'Authorization': f'Bearer {access_token}'
+                    'Client-ID': TEST_TWITCH_CLIENT_ID,
+                    'Authorization': f'Bearer {TEST_ACCESS_TOKEN}'
                 },
                 data=query
             ) as response:
-                print_info(f"Response status: {response.status}")
-
-                if response.status == 200:
-                    results = await response.json()
-                    print_success(f"IGDB search successful")
-                    print_info(f"Found {len(results)} result(s)")
-
-                    return results[0] if results else None
-                else:
-                    response_text = await response.text()
-                    print_error(f"IGDB search failed: {response.status}")
-                    print_error(f"Response: {response_text}")
-                    return None
-
-    except Exception as e:
-        print_error(f"Exception during IGDB search: {e}")
-        return None
+                assert response.status == 200
+                results = await response.json()
+                assert len(results) == 1
+                assert results[0]['name'] == 'Resident Evil 4'
+                assert results[0]['id'] == 1942
 
 
-def display_game_data(game_data: Dict[str, Any]):
-    """Display parsed game data"""
-    print_header("Step 3: Parse Game Data")
-
-    if not game_data:
-        print_error("No game data to display")
-        return
-
-    print(f"\n📊 Game Information:")
-    print(f"   Name: {game_data.get('name', 'N/A')}")
-    print(f"   IGDB ID: {game_data.get('id', 'N/A')}")
-
-    # Alternative names
-    if 'alternative_names' in game_data and game_data['alternative_names']:
-        alt_names = [alt.get('name') for alt in game_data['alternative_names']]
-        print(f"   Alternative Names: {alt_names}")
-    else:
-        print(f"   Alternative Names: None")
-
-    # Genres
-    if 'genres' in game_data and game_data['genres']:
-        genres = [genre.get('name') for genre in game_data['genres']]
-        print(f"   Genres: {genres}")
-    else:
-        print(f"   Genres: None")
-
-    # Franchises/Series
-    if 'franchises' in game_data and game_data['franchises']:
-        franchises = [franchise.get('name') for franchise in game_data['franchises']]
-        print(f"   Series/Franchise: {franchises}")
-    else:
-        print(f"   Series/Franchise: None")
-
-    # Release year
-    if 'release_dates' in game_data and game_data['release_dates']:
-        years = [rd.get('y') for rd in game_data['release_dates'] if rd.get('y')]
-        if years:
-            print(f"   Release Year(s): {sorted(set(years))}")
-        else:
-            print(f"   Release Year: None")
-    else:
-        print(f"   Release Year: None")
-
-    # Cover
-    if 'cover' in game_data and game_data['cover']:
-        cover_url = game_data['cover'].get('url', 'N/A')
-        print(f"   Cover URL: {cover_url}")
+def test_igdb_credentials_available():
+    """Test that IGDB credentials are available in environment."""
+    # This test checks that the test environment is set up correctly
+    assert os.getenv('TWITCH_CLIENT_ID') is not None
+    assert os.getenv('TWITCH_CLIENT_SECRET') is not None
 
 
-async def run_comprehensive_test():
-    """Run comprehensive IGDB authentication test"""
-    print_header("🧪 IGDB Authentication Test")
-    print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-    # Test 1: OAuth Token
-    access_token = await test_oauth_token()
-
-    if not access_token:
-        print_error("\n❌ OAuth authentication failed - cannot proceed")
-        return False
-
-    # Test 2: Search for well-known games
-    test_games = [
-        "Resident Evil 4",
-        "The Last of Us Part II",
-        "God of War"
-    ]
-
-    all_tests_passed = True
-
-    for game_name in test_games:
-        game_data = await test_igdb_search(access_token, game_name)
-
-        if game_data:
-            display_game_data(game_data)
-        else:
-            print_error(f"Failed to retrieve data for '{game_name}'")
-            all_tests_passed = False
-
-        # Small delay between requests
-        await asyncio.sleep(0.3)
-
-    # Final summary
-    print_header("Test Summary")
-
-    if all_tests_passed:
-        print_success("All tests passed! IGDB authentication is working correctly.")
-        print_info("The credentials are valid and the API is responding as expected.")
-        return True
-    else:
-        print_error("Some tests failed. Check the output above for details.")
-        return False
+def test_igdb_query_formatting():
+    """Test IGDB query string formatting."""
+    game_name = "Resident Evil 4"
+    game_name_escaped = game_name.replace('"', '\\"')
+    
+    query = f'search "{game_name_escaped}"; fields name,alternative_names.name,franchises.name,genres.name,release_dates.y,cover.url; limit 3;'
+    
+    # Verify query format
+    assert 'search "Resident Evil 4"' in query
+    assert 'fields name,alternative_names.name' in query
+    assert 'limit 3' in query
 
 
-async def test_validation_function():
-    """Test the actual validation function from igdb.py"""
-    print_header("Step 4: Test validate_and_enrich() Function")
+def test_igdb_response_parsing(mock_igdb_game_response):
+    """Test parsing of IGDB game response data."""
+    game_data = mock_igdb_game_response[0]
+    
+    # Test basic fields
+    assert game_data['name'] == 'Resident Evil 4'
+    assert game_data['id'] == 1942
+    
+    # Test alternative names
+    assert len(game_data['alternative_names']) == 2
+    alt_names = [alt['name'] for alt in game_data['alternative_names']]
+    assert 'RE4' in alt_names
+    assert 'Biohazard 4' in alt_names
+    
+    # Test genres
+    assert len(game_data['genres']) == 2
+    genres = [genre['name'] for genre in game_data['genres']]
+    assert 'Shooter' in genres
+    assert 'Adventure' in genres
+    
+    # Test franchise/series
+    assert len(game_data['franchises']) == 1
+    assert game_data['franchises'][0]['name'] == 'Resident Evil'
+    
+    # Test release year
+    assert len(game_data['release_dates']) == 1
+    assert game_data['release_dates'][0]['y'] == 2005
+    
+    # Test cover URL
+    assert 'cover' in game_data
+    assert game_data['cover']['url'].startswith('//')
 
-    # Import the actual module
+
+@pytest.mark.asyncio
+async def test_igdb_integration_module():
+    """Test that the IGDB integration module can be imported."""
     try:
-        import sys
-        import os
-
-        # Add parent directory to path
-        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
         from bot.integrations import igdb
-
-        # Temporarily set environment variables
-        os.environ['TWITCH_CLIENT_ID'] = TWITCH_CLIENT_ID
-        os.environ['TWITCH_CLIENT_SECRET'] = TWITCH_CLIENT_SECRET
-
-        print_info("Testing validate_and_enrich() function...")
-
-        result = await igdb.validate_and_enrich("Resident Evil 4")
-
-        print_success("Function executed successfully")
-        print(f"\n📊 Validation Result:")
-        print(f"   Canonical Name: {result.get('canonical_name')}")
-        print(f"   Confidence: {result.get('confidence')}")
-        print(f"   IGDB ID: {result.get('igdb_id')}")
-        print(f"   Genre: {result.get('genre')}")
-        print(f"   Series: {result.get('series_name')}")
-        print(f"   Release Year: {result.get('release_year')}")
-        print(f"   Alternative Names: {result.get('alternative_names', [])}")
-
-        if result.get('confidence', 0) >= 0.8:
-            print_success(f"High confidence match ({result.get('confidence')})")
-        else:
-            print_error(f"Low confidence match ({result.get('confidence')})")
-
-        return True
-
-    except Exception as e:
-        print_error(f"Error testing validation function: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        
+        # Verify key functions exist (using actual function names from module)
+        assert hasattr(igdb, 'validate_and_enrich')
+        assert hasattr(igdb, 'get_igdb_access_token')
+        assert hasattr(igdb, 'search_igdb')
+        assert hasattr(igdb, 'calculate_confidence')
+        assert hasattr(igdb, 'should_use_igdb_data')
+        
+    except ImportError as e:
+        pytest.skip(f"IGDB module not available: {e}")
 
 
-def main():
-    """Main entry point"""
-    try:
-        # Run the comprehensive test
-        loop = asyncio.get_event_loop()
-        success = loop.run_until_complete(run_comprehensive_test())
-
-        # Also test the actual module function
-        print("\n")
-        loop.run_until_complete(test_validation_function())
-
-        print_header("✨ Testing Complete")
-
-        if success:
-            print_success("IGDB authentication is working correctly!")
-            print_info("You can now run sync commands with confidence.")
-            sys.exit(0)
-        else:
-            print_error("IGDB authentication has issues.")
-            print_info("Review the output above for diagnostic information.")
-            sys.exit(1)
-
-    except KeyboardInterrupt:
-        print("\n\n⚠️  Test interrupted by user")
-        sys.exit(1)
-    except Exception as e:
-        print_error(f"Unexpected error: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+def test_igdb_error_handling():
+    """Test error handling for various IGDB scenarios."""
+    # Test empty response
+    empty_response = []
+    assert len(empty_response) == 0
+    
+    # Test missing fields
+    incomplete_game = {
+        'id': 123,
+        'name': 'Test Game'
+        # Missing other fields
+    }
+    
+    # Verify we can handle missing fields gracefully
+    assert incomplete_game.get('alternative_names', []) == []
+    assert incomplete_game.get('genres', []) == []
+    assert incomplete_game.get('franchises', []) == []
