@@ -7,10 +7,13 @@ import asyncio
 import os
 import sys
 
+import pytest
+
 # Add the current directory to the path so we can import the bot modules
 sys.path.append(os.path.dirname(__file__))
 
 
+@pytest.mark.asyncio
 async def test_ai_jonesy_response():
     """Test the AI response to 'Who is Jonesy?' question"""
     try:

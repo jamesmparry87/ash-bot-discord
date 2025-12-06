@@ -328,15 +328,30 @@ async def monday_content_sync():
         print(
             f"🔄 SYNC & DEBRIEF (Monday): Using fixed 7-day window from {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        # Perform content sync with error handling
-        try:
-            analysis_results = await perform_full_content_sync(start_sync_time)
-        except Exception as sync_error:
-            print(f"❌ SYNC & DEBRIEF (Monday): Content sync failed: {sync_error}")
+        # Perform content sync with retry logic
+        max_retries = 3
+        analysis_results = None
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                print(f"🔄 SYNC & DEBRIEF (Monday): Attempt {attempt + 1}/{max_retries}...")
+                analysis_results = await perform_full_content_sync(start_sync_time)
+                break  # Success!
+            except Exception as sync_error:
+                last_error = sync_error
+                print(f"⚠️ SYNC & DEBRIEF (Monday): Attempt {attempt + 1} failed: {sync_error}")
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 60  # 1 min, 2 min, etc.
+                    print(f"⏳ Waiting {wait_time} seconds before retry...")
+                    await asyncio.sleep(wait_time)
+
+        if not analysis_results:
+            print(f"❌ SYNC & DEBRIEF (Monday): All sync attempts failed. Last error: {last_error}")
             await notify_jam_weekly_message_failure(
                 'monday',
                 'YouTube/Twitch integration failure',
-                f'Failed to fetch new content from YouTube/Twitch APIs. Error: {str(sync_error)[:200]}'
+                f'Failed to fetch new content after {max_retries} attempts. Last error: {str(last_error)[:200]}'
             )
             return
 

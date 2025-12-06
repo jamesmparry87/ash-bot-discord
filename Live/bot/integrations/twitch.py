@@ -223,122 +223,139 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                 user_data = await response.json()
                 user_id = user_data['data'][0]['id']
 
-            # Get recent videos
+            # Get recent videos with pagination
             videos_url = f"https://api.twitch.tv/helix/videos"
-            params = {"user_id": user_id, "first": 100, "type": "archive"}  # 'archive' for past broadcasts
+            cursor = None
+            more_videos = True
 
-            async with session.get(videos_url, params=params, headers=headers) as response:
-                if response.status != 200:
-                    return []
-                videos_data = await response.json()
-                for video in videos_data['data']:
-                    created_at = datetime.fromisoformat(video['created_at'].replace('Z', '+00:00'))
-                    if created_at < start_timestamp:
-                        break  # Stop when we find videos older than our sync time
+            while more_videos:
+                params = {"user_id": user_id, "first": 100, "type": "archive"}
+                if cursor:
+                    params['after'] = cursor
 
-                    title = video['title']
+                async with session.get(videos_url, params=params, headers=headers) as response:
+                    if response.status != 200:
+                        print(f"❌ Twitch API error: {response.status}")
+                        break
 
-                    # PRIMARY METHOD: Use Twitch API's game field (most reliable)
-                    extracted_name = None
-                    data_confidence = 0.0
-                    twitch_game_name = None
+                    videos_data = await response.json()
+                    if not videos_data.get('data'):
+                        break
 
-                    # Try to fetch game name from Twitch API's game_id
-                    game_id = video.get('game_id')
-                    if game_id and game_id != '0' and game_id != '':
-                        try:
-                            # Fetch the game name from Twitch API
-                            game_url = f"https://api.twitch.tv/helix/games?id={game_id}"
-                            async with session.get(game_url, headers=headers) as game_response:
-                                if game_response.status == 200:
-                                    game_data = await game_response.json()
-                                    if game_data.get('data') and len(game_data['data']) > 0:
-                                        twitch_game_name = game_data['data'][0].get('name')
-                                        if twitch_game_name:
-                                            print(f"🎮 TWITCH API: VOD '{title}' → Game: '{twitch_game_name}'")
-                                            extracted_name = twitch_game_name
-                                            data_confidence = 1.0  # High confidence since it's from Twitch API
-                        except Exception as game_fetch_error:
-                            print(f"⚠️ Failed to fetch game name from Twitch API: {game_fetch_error}")
+                    for video in videos_data['data']:
+                        created_at = datetime.fromisoformat(video['created_at'].replace('Z', '+00:00'))
+                        if created_at < start_timestamp:
+                            more_videos = False
+                            break  # Stop processing this batch and the loop
 
-                    # FALLBACK METHOD: Parse title if no game_id available
-                    if not extracted_name:
-                        print(f"⚠️ No game_id for VOD '{title}', falling back to title parsing")
-                        extracted_name, data_confidence = await smart_extract_with_validation(title)
+                        title = video['title']
 
-                    # Null safety checks
-                    if not extracted_name:
-                        extracted_name = ''
+                        # PRIMARY METHOD: Use Twitch API's game field (most reliable)
+                        extracted_name = None
                         data_confidence = 0.0
+                        twitch_game_name = None
 
-                    # Set defaults for low-confidence or no-match scenarios
-                    canonical_name = extracted_name
-                    igdb_id = None
-                    igdb_genre = None
-                    igdb_series = None
-                    igdb_year = None
-                    alternative_names = []
+                        # Try to fetch game name from Twitch API's game_id
+                        game_id = video.get('game_id')
+                        if game_id and game_id != '0' and game_id != '':
+                            try:
+                                # Fetch the game name from Twitch API
+                                game_url = f"https://api.twitch.tv/helix/games?id={game_id}"
+                                async with session.get(game_url, headers=headers) as game_response:
+                                    if game_response.status == 200:
+                                        game_data = await game_response.json()
+                                        if game_data.get('data') and len(game_data['data']) > 0:
+                                            twitch_game_name = game_data['data'][0].get('name')
+                                            if twitch_game_name:
+                                                print(f"🎮 TWITCH API: VOD '{title}' → Game: '{twitch_game_name}'")
+                                                extracted_name = twitch_game_name
+                                                data_confidence = 1.0  # High confidence since it's from Twitch API
+                            except Exception as game_fetch_error:
+                                print(f"⚠️ Failed to fetch game name from Twitch API: {game_fetch_error}")
 
-                    if extracted_name and data_confidence >= 0.8:
-                        # Get full IGDB enrichment data
-                        igdb_result = await igdb.validate_and_enrich(extracted_name)
-                        canonical_name = igdb_result.get('canonical_name', extracted_name)
-                        igdb_id = igdb_result.get('igdb_id')
-                        igdb_genre = igdb_result.get('genre')
-                        igdb_series = igdb_result.get('series_name')
-                        igdb_year = igdb_result.get('release_year')
+                        # FALLBACK METHOD: Parse title if no game_id available
+                        if not extracted_name:
+                            print(f"⚠️ No game_id for VOD '{title}', falling back to title parsing")
+                            extracted_name, data_confidence = await smart_extract_with_validation(title)
 
-                        # Get alternative names ONLY from IGDB
-                        if igdb_result.get('alternative_names'):
-                            alternative_names = igdb_result['alternative_names'][:5]
+                        # Null safety checks
+                        if not extracted_name:
+                            extracted_name = ''
+                            data_confidence = 0.0
 
-                        # DATA QUALITY CHECK: Empty alternative names = likely bad match
-                        if not alternative_names or len(alternative_names) == 0:
+                        # Set defaults for low-confidence or no-match scenarios
+                        canonical_name = extracted_name
+                        igdb_id = None
+                        igdb_genre = None
+                        igdb_series = None
+                        igdb_year = None
+                        alternative_names = []
+
+                        if extracted_name and data_confidence >= 0.8:
+                            # Get full IGDB enrichment data
+                            igdb_result = await igdb.validate_and_enrich(extracted_name)
+                            canonical_name = igdb_result.get('canonical_name', extracted_name)
+                            igdb_id = igdb_result.get('igdb_id')
+                            igdb_genre = igdb_result.get('genre')
+                            igdb_series = igdb_result.get('series_name')
+                            igdb_year = igdb_result.get('release_year')
+
+                            # Get alternative names ONLY from IGDB
+                            if igdb_result.get('alternative_names'):
+                                alternative_names = igdb_result['alternative_names'][:5]
+
+                            # DATA QUALITY CHECK: Empty alternative names = likely bad match
+                            if not alternative_names or len(alternative_names) == 0:
+                                print(
+                                    f"⚠️ DATA QUALITY WARNING: '{canonical_name}' has NO alternative names in IGDB - likely incorrect extraction")
+                                print(f"   Original title: '{title}'")
+                                # Lower confidence to trigger manual review
+                                data_confidence = 0.5
+
                             print(
-                                f"⚠️ DATA QUALITY WARNING: '{canonical_name}' has NO alternative names in IGDB - likely incorrect extraction")
-                            print(f"   Original title: '{title}'")
-                            # Lower confidence to trigger manual review
-                            data_confidence = 0.5
+                                f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
+                        elif extracted_name:
+                            print(
+                                f"⚠️ Low IGDB confidence for '{extracted_name}': {data_confidence:.2f} - flagging for review")
+                            # For low confidence, only keep extracted name as alternative
+                            if canonical_name != extracted_name:
+                                alternative_names = [extracted_name]
 
-                        print(
-                            f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
-                    elif extracted_name:
-                        print(
-                            f"⚠️ Low IGDB confidence for '{extracted_name}': {data_confidence:.2f} - flagging for review")
-                        # For low confidence, only keep extracted name as alternative
-                        if canonical_name != extracted_name:
-                            alternative_names = [extracted_name]
+                        # Fallback series name extraction if IGDB doesn't provide one
+                        series_name = igdb_series
+                        if not series_name and extracted_name:
+                            # Try to extract series from game name
+                            # For titles like "God of War 3", extract "God of War"
+                            # For titles like "Uncharted: The Lost Legacy", extract "Uncharted"
+                            if ':' in extracted_name or '–' in extracted_name or '—' in extracted_name:
+                                parts = re.split(r'[:\–\—]', extracted_name)
+                                if parts and len(parts[0].strip()) >= 3:
+                                    series_name = parts[0].strip()
+                            else:
+                                # Remove numbers from end (e.g., "God of War 3" → "God of War")
+                                series_name = re.sub(r'\s+\d+\s*$', '', extracted_name).strip()
+                                # If we removed something, use that as series, otherwise use canonical
+                                if series_name == extracted_name:
+                                    series_name = canonical_name
 
-                    # Fallback series name extraction if IGDB doesn't provide one
-                    series_name = igdb_series
-                    if not series_name and extracted_name:
-                        # Try to extract series from game name
-                        # For titles like "God of War 3", extract "God of War"
-                        # For titles like "Uncharted: The Lost Legacy", extract "Uncharted"
-                        if ':' in extracted_name or '–' in extracted_name or '—' in extracted_name:
-                            parts = re.split(r'[:\–\—]', extracted_name)
-                            if parts and len(parts[0].strip()) >= 3:
-                                series_name = parts[0].strip()
-                        else:
-                            # Remove numbers from end (e.g., "God of War 3" → "God of War")
-                            series_name = re.sub(r'\s+\d+\s*$', '', extracted_name).strip()
-                            # If we removed something, use that as series, otherwise use canonical
-                            if series_name == extracted_name:
-                                series_name = canonical_name
+                        new_vods.append({
+                            'title': title,
+                            'url': video['url'],
+                            'duration_seconds': parse_twitch_duration(video.get('duration', '0s')),
+                            'published_at': created_at,
+                            'canonical_name': canonical_name,
+                            'alternative_names': alternative_names,
+                            'series_name': series_name or canonical_name,
+                            'genre': igdb_genre,
+                            'release_year': igdb_year,
+                            'igdb_id': igdb_id,
+                            'data_confidence': data_confidence
+                        })
 
-                    new_vods.append({
-                        'title': title,
-                        'url': video['url'],
-                        'duration_seconds': parse_twitch_duration(video.get('duration', '0s')),
-                        'published_at': created_at,
-                        'canonical_name': canonical_name,
-                        'alternative_names': alternative_names,
-                        'series_name': series_name or canonical_name,
-                        'genre': igdb_genre,
-                        'release_year': igdb_year,
-                        'igdb_id': igdb_id,
-                        'data_confidence': data_confidence
-                    })
+                    cursor = videos_data.get('pagination', {}).get('cursor')
+                    if not cursor:
+                        break
+
         except Exception as e:
             print(f"❌ Failed to fetch new Twitch VODs: {e}")
 

@@ -78,3 +78,4 @@ recommend_list_message_id.txt
 
 # Cline AI assistant files
 .cline/
+.clinerules

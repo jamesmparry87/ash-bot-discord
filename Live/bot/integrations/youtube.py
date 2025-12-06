@@ -481,153 +481,167 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
 
     async with aiohttp.ClientSession() as session:
         try:
-            # Step 1: Get all playlists from the channel
+            # Step 1: Get all playlists from the channel (with pagination)
             print(f"🔄 Fetching playlists from channel {channel_id}")
-            url = f"https://www.googleapis.com/youtube/v3/playlists"
-            params = {
-                'part': 'snippet,contentDetails',
-                'channelId': channel_id,
-                'maxResults': 50,
-                'key': youtube_api_key
-            }
 
-            async with session.get(url, params=params) as response:
-                if response.status != 200:
-                    print(f"❌ YouTube API error: {response.status}")
-                    return []
+            all_playlists = []
+            next_page_token = None
 
-                data = await response.json()
+            while True:
+                url = f"https://www.googleapis.com/youtube/v3/playlists"
+                params = {
+                    'part': 'snippet,contentDetails',
+                    'channelId': channel_id,
+                    'maxResults': 50,
+                    'key': youtube_api_key
+                }
+                if next_page_token:
+                    params['pageToken'] = next_page_token
 
-                # Step 2: Process each playlist
-                for playlist in data['items']:
-                    try:
-                        playlist_id = playlist['id']
-                        playlist_title = playlist['snippet']['title']
-                        video_count = playlist['contentDetails']['itemCount']
+                async with session.get(url, params=params) as response:
+                    if response.status != 200:
+                        print(f"❌ YouTube API error fetching playlists: {response.status}")
+                        break
 
-                        # Skip non-game playlists
-                        if video_count < 3:
-                            continue
+                    data = await response.json()
+                    all_playlists.extend(data.get('items', []))
 
-                        skip_patterns = ['shorts', 'live', 'stream', 'highlight', 'clip']
-                        if any(pattern in playlist_title.lower() for pattern in skip_patterns):
-                            continue
+                    next_page_token = data.get('nextPageToken')
+                    if not next_page_token:
+                        break
 
-                        # Check if playlist has content since start_timestamp
-                        has_new_content = await playlist_has_new_content(
-                            session, playlist_id, start_timestamp, youtube_api_key
-                        )
+            print(f"✅ Found {len(all_playlists)} total playlists")
 
-                        if not has_new_content:
-                            continue
+            # Step 2: Process each playlist
+            for playlist in all_playlists:
+                try:
+                    playlist_id = playlist['id']
+                    playlist_title = playlist['snippet']['title']
+                    video_count = playlist['contentDetails']['itemCount']
 
-                        print(f"✅ Processing playlist: {playlist_title}")
-
-                        # Detect completion status from playlist title
-                        completion_status = 'completed' if '[COMPLETED]' in playlist_title.upper() else 'in_progress'
-
-                        # Extract clean canonical name (remove [COMPLETED] and other markers - case insensitive)
-                        clean_title = re.sub(r'\[completed\]', '', playlist_title, flags=re.IGNORECASE).strip()
-                        # Use cleaned playlist title directly (don't use video title extraction for playlists)
-                        extracted_name = clean_title
-
-                        if not extracted_name:
-                            print(f"⚠️ Could not extract game name from: {playlist_title}")
-                            continue
-
-                        # Validate with IGDB for better accuracy
-                        print(f"🔍 Validating '{extracted_name}' with IGDB...")
-                        igdb_result = await igdb.validate_and_enrich(extracted_name)
-
-                        # Set defaults for low-confidence or no-match scenarios
-                        canonical_name = extracted_name
-                        igdb_id = None
-                        igdb_genre = None
-                        igdb_series = None
-                        igdb_year = None
-                        data_confidence = igdb_result.get('confidence', 0.0)
-
-                        # Use IGDB data if confidence is high enough
-                        if data_confidence >= 0.8:
-                            canonical_name = igdb_result.get('canonical_name', extracted_name)
-                            igdb_id = igdb_result.get('igdb_id')
-                            igdb_genre = igdb_result.get('genre')
-                            igdb_series = igdb_result.get('series_name')
-                            igdb_year = igdb_result.get('release_year')
-                            print(
-                                f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
-                        else:
-                            print(
-                                f"⚠️ Low IGDB confidence for '{extracted_name}': {data_confidence:.2f} - flagging for review")
-
-                        # Get all videos from this playlist with statistics
-                        videos_data = await get_playlist_videos_with_views(session, playlist_id, youtube_api_key)
-
-                        if not videos_data:
-                            continue
-
-                        # Calculate aggregated statistics
-                        total_views = sum(v.get('view_count', 0) for v in videos_data)
-                        total_playtime_seconds = sum(v.get('duration_seconds', 0) for v in videos_data)
-                        total_playtime_minutes = total_playtime_seconds // 60
-                        total_episodes = len(videos_data)
-
-                        # Get first video date
-                        first_video_date = None
-                        if videos_data:
-                            first_video_date = videos_data[0].get('published_at')
-
-                        # Build alternative names ONLY from IGDB (no video titles or playlist names)
-                        alternative_names = []
-                        if igdb_result.get('alternative_names'):
-                            alternative_names = igdb_result['alternative_names'][:5]  # Limit to 5 IGDB alternatives
-
-                        # If no IGDB alternatives but we have the canonical name, add it
-                        if not alternative_names and canonical_name != extracted_name:
-                            alternative_names = [extracted_name]
-
-                        # Fallback series name extraction from playlist title if IGDB doesn't provide one
-                        series_name = igdb_series
-                        if not series_name:
-                            # Extract series from playlist title (remove brackets, episode markers, etc.)
-                            clean_title = playlist_title.replace('[COMPLETED]', '').replace('[completed]', '').strip()
-                            # Remove common patterns like "- Part 1", "Episode 5", etc.
-                            series_name = re.sub(r'\s*-\s*(Part|Episode|Ep|#)\s*\d+.*$',
-                                                 '', clean_title, flags=re.IGNORECASE)
-                            series_name = re.sub(r'\s*\d+\s*$', '', series_name).strip()  # Remove trailing numbers
-                            # If it looks like a full game name with subtitle, try to extract just the series
-                            if ':' in series_name or '–' in series_name or '—' in series_name:
-                                # For titles like "Uncharted 3: Drake's Deception", extract "Uncharted"
-                                parts = re.split(r'[:\–\—]', series_name)
-                                if parts and len(parts[0].strip()) >= 3:
-                                    series_name = parts[0].strip()
-
-                        # Create complete game data entry with IGDB enrichment
-                        game_data = {
-                            'canonical_name': canonical_name,
-                            'series_name': series_name or canonical_name,  # Use extracted series or canonical as fallback
-                            'genre': igdb_genre,  # From IGDB
-                            'release_year': igdb_year,  # From IGDB
-                            'total_playtime_minutes': total_playtime_minutes,
-                            'total_episodes': total_episodes,
-                            'youtube_playlist_url': f"https://youtube.com/playlist?list={playlist_id}",
-                            'youtube_views': total_views,
-                            'completion_status': completion_status,
-                            'alternative_names': alternative_names,
-                            'first_played_date': first_video_date,
-                            'igdb_id': igdb_id,  # IGDB tracking
-                            'data_confidence': data_confidence,  # Confidence score
-                            'notes': f"Auto-synced from YouTube playlist. {total_episodes} episodes, {total_playtime_minutes//60}h {total_playtime_minutes%60}m total."
-                        }
-
-                        games_data.append(game_data)
-                        print(
-                            f"✅ Processed: {canonical_name} - {total_episodes} episodes, {total_views:,} views, status: {completion_status}")
-
-                    except Exception as playlist_error:
-                        print(
-                            f"⚠️ Error processing playlist '{playlist.get('snippet', {}).get('title', 'Unknown')}': {playlist_error}")
+                    # Skip non-game playlists
+                    if video_count < 3:
                         continue
+
+                    skip_patterns = ['shorts', 'live', 'stream', 'highlight', 'clip']
+                    if any(pattern in playlist_title.lower() for pattern in skip_patterns):
+                        continue
+
+                    # Check if playlist has content since start_timestamp
+                    has_new_content = await playlist_has_new_content(
+                        session, playlist_id, start_timestamp, youtube_api_key
+                    )
+
+                    if not has_new_content:
+                        continue
+
+                    print(f"✅ Processing playlist: {playlist_title}")
+
+                    # Detect completion status from playlist title
+                    completion_status = 'completed' if '[COMPLETED]' in playlist_title.upper() else 'in_progress'
+
+                    # Extract clean canonical name (remove [COMPLETED] and other markers - case insensitive)
+                    clean_title = re.sub(r'\[completed\]', '', playlist_title, flags=re.IGNORECASE).strip()
+                    # Use cleaned playlist title directly (don't use video title extraction for playlists)
+                    extracted_name = clean_title
+
+                    if not extracted_name:
+                        print(f"⚠️ Could not extract game name from: {playlist_title}")
+                        continue
+
+                    # Validate with IGDB for better accuracy
+                    print(f"🔍 Validating '{extracted_name}' with IGDB...")
+                    igdb_result = await igdb.validate_and_enrich(extracted_name)
+
+                    # Set defaults for low-confidence or no-match scenarios
+                    canonical_name = extracted_name
+                    igdb_id = None
+                    igdb_genre = None
+                    igdb_series = None
+                    igdb_year = None
+                    data_confidence = igdb_result.get('confidence', 0.0)
+
+                    # Use IGDB data if confidence is high enough
+                    if data_confidence >= 0.8:
+                        canonical_name = igdb_result.get('canonical_name', extracted_name)
+                        igdb_id = igdb_result.get('igdb_id')
+                        igdb_genre = igdb_result.get('genre')
+                        igdb_series = igdb_result.get('series_name')
+                        igdb_year = igdb_result.get('release_year')
+                        print(
+                            f"✅ IGDB validated: '{extracted_name}' → '{canonical_name}' (confidence: {data_confidence:.2f})")
+                    else:
+                        print(
+                            f"⚠️ Low IGDB confidence for '{extracted_name}': {data_confidence:.2f} - flagging for review")
+
+                    # Get all videos from this playlist with statistics
+                    videos_data = await get_playlist_videos_with_views(session, playlist_id, youtube_api_key)
+
+                    if not videos_data:
+                        continue
+
+                    # Calculate aggregated statistics
+                    total_views = sum(v.get('view_count', 0) for v in videos_data)
+                    total_playtime_seconds = sum(v.get('duration_seconds', 0) for v in videos_data)
+                    total_playtime_minutes = total_playtime_seconds // 60
+                    total_episodes = len(videos_data)
+
+                    # Get first video date
+                    first_video_date = None
+                    if videos_data:
+                        first_video_date = videos_data[0].get('published_at')
+
+                    # Build alternative names ONLY from IGDB (no video titles or playlist names)
+                    alternative_names = []
+                    if igdb_result.get('alternative_names'):
+                        alternative_names = igdb_result['alternative_names'][:5]  # Limit to 5 IGDB alternatives
+
+                    # If no IGDB alternatives but we have the canonical name, add it
+                    if not alternative_names and canonical_name != extracted_name:
+                        alternative_names = [extracted_name]
+
+                    # Fallback series name extraction from playlist title if IGDB doesn't provide one
+                    series_name = igdb_series
+                    if not series_name:
+                        # Extract series from playlist title (remove brackets, episode markers, etc.)
+                        clean_title = playlist_title.replace('[COMPLETED]', '').replace('[completed]', '').strip()
+                        # Remove common patterns like "- Part 1", "Episode 5", etc.
+                        series_name = re.sub(r'\s*-\s*(Part|Episode|Ep|#)\s*\d+.*$',
+                                             '', clean_title, flags=re.IGNORECASE)
+                        series_name = re.sub(r'\s*\d+\s*$', '', series_name).strip()  # Remove trailing numbers
+                        # If it looks like a full game name with subtitle, try to extract just the series
+                        if ':' in series_name or '–' in series_name or '—' in series_name:
+                            # For titles like "Uncharted 3: Drake's Deception", extract "Uncharted"
+                            parts = re.split(r'[:\–\—]', series_name)
+                            if parts and len(parts[0].strip()) >= 3:
+                                series_name = parts[0].strip()
+
+                    # Create complete game data entry with IGDB enrichment
+                    game_data = {
+                        'canonical_name': canonical_name,
+                        'series_name': series_name or canonical_name,  # Use extracted series or canonical as fallback
+                        'genre': igdb_genre,  # From IGDB
+                        'release_year': igdb_year,  # From IGDB
+                        'total_playtime_minutes': total_playtime_minutes,
+                        'total_episodes': total_episodes,
+                        'youtube_playlist_url': f"https://youtube.com/playlist?list={playlist_id}",
+                        'youtube_views': total_views,
+                        'completion_status': completion_status,
+                        'alternative_names': alternative_names,
+                        'first_played_date': first_video_date,
+                        'igdb_id': igdb_id,  # IGDB tracking
+                        'data_confidence': data_confidence,  # Confidence score
+                        'notes': f"Auto-synced from YouTube playlist. {total_episodes} episodes, {total_playtime_minutes//60}h {total_playtime_minutes%60}m total."
+                    }
+
+                    games_data.append(game_data)
+                    print(
+                        f"✅ Processed: {canonical_name} - {total_episodes} episodes, {total_views:,} views, status: {completion_status}")
+
+                except Exception as playlist_error:
+                    print(
+                        f"⚠️ Error processing playlist '{playlist.get('snippet', {}).get('title', 'Unknown')}': {playlist_error}")
+                    continue
 
         except Exception as e:
             print(f"❌ Failed to fetch playlist-based content: {e}")
@@ -756,132 +770,6 @@ async def get_most_viewed_game_overall(channel_id: str = "UCPoUxLHeTnE9SUDAkqfJz
                 # Return the full list in the format expected by the message handler
                 return {'full_rankings': game_analytics}
                 # --- MODIFICATION END ---
-
-    except Exception as e:
-        print(f"❌ Error in get_most_viewed_game_overall: {e}")
-        return None
-
-    """
-    Query YouTube API to find the most viewed game across all of Jonesy's content.
-
-    Returns:
-        Dict with most viewed game data or None if unavailable
-    """
-    try:
-        youtube_api_key = os.getenv('YOUTUBE_API_KEY')
-        if not youtube_api_key:
-            print("⚠️ YouTube API key not configured for overall analytics")
-            return None
-
-        print(f"🔄 Fetching overall YouTube analytics for channel: {channel_id}")
-
-        async with aiohttp.ClientSession() as session:
-            # Step 1: Get all playlists from the channel
-            url = f"https://www.googleapis.com/youtube/v3/playlists"
-            params = {
-                'part': 'snippet,contentDetails',
-                'channelId': channel_id,
-                'maxResults': 50,
-                'key': youtube_api_key
-            }
-
-            async with session.get(url, params=params) as response:
-                if response.status != 200:
-                    print(f"YouTube API error: {response.status}")
-                    return None
-
-                data = await response.json()
-
-                game_analytics = []
-
-                # Step 2: Process each playlist to calculate total views
-                for playlist in data['items']:
-                    try:
-                        playlist_id = playlist['id']
-                        playlist_title = playlist['snippet']['title']
-                        video_count = playlist['contentDetails']['itemCount']
-
-                        # Skip playlists with very few videos or non-game content
-                        if video_count < 3:
-                            continue
-
-                        skip_patterns = ['shorts', 'live', 'stream', 'highlight', 'clip']
-                        if any(pattern in playlist_title.lower() for pattern in skip_patterns):
-                            continue
-
-                        # Extract canonical game name
-                        canonical_name = extract_game_name_from_title(playlist_title)
-                        if not canonical_name:
-                            continue
-
-                        print(f"📊 Analyzing playlist: {playlist_title} ({video_count} videos)")
-
-                        # Get all videos from this playlist with view counts
-                        videos_data = await get_playlist_videos_with_views(session, playlist_id, youtube_api_key)
-
-                        if videos_data:
-                            total_views = sum(video.get('view_count', 0) for video in videos_data)
-                            total_likes = sum(video.get('like_count', 0) for video in videos_data)
-                            average_views = total_views / len(videos_data) if videos_data else 0
-
-                            game_analytics.append({
-                                'canonical_name': canonical_name,
-                                'playlist_title': playlist_title,
-                                'total_views': total_views,
-                                'total_videos': len(videos_data),
-                                'average_views_per_episode': round(average_views),
-                                'total_likes': total_likes,
-                                'playlist_id': playlist_id,
-                                'videos_data': videos_data[:5]  # Keep top 5 videos for detailed analysis
-                            })
-
-                    except Exception as playlist_error:
-                        print(
-                            f"⚠️ Error processing playlist {playlist.get('snippet', {}).get('title', 'Unknown')}: {playlist_error}")
-                        continue
-
-                # Step 3: Find the most viewed game
-                if not game_analytics:
-                    print("❌ No valid game playlists found for analysis")
-                    return None
-
-                # Sort by total views
-                game_analytics.sort(key=lambda x: x['total_views'], reverse=True)
-                most_viewed = game_analytics[0]
-
-                # Find most viewed individual episode
-                most_viewed_episode = max(
-                    most_viewed['videos_data'], key=lambda x: x.get(
-                        'view_count', 0)) if most_viewed['videos_data'] else None
-
-                result = {
-                    'query_type': 'most_viewed_overall',
-                    'most_viewed_game': {
-                        'name': most_viewed['canonical_name'],
-                        'playlist_title': most_viewed['playlist_title'],
-                        'total_views': most_viewed['total_views'],
-                        'total_episodes': most_viewed['total_videos'],
-                        'average_views_per_episode': most_viewed['average_views_per_episode'],
-                        'total_likes': most_viewed['total_likes']
-                    },
-                    'runner_up': {
-                        'name': game_analytics[1]['canonical_name'],
-                        'total_views': game_analytics[1]['total_views']
-                    } if len(game_analytics) > 1 else None,
-                    'total_games_analyzed': len(game_analytics),
-                    'most_viewed_episode': {
-                        'title': most_viewed_episode['title'],
-                        'view_count': most_viewed_episode.get('view_count', 0),
-                        'episode_number': most_viewed_episode.get('position', 0) + 1
-                    } if most_viewed_episode else None
-                }
-
-                print(
-                    f"✅ Overall YouTube analytics complete: '{most_viewed['canonical_name']}' with {most_viewed['total_views']:,} total views")
-                print(f"📊 DEBUG - Result structure: {result}")
-                print(f"📊 DEBUG - Most viewed game name: {result['most_viewed_game']['name']}")
-                print(f"📊 DEBUG - Total views: {result['most_viewed_game']['total_views']}")
-                return result
 
     except Exception as e:
         print(f"❌ Error in get_most_viewed_game_overall: {e}")

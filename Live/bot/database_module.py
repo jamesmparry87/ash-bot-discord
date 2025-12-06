@@ -1,6 +1,8 @@
+import asyncio
 import json
 import logging
 import os
+import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from zoneinfo import ZoneInfo
@@ -21,7 +23,7 @@ class DatabaseManager:
         'total_playtime_minutes', 'youtube_views', 'youtube_playlist_url',
         'created_at', 'updated_at', 'last_youtube_sync'
     ]
-    
+
     def __init__(self):
         self.database_url = os.getenv('DATABASE_URL')
         if not self.database_url:
@@ -31,18 +33,18 @@ class DatabaseManager:
         else:
             self.connection = None
             self.init_database()
-    
+
     def _validate_column_name(self, column: str, allowed_columns: List[str]) -> str:
         """
         Validate column name against whitelist to prevent SQL injection.
-        
+
         Args:
             column: Column name to validate
             allowed_columns: List of allowed column names
-            
+
         Returns:
             Validated column name
-            
+
         Raises:
             ValueError: If column name is not in whitelist
         """
@@ -50,14 +52,14 @@ class DatabaseManager:
             logger.error(f"SQL Injection attempt detected - Invalid column name: {column}")
             raise ValueError(f"Invalid column name: {column}")
         return column
-    
+
     def _validate_order_direction(self, order: str) -> str:
         """
         Validate ORDER BY direction (ASC/DESC) to prevent SQL injection.
-        
+
         Args:
             order: Order direction string
-            
+
         Returns:
             Validated order direction (ASC or DESC)
         """
@@ -2153,7 +2155,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                     SELECT
@@ -2263,7 +2265,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                     SELECT
@@ -2301,7 +2303,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                     SELECT
@@ -2339,7 +2341,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                     SELECT
@@ -2377,7 +2379,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                     SELECT
@@ -2459,7 +2461,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                         SELECT
@@ -2488,7 +2490,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                         SELECT canonical_name, first_played_date FROM played_games
@@ -2510,7 +2512,7 @@ class DatabaseManager:
         try:
             # Validate order direction to prevent SQL injection
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
                     SELECT canonical_name, release_year FROM played_games
@@ -3633,15 +3635,86 @@ class DatabaseManager:
                     WHERE id = %s
                 """, (first_correct_user_id, total_participants, correct_count, session_id))
 
-                # Mark the question as 'answered'
+                # Mark the question as 'answered' with retry logic
                 question_id = session_dict.get("question_id")
                 if question_id:
-                    cur.execute("""
-                        UPDATE trivia_questions
-                        SET status = 'answered'
-                        WHERE id = %s
-                    """, (question_id,))
-                    print(f"📝 TRIVIA: Marked question {question_id} as 'answered'")
+                    max_retries = 3
+                    retry_count = 0
+                    status_updated = False
+
+                    while retry_count < max_retries and not status_updated:
+                        try:
+                            # Verify question exists first
+                            cur.execute("""
+                                SELECT id, status FROM trivia_questions
+                                WHERE id = %s
+                            """, (question_id,))
+
+                            question_check = cur.fetchone()
+
+                            if not question_check:
+                                print(f"❌ TRIVIA: Question {question_id} not found in database!")
+                                logger.error(f"Question {question_id} not found for status update")
+                                break
+
+                            current_status = dict(question_check).get('status')
+                            print(f"📝 TRIVIA: Question {question_id} current status: '{current_status}'")
+
+                            # Update to 'answered' status
+                            cur.execute("""
+                                UPDATE trivia_questions
+                                SET status = 'answered'
+                                WHERE id = %s
+                            """, (question_id,))
+
+                            # Verify the update succeeded
+                            if cur.rowcount > 0:
+                                # Double-check by reading back the status
+                                cur.execute("""
+                                    SELECT status FROM trivia_questions
+                                    WHERE id = %s
+                                """, (question_id,))
+
+                                verify_result = cur.fetchone()
+                                if verify_result:
+                                    new_status = dict(verify_result).get('status')
+                                    if new_status == 'answered':
+                                        print(
+                                            f"✅ TRIVIA: Successfully marked question {question_id} as 'answered' (verified)")
+                                        logger.info(f"Question {question_id} marked as 'answered'")
+                                        status_updated = True
+                                    else:
+                                        print(
+                                            f"⚠️ TRIVIA: Status update verification failed - status is '{new_status}' instead of 'answered'")
+                                        logger.warning(
+                                            f"Question {question_id} status verification failed: {new_status}")
+                                else:
+                                    print(f"⚠️ TRIVIA: Could not verify status update for question {question_id}")
+                            else:
+                                print(f"⚠️ TRIVIA: UPDATE returned 0 rows affected for question {question_id}")
+                                logger.warning(f"Question {question_id} status update affected 0 rows")
+
+                        except Exception as status_error:
+                            retry_count += 1
+                            print(
+                                f"❌ TRIVIA: Error updating question status (attempt {retry_count}/{max_retries}): {status_error}")
+                            logger.error(
+                                f"Question {question_id} status update error (attempt {retry_count}): {status_error}")
+
+                            if retry_count < max_retries:
+                                print(f"🔄 TRIVIA: Retrying status update for question {question_id}...")
+                                # Note: This is a synchronous method called from sync context
+                                # If this becomes a problem, refactor to async or use loop.run_in_executor
+                                time.sleep(0.5)  # Brief pause before retry
+
+                    if not status_updated:
+                        print(
+                            f"❌ TRIVIA: FAILED to mark question {question_id} as 'answered' after {max_retries} attempts")
+                        logger.error(
+                            f"Critical: Question {question_id} could not be marked as 'answered' after {max_retries} attempts")
+                else:
+                    print(f"⚠️ TRIVIA: No question_id found in session {session_id}, cannot mark as answered")
+                    logger.warning(f"Session {session_id} has no question_id")
 
                 conn.commit()
                 print(f"✅ TRIVIA: Session {session_id} completed - {correct_count}/{total_participants} correct")
