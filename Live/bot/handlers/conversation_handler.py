@@ -1577,35 +1577,35 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
             # Mark the rejected question as retired
             question_data = conversation.get('data', {}).get('question_data', {})
             question_id = question_data.get('id')
-            
+
             if question_id and db:
                 try:
                     db.update_trivia_question_status(question_id, 'retired')
                     print(f"✅ Marked question {question_id} as retired")
                 except Exception as e:
                     print(f"⚠️ Error marking question as retired: {e}")
-            
+
             await message.reply("🔄 **Question Rejected.** Searching for alternative question...")
-            
+
             # Automatically fetch next available question
             try:
                 next_question = db.get_next_trivia_question(exclude_user_id=JAM_USER_ID)
-                
+
                 if next_question:
                     # Calculate dynamic answer if needed
                     if next_question.get('is_dynamic') and next_question.get('dynamic_query_type'):
                         calculated_answer = db.calculate_dynamic_answer(next_question['dynamic_query_type'])
                         next_question['correct_answer'] = calculated_answer
-                    
+
                     # Start new approval workflow for replacement question
                     await message.reply(
                         f"🎯 **Alternative Question Found**\n\n"
                         f"Presenting replacement question for your approval:"
                     )
-                    
+
                     # Send the new question for approval (reuse the approval workflow)
                     success = await start_pre_trivia_approval(next_question)
-                    
+
                     if not success:
                         await message.reply(
                             "⚠️ **Could not start approval for replacement.** "
@@ -1623,7 +1623,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 await message.reply(
                     "❌ **Error finding replacement.** Please start trivia manually at 11:00 AM."
                 )
-            
+
             del jam_approval_conversations[user_id]
         else:
             await message.reply("⚠️ Invalid input. Please respond with **1** (Approve) or **2** (Reject).")
