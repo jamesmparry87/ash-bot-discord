@@ -434,6 +434,215 @@ def cleanup_series_names(db) -> Dict[str, Union[int, str]]:
         return {'error': str(e)}
 
 
+def parse_complex_array_syntax(alt_names_str: str) -> List[str]:
+    """
+    Parse complex array syntax from database into simple list.
+    
+    Handles formats like:
+    - '{"Name 1","Name 2","Name 3"}'
+    - '["Name 1", "Name 2"]'
+    - 'Name 1, Name 2, Name 3'
+    
+    Args:
+        alt_names_str: String representation of alternative names
+        
+    Returns:
+        List of parsed names
+    """
+    import json
+    import re
+    
+    if not alt_names_str:
+        return []
+    
+    # Try JSON parsing first
+    try:
+        parsed = json.loads(alt_names_str)
+        if isinstance(parsed, list):
+            return [str(name).strip() for name in parsed if name]
+    except (json.JSONDecodeError, ValueError):
+        pass
+    
+    # Try PostgreSQL array format: {"Name 1","Name 2"}
+    if alt_names_str.startswith('{') and alt_names_str.endswith('}'):
+        # Remove outer braces
+        content = alt_names_str[1:-1]
+        # Split by comma, handling quoted strings
+        names = re.findall(r'"([^"]*)"', content)
+        if names:
+            return [name.strip() for name in names if name.strip()]
+        # Fallback: simple comma split
+        return [name.strip() for name in content.split(',') if name.strip()]
+    
+    # Fallback: treat as comma-separated string
+    return [name.strip() for name in alt_names_str.split(',') if name.strip()]
+
+
+def filter_english_names(names: List[str]) -> List[str]:
+    """
+    Filter alternative names to English-only (ASCII + common European characters).
+    
+    Removes:
+    - CJK characters (Chinese, Japanese, Korean)
+    - Cyrillic characters (Russian, etc.)
+    - Arabic script
+    - Other non-Latin scripts
+    
+    Keeps:
+    - ASCII characters (a-z, A-Z, 0-9)
+    - Latin Extended-A (accented characters: é, ñ, ö, etc.)
+    - Common punctuation and symbols
+    
+    Args:
+        names: List of alternative names in various languages
+        
+    Returns:
+        Filtered list containing only English/Latin-based names
+    """
+    import re
+    
+    english_names = []
+    
+    for name in names:
+        if not name or not isinstance(name, str):
+            continue
+        
+        name = name.strip()
+        if not name:
+            continue
+        
+        # Check if name contains CJK characters
+        if re.search(r'[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]', name):
+            print(f"  🚫 Filtering CJK name: '{name}'")
+            continue
+        
+        # Check if name contains Cyrillic
+        if re.search(r'[\u0400-\u04ff]', name):
+            print(f"  🚫 Filtering Cyrillic name: '{name}'")
+            continue
+        
+        # Check if name contains Arabic
+        if re.search(r'[\u0600-\u06ff]', name):
+            print(f"  🚫 Filtering Arabic name: '{name}'")
+            continue
+        
+        # Allow ASCII + Latin Extended-A (covers most European languages)
+        # Unicode ranges: 0000-007F (ASCII), 0080-00FF (Latin-1), 0100-017F (Latin Extended-A)
+        if all(ord(c) < 592 for c in name):  # 592 = end of Latin Extended-A
+            english_names.append(name)
+        else:
+            print(f"  🚫 Filtering non-Latin name: '{name}'")
+    
+    return english_names
+
+
+def cleanup_alternative_names_format(db) -> Dict[str, Union[int, str, float]]:
+    """
+    Clean up alternative names to English-only, deduplicated, simple format.
+    
+    This function:
+    1. Parses complex array syntax from database
+    2. Filters to English-only names
+    3. Deduplicates names
+    4. Updates database with clean list
+    
+    Args:
+        db: Database instance
+        
+    Returns:
+        Dictionary with cleanup statistics
+    """
+    if not db:
+        return {'error': 'Database not available'}
+    
+    try:
+        all_games = db.get_all_played_games()
+        stats: Dict[str, Union[int, str, float]] = {
+            'total_games': len(all_games),
+            'processed': 0,
+            'cleaned': 0,
+            'skipped_no_alt_names': 0,
+            'total_names_before': 0,
+            'total_names_after': 0,
+        }
+        
+        for game in all_games:
+            alt_names = game.get('alternative_names')
+            
+            if not alt_names:
+                stats['skipped_no_alt_names'] = int(stats['skipped_no_alt_names']) + 1
+                continue
+            
+            # Parse if string
+            if isinstance(alt_names, str):
+                alt_names = parse_complex_array_syntax(alt_names)
+            elif not isinstance(alt_names, list):
+                print(f"⚠️ Unknown alt_names format for {game['canonical_name']}: {type(alt_names)}")
+                stats['skipped_no_alt_names'] = int(stats['skipped_no_alt_names']) + 1
+                continue
+            
+            if not alt_names:
+                stats['skipped_no_alt_names'] = int(stats['skipped_no_alt_names']) + 1
+                continue
+            
+            original_count = len(alt_names)
+            stats['total_names_before'] = int(stats['total_names_before']) + original_count
+            
+            print(f"\n🔍 Processing {game['canonical_name']}:")
+            print(f"  Original names ({original_count}): {alt_names}")
+            
+            # Filter to English-only
+            english_only = filter_english_names(alt_names)
+            
+            # Deduplicate while preserving order
+            seen = set()
+            unique_names = []
+            for name in english_only:
+                name_lower = name.lower()
+                if name_lower not in seen:
+                    seen.add(name_lower)
+                    unique_names.append(name)
+            
+            final_count = len(unique_names)
+            stats['total_names_after'] = int(stats['total_names_after']) + final_count
+            
+            # Only update if there were changes
+            if unique_names != alt_names:
+                db.update_played_game(game['id'], alternative_names=unique_names)
+                print(f"  ✅ Cleaned: {original_count} → {final_count} names")
+                print(f"  Final names: {unique_names}")
+                stats['cleaned'] = int(stats['cleaned']) + 1
+            else:
+                print(f"  ✓ Already clean ({final_count} names)")
+            
+            stats['processed'] = int(stats['processed']) + 1
+        
+        # Calculate summary
+        names_removed = int(stats['total_names_before']) - int(stats['total_names_after'])
+        stats['names_removed'] = names_removed
+        stats['removal_percentage'] = round(
+            (names_removed / int(stats['total_names_before']) * 100) if int(stats['total_names_before']) > 0 else 0,
+            1
+        )
+        
+        print(f"\n📊 Cleanup Summary:")
+        print(f"  Total games: {stats['total_games']}")
+        print(f"  Processed: {stats['processed']}")
+        print(f"  Cleaned: {stats['cleaned']}")
+        print(f"  Skipped (no alt names): {stats['skipped_no_alt_names']}")
+        print(f"  Names before: {stats['total_names_before']}")
+        print(f"  Names after: {stats['total_names_after']}")
+        print(f"  Names removed: {stats['names_removed']} ({stats['removal_percentage']}%)")
+        
+        return stats
+        
+    except Exception as e:
+        print(f"❌ Error cleaning up alternative names: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'error': str(e)}
+
+
 def audit_data_quality(db) -> Dict[str, Any]:
     """
     Generate comprehensive data quality report.
