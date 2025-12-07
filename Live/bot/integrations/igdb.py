@@ -177,7 +177,7 @@ async def validate_and_enrich(game_name: str) -> Dict[str, Any]:
         # Apply English-only filter
         english_alt_names = filter_english_names(alt_names)
         enrichment['alternative_names'] = english_alt_names[:5]  # Limit to 5
-        
+
         if len(english_alt_names) < len(alt_names):
             print(f"🔤 IGDB: Filtered {len(alt_names) - len(english_alt_names)} non-English names from '{igdb_name}'")
 
@@ -332,24 +332,24 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
 def filter_english_names(names: List[str]) -> List[str]:
     """
     Filter alternative names to English-only (removes non-Latin scripts).
-    
+
     Args:
         names: List of game names in various languages
-        
+
     Returns:
         List of names using only English/Latin characters
     """
     import re
-    
+
     if not names:
         return []
-    
+
     english_names = []
-    
+
     for name in names:
         if not name or not isinstance(name, str):
             continue
-            
+
         # Allow ASCII + Latin Extended-A (covers English + European accents like é, ñ, ö)
         # Unicode range: 0-591 covers Basic Latin + Latin Extended-A
         try:
@@ -362,7 +362,7 @@ def filter_english_names(names: List[str]) -> List[str]:
             # If we can't process the name, skip it
             print(f"⚠️ IGDB: Error filtering name '{name[:20]}...': {e}")
             continue
-    
+
     return english_names
 
 

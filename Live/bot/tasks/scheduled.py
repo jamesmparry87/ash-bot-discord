@@ -1966,20 +1966,20 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
         try:
             title = vod['title']
             vod_url = vod.get('url', '')
-            
+
             # Use smart extraction with IGDB validation (Phase 1.2)
             try:
                 from ..integrations.twitch import smart_extract_with_validation
                 extracted_name, confidence = await smart_extract_with_validation(title)
-                
+
                 if not extracted_name or confidence < 0.5:
                     print(f"⚠️ SYNC: Low confidence ({confidence:.2f}) for Twitch title: '{title}'")
-                    
+
                     # Flag for manual review if confidence is between 0.3-0.5
                     if 0.3 <= confidence < 0.5 and extracted_name:
                         try:
                             from ..handlers.conversation_handler import start_game_review_approval
-                            
+
                             review_data = {
                                 'original_title': title,
                                 'extracted_name': extracted_name,
@@ -1987,23 +1987,23 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                 'source': 'twitch_sync',
                                 'vod_url': vod_url
                             }
-                            
+
                             await start_game_review_approval(review_data)
                             print(f"📤 SYNC: Sent Twitch VOD for manual review (confidence: {confidence:.2f})")
                         except Exception as review_error:
                             print(f"❌ SYNC: Failed to send Twitch VOD for review: {review_error}")
-                    
+
                     continue
-                
+
                 game_name = extracted_name
                 print(f"✅ SYNC: Extracted '{game_name}' from Twitch with {confidence:.2f} confidence")
-                
+
             except ImportError:
                 # Fallback to basic extraction if smart extraction not available
                 print("⚠️ SYNC: Smart extraction not available, falling back to basic extraction")
                 game_name = extract_game_from_twitch(title)
                 confidence = 0.0
-                
+
                 if not game_name:
                     print(f"⚠️ SYNC: Could not extract game from Twitch title: '{title}'")
                     continue
@@ -2022,7 +2022,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                     'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + duration_minutes,
                     'total_episodes': existing_game.get('total_episodes', 0) + 1
                 }
-                
+
                 # Phase 1.3: Store VOD URLs
                 if vod_url:
                     # Get existing VOD URLs (handle both list and text formats)
@@ -2032,7 +2032,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                         existing_vods = [v.strip() for v in existing_vods.split(',') if v.strip()]
                     elif not isinstance(existing_vods, list):
                         existing_vods = []
-                    
+
                     # Add new VOD if not already present
                     if vod_url not in existing_vods:
                         existing_vods.append(vod_url)
@@ -2053,14 +2053,13 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                     'total_playtime_minutes': duration_minutes,
                     'total_episodes': 1,
                     'first_played_date': vod['published_at'].date(),
-                    'notes': f"Auto-synced from Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"
-                }
-                
+                    'notes': f"Auto-synced from Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
+
                 # Phase 1.3: Add VOD URL for new games
                 if vod_url:
                     game_data['twitch_vod_urls'] = [vod_url]
                     print(f"📎 SYNC: Storing VOD URL for new game '{game_name}'")
-                
+
                 # Try IGDB enrichment for new Twitch games if confidence is high
                 if igdb_available and confidence >= 0.75:
                     try:
@@ -2070,21 +2069,21 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                             if igdb_data.get('genre'):
                                 game_data['genre'] = map_genre_to_standard(igdb_data['genre'])
                                 print(f"🎮 SYNC: Added genre from IGDB: {game_data['genre']}")
-                            
+
                             if igdb_data.get('release_year'):
                                 game_data['release_year'] = igdb_data['release_year']
                                 print(f"📅 SYNC: Added release year from IGDB: {igdb_data['release_year']}")
-                            
+
                             if igdb_data.get('series_name'):
                                 game_data['series_name'] = igdb_data['series_name']
                                 print(f"📚 SYNC: Added series from IGDB: {igdb_data['series_name']}")
-                            
+
                             if igdb_data.get('alternative_names'):
                                 game_data['alternative_names'] = igdb_data['alternative_names'][:5]
                                 print(f"🔤 SYNC: Added alternative names from IGDB")
                     except Exception as igdb_error:
                         print(f"⚠️ SYNC: IGDB enrichment failed for Twitch game '{game_name}': {igdb_error}")
-                
+
                 db.add_played_game(**game_data)
                 print(f"✅ SYNC: Added '{game_name}' from Twitch VOD ({duration_minutes} mins)")
                 games_added += 1
