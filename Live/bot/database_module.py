@@ -1340,7 +1340,7 @@ class DatabaseManager:
                 cur.execute("""
                     SELECT * FROM played_games
                     WHERE series_name IS NOT NULL AND series_name != ''
-                    ORDER BY 
+                    ORDER BY
                         series_name ASC,
                         release_year ASC NULLS LAST,
                         canonical_name ASC
