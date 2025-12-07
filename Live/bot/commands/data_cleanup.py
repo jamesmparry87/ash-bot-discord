@@ -4,12 +4,13 @@ Data Cleanup Commands Module
 Admin commands for cleaning and validating the played games database.
 """
 
-import discord
-from discord.ext import commands
 from typing import Optional
 
-from ..database_module import get_database
+import discord
+from discord.ext import commands
+
 from ..config import JAM_USER_ID
+from ..database_module import get_database
 
 
 class DataCleanupCommands(commands.Cog):
@@ -32,8 +33,8 @@ class DataCleanupCommands(commands.Cog):
         
         try:
             # Import IGDB validation
-            from ..integrations.igdb import validate_and_enrich, filter_english_names
-            
+            from ..integrations.igdb import filter_english_names, validate_and_enrich
+
             # Get all games from database
             all_games = self.db.get_all_played_games()
             
