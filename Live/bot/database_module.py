@@ -1329,6 +1329,38 @@ class DatabaseManager:
         """Get all games in a specific series"""
         return self.get_all_played_games(series_name)
 
+    def get_games_by_series_organized(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Get all games organized by series with chronological sorting"""
+        conn = self.get_connection()
+        if not conn:
+            return {}
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT * FROM played_games
+                    WHERE series_name IS NOT NULL AND series_name != ''
+                    ORDER BY 
+                        series_name ASC,
+                        release_year ASC NULLS LAST,
+                        canonical_name ASC
+                """)
+                results = cur.fetchall()
+
+                # Group by series
+                series_dict: Dict[str, List[Dict[str, Any]]] = {}
+                for row in results:
+                    game = dict(row)
+                    series = game['series_name']
+                    if series not in series_dict:
+                        series_dict[series] = []
+                    series_dict[series].append(game)
+
+                return series_dict
+        except Exception as e:
+            logger.error(f"Error getting organized series: {e}")
+            return {}
+
     def played_game_exists(self, name: str) -> bool:
         """Check if a game has been played (fuzzy match)"""
         return self.get_played_game(name) is not None
