@@ -55,12 +55,34 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
 
         print(f"⚠️ Low confidence ({best_confidence:.2f}), trying alternative extractions...")
 
-    # Strategy 2: Try extracting part BEFORE the dash (for titles like "Game Name - Episode Title")
+    # Strategy 2: Try extracting from dash-separated titles
+    # PRIORITIZE "after dash" first (common format: "Description - Game Name (dayX)")
     if ' - ' in title or ' | ' in title:
         separator = ' - ' if ' - ' in title else ' | '
         parts = title.split(separator)
 
-        # Try the FIRST part (before separator)
+        # Try the SECOND part FIRST (after separator) - most common location for game name
+        if len(parts) > 1:
+            after_dash = parts[1].strip()
+            # Remove day/episode markers
+            after_dash = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', after_dash, flags=re.IGNORECASE)
+            after_dash = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]', '', after_dash, flags=re.IGNORECASE)
+            after_dash = cleanup_game_name(after_dash)
+
+            if len(after_dash) >= 3 and not is_generic_term(after_dash):
+                igdb_result = await igdb.validate_and_enrich(after_dash)
+                confidence = igdb_result.get('confidence', 0.0)
+                print(f"  Trying part after dash (PRIORITY): '{after_dash}' → confidence: {confidence:.2f}")
+
+                if confidence > best_confidence:
+                    best_name = after_dash
+                    best_confidence = confidence
+
+                    # Higher confidence threshold since this is the priority extraction
+                    if confidence >= 0.8:
+                        return best_name, best_confidence
+
+        # FALLBACK: Try the FIRST part (before separator) if after-dash had low confidence
         if len(parts) > 1:
             before_dash = parts[0].strip()
             # Clean common prefixes
@@ -74,7 +96,7 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
             if len(before_dash) >= 3 and not is_generic_term(before_dash):
                 igdb_result = await igdb.validate_and_enrich(before_dash)
                 confidence = igdb_result.get('confidence', 0.0)
-                print(f"  Trying part before dash: '{before_dash}' → confidence: {confidence:.2f}")
+                print(f"  Trying part before dash (FALLBACK): '{before_dash}' → confidence: {confidence:.2f}")
 
                 if confidence > best_confidence:
                     best_name = before_dash
@@ -82,23 +104,6 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
 
                     if confidence >= 0.8:
                         return best_name, best_confidence
-
-        # Try the SECOND part (after separator) - but remove day/episode markers
-        if len(parts) > 1:
-            after_dash = parts[1].strip()
-            # Remove day/episode markers
-            after_dash = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', after_dash, flags=re.IGNORECASE)
-            after_dash = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]', '', after_dash, flags=re.IGNORECASE)
-            after_dash = cleanup_game_name(after_dash)
-
-            if len(after_dash) >= 3 and not is_generic_term(after_dash):
-                igdb_result = await igdb.validate_and_enrich(after_dash)
-                confidence = igdb_result.get('confidence', 0.0)
-                print(f"  Trying part after dash: '{after_dash}' → confidence: {confidence:.2f}")
-
-                if confidence > best_confidence:
-                    best_name = after_dash
-                    best_confidence = confidence
 
     # Strategy 3: Try just removing prefixes and suffixes without complex pattern matching
     simple_clean = title
@@ -497,6 +502,56 @@ async def fetch_comprehensive_twitch_games(
                 f"Failed to fetch comprehensive Twitch games: {str(e)}")
 
     return games_data
+
+
+def detect_multiple_games_in_title(title: str) -> List[str]:
+    """
+    Detect if a stream title mentions multiple games.
+    Returns list of potential game names found in the title.
+    
+    Common patterns:
+    - "Game A + Game B"
+    - "Game A & Game B"  
+    - "Game A and Game B"
+    - "Game A, Game B, Game C"
+    
+    Args:
+        title: Stream title to analyze
+        
+    Returns:
+        List of potential game names, or empty list if single game
+    """
+    potential_games = []
+    
+    # Common multi-game separators
+    separators = [' + ', ' & ', ' and ', ', ']
+    
+    for sep in separators:
+        if sep in title.lower():
+            # Split on the separator
+            parts = title.split(sep)
+            
+            # Only consider valid if we have 2-4 parts (reasonable multi-game scenario)
+            if 2 <= len(parts) <= 4:
+                # Clean each part
+                cleaned_parts = []
+                for part in parts:
+                    cleaned = part.strip()
+                    # Remove common prefixes/suffixes
+                    cleaned = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', cleaned, flags=re.IGNORECASE)
+                    cleaned = re.sub(r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*', '', cleaned, flags=re.IGNORECASE)
+                    cleaned = cleanup_game_name(cleaned)
+                    
+                    # Only include if it looks like a game name (3+ chars, not generic)
+                    if len(cleaned) >= 3 and not is_generic_term(cleaned):
+                        cleaned_parts.append(cleaned)
+                
+                # If we got valid parts, use them
+                if len(cleaned_parts) >= 2:
+                    potential_games = cleaned_parts
+                    break
+    
+    return potential_games
 
 
 def parse_twitch_duration(duration: str) -> int:
