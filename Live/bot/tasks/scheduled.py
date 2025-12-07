@@ -2038,31 +2038,35 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
             # Phase 2.2: Check for multi-game streams
             try:
                 potential_games = detect_multiple_games_in_title(title)
-                
+
                 if len(potential_games) >= 2:
                     print(f"🔍 SYNC: Multi-game stream detected in '{title}'")
                     print(f"   Games found: {potential_games}")
-                    
+
                     # Split playtime equally between games
                     fractional_duration = duration_minutes // len(potential_games)
-                    
+
                     # Process each game separately
                     for game_name in potential_games:
                         try:
                             from ..integrations.twitch import smart_extract_with_validation
                             extracted_name, confidence = await smart_extract_with_validation(game_name)
-                            
+
                             if extracted_name and confidence >= 0.7:
-                                print(f"   ✅ Processing '{extracted_name}' ({fractional_duration} mins, {confidence:.2f} confidence)")
-                                
+                                print(
+                                    f"   ✅ Processing '{extracted_name}' ({fractional_duration} mins, {confidence:.2f} confidence)")
+
                                 # Check if game exists
                                 existing_game = db.get_played_game(extracted_name)
-                                
+
                                 if existing_game:
                                     update_params = {
-                                        'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + fractional_duration,
-                                        'total_episodes': existing_game.get('total_episodes', 0) + 1
-                                    }
+                                        'total_playtime_minutes': existing_game.get(
+                                            'total_playtime_minutes',
+                                            0) + fractional_duration,
+                                        'total_episodes': existing_game.get(
+                                            'total_episodes',
+                                            0) + 1}
                                     db.update_played_game(existing_game['id'], **update_params)
                                     print(f"   ✅ Updated '{extracted_name}' with {fractional_duration} mins")
                                     games_updated += 1
@@ -2074,25 +2078,24 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                         'total_playtime_minutes': fractional_duration,
                                         'total_episodes': 1,
                                         'first_played_date': vod['published_at'].date(),
-                                        'notes': f"Auto-synced from multi-game Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"
-                                    }
+                                        'notes': f"Auto-synced from multi-game Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
                                     if vod_url:
                                         game_data['twitch_vod_urls'] = [vod_url]
-                                    
+
                                     db.add_played_game(**game_data)
                                     print(f"   ✅ Added '{extracted_name}' with {fractional_duration} mins")
                                     games_added += 1
-                                
+
                                 total_new_minutes += fractional_duration
                             else:
                                 print(f"   ⚠️ Low confidence for '{game_name}' ({confidence:.2f}), skipping")
-                        
+
                         except Exception as multi_game_error:
                             print(f"   ❌ Error processing multi-game entry '{game_name}': {multi_game_error}")
-                    
+
                     # Skip normal processing for this VOD since we handled all games
                     continue
-                    
+
             except Exception as detection_error:
                 print(f"⚠️ SYNC: Multi-game detection failed for '{title}': {detection_error}")
                 # Fall through to normal single-game processing
