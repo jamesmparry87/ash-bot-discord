@@ -79,7 +79,8 @@ class TestIGDBValidation:
         for game in known_games:
             result = await validate_and_enrich(game)
             assert result is not None, f"IGDB validation failed for '{game}'"
-            assert result.get('confidence', 0) >= 0.9, f"Low confidence for known game '{game}': {result.get('confidence', 0)}"
+            assert result.get(
+                'confidence', 0) >= 0.9, f"Low confidence for known game '{game}': {result.get('confidence', 0)}"
             assert result.get('canonical_name'), f"No canonical name returned for '{game}'"
 
     @pytest.mark.asyncio
@@ -342,7 +343,7 @@ class TestRegressionPrevention:
         """
         Regression test: Ensure 'Zombie Army 4' is correctly extracted
         from "Certified Zombie Pest Control Specialist - Zombie Army 4 (day7)"
-        
+
         This was a known failing case that should now work.
         """
         from bot.integrations.twitch import smart_extract_with_validation
@@ -357,7 +358,7 @@ class TestRegressionPrevention:
     def test_alternative_names_no_mixed_languages(self):
         """
         Regression test: Ensure alternative names don't contain mixed languages
-        
+
         This was a known issue where Spanish, Japanese, etc. names were mixed with English.
         """
         from bot.integrations.igdb import filter_english_names
@@ -380,7 +381,7 @@ class TestRegressionPrevention:
     async def test_extraction_doesnt_pick_description_first(self):
         """
         Regression test: Ensure extraction doesn't prioritize description over game name
-        
+
         Previous behavior tried "before dash" first, which was wrong for "Description - Game" format.
         """
         from bot.integrations.twitch import smart_extract_with_validation
