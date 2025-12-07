@@ -274,6 +274,14 @@ class DatabaseManager:
                     ADD COLUMN IF NOT EXISTS igdb_last_validated TIMESTAMP
                 """)
 
+                # Add Twitch engagement tracking columns
+                cur.execute("""
+                    ALTER TABLE played_games
+                    ADD COLUMN IF NOT EXISTS twitch_views INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS twitch_watch_hours INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS last_twitch_sync TIMESTAMP
+                """)
+
                 # Migrate existing array columns to TEXT format for manual
                 # editing
                 try:
