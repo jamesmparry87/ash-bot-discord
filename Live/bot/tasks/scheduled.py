@@ -2028,24 +2028,24 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
         try:
             title = vod['title']
             vod_url = vod.get('url', '')
-            
+
             # Initialize variables early to avoid unbound variable errors
             is_low_confidence = False
             confidence = 0.0
-            
+
             # Use smart extraction with IGDB validation (Phase 1.2)
             try:
                 from ..integrations.twitch import smart_extract_with_validation
                 extracted_name, confidence = await smart_extract_with_validation(title)
-                
+
                 if not extracted_name or confidence < 0.5:
                     print(f"⚠️ SYNC: Low confidence ({confidence:.2f}) for Twitch title: '{title}'")
-                    
+
                     # Flag for manual review if confidence is between 0.3-0.5
                     if 0.3 <= confidence < 0.5 and extracted_name:
                         try:
                             from ..handlers.conversation_handler import start_game_review_approval
-                            
+
                             review_data = {
                                 'original_title': title,
                                 'extracted_name': extracted_name,
@@ -2053,25 +2053,26 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                 'source': 'twitch_sync',
                                 'vod_url': vod_url
                             }
-                            
+
                             await start_game_review_approval(review_data)
                             print(f"📤 SYNC: Sent Twitch VOD for manual review (confidence: {confidence:.2f})")
                         except Exception as review_error:
                             print(f"❌ SYNC: Failed to send Twitch VOD for review: {review_error}")
-                    
+
                     continue
-                
+
                 game_name = extracted_name
                 is_low_confidence = confidence < 0.5
-                print(f"✅ SYNC: Extracted '{game_name}' from Twitch with {confidence:.2f} confidence{' (LOW - needs review)' if is_low_confidence else ''}")
-                
+                print(
+                    f"✅ SYNC: Extracted '{game_name}' from Twitch with {confidence:.2f} confidence{' (LOW - needs review)' if is_low_confidence else ''}")
+
             except ImportError:
                 # Fallback to basic extraction if smart extraction not available
                 print("⚠️ SYNC: Smart extraction not available, falling back to basic extraction")
                 game_name = extract_game_from_twitch(title)
                 confidence = 0.0
                 is_low_confidence = False  # Reset for fallback case
-                
+
                 if not game_name:
                     print(f"⚠️ SYNC: Could not extract game from Twitch title: '{title}'")
                     continue
@@ -2112,7 +2113,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                 db.update_played_game(existing_game['id'], **update_params)
                 print(f"✅ SYNC: Updated '{game_name}' with Twitch VOD ({duration_minutes} mins)")
                 games_updated += 1
-                
+
                 # Track low-confidence update for notification
                 if is_low_confidence:
                     low_confidence_entries.append({
@@ -2164,11 +2165,11 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                 print(f"🔤 SYNC: Added alternative names from IGDB")
                     except Exception as igdb_error:
                         print(f"⚠️ SYNC: IGDB enrichment failed for Twitch game '{game_name}': {igdb_error}")
-                
+
                 new_game_id = db.add_played_game(**game_data)
                 print(f"✅ SYNC: Added '{game_name}' from Twitch VOD ({duration_minutes} mins)")
                 games_added += 1
-                
+
                 # Track low-confidence addition for notification
                 if is_low_confidence and new_game_id:
                     low_confidence_entries.append({

@@ -508,29 +508,29 @@ def detect_multiple_games_in_title(title: str) -> List[str]:
     """
     Detect if a stream title mentions multiple games.
     Returns list of potential game names found in the title.
-    
+
     Common patterns:
     - "Game A + Game B"
-    - "Game A & Game B"  
+    - "Game A & Game B"
     - "Game A and Game B"
     - "Game A, Game B, Game C"
-    
+
     Args:
         title: Stream title to analyze
-        
+
     Returns:
         List of potential game names, or empty list if single game
     """
     potential_games = []
-    
+
     # Common multi-game separators
     separators = [' + ', ' & ', ' and ', ', ']
-    
+
     for sep in separators:
         if sep in title.lower():
             # Split on the separator
             parts = title.split(sep)
-            
+
             # Only consider valid if we have 2-4 parts (reasonable multi-game scenario)
             if 2 <= len(parts) <= 4:
                 # Clean each part
@@ -539,18 +539,22 @@ def detect_multiple_games_in_title(title: str) -> List[str]:
                     cleaned = part.strip()
                     # Remove common prefixes/suffixes
                     cleaned = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', cleaned, flags=re.IGNORECASE)
-                    cleaned = re.sub(r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*', '', cleaned, flags=re.IGNORECASE)
+                    cleaned = re.sub(
+                        r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*',
+                        '',
+                        cleaned,
+                        flags=re.IGNORECASE)
                     cleaned = cleanup_game_name(cleaned)
-                    
+
                     # Only include if it looks like a game name (3+ chars, not generic)
                     if len(cleaned) >= 3 and not is_generic_term(cleaned):
                         cleaned_parts.append(cleaned)
-                
+
                 # If we got valid parts, use them
                 if len(cleaned_parts) >= 2:
                     potential_games = cleaned_parts
                     break
-    
+
     return potential_games
 
 
