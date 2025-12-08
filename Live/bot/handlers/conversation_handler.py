@@ -1712,14 +1712,17 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                     del jam_approval_conversations[user_id]
 
             elif content in ['2', 'modify', 'edit', 'change']:
-                # Switch to modification mode
-                conversation['step'] = 'modification'
-                current_question = data.get('question_data', {}).get('question_text', 'Unknown')
+                # Switch to modification choice menu
+                conversation['step'] = 'modification_choice'
                 await message.reply(
-                    f"✏️ **Question Text Editing**\n\n"
-                    f"**Current Question:**\n"
-                    f"```\n{current_question}\n```\n\n"
-                    f"Please provide your revised question text (copy the above and edit as needed):"
+                    f"✏️ **Modification Options**\n\n"
+                    f"What would you like to modify?\n\n"
+                    f"**1.** 📝 **Edit Question Text** - Modify the question only\n"
+                    f"**2.** 📝 **Edit Answer Only** - Modify the answer only\n"
+                    f"**3.** 📝 **Edit Both** - Modify question and answer\n"
+                    f"**4.** ↩️ **Back to Approval** - Return to approval menu\n\n"
+                    f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
+                    f"*Select the modification scope for efficient editing.*"
                 )
 
             elif content in ['3', 'reject', 'no', 'decline']:
@@ -1743,6 +1746,68 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 await message.reply(
                     f"⚠️ **Invalid response.** Please respond with **1** (Approve), **2** (Modify), or **3** (Reject).\n\n"
                     f"*Precise input required for approval protocol execution.*"
+                )
+
+        elif step == 'modification_choice':
+            # Handle modification choice menu
+            if content in ['1', 'question', 'edit question']:
+                # Edit question only
+                conversation['step'] = 'modification'
+                current_question = data.get('question_data', {}).get('question_text', 'Unknown')
+                await message.reply(
+                    f"✏️ **Question Text Editing**\n\n"
+                    f"**Current Question:**\n"
+                    f"```\n{current_question}\n```\n\n"
+                    f"Please provide your revised question text (copy the above and edit as needed):"
+                )
+
+            elif content in ['2', 'answer', 'edit answer']:
+                # Edit answer only
+                conversation['step'] = 'answer_modification'
+                original_data = data.get('question_data', {})
+                current_answer = original_data.get('correct_answer', 'Dynamic calculation')
+                await message.reply(
+                    f"✏️ **Answer Editing**\n\n"
+                    f"**Current Answer:**\n"
+                    f"```\n{current_answer}\n```\n\n"
+                    f"Please provide the revised answer:"
+                )
+
+            elif content in ['3', 'both', 'edit both']:
+                # Edit both - start with question
+                conversation['step'] = 'modification'
+                data['edit_both'] = True  # Flag to continue to answer after question
+                current_question = data.get('question_data', {}).get('question_text', 'Unknown')
+                await message.reply(
+                    f"✏️ **Editing Both Question and Answer**\n\n"
+                    f"Let's start with the question text.\n\n"
+                    f"**Current Question:**\n"
+                    f"```\n{current_question}\n```\n\n"
+                    f"Please provide your revised question text (copy the above and edit as needed):"
+                )
+
+            elif content in ['4', 'back', 'cancel']:
+                # Return to approval menu
+                conversation['step'] = 'approval'
+                question_data = data.get('question_data', {})
+                question_text = question_data.get('question_text', 'Unknown question')
+                correct_answer = question_data.get('correct_answer', 'Dynamic calculation')
+                
+                await message.reply(
+                    f"↩️ **Returned to Approval Menu**\n\n"
+                    f"**Question:** {question_text}\n\n"
+                    f"**Answer:** {correct_answer}\n\n"
+                    f"📚 **Available Actions:**\n"
+                    f"**1.** ✅ **Approve** - Add this question to the database as-is\n"
+                    f"**2.** ✏️ **Modify** - Edit question and/or answer\n"
+                    f"**3.** ❌ **Reject** - Discard this question and generate an alternative\n\n"
+                    f"Please respond with **1**, **2**, or **3**."
+                )
+
+            else:
+                await message.reply(
+                    f"⚠️ **Invalid choice.** Please respond with **1** (Edit Question), **2** (Edit Answer), **3** (Edit Both), or **4** (Back).\n\n"
+                    f"*Precise input required for modification selection.*"
                 )
 
         elif step == 'modification':
@@ -2079,10 +2144,9 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
         approval_msg += (
             f"📚 **Available Actions:**\n"
             f"**1.** ✅ **Approve** - Add this question to the database as-is\n"
-            f"**2.** ✏️ **Modify Question** - Edit the question text\n"
-            f"**3.** 🔧 **Modify Answer** - Edit the answer only\n"
-            f"**4.** ❌ **Reject** - Discard this question and generate an alternative\n\n"
-            f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
+            f"**2.** ✏️ **Modify** - Edit question and/or answer\n"
+            f"**3.** ❌ **Reject** - Discard this question and generate an alternative\n\n"
+            f"Please respond with **1**, **2**, or **3**.\n\n"
             f"*Question approval required for Trivia Tuesday deployment.*"
         )
 
