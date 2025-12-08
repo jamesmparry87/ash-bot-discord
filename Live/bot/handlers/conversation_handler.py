@@ -1792,7 +1792,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 question_data = data.get('question_data', {})
                 question_text = question_data.get('question_text', 'Unknown question')
                 correct_answer = question_data.get('correct_answer', 'Dynamic calculation')
-                
+
                 await message.reply(
                     f"↩️ **Returned to Approval Menu**\n\n"
                     f"**Question:** {question_text}\n\n"
