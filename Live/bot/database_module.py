@@ -274,6 +274,14 @@ class DatabaseManager:
                     ADD COLUMN IF NOT EXISTS igdb_last_validated TIMESTAMP
                 """)
 
+                # Add Twitch engagement tracking columns
+                cur.execute("""
+                    ALTER TABLE played_games
+                    ADD COLUMN IF NOT EXISTS twitch_views INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS twitch_watch_hours INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS last_twitch_sync TIMESTAMP
+                """)
+
                 # Migrate existing array columns to TEXT format for manual
                 # editing
                 try:
@@ -1320,6 +1328,38 @@ class DatabaseManager:
     def get_series_games(self, series_name: str) -> List[Dict[str, Any]]:
         """Get all games in a specific series"""
         return self.get_all_played_games(series_name)
+
+    def get_games_by_series_organized(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Get all games organized by series with chronological sorting"""
+        conn = self.get_connection()
+        if not conn:
+            return {}
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT * FROM played_games
+                    WHERE series_name IS NOT NULL AND series_name != ''
+                    ORDER BY
+                        series_name ASC,
+                        release_year ASC NULLS LAST,
+                        canonical_name ASC
+                """)
+                results = cur.fetchall()
+
+                # Group by series
+                series_dict: Dict[str, List[Dict[str, Any]]] = {}
+                for row in results:
+                    game = dict(row)
+                    series = game['series_name']
+                    if series not in series_dict:
+                        series_dict[series] = []
+                    series_dict[series].append(game)
+
+                return series_dict
+        except Exception as e:
+            logger.error(f"Error getting organized series: {e}")
+            return {}
 
     def played_game_exists(self, name: str) -> bool:
         """Check if a game has been played (fuzzy match)"""
@@ -4027,6 +4067,37 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting answered trivia questions: {e}")
             return []
+
+    def update_trivia_question_status(
+            self,
+            question_id: int,
+            new_status: str) -> bool:
+        """Update a trivia question's status to any valid value"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE trivia_questions
+                    SET status = %s
+                    WHERE id = %s
+                """,
+                    (new_status, question_id),
+                )
+                conn.commit()
+
+                if cur.rowcount > 0:
+                    logger.info(
+                        f"Updated trivia question {question_id} status to '{new_status}'")
+                    return True
+                return False
+        except Exception as e:
+            logger.error(f"Error updating trivia question status: {e}")
+            conn.rollback()
+            return False
 
     def reset_trivia_question_status(
             self,

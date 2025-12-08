@@ -43,6 +43,7 @@ except Exception as db_error:
 
 # Import integrations
 try:
+    from ..integrations.twitch import detect_multiple_games_in_title
     from ..integrations.twitch import extract_game_name_from_title as extract_game_from_twitch
     from ..integrations.twitch import fetch_new_vods_since
     from ..integrations.youtube import execute_youtube_auto_post
@@ -70,6 +71,10 @@ except ImportError:
     def extract_game_from_twitch(*args, **kwargs) -> Optional[str]:
         print("⚠️ extract_game_from_twitch not available - integration not loaded")
         return None
+
+    def detect_multiple_games_in_title(title: str) -> list:
+        print("⚠️ detect_multiple_games_in_title not available - integration not loaded")
+        return []
 
 try:
     from ..handlers.conversation_handler import notify_jam_weekly_message_failure, start_weekly_announcement_approval
@@ -1467,6 +1472,65 @@ async def notify_scheduled_message_error(task_name: str, error_message: str, tim
     except Exception as notify_error:
         print(f"❌ Failed to notify JAM of scheduled message error: {notify_error}")
 
+
+async def send_low_confidence_notification(entries: list) -> None:
+    """Send batch DM notification to JAM about low-confidence game extractions"""
+    try:
+        from ..config import JAM_USER_ID
+
+        if not _bot_instance:
+            print("❌ Bot instance not available for low-confidence notification")
+            return
+
+        user = await _bot_instance.fetch_user(JAM_USER_ID)
+        if not user:
+            print(f"❌ Could not fetch JAM user for low-confidence notification")
+            return
+
+        # Group entries by action type
+        added = [e for e in entries if e['action'] == 'added']
+        updated = [e for e in entries if e['action'] == 'updated']
+
+        # Build notification message
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        message = (
+            f"⚠️ **Low Confidence Game Extractions - Monday Sync**\n\n"
+            f"**Time:** {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}\n"
+            f"**Total Entries:** {len(entries)}\n\n"
+        )
+
+        if added:
+            message += f"**🆕 New Games Added ({len(added)}):**\n"
+            for entry in added[:5]:  # Limit to first 5
+                message += f"• **{entry['name']}** (ID: {entry['id']}, {entry['confidence']:.0%} confidence)\n"
+                message += f"  From: \"{entry['original_title'][:50]}...\"\n"
+            if len(added) > 5:
+                message += f"  ...and {len(added) - 5} more\n"
+            message += "\n"
+
+        if updated:
+            message += f"**🔄 Existing Games Updated ({len(updated)}):**\n"
+            for entry in updated[:5]:  # Limit to first 5
+                message += f"• **{entry['name']}** (ID: {entry['id']}, +{entry['playtime_added']} mins)\n"
+            if len(updated) > 5:
+                message += f"  ...and {len(updated) - 5} more\n"
+            message += "\n"
+
+        total_playtime = sum(e.get('playtime_added', 0) for e in entries)
+        message += (
+            f"**📊 Summary:**\n"
+            f"• Total playtime preserved: {total_playtime} minutes ({round(total_playtime/60, 1)} hours)\n"
+            f"• All entries saved to database with review flags\n\n"
+            f"*These extractions had confidence between 30-50% but were saved to preserve playtime data. "
+            f"You can review and correct them later if needed.*"
+        )
+
+        await user.send(message)
+        print(f"✅ Sent low-confidence notification to JAM ({len(entries)} entries)")
+
+    except Exception as e:
+        print(f"❌ Failed to send low-confidence notification: {e}")
+
 # --- Reminder Helper Functions ---
 
 
@@ -1961,15 +2025,128 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
             print(f"⚠️ SYNC: Error processing game '{game_data.get('canonical_name', 'Unknown')}': {game_error}")
             continue
 
-    # Process Twitch VODs
+    # Track low-confidence entries for batch notification
+    low_confidence_entries = []
+
+    # Process Twitch VODs with smart extraction and IGDB enrichment
     for vod in twitch_vods:
         try:
             title = vod['title']
-            game_name = extract_game_from_twitch(title)
+            vod_url = vod.get('url', '')
+            duration_minutes = vod.get('duration_seconds', 0) // 60
 
-            if not game_name:
-                print(f"⚠️ SYNC: Could not extract game from Twitch title: '{title}'")
-                continue
+            # Phase 2.2: Check for multi-game streams
+            try:
+                potential_games = detect_multiple_games_in_title(title)
+
+                if len(potential_games) >= 2:
+                    print(f"🔍 SYNC: Multi-game stream detected in '{title}'")
+                    print(f"   Games found: {potential_games}")
+
+                    # Split playtime equally between games
+                    fractional_duration = duration_minutes // len(potential_games)
+
+                    # Process each game separately
+                    for game_name in potential_games:
+                        try:
+                            from ..integrations.twitch import smart_extract_with_validation
+                            extracted_name, confidence = await smart_extract_with_validation(game_name)
+
+                            if extracted_name and confidence >= 0.7:
+                                print(
+                                    f"   ✅ Processing '{extracted_name}' ({fractional_duration} mins, {confidence:.2f} confidence)")
+
+                                # Check if game exists
+                                existing_game = db.get_played_game(extracted_name)
+
+                                if existing_game:
+                                    update_params = {
+                                        'total_playtime_minutes': existing_game.get(
+                                            'total_playtime_minutes',
+                                            0) + fractional_duration,
+                                        'total_episodes': existing_game.get(
+                                            'total_episodes',
+                                            0) + 1}
+                                    db.update_played_game(existing_game['id'], **update_params)
+                                    print(f"   ✅ Updated '{extracted_name}' with {fractional_duration} mins")
+                                    games_updated += 1
+                                else:
+                                    # Add new game
+                                    game_data = {
+                                        'canonical_name': extracted_name,
+                                        'series_name': extracted_name,
+                                        'total_playtime_minutes': fractional_duration,
+                                        'total_episodes': 1,
+                                        'first_played_date': vod['published_at'].date(),
+                                        'notes': f"Auto-synced from multi-game Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
+                                    if vod_url:
+                                        game_data['twitch_vod_urls'] = [vod_url]
+
+                                    db.add_played_game(**game_data)
+                                    print(f"   ✅ Added '{extracted_name}' with {fractional_duration} mins")
+                                    games_added += 1
+
+                                total_new_minutes += fractional_duration
+                            else:
+                                print(f"   ⚠️ Low confidence for '{game_name}' ({confidence:.2f}), skipping")
+
+                        except Exception as multi_game_error:
+                            print(f"   ❌ Error processing multi-game entry '{game_name}': {multi_game_error}")
+
+                    # Skip normal processing for this VOD since we handled all games
+                    continue
+
+            except Exception as detection_error:
+                print(f"⚠️ SYNC: Multi-game detection failed for '{title}': {detection_error}")
+                # Fall through to normal single-game processing
+
+            # Initialize variables early to avoid unbound variable errors (single-game processing)
+            is_low_confidence = False
+            confidence = 0.0
+
+            # Use smart extraction with IGDB validation (Phase 1.2) for single-game streams
+            try:
+                from ..integrations.twitch import smart_extract_with_validation
+                extracted_name, confidence = await smart_extract_with_validation(title)
+
+                if not extracted_name or confidence < 0.5:
+                    print(f"⚠️ SYNC: Low confidence ({confidence:.2f}) for Twitch title: '{title}'")
+
+                    # Flag for manual review if confidence is between 0.3-0.5
+                    if 0.3 <= confidence < 0.5 and extracted_name:
+                        try:
+                            from ..handlers.conversation_handler import start_game_review_approval
+
+                            review_data = {
+                                'original_title': title,
+                                'extracted_name': extracted_name,
+                                'confidence_score': confidence,
+                                'source': 'twitch_sync',
+                                'vod_url': vod_url
+                            }
+
+                            await start_game_review_approval(review_data)
+                            print(f"📤 SYNC: Sent Twitch VOD for manual review (confidence: {confidence:.2f})")
+                        except Exception as review_error:
+                            print(f"❌ SYNC: Failed to send Twitch VOD for review: {review_error}")
+
+                    continue
+
+                game_name = extracted_name
+                is_low_confidence = confidence < 0.5
+                print(
+                    f"✅ SYNC: Extracted '{game_name}' from Twitch with {confidence:.2f} confidence{' (LOW - needs review)' if is_low_confidence else ''}")
+
+            except ImportError:
+                # Fallback to basic extraction if smart extraction not available
+                print("⚠️ SYNC: Smart extraction not available, falling back to basic extraction")
+                game_name = extract_game_from_twitch(title)
+                confidence = 0.0
+                is_low_confidence = False  # Reset for fallback case
+
+                if not game_name:
+                    print(f"⚠️ SYNC: Could not extract game from Twitch title: '{title}'")
+                    continue
 
             print(f"✅ SYNC: Processing Twitch VOD '{game_name}'")
 
@@ -1986,21 +2163,96 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                     'total_episodes': existing_game.get('total_episodes', 0) + 1
                 }
 
+                # Phase 1.3: Store VOD URLs
+                if vod_url:
+                    # Get existing VOD URLs (handle both list and text formats)
+                    existing_vods = existing_game.get('twitch_vod_urls', [])
+                    if isinstance(existing_vods, str):
+                        # Parse comma-separated string
+                        existing_vods = [v.strip() for v in existing_vods.split(',') if v.strip()]
+                    elif not isinstance(existing_vods, list):
+                        existing_vods = []
+
+                    # Add new VOD if not already present
+                    if vod_url not in existing_vods:
+                        existing_vods.append(vod_url)
+                        # Keep only last 10 VODs to avoid bloat
+                        existing_vods = existing_vods[-10:]
+                        update_params['twitch_vod_urls'] = existing_vods
+                        print(f"📎 SYNC: Added VOD URL to '{game_name}' ({len(existing_vods)} total)")
+
                 db.update_played_game(existing_game['id'], **update_params)
                 print(f"✅ SYNC: Updated '{game_name}' with Twitch VOD ({duration_minutes} mins)")
                 games_updated += 1
 
+                # Track low-confidence update for notification
+                if is_low_confidence:
+                    low_confidence_entries.append({
+                        'id': existing_game['id'],
+                        'name': game_name,
+                        'confidence': confidence,
+                        'source': 'twitch_vod',
+                        'original_title': title,
+                        'vod_url': vod_url,
+                        'action': 'updated',
+                        'playtime_added': duration_minutes
+                    })
+
             else:
-                # Add new game from Twitch VOD
-                db.add_played_game(
-                    canonical_name=game_name,
-                    series_name=game_name,
-                    total_playtime_minutes=duration_minutes,
-                    total_episodes=1,
-                    first_played_date=vod['published_at'].date(),
-                    notes=f"Auto-synced from Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}")
+                # Add new game from Twitch VOD with IGDB enrichment if available
+                game_data = {
+                    'canonical_name': game_name,
+                    'series_name': game_name,
+                    'total_playtime_minutes': duration_minutes,
+                    'total_episodes': 1,
+                    'first_played_date': vod['published_at'].date(),
+                    'notes': f"Auto-synced from Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
+
+                # Phase 1.3: Add VOD URL for new games
+                if vod_url:
+                    game_data['twitch_vod_urls'] = [vod_url]
+                    print(f"📎 SYNC: Storing VOD URL for new game '{game_name}'")
+
+                # Try IGDB enrichment for new Twitch games if confidence is high
+                if igdb_available and confidence >= 0.75:
+                    try:
+                        igdb_data = await validate_and_enrich(game_name)
+                        if igdb_data and igdb_data.get('match_found'):
+                            # Add enriched metadata
+                            if igdb_data.get('genre'):
+                                game_data['genre'] = map_genre_to_standard(igdb_data['genre'])
+                                print(f"🎮 SYNC: Added genre from IGDB: {game_data['genre']}")
+
+                            if igdb_data.get('release_year'):
+                                game_data['release_year'] = igdb_data['release_year']
+                                print(f"📅 SYNC: Added release year from IGDB: {igdb_data['release_year']}")
+
+                            if igdb_data.get('series_name'):
+                                game_data['series_name'] = igdb_data['series_name']
+                                print(f"📚 SYNC: Added series from IGDB: {igdb_data['series_name']}")
+
+                            if igdb_data.get('alternative_names'):
+                                game_data['alternative_names'] = igdb_data['alternative_names'][:5]
+                                print(f"🔤 SYNC: Added alternative names from IGDB")
+                    except Exception as igdb_error:
+                        print(f"⚠️ SYNC: IGDB enrichment failed for Twitch game '{game_name}': {igdb_error}")
+
+                new_game_id = db.add_played_game(**game_data)
                 print(f"✅ SYNC: Added '{game_name}' from Twitch VOD ({duration_minutes} mins)")
                 games_added += 1
+
+                # Track low-confidence addition for notification
+                if is_low_confidence and new_game_id:
+                    low_confidence_entries.append({
+                        'id': new_game_id,
+                        'name': game_name,
+                        'confidence': confidence,
+                        'source': 'twitch_vod',
+                        'original_title': title,
+                        'vod_url': vod_url,
+                        'action': 'added',
+                        'playtime_added': duration_minutes
+                    })
 
         except Exception as vod_error:
             print(f"⚠️ SYNC: Error processing Twitch VOD '{vod.get('title', 'Unknown')}': {vod_error}")
@@ -2023,6 +2275,10 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
     except Exception as timestamp_error:
         print(f"⚠️ SYNC: Failed to update last sync timestamp: {timestamp_error}")
 
+    # --- Send Low-Confidence Notification ---
+    if low_confidence_entries:
+        await send_low_confidence_notification(low_confidence_entries)
+
     # --- Enhanced Reporting ---
     total_content_count = sum(game.get('total_episodes', 0) for game in playlist_games) + len(twitch_vods)
 
@@ -2035,7 +2291,8 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
         "games_updated": games_updated,
         "duplicates_merged": duplicates_merged,
         "completed_games": completed_games,  # Games that changed to 'completed' status
-        "top_video": None  # Can be enhanced later if needed for specific video tracking
+        "top_video": None,  # Can be enhanced later if needed for specific video tracking
+        "low_confidence_count": len(low_confidence_entries)
     }
 
 

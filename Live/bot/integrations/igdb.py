@@ -171,10 +171,15 @@ async def validate_and_enrich(game_name: str) -> Dict[str, Any]:
         'match_found': True
     }
 
-    # Parse alternative names
+    # Parse alternative names and filter to English-only
     if 'alternative_names' in best_match:
         alt_names = [alt.get('name') for alt in best_match['alternative_names'] if alt.get('name')]
-        enrichment['alternative_names'] = alt_names[:5]  # Limit to 5
+        # Apply English-only filter
+        english_alt_names = filter_english_names(alt_names)
+        enrichment['alternative_names'] = english_alt_names[:5]  # Limit to 5
+
+        if len(english_alt_names) < len(alt_names):
+            print(f"🔤 IGDB: Filtered {len(alt_names) - len(english_alt_names)} non-English names from '{igdb_name}'")
 
     # Parse genres (take first one for consistency)
     if 'genres' in best_match and best_match['genres']:
@@ -322,6 +327,43 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
         similarity = min(1.0, similarity + 0.1)  # Small bonus for matching numbers
 
     return round(similarity, 2)
+
+
+def filter_english_names(names: List[str]) -> List[str]:
+    """
+    Filter alternative names to English-only (removes non-Latin scripts).
+
+    Args:
+        names: List of game names in various languages
+
+    Returns:
+        List of names using only English/Latin characters
+    """
+    import re
+
+    if not names:
+        return []
+
+    english_names = []
+
+    for name in names:
+        if not name or not isinstance(name, str):
+            continue
+
+        # Allow ASCII + Latin Extended-A (covers English + European accents like é, ñ, ö)
+        # Unicode range: 0-591 covers Basic Latin + Latin Extended-A
+        try:
+            if all(ord(c) < 592 for c in name):
+                # Additional check: Skip if contains only CJK characters
+                # CJK ranges: Chinese (4e00-9fff), Hiragana (3040-309f), Katakana (30a0-30ff)
+                if not re.match(r'^[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]+$', name):
+                    english_names.append(name)
+        except Exception as e:
+            # If we can't process the name, skip it
+            print(f"⚠️ IGDB: Error filtering name '{name[:20]}...': {e}")
+            continue
+
+    return english_names
 
 
 def should_use_igdb_data(confidence: float) -> bool:
