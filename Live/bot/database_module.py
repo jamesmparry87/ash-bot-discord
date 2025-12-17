@@ -396,6 +396,47 @@ class DatabaseManager:
                     ON trivia_approval_sessions(expires_at, status)
                 """)
 
+                # Phase 5: AI usage tracking tables for persistent quota management
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_usage_tracking (
+                        tracking_date DATE PRIMARY KEY,
+                        daily_requests INTEGER DEFAULT 0,
+                        hourly_requests INTEGER DEFAULT 0,
+                        daily_errors INTEGER DEFAULT 0,
+                        last_reset_time TIMESTAMP WITH TIME ZONE,
+                        last_hour_reset INTEGER DEFAULT 0,
+                        quota_exhausted BOOLEAN DEFAULT FALSE,
+                        current_model TEXT,
+                        last_model_switch TIMESTAMP WITH TIME ZONE,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """)
+
+                # Phase 5: AI alert log for tracking notifications sent
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_alert_log (
+                        id SERIAL PRIMARY KEY,
+                        alert_type TEXT NOT NULL,
+                        severity TEXT NOT NULL,
+                        message TEXT NOT NULL,
+                        error_details JSONB,
+                        dm_sent BOOLEAN DEFAULT FALSE,
+                        dm_sent_at TIMESTAMP WITH TIME ZONE,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """)
+
+                # Create index for alert log
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_ai_alert_log_created
+                    ON ai_alert_log(created_at DESC)
+                """)
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_ai_alert_log_type_severity
+                    ON ai_alert_log(alert_type, severity)
+                """)
+
                 # Create index for faster searches
                 cur.execute("""
                     CREATE INDEX IF NOT EXISTS idx_played_games_canonical_name
@@ -5486,6 +5527,281 @@ class DatabaseManager:
             logger.error(f"Error cleaning up expired game review sessions: {e}")
             conn.rollback()
             return 0
+
+    # --- Phase 5: AI Usage Tracking Methods ---
+
+    def load_ai_usage_stats(self) -> Optional[Dict[str, Any]]:
+        """Load AI usage statistics from database for today"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+                today = uk_now.date()
+
+                cur.execute("""
+                    SELECT * FROM ai_usage_tracking
+                    WHERE tracking_date = %s
+                """, (today,))
+
+                result = cur.fetchone()
+                if result:
+                    stats_dict = dict(result)
+                    logger.info(f"Loaded AI usage stats: {stats_dict['daily_requests']} requests today")
+                    return stats_dict
+                else:
+                    # Create initial record for today
+                    cur.execute("""
+                        INSERT INTO ai_usage_tracking (
+                            tracking_date, daily_requests, hourly_requests,
+                            daily_errors, last_reset_time, last_hour_reset
+                        ) VALUES (%s, 0, 0, 0, %s, %s)
+                        RETURNING *
+                    """, (today, uk_now, uk_now.hour))
+
+                    conn.commit()
+                    new_result = cur.fetchone()
+                    if new_result:
+                        stats_dict = dict(new_result)
+                        logger.info(f"Created new AI usage tracking record for {today}")
+                        return stats_dict
+                    return None
+
+        except Exception as e:
+            logger.error(f"Error loading AI usage stats: {e}")
+            return None
+
+    def save_ai_usage_stats(self, stats: Dict[str, Any]) -> bool:
+        """Save AI usage statistics to database"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+                today = uk_now.date()
+
+                cur.execute("""
+                    INSERT INTO ai_usage_tracking (
+                        tracking_date, daily_requests, hourly_requests, daily_errors,
+                        last_reset_time, last_hour_reset, quota_exhausted,
+                        current_model, last_model_switch, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (tracking_date)
+                    DO UPDATE SET
+                        daily_requests = EXCLUDED.daily_requests,
+                        hourly_requests = EXCLUDED.hourly_requests,
+                        daily_errors = EXCLUDED.daily_errors,
+                        last_reset_time = EXCLUDED.last_reset_time,
+                        last_hour_reset = EXCLUDED.last_hour_reset,
+                        quota_exhausted = EXCLUDED.quota_exhausted,
+                        current_model = EXCLUDED.current_model,
+                        last_model_switch = EXCLUDED.last_model_switch,
+                        updated_at = EXCLUDED.updated_at
+                """, (
+                    today,
+                    stats.get('daily_requests', 0),
+                    stats.get('hourly_requests', 0),
+                    stats.get('daily_errors', 0),
+                    stats.get('last_reset_time'),
+                    stats.get('last_hour_reset', uk_now.hour),
+                    stats.get('quota_exhausted', False),
+                    stats.get('current_model'),
+                    stats.get('last_model_switch'),
+                    uk_now
+                ))
+
+                conn.commit()
+                return True
+
+        except Exception as e:
+            logger.error(f"Error saving AI usage stats: {e}")
+            conn.rollback()
+            return False
+
+    def increment_ai_request(self) -> bool:
+        """Atomically increment AI request counters in database"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+                today = uk_now.date()
+
+                cur.execute("""
+                    INSERT INTO ai_usage_tracking (
+                        tracking_date, daily_requests, hourly_requests,
+                        last_reset_time, last_hour_reset, updated_at
+                    ) VALUES (%s, 1, 1, %s, %s, %s)
+                    ON CONFLICT (tracking_date)
+                    DO UPDATE SET
+                        daily_requests = ai_usage_tracking.daily_requests + 1,
+                        hourly_requests = ai_usage_tracking.hourly_requests + 1,
+                        updated_at = %s
+                """, (today, uk_now, uk_now.hour, uk_now, uk_now))
+
+                conn.commit()
+                return True
+
+        except Exception as e:
+            logger.error(f"Error incrementing AI request: {e}")
+            conn.rollback()
+            return False
+
+    def increment_ai_error(self) -> bool:
+        """Atomically increment AI error counter in database"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+                today = uk_now.date()
+
+                cur.execute("""
+                    INSERT INTO ai_usage_tracking (
+                        tracking_date, daily_errors, updated_at
+                    ) VALUES (%s, 1, %s)
+                    ON CONFLICT (tracking_date)
+                    DO UPDATE SET
+                        daily_errors = ai_usage_tracking.daily_errors + 1,
+                        updated_at = %s
+                """, (today, uk_now, uk_now))
+
+                conn.commit()
+                return True
+
+        except Exception as e:
+            logger.error(f"Error incrementing AI error: {e}")
+            conn.rollback()
+            return False
+
+    def log_ai_alert(
+        self,
+        alert_type: str,
+        severity: str,
+        message: str,
+        error_details: Optional[Dict[str, Any]] = None,
+        dm_sent: bool = False
+    ) -> Optional[int]:
+        """Log an AI alert to the database"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+
+                cur.execute("""
+                    INSERT INTO ai_alert_log (
+                        alert_type, severity, message, error_details,
+                        dm_sent, dm_sent_at, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (
+                    alert_type,
+                    severity,
+                    message,
+                    json.dumps(error_details) if error_details else None,
+                    dm_sent,
+                    uk_now if dm_sent else None,
+                    uk_now
+                ))
+
+                result = cur.fetchone()
+                conn.commit()
+
+                if result:
+                    alert_id = int(result['id'])  # type: ignore
+                    return alert_id
+                return None
+
+        except Exception as e:
+            logger.error(f"Error logging AI alert: {e}")
+            conn.rollback()
+            return None
+
+    def get_recent_ai_alerts(
+        self,
+        alert_type: Optional[str] = None,
+        minutes: int = 5
+    ) -> List[Dict[str, Any]]:
+        """Get recent AI alerts for aggregation logic"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+                cutoff_time = uk_now - timedelta(minutes=minutes)
+
+                if alert_type:
+                    cur.execute("""
+                        SELECT * FROM ai_alert_log
+                        WHERE alert_type = %s
+                        AND created_at >= %s
+                        ORDER BY created_at DESC
+                    """, (alert_type, cutoff_time))
+                else:
+                    cur.execute("""
+                        SELECT * FROM ai_alert_log
+                        WHERE created_at >= %s
+                        ORDER BY created_at DESC
+                    """, (cutoff_time,))
+
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+
+        except Exception as e:
+            logger.error(f"Error getting recent AI alerts: {e}")
+            return []
+
+    def get_ai_usage_summary(self, days: int = 7) -> Dict[str, Any]:
+        """Get AI usage summary for the last N days"""
+        conn = self.get_connection()
+        if not conn:
+            return {}
+
+        try:
+            with conn.cursor() as cur:
+                uk_now = datetime.now(ZoneInfo("Europe/London"))
+                cutoff_date = uk_now.date() - timedelta(days=days)
+
+                cur.execute("""
+                    SELECT
+                        SUM(daily_requests) as total_requests,
+                        SUM(daily_errors) as total_errors,
+                        AVG(daily_requests) as avg_requests_per_day,
+                        MAX(daily_requests) as peak_requests,
+                        COUNT(*) as days_with_data
+                    FROM ai_usage_tracking
+                    WHERE tracking_date >= %s
+                """, (cutoff_date,))
+
+                result = cur.fetchone()
+                if result:
+                    summary = dict(result)
+                    return {
+                        'total_requests': int(summary.get('total_requests', 0) or 0),
+                        'total_errors': int(summary.get('total_errors', 0) or 0),
+                        'avg_requests_per_day': round(float(summary.get('avg_requests_per_day', 0) or 0), 1),
+                        'peak_requests': int(summary.get('peak_requests', 0) or 0),
+                        'days_with_data': int(summary.get('days_with_data', 0) or 0),
+                        'timeframe_days': days
+                    }
+                return {}
+
+        except Exception as e:
+            logger.error(f"Error getting AI usage summary: {e}")
+            return {}
 
 
 # Singleton database manager instance
