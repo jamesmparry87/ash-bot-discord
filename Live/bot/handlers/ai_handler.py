@@ -63,6 +63,12 @@ ai_status_message = "Offline"
 primary_ai = None
 backup_ai = None
 
+# Model cascade tracking (Phase 2)
+current_gemini_model = None  # Currently active Gemini model
+working_gemini_models = []   # List of working models in priority order
+model_failure_counts = {}    # Track failures per model
+last_model_switch = None     # Timestamp of last model switch
+
 # AI Usage Tracking and Rate Limiting
 try:
     # Try US/Pacific first, fallback to America/Los_Angeles if not available
@@ -424,6 +430,93 @@ def handle_quota_exhaustion():
     ai_usage_stats["primary_ai_errors"] += 1
 
     print(f"🚫 Primary AI quota exhausted at {current_time.strftime('%H:%M:%S')} - backup AI will be used if available")
+
+
+async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
+    """Test if a specific Gemini model works (Phase 2: Model Cascade)"""
+    try:
+        test_model = genai.GenerativeModel(model_name)  # type: ignore
+        
+        # Use thread executor to avoid blocking
+        import asyncio
+        import concurrent.futures
+        
+        def sync_test():
+            return test_model.generate_content(
+                "Test",
+                generation_config={"max_output_tokens": 5}
+            )
+        
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = loop.run_in_executor(executor, sync_test)
+            response = await asyncio.wait_for(future, timeout=timeout)
+        
+        if response and hasattr(response, 'text') and response.text:
+            print(f"✅ Gemini model '{model_name}' is working")
+            return True
+        return False
+        
+    except Exception as e:
+        error_str = str(e).lower()
+        if "not found" in error_str or "404" in error_str:
+            print(f"❌ Gemini model '{model_name}' not found (invalid name)")
+        elif "quota" in error_str or "429" in error_str:
+            if "limit: 0" in error_str or "limit:0" in error_str:
+                print(f"❌ Gemini model '{model_name}' not available on your tier")
+            else:
+                print(f"⚠️ Gemini model '{model_name}' quota exhausted")
+        else:
+            print(f"❌ Gemini model '{model_name}' test failed: {str(e)[:100]}")
+        return False
+
+
+async def initialize_gemini_models() -> bool:
+    """Test all Gemini models and build priority list (Phase 2: Model Cascade)"""
+    global working_gemini_models, current_gemini_model, gemini_model
+    
+    working_gemini_models = []
+    
+    print("🔍 Testing Gemini model cascade...")
+    for model_name in GEMINI_MODEL_CASCADE:
+        if await test_gemini_model(model_name):
+            working_gemini_models.append(model_name)
+    
+    if working_gemini_models:
+        current_gemini_model = working_gemini_models[0]
+        gemini_model = genai.GenerativeModel(current_gemini_model)  # type: ignore
+        print(f"✅ Primary Gemini model: {current_gemini_model}")
+        if len(working_gemini_models) > 1:
+            print(f"🔄 Backup Gemini models: {working_gemini_models[1:]}")
+        return True
+    else:
+        print("❌ No working Gemini models found")
+        return False
+
+
+async def switch_to_backup_gemini_model() -> bool:
+    """Switch to next available Gemini model after failure (Phase 2: Model Cascade)"""
+    global current_gemini_model, gemini_model, working_gemini_models, last_model_switch
+    
+    if not current_gemini_model or not working_gemini_models:
+        return False
+    
+    try:
+        current_index = working_gemini_models.index(current_gemini_model)
+        if current_index + 1 < len(working_gemini_models):
+            next_model = working_gemini_models[current_index + 1]
+            
+            # Test the backup before switching
+            if await test_gemini_model(next_model, timeout=5.0):
+                current_gemini_model = next_model
+                gemini_model = genai.GenerativeModel(next_model)  # type: ignore
+                last_model_switch = datetime.now(ZoneInfo("Europe/London"))
+                print(f"🔄 Switched to backup Gemini model: {next_model}")
+                return True
+    except Exception as e:
+        print(f"❌ Error switching Gemini model: {e}")
+    
+    return False
 
 
 def apply_ash_persona_to_ai_prompt(content_prompt: str, context_type: str = "general") -> str:
@@ -1713,21 +1806,35 @@ Write 2-4 sentences maximum. Make it engaging and user-focused."""
 
 
 async def initialize_ai_async():
-    """Async initialize AI providers with proper testing and set global status"""
+    """Async initialize AI providers with model cascade (Phase 2)"""
     global ai_enabled, ai_status_message, primary_ai, backup_ai
 
-    print("🤖 Starting async AI initialization...")
+    print("🤖 Starting async AI initialization with model cascade...")
 
     try:
-        # Setup AI providers with async testing
-        gemini_ok = await setup_ai_provider_async(
-            "gemini", GEMINI_API_KEY, genai, GENAI_AVAILABLE)
+        # Initialize Gemini with model cascade testing
+        if GEMINI_API_KEY and GENAI_AVAILABLE and genai:
+            genai.configure(api_key=GEMINI_API_KEY)  # type: ignore
+            gemini_ok = await initialize_gemini_models()
+            
+            if gemini_ok:
+                primary_ai = "gemini"
+                model_info = f"{current_gemini_model}"
+                if len(working_gemini_models) > 1:
+                    model_info += f" (+ {len(working_gemini_models)-1} backup)"
+                print(f"✅ Gemini AI initialized: {model_info}")
+            else:
+                print("❌ No working Gemini models found")
+        else:
+            gemini_ok = False
+            print("⚠️ Gemini AI not available - missing API key or module")
+        
+        # Hugging Face backup (disabled)
         huggingface_ok = await setup_ai_provider_async(
             "huggingface", HUGGINGFACE_API_KEY, requests, HUGGINGFACE_AVAILABLE)
 
         if gemini_ok:
             primary_ai = "gemini"
-            print("✅ Gemini AI configured and tested successfully - set as primary AI")
             if huggingface_ok:
                 backup_ai = "huggingface"
                 print("✅ Hugging Face AI configured successfully - set as backup AI")
@@ -1741,7 +1848,8 @@ async def initialize_ai_async():
             if backup_ai:
                 ai_status_message = f"Online ({primary_ai.title()} + {backup_ai.title()} backup)"
             else:
-                ai_status_message = f"Online ({primary_ai.title()} only)"
+                model_count = f" ({len(working_gemini_models)} models)" if working_gemini_models else ""
+                ai_status_message = f"Online ({primary_ai.title()}{model_count})"
             print(f"✅ AI initialization complete: {ai_status_message}")
         else:
             ai_status_message = "No AI available"
