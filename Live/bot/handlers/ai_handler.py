@@ -47,6 +47,13 @@ except ImportError:
 GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
 HUGGINGFACE_API_KEY = os.getenv('HUGGINGFACE_API_KEY')
 
+# Gemini model cascade configuration (priority order)
+# These models are tested on startup and used with automatic fallback
+GEMINI_MODEL_CASCADE = [
+    'gemini-2.5-flash',       # Primary: Latest, fastest
+    'gemini-2.0-flash-001',   # Backup: Stable, reliable
+]
+
 # AI instances
 gemini_model = None
 huggingface_headers = None
@@ -764,7 +771,8 @@ async def setup_ai_provider_async(
         if name == "gemini":
             global gemini_model
             module.configure(api_key=api_key)
-            gemini_model = module.GenerativeModel('gemini-2.0-flash')
+            # Use first model from cascade (gemini-2.5-flash)
+            gemini_model = module.GenerativeModel(GEMINI_MODEL_CASCADE[0])
 
             # Test with timeout to prevent hanging - using proper async/await
             test_generation_config = {
@@ -831,8 +839,9 @@ def setup_ai_provider(
         if name == "gemini":
             global gemini_model
             module.configure(api_key=api_key)
-            gemini_model = module.GenerativeModel('gemini-2.0-flash')
-            print(f"✅ Gemini AI configured (testing deferred to async initialization)")
+            # Use first model from cascade (gemini-2.5-flash)
+            gemini_model = module.GenerativeModel(GEMINI_MODEL_CASCADE[0])
+            print(f"✅ Gemini AI configured with {GEMINI_MODEL_CASCADE[0]} (testing deferred to async initialization)")
             return True
         elif name == "huggingface":
             print("⚠️ Hugging Face AI disabled to prevent deployment hangs")
