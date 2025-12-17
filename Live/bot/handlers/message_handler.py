@@ -1921,7 +1921,7 @@ Respond to: {content}"""
                 print(f"   Prompt: {ai_prompt[:200]}...")
                 import traceback
                 traceback.print_exc()
-                
+
                 await message.reply("My apologies. My cognitive matrix is currently unavailable for that query.")
         else:
             # ADD LOUD ERROR LOGGING
@@ -1930,7 +1930,7 @@ Respond to: {content}"""
             print(f"   User: {message.author.id} ({message.author.display_name})")
             import traceback
             traceback.print_exc()
-            
+
             await message.reply("My apologies. My cognitive matrix is currently offline. Please try again later.")
     except Exception as e:
         print(f"🚨 CRITICAL ERROR in general conversation handler: {e}")

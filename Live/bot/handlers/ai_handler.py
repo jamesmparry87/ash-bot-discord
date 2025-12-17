@@ -749,7 +749,7 @@ def _convert_few_shot_examples_to_gemini_format(examples: list) -> list:
                     'role': 'user',
                     'parts': [{'text': user_text}]
                 })
-            
+
             # Model response - handle both old and new format
             model_text = example.get('assistant') or example.get('ash_response', '')
             if model_text:
