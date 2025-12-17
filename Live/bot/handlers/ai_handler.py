@@ -754,20 +754,79 @@ async def call_ai_with_rate_limiting(
                 except asyncio.TimeoutError:
                     print(f"❌ Gemini AI request timed out after {timeout_duration}s")
                     record_ai_error()
-                    # Don't attempt backup for timeout - return timeout error
+                    
+                    # Phase 3: Try backup Gemini model on timeout
+                    if len(working_gemini_models) > 1 and current_gemini_model:
+                        print("🔄 Attempting to switch to backup Gemini model after timeout...")
+                        if await switch_to_backup_gemini_model():
+                            print("✅ Switched to backup model, retrying request...")
+                            # Retry with backup model (recursive call with limited depth)
+                            if not hasattr(call_ai_with_rate_limiting, '_retry_count'):
+                                call_ai_with_rate_limiting._retry_count = 0  # type: ignore
+                            
+                            if call_ai_with_rate_limiting._retry_count < 2:  # type: ignore
+                                call_ai_with_rate_limiting._retry_count += 1  # type: ignore
+                                result = await call_ai_with_rate_limiting(prompt, user_id, context)
+                                call_ai_with_rate_limiting._retry_count = 0  # type: ignore
+                                return result
+                    
+                    # No backup available or retry failed
                     return None, f"timeout_error:{timeout_duration}s"
 
             except Exception as e:
                 error_str = str(e)
                 print(f"❌ Gemini AI error: {error_str}")
 
+                # Phase 3: Track model-specific failures
+                global model_failure_counts
+                if current_gemini_model:
+                    model_failure_counts[current_gemini_model] = model_failure_counts.get(current_gemini_model, 0) + 1
+                    print(f"📊 Model failure count for {current_gemini_model}: {model_failure_counts[current_gemini_model]}")
+
                 # Check if this is a quota exhaustion error
                 if check_quota_exhaustion(error_str):
                     handle_quota_exhaustion()
                     # Don't attempt backup for deployment safety
                     return None, "quota_exhausted_no_backup"
-                else:
-                    record_ai_error()
+                
+                # Phase 3: Check for model-specific errors that warrant switching
+                should_switch_model = False
+                error_lower = error_str.lower()
+                
+                # Errors that indicate model-specific issues
+                model_error_indicators = [
+                    "not found", "404", "invalid model", "model not available",
+                    "limit: 0", "limit:0", "not supported on your tier"
+                ]
+                
+                if any(indicator in error_lower for indicator in model_error_indicators):
+                    print(f"⚠️ Model-specific error detected: {error_str[:100]}")
+                    should_switch_model = True
+                
+                # Also switch if we have too many failures on current model
+                if current_gemini_model and model_failure_counts.get(current_gemini_model, 0) >= 3:
+                    print(f"⚠️ Too many failures on {current_gemini_model}, attempting switch...")
+                    should_switch_model = True
+                
+                # Phase 3: Try backup Gemini model if appropriate
+                if should_switch_model and len(working_gemini_models) > 1:
+                    print("🔄 Attempting to switch to backup Gemini model...")
+                    if await switch_to_backup_gemini_model():
+                        print("✅ Switched to backup model, retrying request...")
+                        # Reset failure count for new model
+                        model_failure_counts[current_gemini_model] = 0
+                        
+                        # Retry with backup model (with limit)
+                        if not hasattr(call_ai_with_rate_limiting, '_retry_count'):
+                            call_ai_with_rate_limiting._retry_count = 0  # type: ignore
+                        
+                        if call_ai_with_rate_limiting._retry_count < 2:  # type: ignore
+                            call_ai_with_rate_limiting._retry_count += 1  # type: ignore
+                            result = await call_ai_with_rate_limiting(prompt, user_id, context)
+                            call_ai_with_rate_limiting._retry_count = 0  # type: ignore
+                            return result
+                
+                record_ai_error()
 
         # If primary AI failed or quota exhausted, try backup AI
         if not response_text:
