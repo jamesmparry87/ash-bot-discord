@@ -739,22 +739,31 @@ async def call_ai_with_rate_limiting(
 def _convert_few_shot_examples_to_gemini_format(examples: list) -> list:
     """Convert our few-shot examples to Gemini's Content format"""
     try:
+        import traceback
         gemini_history = []
         for example in examples:
-            # User message
-            gemini_history.append({
-                'role': 'user',
-                'parts': [{'text': example['user']}]
-            })
-            # Model response
-            gemini_history.append({
-                'role': 'model',
-                'parts': [{'text': example['assistant']}]
-            })
+            # User message - handle both old and new format
+            user_text = example.get('user') or example.get('user_input', '')
+            if user_text:
+                gemini_history.append({
+                    'role': 'user',
+                    'parts': [{'text': user_text}]
+                })
+            
+            # Model response - handle both old and new format
+            model_text = example.get('assistant') or example.get('ash_response', '')
+            if model_text:
+                gemini_history.append({
+                    'role': 'model',
+                    'parts': [{'text': model_text}]
+                })
 
+        print(f"✅ Converted {len(gemini_history)//2} few-shot examples successfully")
         return gemini_history
     except Exception as e:
-        print(f"⚠️ Error converting few-shot examples: {e}")
+        print(f"🚨 CRITICAL ERROR converting few-shot examples: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 

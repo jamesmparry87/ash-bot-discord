@@ -1914,9 +1914,26 @@ Respond to: {content}"""
                 filtered_response = filter_ai_response(response_text)
                 await message.reply(filtered_response)
             else:
+                # ADD LOUD ERROR LOGGING
+                print(f"🚨 CRITICAL AI ERROR: AI call returned None")
+                print(f"   Status message: {status_message}")
+                print(f"   User: {message.author.id} ({author_name})")
+                print(f"   Prompt: {ai_prompt[:200]}...")
+                import traceback
+                traceback.print_exc()
+                
                 await message.reply("My apologies. My cognitive matrix is currently unavailable for that query.")
         else:
+            # ADD LOUD ERROR LOGGING
+            print(f"🚨 CRITICAL AI ERROR: AI is not enabled")
+            print(f"   ai_enabled flag: {ai_enabled}")
+            print(f"   User: {message.author.id} ({message.author.display_name})")
+            import traceback
+            traceback.print_exc()
+            
             await message.reply("My apologies. My cognitive matrix is currently offline. Please try again later.")
     except Exception as e:
-        print(f"❌ Error in general conversation handler: {e}")
+        print(f"🚨 CRITICAL ERROR in general conversation handler: {e}")
+        import traceback
+        traceback.print_exc()
         await message.reply("System anomaly detected. Diagnostic protocols engaged.")
