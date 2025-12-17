@@ -430,7 +430,6 @@ def handle_quota_exhaustion():
 async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
     """Test if a specific Gemini model works (Phase 2: Model Cascade)"""
     try:
-        # New SDK requires api_key parameter
         test_model = genai.GenerativeModel(  # type: ignore
             model_name=model_name,
             api_key=GEMINI_API_KEY
