@@ -5555,12 +5555,12 @@ class DatabaseManager:
                     # Create initial record for today
                     cur.execute("""
                         INSERT INTO ai_usage_tracking (
-                            tracking_date, daily_requests, hourly_requests, 
+                            tracking_date, daily_requests, hourly_requests,
                             daily_errors, last_reset_time, last_hour_reset
                         ) VALUES (%s, 0, 0, 0, %s, %s)
                         RETURNING *
                     """, (today, uk_now, uk_now.hour))
-                    
+
                     conn.commit()
                     new_result = cur.fetchone()
                     if new_result:
@@ -5590,7 +5590,7 @@ class DatabaseManager:
                         last_reset_time, last_hour_reset, quota_exhausted,
                         current_model, last_model_switch, updated_at
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (tracking_date) 
+                    ON CONFLICT (tracking_date)
                     DO UPDATE SET
                         daily_requests = EXCLUDED.daily_requests,
                         hourly_requests = EXCLUDED.hourly_requests,
@@ -5635,10 +5635,10 @@ class DatabaseManager:
 
                 cur.execute("""
                     INSERT INTO ai_usage_tracking (
-                        tracking_date, daily_requests, hourly_requests, 
+                        tracking_date, daily_requests, hourly_requests,
                         last_reset_time, last_hour_reset, updated_at
                     ) VALUES (%s, 1, 1, %s, %s, %s)
-                    ON CONFLICT (tracking_date) 
+                    ON CONFLICT (tracking_date)
                     DO UPDATE SET
                         daily_requests = ai_usage_tracking.daily_requests + 1,
                         hourly_requests = ai_usage_tracking.hourly_requests + 1,
@@ -5668,7 +5668,7 @@ class DatabaseManager:
                     INSERT INTO ai_usage_tracking (
                         tracking_date, daily_errors, updated_at
                     ) VALUES (%s, 1, %s)
-                    ON CONFLICT (tracking_date) 
+                    ON CONFLICT (tracking_date)
                     DO UPDATE SET
                         daily_errors = ai_usage_tracking.daily_errors + 1,
                         updated_at = %s
@@ -5776,7 +5776,7 @@ class DatabaseManager:
                 cutoff_date = uk_now.date() - timedelta(days=days)
 
                 cur.execute("""
-                    SELECT 
+                    SELECT
                         SUM(daily_requests) as total_requests,
                         SUM(daily_errors) as total_errors,
                         AVG(daily_requests) as avg_requests_per_day,

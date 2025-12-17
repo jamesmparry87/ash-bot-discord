@@ -426,27 +426,27 @@ async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
     """Test if a specific Gemini model works (Phase 2: Model Cascade)"""
     try:
         test_model = genai.GenerativeModel(model_name)  # type: ignore
-        
+
         # Use thread executor to avoid blocking
         import asyncio
         import concurrent.futures
-        
+
         def sync_test():
             return test_model.generate_content(
                 "Test",
                 generation_config={"max_output_tokens": 5}
             )
-        
+
         loop = asyncio.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = loop.run_in_executor(executor, sync_test)
             response = await asyncio.wait_for(future, timeout=timeout)
-        
+
         if response and hasattr(response, 'text') and response.text:
             print(f"✅ Gemini model '{model_name}' is working")
             return True
         return False
-        
+
     except Exception as e:
         error_str = str(e).lower()
         if "not found" in error_str or "404" in error_str:
@@ -464,14 +464,14 @@ async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
 async def initialize_gemini_models() -> bool:
     """Test all Gemini models and build priority list (Phase 2: Model Cascade)"""
     global working_gemini_models, current_gemini_model, gemini_model
-    
+
     working_gemini_models = []
-    
+
     print("🔍 Testing Gemini model cascade...")
     for model_name in GEMINI_MODEL_CASCADE:
         if await test_gemini_model(model_name):
             working_gemini_models.append(model_name)
-    
+
     if working_gemini_models:
         current_gemini_model = working_gemini_models[0]
         gemini_model = genai.GenerativeModel(current_gemini_model)  # type: ignore
@@ -487,15 +487,15 @@ async def initialize_gemini_models() -> bool:
 async def switch_to_backup_gemini_model() -> bool:
     """Switch to next available Gemini model after failure (Phase 2: Model Cascade)"""
     global current_gemini_model, gemini_model, working_gemini_models, last_model_switch
-    
+
     if not current_gemini_model or not working_gemini_models:
         return False
-    
+
     try:
         current_index = working_gemini_models.index(current_gemini_model)
         if current_index + 1 < len(working_gemini_models):
             next_model = working_gemini_models[current_index + 1]
-            
+
             # Test the backup before switching
             if await test_gemini_model(next_model, timeout=5.0):
                 current_gemini_model = next_model
@@ -505,7 +505,7 @@ async def switch_to_backup_gemini_model() -> bool:
                 return True
     except Exception as e:
         print(f"❌ Error switching Gemini model: {e}")
-    
+
     return False
 
 
@@ -681,7 +681,7 @@ async def call_ai_with_rate_limiting(
                 except asyncio.TimeoutError:
                     print(f"❌ Gemini AI request timed out after {timeout_duration}s")
                     record_ai_error()
-                    
+
                     # Phase 3: Try backup Gemini model on timeout
                     if len(working_gemini_models) > 1 and current_gemini_model:
                         print("🔄 Attempting to switch to backup Gemini model after timeout...")
@@ -690,13 +690,13 @@ async def call_ai_with_rate_limiting(
                             # Retry with backup model (recursive call with limited depth)
                             if not hasattr(call_ai_with_rate_limiting, '_retry_count'):
                                 call_ai_with_rate_limiting._retry_count = 0  # type: ignore
-                            
+
                             if call_ai_with_rate_limiting._retry_count < 2:  # type: ignore
                                 call_ai_with_rate_limiting._retry_count += 1  # type: ignore
                                 result = await call_ai_with_rate_limiting(prompt, user_id, context)
                                 call_ai_with_rate_limiting._retry_count = 0  # type: ignore
                                 return result
-                    
+
                     # No backup available or retry failed
                     return None, f"timeout_error:{timeout_duration}s"
 
@@ -708,33 +708,34 @@ async def call_ai_with_rate_limiting(
                 global model_failure_counts
                 if current_gemini_model:
                     model_failure_counts[current_gemini_model] = model_failure_counts.get(current_gemini_model, 0) + 1
-                    print(f"📊 Model failure count for {current_gemini_model}: {model_failure_counts[current_gemini_model]}")
+                    print(
+                        f"📊 Model failure count for {current_gemini_model}: {model_failure_counts[current_gemini_model]}")
 
                 # Check if this is a quota exhaustion error
                 if check_quota_exhaustion(error_str):
                     handle_quota_exhaustion()
                     # Don't attempt backup for deployment safety
                     return None, "quota_exhausted_no_backup"
-                
+
                 # Phase 3: Check for model-specific errors that warrant switching
                 should_switch_model = False
                 error_lower = error_str.lower()
-                
+
                 # Errors that indicate model-specific issues
                 model_error_indicators = [
                     "not found", "404", "invalid model", "model not available",
                     "limit: 0", "limit:0", "not supported on your tier"
                 ]
-                
+
                 if any(indicator in error_lower for indicator in model_error_indicators):
                     print(f"⚠️ Model-specific error detected: {error_str[:100]}")
                     should_switch_model = True
-                
+
                 # Also switch if we have too many failures on current model
                 if current_gemini_model and model_failure_counts.get(current_gemini_model, 0) >= 3:
                     print(f"⚠️ Too many failures on {current_gemini_model}, attempting switch...")
                     should_switch_model = True
-                
+
                 # Phase 3: Try backup Gemini model if appropriate
                 if should_switch_model and len(working_gemini_models) > 1:
                     print("🔄 Attempting to switch to backup Gemini model...")
@@ -742,17 +743,17 @@ async def call_ai_with_rate_limiting(
                         print("✅ Switched to backup model, retrying request...")
                         # Reset failure count for new model
                         model_failure_counts[current_gemini_model] = 0
-                        
+
                         # Retry with backup model (with limit)
                         if not hasattr(call_ai_with_rate_limiting, '_retry_count'):
                             call_ai_with_rate_limiting._retry_count = 0  # type: ignore
-                        
+
                         if call_ai_with_rate_limiting._retry_count < 2:  # type: ignore
                             call_ai_with_rate_limiting._retry_count += 1  # type: ignore
                             result = await call_ai_with_rate_limiting(prompt, user_id, context)
                             call_ai_with_rate_limiting._retry_count = 0  # type: ignore
                             return result
-                
+
                 record_ai_error()
 
         # Return response or error
@@ -1794,7 +1795,7 @@ async def initialize_ai_async():
         if GEMINI_API_KEY and GENAI_AVAILABLE and genai:
             genai.configure(api_key=GEMINI_API_KEY)  # type: ignore
             gemini_ok = await initialize_gemini_models()
-            
+
             if gemini_ok:
                 primary_ai = "gemini"
                 model_info = f"{current_gemini_model}"
@@ -1806,7 +1807,7 @@ async def initialize_ai_async():
         else:
             gemini_ok = False
             print("⚠️ Gemini AI not available - missing API key or module")
-        
+
         # Set AI status
         if gemini_ok:
             primary_ai = "gemini"

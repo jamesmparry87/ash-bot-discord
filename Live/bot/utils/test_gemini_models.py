@@ -204,13 +204,13 @@ def print_summary(results: Dict[str, List[Dict]]):
             print(f"       '{r['model']}',{' ' * (25 - len(r['model']))}{comment}")
         print("   ]")
         print("   ```")
-        
+
         print("\n📊 CASCADE STRATEGY:")
         print(f"   • Phase 1: Fixed model names (✅ complete)")
         print(f"   • Phase 2: Model cascade with {len(results['working'])} models (✅ complete)")
         print(f"   • Phase 3: Auto-fallback on errors (✅ complete)")
         print(f"   • Phase 4: Enhanced testing (✅ complete)")
-        
+
         if len(results['working']) > 1:
             print(f"\n🛡️ REDUNDANCY:")
             print(f"   • {len(results['working'])} working models provide {len(results['working'])-1} backup level(s)")
