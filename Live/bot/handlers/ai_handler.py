@@ -437,7 +437,7 @@ async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
                 generation_config={"max_output_tokens": 5}
             )
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = loop.run_in_executor(executor, sync_test)
             response = await asyncio.wait_for(future, timeout=timeout)
