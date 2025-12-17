@@ -23,7 +23,7 @@ try:
 
     # Find .env file in Live directory
     env_path = Path(__file__).parent.parent.parent / '.env'
-    
+
     if env_path.exists():
         # Manually read .env file if dotenv not available
         with open(env_path, 'r') as f:
@@ -61,12 +61,12 @@ GEMINI_MODELS_TO_TEST = [
 def configure_api():
     """Configure Gemini API with API key from environment"""
     api_key = os.getenv('GOOGLE_API_KEY')
-    
+
     if not api_key:
         print("❌ GOOGLE_API_KEY not found in environment variables")
         print("   Set it with: export GOOGLE_API_KEY='your-key-here'")
         sys.exit(1)
-    
+
     genai.configure(api_key=api_key)
     print(f"✅ API configured with key: {api_key[:10]}...{api_key[-4:]}")
 
@@ -76,22 +76,22 @@ def list_available_models():
     try:
         print("\n📋 Listing all available Gemini models from API...")
         models = genai.list_models()
-        
+
         gemini_models = [m for m in models if 'gemini' in m.name.lower()]
-        
+
         if not gemini_models:
             print("⚠️ No Gemini models found in API response")
             return []
-        
+
         print(f"✅ Found {len(gemini_models)} Gemini models in API catalog:")
         for model in gemini_models:
             print(f"   • {model.name}")
             print(f"     Display: {model.display_name}")
             if hasattr(model, 'supported_generation_methods'):
                 print(f"     Methods: {model.supported_generation_methods}")
-        
+
         return [m.name for m in gemini_models]
-        
+
     except Exception as e:
         print(f"❌ Error listing models: {e}")
         return []
@@ -106,22 +106,22 @@ def test_model(model_name: str) -> Dict[str, any]:
         'response_time': None,
         'response_text': None
     }
-    
+
     try:
         start_time = datetime.now()
-        
+
         # Create model instance
         model = genai.GenerativeModel(model_name)
-        
+
         # Test with minimal request
         response = model.generate_content(
-            "Test", 
+            "Test",
             generation_config={"max_output_tokens": 5}
         )
-        
+
         end_time = datetime.now()
         response_time = (end_time - start_time).total_seconds()
-        
+
         if response and response.text:
             result['available'] = True
             result['response_time'] = response_time
@@ -130,11 +130,11 @@ def test_model(model_name: str) -> Dict[str, any]:
         else:
             result['error'] = "Empty response"
             print(f"⚠️ {model_name:25s} - Empty response returned")
-            
+
     except Exception as e:
         error_str = str(e)
         result['error'] = error_str
-        
+
         # Categorize error type
         if "quota" in error_str.lower() or "429" in error_str:
             if "limit: 0" in error_str or "limit:0" in error_str:
@@ -147,7 +147,7 @@ def test_model(model_name: str) -> Dict[str, any]:
             print(f"❌ {model_name:25s} - PERMISSION DENIED (check API key)")
         else:
             print(f"❌ {model_name:25s} - ERROR: {error_str[:80]}")
-    
+
     return result
 
 
@@ -157,17 +157,17 @@ def test_all_models() -> Dict[str, List[Dict]]:
     print("🔍 TESTING GEMINI MODELS")
     print(f"{'='*80}")
     print(f"⏰ Time: {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d %H:%M:%S UK')}")
-    
+
     results = {
         'working': [],
         'quota_issues': [],
         'not_available': [],
         'errors': []
     }
-    
+
     for model_name in GEMINI_MODELS_TO_TEST:
         result = test_model(model_name)
-        
+
         if result['available']:
             results['working'].append(result)
         elif result['error']:
@@ -181,7 +181,7 @@ def test_all_models() -> Dict[str, List[Dict]]:
                 results['not_available'].append(result)
             else:
                 results['errors'].append(result)
-    
+
     return results
 
 
@@ -190,39 +190,39 @@ def print_summary(results: Dict[str, List[Dict]]):
     print(f"\n{'='*80}")
     print("📊 SUMMARY")
     print(f"{'='*80}")
-    
+
     if results['working']:
         print(f"\n✅ WORKING MODELS ({len(results['working'])} available):")
         for r in results['working']:
             print(f"   • {r['model']} (response time: {r['response_time']:.2f}s)")
-        
+
         print("\n💡 RECOMMENDATION:")
         primary = results['working'][0]['model']
         print(f"   Use '{primary}' as primary model in ai_handler.py")
-        
+
         if len(results['working']) > 1:
             fallbacks = [r['model'] for r in results['working'][1:]]
             print(f"   Available fallbacks: {', '.join(fallbacks)}")
     else:
         print("\n❌ NO WORKING MODELS FOUND")
         print("   This means AI features will not work with current API key/configuration")
-    
+
     if results['not_available']:
         print(f"\n⚠️ NOT AVAILABLE ON YOUR TIER ({len(results['not_available'])} models):")
         for r in results['not_available']:
             print(f"   • {r['model']} - May require paid plan or regional availability")
-    
+
     if results['quota_issues']:
         print(f"\n🚫 QUOTA EXHAUSTED ({len(results['quota_issues'])} models):")
         for r in results['quota_issues']:
             print(f"   • {r['model']} - Daily/minute limit reached")
         print("   💡 Quotas reset at 8:00 AM UK time (Google's reset time)")
-    
+
     if results['errors']:
         print(f"\n❌ OTHER ERRORS ({len(results['errors'])} models):")
         for r in results['errors']:
             print(f"   • {r['model']} - {r['error'][:100]}")
-    
+
     print(f"\n{'='*80}")
 
 
@@ -232,19 +232,19 @@ def main():
     print("# GEMINI MODEL TESTING UTILITY")
     print("# Tests which Gemini models work with your API key")
     print(f"{'#'*80}\n")
-    
+
     # Configure API
     configure_api()
-    
+
     # List available models from API
     api_models = list_available_models()
-    
+
     # Test each model
     results = test_all_models()
-    
+
     # Print summary
     print_summary(results)
-    
+
     # Return exit code based on results
     if results['working']:
         print("\n✅ SUCCESS: At least one working model found")
