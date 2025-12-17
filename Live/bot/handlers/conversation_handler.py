@@ -23,7 +23,7 @@ from ..config import (
 )
 from ..database_module import get_database
 from ..utils.permissions import get_user_communication_tier, user_is_mod_by_id
-from .ai_handler import ai_enabled, apply_ash_persona_to_ai_prompt, call_ai_with_rate_limiting, filter_ai_response
+from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
 
 # Get database instance
 db = get_database()  # type: ignore
@@ -60,6 +60,123 @@ game_review_conversations: Dict[int, Dict[str, Any]] = {}
 # ============================================================================
 # VALIDATION HELPER FUNCTIONS (Fix #6)
 # ============================================================================
+
+# ============================================================================
+# CONVERSATION SAFETY WRAPPER (Fix #1)
+# ============================================================================
+
+def check_escape_command(content: str) -> bool:
+    """
+    Check if user is trying to escape/cancel the conversation.
+    
+    Args:
+        content: User's message content (case-insensitive check)
+    
+    Returns:
+        True if user wants to cancel, False otherwise
+    """
+    escape_keywords = ['cancel', 'abort', 'quit', 'exit', 'stop', 'nevermind', 'never mind']
+    return content.lower().strip() in escape_keywords
+
+
+def check_conversation_health(conversation: Dict[str, Any], max_age_minutes: int = 60) -> Tuple[bool, Optional[str]]:
+    """
+    ✅ FIX #1: Check if a conversation is healthy or should be auto-expired.
+    
+    Prevents infinite loops by enforcing:
+    - Maximum conversation age (default 60 minutes)
+    - Invalid input tracking
+    - Step progression monitoring
+    
+    Args:
+        conversation: The conversation state dictionary
+        max_age_minutes: Maximum age in minutes before auto-expiry
+    
+    Returns:
+        Tuple of (is_healthy: bool, error_message: Optional[str])
+    """
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    
+    # Check conversation age
+    initiated_at = conversation.get('initiated_at')
+    if initiated_at:
+        age_minutes = (uk_now - initiated_at).total_seconds() / 60
+        if age_minutes > max_age_minutes:
+            return False, f"Conversation expired (active for {age_minutes:.0f} minutes, max {max_age_minutes})"
+    
+    # Check for excessive invalid inputs (if tracked)
+    invalid_count = conversation.get('invalid_input_count', 0)
+    if invalid_count > 10:
+        return False, f"Too many invalid inputs ({invalid_count}), conversation may be stuck"
+    
+    # Check for step loops (same step repeated too many times)
+    step_history = conversation.get('step_history', [])
+    if len(step_history) > 20:
+        # Check if stuck in a loop (same step appearing too frequently)
+        current_step = conversation.get('step')
+        step_count = step_history.count(current_step)
+        if step_count > 8:
+            return False, f"Stuck in step '{current_step}' (repeated {step_count} times)"
+    
+    return True, None
+
+
+def track_conversation_step(conversation: Dict[str, Any], new_step: str):
+    """
+    ✅ FIX #1: Track step transitions to detect loops.
+    
+    Maintains a history of conversation steps to identify when
+    the state machine is stuck in a loop.
+    """
+    if 'step_history' not in conversation:
+        conversation['step_history'] = []
+    
+    conversation['step_history'].append(new_step)
+    
+    # Keep only last 25 steps to avoid memory bloat
+    if len(conversation['step_history']) > 25:
+        conversation['step_history'] = conversation['step_history'][-25:]
+
+
+def increment_invalid_input_count(conversation: Dict[str, Any]):
+    """
+    ✅ FIX #1: Track invalid input attempts.
+    
+    Increments counter each time user provides invalid input.
+    Used to detect stuck conversations.
+    """
+    conversation['invalid_input_count'] = conversation.get('invalid_input_count', 0) + 1
+
+
+def reset_invalid_input_count(conversation: Dict[str, Any]):
+    """
+    ✅ FIX #1: Reset invalid input counter after successful input.
+    
+    Clears the invalid input counter when user provides valid input,
+    preventing false positives for unstuck conversations.
+    """
+    conversation['invalid_input_count'] = 0
+
+
+async def send_conversation_expired_message(message: discord.Message, conversation_type: str, reason: str):
+    """
+    ✅ FIX #1: Send user-friendly expiration message with recovery instructions.
+    """
+    expired_msg = (
+        f"⏰ **Conversation Expired**\n\n"
+        f"Your {conversation_type} conversation has been automatically closed.\n\n"
+        f"**Reason:** {reason}\n\n"
+        f"**To start over:**\n"
+        f"• Use the original command to begin a fresh conversation\n"
+        f"• All progress from the expired conversation has been discarded\n\n"
+        f"*Conversations automatically expire after extended inactivity to prevent stuck states.*"
+    )
+    
+    try:
+        await message.reply(expired_msg)
+    except Exception as e:
+        print(f"⚠️ Failed to send expiration message: {e}")
+
 
 def validate_numbered_input(content: str, valid_options: list[str]) -> bool:
     """
@@ -280,8 +397,8 @@ async def amend_weekly_content_with_ai(
     Provide ONLY the revised announcement text, with no additional commentary.
     """
 
-    prompt = apply_ash_persona_to_ai_prompt(amendment_prompt, "announcement_amendment")
-    response_text, status_message = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+    # Phase 2: Persona handled automatically by system_instruction
+    response_text, status_message = await call_ai_with_rate_limiting(amendment_prompt, JAM_USER_ID)
 
     if response_text:
         return filter_ai_response(response_text)
@@ -322,8 +439,8 @@ async def _regenerate_weekly_announcement_content(
 
         CRITICAL: The new version must be substantially different from the original.
         """
-        prompt = apply_ash_persona_to_ai_prompt(content_prompt, "announcement_regeneration")
-        response_text, status_message = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+        # Phase 2: Persona handled automatically by system_instruction
+        response_text, status_message = await call_ai_with_rate_limiting(content_prompt, JAM_USER_ID)
 
         if response_text:
             return filter_ai_response(response_text)
@@ -354,8 +471,8 @@ async def _regenerate_weekly_announcement_content(
         CRITICAL: Your new message must focus entirely on the new data point. Maintain your analytical persona.
         Start with "Good morning, personnel. A secondary analysis of the past week's crew engagement is complete."
         """
-        prompt = apply_ash_persona_to_ai_prompt(content_prompt, "announcement_regeneration")
-        response_text, status_message = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+        # Phase 2: Persona handled automatically by system_instruction
+        response_text, status_message = await call_ai_with_rate_limiting(content_prompt, JAM_USER_ID)
 
         if response_text:
             return filter_ai_response(response_text)
@@ -407,9 +524,43 @@ async def handle_weekly_announcement_approval(message: discord.Message):
         return
 
     content = message.content.strip()
+
+    # ✅ FIX #1: Check for escape command
+    if check_escape_command(content):
+        announcement_id = convo.get('announcement_id')
+        if announcement_id and db:
+            db.update_announcement_status(announcement_id, 'cancelled')
+        
+        await message.reply(
+            f"❌ **Approval Cancelled**\n\n"
+            f"The weekly announcement approval has been cancelled at your request. "
+            f"No message will be sent today.\n\n"
+            f"*You can generate a new announcement tomorrow.*"
+        )
+        if user_id in weekly_announcement_approvals:
+            del weekly_announcement_approvals[user_id]
+        return
+
+    # ✅ FIX #1: Check conversation health
+    is_healthy, error_message = check_conversation_health(convo, max_age_minutes=120)
+    if not is_healthy:
+        await send_conversation_expired_message(message, "weekly announcement approval", error_message or "Conversation health check failed")
+        announcement_id = convo.get('announcement_id')
+        if announcement_id and db:
+            db.update_announcement_status(announcement_id, 'cancelled')
+        if user_id in weekly_announcement_approvals:
+            del weekly_announcement_approvals[user_id]
+        return
+
     announcement_id = convo['announcement_id']
 
     if convo['step'] == 'approval':
+        # Validate input first (options 1-5)
+        valid_options = ['1', '2', '3', '4', '5']
+        if not validate_numbered_input(content, valid_options):
+            await message.reply(create_invalid_input_message(content, valid_options))
+            return
+        
         if content == '1':
             db.update_announcement_status(announcement_id, 'approved')
             await message.reply("✅ **Approved.** The message will be posted at 9:00 AM.")
@@ -447,7 +598,8 @@ async def handle_weekly_announcement_approval(message: discord.Message):
                 # Update the database record with the new content so it persists
                 db.update_announcement_status(announcement_id, 'pending_approval', new_content=new_content)
 
-                # Present the new version for approval
+                # Present the new version for approval (return to approval step for validation)
+                convo['step'] = 'approval'
                 approval_msg = (
                     f"🔄 **Regeneration Complete**\n\n"
                     f"Here is an alternative version of the {convo['day'].title()} greeting:\n\n"
@@ -500,8 +652,12 @@ async def handle_weekly_announcement_approval(message: discord.Message):
                 f"Please respond with **1, 2, 3, or 4**."
             )
             await message.reply(approval_msg)
+            # Update step to approval so next input is validated
+            convo['step'] = 'approval'
         else:
-            # AI amendment failed, fall back to simple text append
+            # AI amendment failed - ask what to do next
+            valid_options = ['1', '2', '3']
+            convo['step'] = 'ai_amendment_failed'
             await message.reply(
                 "⚠️ **AI Amendment Failed.** The AI was unable to process your instruction. "
                 "Would you like to:\n\n"
@@ -510,7 +666,26 @@ async def handle_weekly_announcement_approval(message: discord.Message):
                 "**3.** Cancel\n\n"
                 "Please respond with **1**, **2**, or **3**."
             )
-            # Keep the step as 'ai_amending' so they can try again
+    
+    elif convo['step'] == 'ai_amendment_failed':
+        # Handle AI amendment failure recovery
+        valid_options = ['1', '2', '3']
+        if not validate_numbered_input(content, valid_options):
+            await message.reply(create_invalid_input_message(content, valid_options))
+            return
+        
+        if content == '1':
+            convo['step'] = 'ai_amending'
+            await message.reply("🤖 **Try Again:** Please provide new amendment instructions.")
+        elif content == '2':
+            # Approve original and post
+            db.update_announcement_status(announcement_id, 'approved')
+            await message.reply("✅ **Original Approved.** The message will be posted at 9:00 AM.")
+            del weekly_announcement_approvals[user_id]
+        elif content == '3':
+            db.update_announcement_status(announcement_id, 'cancelled')
+            await message.reply("❌ **Cancelled.** No message will be sent today.")
+            del weekly_announcement_approvals[user_id]
 
     elif convo['step'] == 'manual_editing':
         # User has provided their complete replacement text
@@ -575,7 +750,8 @@ Original content from {author} ({author_context}):
 Rewrite this as a technical briefing for moderators. Be analytical and precise, using phrases like "Analysis indicates", "System diagnostics confirm", "Mission parameters", etc.
 Write 2-4 sentences maximum. Stay faithful to the original content while adding your clinical personality."""
 
-            prompt = apply_ash_persona_to_ai_prompt(content_prompt, "mod_announcement")
+            # Phase 2: Persona handled automatically by system_instruction
+            prompt = content_prompt
 
         else:  # user channel
             content_prompt = f"""Rewrite this announcement content succinctly in your style WITHOUT omitting any details or overly elaborating or inventing additional information.
@@ -594,7 +770,8 @@ Original content from {author} ({author_context}):
 Rewrite this as a community announcement that's accessible to regular users but still has your analytical undertones.
 Write 2-4 sentences maximum. Stay faithful to the original content while adding your personality."""
 
-            prompt = apply_ash_persona_to_ai_prompt(content_prompt, "user_announcement")
+            # Phase 2: Persona handled automatically by system_instruction
+            prompt = content_prompt
 
         # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, user_id)
@@ -737,15 +914,42 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
     if not conversation:
         return
 
+    content = message.content.strip()
+
+    # ✅ FIX #1: Check for escape command
+    if check_escape_command(content):
+        await message.reply(
+            f"❌ **Announcement Cancelled**\n\n"
+            f"The announcement creation has been cancelled at your request. "
+            f"All progress has been discarded.\n\n"
+            f"*You can start a new announcement with `!announceupdate`*"
+        )
+        if user_id in announcement_conversations:
+            del announcement_conversations[user_id]
+        return
+
+    # ✅ FIX #1: Check conversation health
+    is_healthy, error_message = check_conversation_health(conversation, max_age_minutes=60)
+    if not is_healthy:
+        await send_conversation_expired_message(message, "announcement creation", error_message or "Conversation health check failed")
+        if user_id in announcement_conversations:
+            del announcement_conversations[user_id]
+        return
+
     # Update activity
     update_announcement_activity(user_id)
 
     step = conversation.get('step', 'channel_selection')
     data = conversation.get('data', {})
-    content = message.content.strip()
 
     try:
         if step == 'channel_selection':
+            # Validate input first
+            valid_options = ['1', '2']
+            if not validate_numbered_input(content, valid_options) and content not in ['mod', 'moderator', 'mod channel', 'user', 'announcements', 'public', 'community']:
+                await message.reply(create_invalid_input_message(content, valid_options, "mod, moderator, user, announcements"))
+                return
+            
             # Handle channel selection (1 for mod, 2 for user announcements)
             if content in ['1', 'mod', 'moderator', 'mod channel']:
                 data['target_channel'] = 'mod'
@@ -872,6 +1076,18 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                         f"*Review mission parameters carefully before deployment.*")
 
         elif step == 'preview':
+            # Validate input first - determine valid options based on AI availability
+            if data.get('ai_content'):
+                # AI-enhanced content: 5 options available
+                valid_options = ['1', '2', '3', '4', '5']
+            else:
+                # AI failed: 4 options available (no AI amend)
+                valid_options = ['1', '2', '3', '4']
+            
+            if not validate_numbered_input(content, valid_options):
+                await message.reply(create_invalid_input_message(content, valid_options))
+                return
+            
             # Handle preview actions
             if content in ['1', 'post', 'deploy', 'send']:
                 # Clean up conversation BEFORE posting to ensure it ends properly
@@ -982,6 +1198,7 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                     amended_content, target_channel, user_id, creator_notes=data.get('creator_notes')
                 )
                 data['formatted_content'] = preview_content
+                data['ai_content'] = amended_content  # Mark as having AI content for validation
 
                 await message.reply(
                     f"✏️ **Amendment Complete**\n\n"
@@ -996,6 +1213,8 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                     f"Please respond with **1, 2, 3, 4, or 5**."
                 )
             else:
+                # AI failed - transition to failure recovery step
+                conversation['step'] = 'ai_amend_failed'
                 await message.reply(
                     "⚠️ **AI Amendment Failed.** Would you like to:\n\n"
                     "**1.** Try a different instruction\n"
@@ -1003,6 +1222,31 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                     "**3.** Cancel\n\n"
                     "Please respond with **1**, **2**, or **3**."
                 )
+        
+        elif step == 'ai_amend_failed':
+            # Handle AI amendment failure recovery for regular announcements
+            valid_options = ['1', '2', '3']
+            if not validate_numbered_input(content, valid_options):
+                await message.reply(create_invalid_input_message(content, valid_options))
+                return
+            
+            if content == '1':
+                conversation['step'] = 'ai_amending'
+                await message.reply("🤖 **Try Again:** Please provide new AI amendment instructions.")
+            elif content == '2':
+                conversation['step'] = 'manual_editing'
+                current_content = data.get('content', data.get('raw_content', ''))
+                await message.reply(
+                    f"✏️ **Manual Edit Mode**\n\n"
+                    f"**Current content:**\n```\n{current_content}\n```\n\n"
+                    f"Please provide your complete replacement text."
+                )
+            elif content == '3':
+                # Cancel announcement
+                if user_id in announcement_conversations:
+                    del announcement_conversations[user_id]
+                await message.reply("❌ **Cancelled.** Announcement creation aborted.")
+                return
 
         elif step == 'manual_editing':
             # User provided complete replacement text
@@ -1118,12 +1362,33 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
     if not conversation:
         return
 
+    content = message.content.strip()
+
+    # ✅ FIX #1: Check for escape command
+    if check_escape_command(content):
+        await message.reply(
+            f"❌ **Question Submission Cancelled**\n\n"
+            f"The trivia question submission has been cancelled at your request. "
+            f"All progress has been discarded.\n\n"
+            f"*You can start a new submission with `!addtriviaquestion`*"
+        )
+        if user_id in mod_trivia_conversations:
+            del mod_trivia_conversations[user_id]
+        return
+
+    # ✅ FIX #1: Check conversation health
+    is_healthy, error_message = check_conversation_health(conversation, max_age_minutes=60)
+    if not is_healthy:
+        await send_conversation_expired_message(message, "trivia question submission", error_message or "Conversation health check failed")
+        if user_id in mod_trivia_conversations:
+            del mod_trivia_conversations[user_id]
+        return
+
     # Update activity
     update_mod_trivia_activity(user_id)
 
     step = conversation.get('step', 'initial')
     data = conversation.get('data', {})
-    content = message.content.strip()
 
     try:
         if step == 'initial':
@@ -1156,6 +1421,12 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                 )
 
         elif step == 'question_type_selection':
+            # Validate input first
+            valid_options = ['1', '2']
+            if not validate_numbered_input(content, valid_options):
+                await message.reply(create_invalid_input_message(content, valid_options, "database, manual, question only, question answer"))
+                return
+            
             if content in ['1', 'database', 'question only', 'calculate']:
                 data['question_type'] = 'database_calculated'
                 conversation['step'] = 'question_input'
@@ -1189,6 +1460,12 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                 )
 
         elif step == 'format_selection':
+            # Validate input first
+            valid_options = ['1', '2']
+            if not validate_numbered_input(content, valid_options):
+                await message.reply(create_invalid_input_message(content, valid_options, "single, multiple, single answer, multiple choice"))
+                return
+            
             if content in ['1', 'single', 'single answer']:
                 data['format'] = 'single_answer'
                 conversation['step'] = 'question_input'
@@ -1630,8 +1907,34 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
     # Get message content early for pre-trivia check
     content = message.content.strip()
 
+    # ✅ FIX #1: Check for escape command
+    if check_escape_command(content):
+        await message.reply(
+            f"❌ **Approval Cancelled**\n\n"
+            f"The question approval process has been cancelled at your request. "
+            f"The pending question has been discarded.\n\n"
+            f"*You can start a new approval with `!approvequestion auto`*"
+        )
+        if user_id in jam_approval_conversations:
+            del jam_approval_conversations[user_id]
+        return
+
+    # ✅ FIX #1: Check conversation health
+    is_healthy, error_message = check_conversation_health(conversation, max_age_minutes=60)
+    if not is_healthy:
+        await send_conversation_expired_message(message, "question approval", error_message or "Conversation health check failed")
+        if user_id in jam_approval_conversations:
+            del jam_approval_conversations[user_id]
+        return
+
     # Handle pre-trivia approval context
     if conversation.get('context') == 'pre_trivia':
+        # ✅ FIX #6: Validate numbered input (14/14) - FINAL VALIDATION
+        valid_options = ['1', '2']
+        if not validate_numbered_input(content, valid_options):
+            await message.reply(create_invalid_input_message(content, valid_options, "approve, reject"))
+            return
+        
         if content == '1':  # Approve
             await message.reply("✅ **Pre-Trivia Question Approved.** It will be posted automatically at 11:00 AM.")
             del jam_approval_conversations[user_id]
@@ -1788,11 +2091,23 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 )
 
             elif content in ['3', 'reject', 'no', 'decline']:
+                # ✅ FIX #4: Mark rejected question as 'retired' not 'answered'
+                question_data = data.get('question_data', {})
+                question_id = question_data.get('id')
+
+                # Mark as retired if it has an ID (database question)
+                if question_id and db:
+                    try:
+                        db.update_trivia_question_status(question_id, 'retired')
+                        print(f"✅ FIX #4: Marked rejected question {question_id} as 'retired'")
+                    except Exception as e:
+                        print(f"⚠️ Error marking question as retired: {e}")
+
                 # Reject the question
                 await message.reply(
                     f"❌ **Question Rejected**\n\n"
                     f"The trivia question has been rejected and will not be added to the database. "
-                    f"The system will generate an alternative question for your review.\n\n"
+                    f"It has been marked as 'retired' and won't be shown again.\n\n"
                     f"*Mission parameters updated. Alternative question generation initiated.*"
                 )
 
@@ -1811,6 +2126,12 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 )
 
         elif step == 'modification_choice':
+            # Validate input first
+            valid_options = ['1', '2', '3', '4']
+            if not validate_numbered_input(content, valid_options):
+                await message.reply(create_invalid_input_message(content, valid_options, "question, answer, both, back"))
+                return
+            
             # Handle modification choice menu
             if content in ['1', 'question', 'edit question']:
                 # Edit question only
@@ -1895,6 +2216,12 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
             await message.reply(preview_msg)
 
         elif step == 'modification_preview':
+            # Validate input first
+            valid_options = ['1', '2', '3']
+            if not validate_numbered_input(content, valid_options):
+                await message.reply(create_invalid_input_message(content, valid_options, "approve, edit, cancel"))
+                return
+            
             if content in ['1', 'approve', 'yes', 'save']:
                 # Ask if they want to edit the answer as well
                 conversation['step'] = 'answer_edit_prompt'
@@ -1946,6 +2273,12 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 )
 
         elif step == 'answer_edit_prompt':
+            # Validate input first
+            valid_options = ['1', '2']
+            if not validate_numbered_input(content, valid_options):
+                await message.reply(create_invalid_input_message(content, valid_options, "edit, skip"))
+                return
+            
             if content in ['1', 'edit', 'yes']:
                 # Edit the answer
                 conversation['step'] = 'answer_modification'
@@ -1999,6 +2332,12 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
             )
 
         elif step == 'type_edit_prompt':
+            # Validate input first
+            valid_options = ['1', '2']
+            if not validate_numbered_input(content, valid_options):
+                await message.reply(create_invalid_input_message(content, valid_options, "change, finish"))
+                return
+            
             if content in ['1', 'change', 'edit', 'yes']:
                 # Edit the question type
                 conversation['step'] = 'type_modification'
@@ -2645,18 +2984,42 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
         return
 
     content = message.content.strip()
+
+    # ✅ FIX #1: Check for escape command
+    if check_escape_command(content):
+        session_id = conversation.get('session_id')
+        if session_id and db:
+            db.complete_game_review_session(session_id, 'cancelled')
+        
+        await message.reply(
+            f"❌ **Review Cancelled**\n\n"
+            f"The game review has been cancelled at your request. "
+            f"This entry will not be imported.\n\n"
+            f"*You can start a new review if needed.*"
+        )
+        if user_id in game_review_conversations:
+            del game_review_conversations[user_id]
+        return
+
+    # Get conversation data
     step = conversation.get('step', 'review')
     data = conversation.get('data', {})
     session_id = conversation.get('session_id')
+    
+    if not session_id:
+        await message.reply("❌ Error: Invalid session")
+        if user_id in game_review_conversations:
+            del game_review_conversations[user_id]
+        return
 
     try:
-        if not session_id:
-            await message.reply("❌ Error: Invalid session")
-            if user_id in game_review_conversations:
-                del game_review_conversations[user_id]
-            return
-
         if step == 'review':
+            # ✅ FIX #6: Validate numbered input (12/14)
+            valid_options = ['1', '2', '3']
+            if not validate_numbered_input(content, valid_options) and content not in ['accept', 'yes', 'correct', 'fix', 'skip', 'no']:
+                await message.reply(create_invalid_input_message(content, valid_options, "accept, correct, skip"))
+                return
+            
             if content in ['1', 'accept', 'yes']:
                 # Accept extracted name
                 db.complete_game_review_session(session_id, 'approved')
@@ -2681,9 +3044,6 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
                     f"❌ **Skipped** - This entry won't be imported"
                 )
                 del game_review_conversations[user_id]
-
-            else:
-                await message.reply("⚠️ Invalid. Respond with **1** (Accept), **2** (Correct), or **3** (Skip).")
 
         elif step == 'correction':
             # User provided correct name - re-validate with IGDB
@@ -2730,6 +3090,12 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
                 )
 
         elif step == 'correction_failed':
+            # ✅ FIX #6: Validate numbered input (13/14)
+            valid_options = ['1', '2', '3']
+            if not validate_numbered_input(content, valid_options):
+                await message.reply(create_invalid_input_message(content, valid_options, "try again, accept, skip"))
+                return
+            
             if content == '1':
                 conversation['step'] = 'correction'
                 await message.reply(f"🔧 Try another name:")

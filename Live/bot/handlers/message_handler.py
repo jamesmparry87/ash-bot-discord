@@ -22,10 +22,8 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 
 from ..config import (
-    BOT_PERSONA,
     BUSY_MESSAGE,
     ERROR_MESSAGE,
-    FAQ_RESPONSES,
     JAM_USER_ID,
     JONESY_USER_ID,
     MEMBERS_CHANNEL_ID,
@@ -33,6 +31,7 @@ from ..config import (
     POPS_ARCADE_USER_ID,
     VIOLATION_CHANNEL_ID,
 )
+from ..persona.faqs import ASH_FAQ_RESPONSES
 from ..database_module import DatabaseManager, get_database
 from ..utils.permissions import (
     cleanup_expired_aliases,
@@ -43,9 +42,7 @@ from ..utils.permissions import (
     user_is_mod_by_id,
 )
 from .ai_handler import (
-    add_pops_arcade_personality_context,
     ai_enabled,
-    apply_ash_persona_to_ai_prompt,
     call_ai_with_rate_limiting,
     filter_ai_response,
 )
@@ -1882,8 +1879,8 @@ async def handle_general_conversation(message: discord.Message, bot: commands.Bo
                 increment_member_conversation_count(message.author.id)
 
         # PRIORITY A: Check for FAQ responses
-        if content_lower in FAQ_RESPONSES:
-            response = FAQ_RESPONSES[content_lower]
+        if content_lower in ASH_FAQ_RESPONSES:
+            response = ASH_FAQ_RESPONSES[content_lower]
             response = apply_pops_arcade_sarcasm(response, message.author.id)
             await message.reply(response)
             return

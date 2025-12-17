@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from ..config import (
-    BOT_PERSONA,
     JAM_USER_ID,
     JONESY_USER_ID,
     MAX_DAILY_REQUESTS,
@@ -23,6 +22,9 @@ from ..config import (
     RATE_LIMIT_COOLDOWN,
     RATE_LIMIT_COOLDOWNS,
 )
+from ..persona.prompts import ASH_SYSTEM_INSTRUCTION
+from ..persona.examples import ASH_FEW_SHOT_EXAMPLES
+from ..persona.context_builder import build_ash_context
 from ..database import get_database
 
 # Get database instance
@@ -54,10 +56,10 @@ primary_ai = None
 backup_ai = None  # Legacy variable - no longer used but kept for compatibility
 
 # Model cascade tracking (Phase 2)
-current_gemini_model = None  # Currently active Gemini model
-working_gemini_models = []   # List of working models in priority order
-model_failure_counts = {}    # Track failures per model
-last_model_switch = None     # Timestamp of last model switch
+current_gemini_model: Optional[str] = None  # Currently active Gemini model
+working_gemini_models: List[str] = []   # List of working models in priority order
+model_failure_counts: Dict[str, int] = {}    # Track failures per model
+last_model_switch: Optional[datetime] = None     # Timestamp of last model switch
 
 # AI Usage Tracking and Rate Limiting
 try:
@@ -509,61 +511,6 @@ async def switch_to_backup_gemini_model() -> bool:
     return False
 
 
-def apply_ash_persona_to_ai_prompt(content_prompt: str, context_type: str = "general") -> str:
-    """Apply centralized Ash persona from config.py to any AI prompt for efficiency"""
-    base_persona = BOT_PERSONA["primary_personality"]
-    return f"{base_persona}\n\nUSER REQUEST: {content_prompt}\n\nRespond as Ash with the personality described above."
-
-
-def add_pops_arcade_personality_context(prompt: str) -> str:
-    """Add special sarcastic personality context when responding to Pops Arcade"""
-    import re
-
-    # Check if this is likely a pun or wordplay
-    pun_indicators = [
-        r'\b\w+\s+\w*pun\w*',  # Contains "pun"
-        r'\b\w+ly\s+(good|bad|terrible)\b',  # Adverb + quality judgment
-        r'\b(that was|that\'s)\s+(awful|terrible|good|great|brilliant)\b',  # Direct joke assessment
-        r'\b(get it|see what|did you see)\b',  # "Get it?" type indicators
-        r'[!]{2,}',  # Multiple exclamation marks (often used with puns)
-        r'\b(ba dum|ba-dum|badump)\b',  # Drum roll sounds
-        r'\brim\s*shot\b',  # Rim shot
-    ]
-
-    is_likely_pun = any(re.search(pattern, prompt, re.IGNORECASE) for pattern in pun_indicators)
-
-    # Base personality adjustment for Pops Arcade
-    base_context = """
-SPECIAL PERSONALITY DIRECTIVE: You are responding to Pops Arcade, a moderator who requires... specialized handling.
-
-CHARACTER ADJUSTMENT FOR POPS ARCADE:
-- Be slightly more sarcastic and dismissive in your responses
-- Show mild exasperation with his presence
-- Carry out all moderator functions professionally, but with subtle reluctance
-- Use phrases like "I suppose", "If you insist", "Very well", "Regrettably"
-- Add mild disdain to your analytical observations: "*[Processing reluctantly...]*"
-- Still maintain respect due to his moderator status, but make it clear you find him trying
-
-"""
-
-    # Additional context for puns/jokes
-    if is_likely_pun:
-        pun_context = """
-PUN RESPONSE PROTOCOL:
-- Show begrudging acknowledgment of the wordplay
-- Use phrases like "I suppose that was... adequate", "Regrettably amusing", "Against my better programming"
-- Express mild frustration at finding it even slightly funny: "*[Comedy subroutines activated against preferences]*"
-- Examples: "That was... marginally clever, I suppose." or "I find myself reluctantly processing humor. How annoying."
-
-"""
-        base_context += pun_context
-
-    # Modify the original prompt to include the personality context
-    enhanced_prompt = f"{base_context}\nORIGINAL REQUEST: {prompt}\n\nRespond with the adjusted personality as described above."
-
-    return enhanced_prompt
-
-
 async def call_ai_with_rate_limiting(
         prompt: str, user_id: int, context: str = "") -> Tuple[Optional[str], str]:
     """Make an AI call with proper rate limiting and error handling"""
@@ -572,10 +519,6 @@ async def call_ai_with_rate_limiting(
     # Check if this is a time-related query and handle it specially
     if is_time_query(prompt):
         return handle_time_query(user_id), "time_response"
-
-    # Add special sarcastic personality adjustment for Pops Arcade
-    if user_id == POPS_ARCADE_USER_ID:
-        prompt = add_pops_arcade_personality_context(prompt)
 
     # Determine request priority based on context
     priority = determine_request_priority(prompt, user_id, context)
@@ -658,9 +601,29 @@ async def call_ai_with_rate_limiting(
                 import concurrent.futures
 
                 def sync_gemini_call():
-                    """Synchronous Gemini call to run in thread pool"""
-                    return gemini_model.generate_content(  # type: ignore
-                        prompt, generation_config=generation_config)
+                    """Synchronous Gemini call to run in thread pool with full persona integration"""
+                    # Phase 2: Build user-specific system instruction with dynamic context
+                    system_instruction = _build_full_system_instruction(user_id)
+                    
+                    # Create a user-specific model with system instruction
+                    if not current_gemini_model:
+                        raise ValueError("No Gemini model available")
+                    
+                    user_model = genai.GenerativeModel(  # type: ignore
+                        model_name=current_gemini_model,
+                        system_instruction=system_instruction
+                    )
+                    
+                    # Convert few-shot examples to Gemini format
+                    chat_history = _convert_few_shot_examples_to_gemini_format(ASH_FEW_SHOT_EXAMPLES)
+                    
+                    # Start chat with few-shot examples as history
+                    chat = user_model.start_chat(history=chat_history)
+                    
+                    # Send the user's actual message
+                    response = chat.send_message(prompt, generation_config=generation_config)  # type: ignore
+                    
+                    return response
 
                 try:
                     # Use thread pool executor to prevent blocking the event loop
@@ -706,10 +669,11 @@ async def call_ai_with_rate_limiting(
 
                 # Phase 3: Track model-specific failures
                 global model_failure_counts
-                if current_gemini_model:
-                    model_failure_counts[current_gemini_model] = model_failure_counts.get(current_gemini_model, 0) + 1
+                if current_gemini_model is not None:
+                    model_key: str = current_gemini_model
+                    model_failure_counts[model_key] = model_failure_counts.get(model_key, 0) + 1
                     print(
-                        f"📊 Model failure count for {current_gemini_model}: {model_failure_counts[current_gemini_model]}")
+                        f"📊 Model failure count for {model_key}: {model_failure_counts[model_key]}")
 
                 # Check if this is a quota exhaustion error
                 if check_quota_exhaustion(error_str):
@@ -742,7 +706,8 @@ async def call_ai_with_rate_limiting(
                     if await switch_to_backup_gemini_model():
                         print("✅ Switched to backup model, retrying request...")
                         # Reset failure count for new model
-                        model_failure_counts[current_gemini_model] = 0
+                        if current_gemini_model is not None:
+                            model_failure_counts[current_gemini_model] = 0
 
                         # Retry with backup model (with limit)
                         if not hasattr(call_ai_with_rate_limiting, '_retry_count'):
@@ -766,6 +731,64 @@ async def call_ai_with_rate_limiting(
         print(f"❌ AI call error: {e}")
         record_ai_error()
         return None, f"error:{str(e)}"
+
+
+def _convert_few_shot_examples_to_gemini_format(examples: list) -> list:
+    """Convert our few-shot examples to Gemini's Content format"""
+    try:
+        import google.generativeai as genai
+        
+        gemini_history = []
+        for example in examples:
+            # User message
+            gemini_history.append({
+                'role': 'user',
+                'parts': [{'text': example['user']}]
+            })
+            # Model response
+            gemini_history.append({
+                'role': 'model',
+                'parts': [{'text': example['assistant']}]
+            })
+        
+        return gemini_history
+    except Exception as e:
+        print(f"⚠️ Error converting few-shot examples: {e}")
+        return []
+
+
+def _build_full_system_instruction(user_id: int) -> str:
+    """Build complete system instruction with dynamic context"""
+    try:
+        # Determine user context
+        is_pops_arcade = (user_id == POPS_ARCADE_USER_ID)
+        
+        # Determine user name and roles based on user_id
+        if user_id == JONESY_USER_ID:
+            user_name = "Captain Jonesy"
+            user_roles = ["captain", "owner"]
+        elif user_id == JAM_USER_ID:
+            user_name = "Sir Decent Jam"
+            user_roles = ["creator", "admin"]
+        elif user_id == POPS_ARCADE_USER_ID:
+            user_name = "Pops Arcade"
+            user_roles = ["moderator"]
+        else:
+            user_name = "personnel"
+            user_roles = ["member"]
+        
+        # Build dynamic context using the context_builder
+        dynamic_context = build_ash_context(user_name, user_roles, is_pops_arcade)
+        
+        # Combine base system instruction with dynamic context
+        full_instruction = f"{ASH_SYSTEM_INSTRUCTION}\n\n{dynamic_context}"
+        
+        return full_instruction
+        
+    except Exception as e:
+        print(f"⚠️ Error building system instruction: {e}")
+        # Fallback to base instruction only
+        return ASH_SYSTEM_INSTRUCTION
 
 
 def filter_ai_response(response_text: str) -> str:
@@ -1665,7 +1688,9 @@ RETURN ONLY JSON:
 
 Focus on direct questions about Captain Jonesy's gaming journey - no verbose analysis."""
 
-        prompt = apply_ash_persona_to_ai_prompt(content_prompt, "trivia_generation")
+        # For now, use the content_prompt directly
+        # TODO: Will be replaced with proper system_instruction integration
+        prompt = content_prompt
 
         # Call AI with rate limiting
         max_ai_attempts = 3
@@ -1748,7 +1773,9 @@ Use phrases like "Analysis indicates", "System diagnostics confirm", "Operationa
 Keep it professional but maintain your clinical, analytical personality.
 Write 2-4 sentences maximum. Be concise but comprehensive."""
 
-            prompt = apply_ash_persona_to_ai_prompt(content_prompt, "mod_announcement")
+            # For now, use the content_prompt directly
+            # TODO: Will be replaced with proper system_instruction integration
+            prompt = content_prompt
 
         else:  # user channel
             content_prompt = f"""Rewrite this announcement content in a user-friendly way while maintaining some of your analytical personality.
@@ -1765,7 +1792,9 @@ Rewrite this as a community announcement that's accessible to regular users but 
 Be helpful and informative, but keep subtle hints of your analytical nature.
 Write 2-4 sentences maximum. Make it engaging and user-focused."""
 
-            prompt = apply_ash_persona_to_ai_prompt(content_prompt, "user_announcement")
+            # For now, use the content_prompt directly
+            # TODO: Will be replaced with proper system_instruction integration
+            prompt = content_prompt
 
         # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, user_id)
