@@ -604,25 +604,25 @@ async def call_ai_with_rate_limiting(
                     """Synchronous Gemini call to run in thread pool with full persona integration"""
                     # Phase 2: Build user-specific system instruction with dynamic context
                     system_instruction = _build_full_system_instruction(user_id)
-                    
+
                     # Create a user-specific model with system instruction
                     if not current_gemini_model:
                         raise ValueError("No Gemini model available")
-                    
+
                     user_model = genai.GenerativeModel(  # type: ignore
                         model_name=current_gemini_model,
                         system_instruction=system_instruction
                     )
-                    
+
                     # Convert few-shot examples to Gemini format
                     chat_history = _convert_few_shot_examples_to_gemini_format(ASH_FEW_SHOT_EXAMPLES)
-                    
+
                     # Start chat with few-shot examples as history
                     chat = user_model.start_chat(history=chat_history)
-                    
+
                     # Send the user's actual message
                     response = chat.send_message(prompt, generation_config=generation_config)  # type: ignore
-                    
+
                     return response
 
                 try:
@@ -737,7 +737,7 @@ def _convert_few_shot_examples_to_gemini_format(examples: list) -> list:
     """Convert our few-shot examples to Gemini's Content format"""
     try:
         import google.generativeai as genai
-        
+
         gemini_history = []
         for example in examples:
             # User message
@@ -750,7 +750,7 @@ def _convert_few_shot_examples_to_gemini_format(examples: list) -> list:
                 'role': 'model',
                 'parts': [{'text': example['assistant']}]
             })
-        
+
         return gemini_history
     except Exception as e:
         print(f"⚠️ Error converting few-shot examples: {e}")
@@ -762,7 +762,7 @@ def _build_full_system_instruction(user_id: int) -> str:
     try:
         # Determine user context
         is_pops_arcade = (user_id == POPS_ARCADE_USER_ID)
-        
+
         # Determine user name and roles based on user_id
         if user_id == JONESY_USER_ID:
             user_name = "Captain Jonesy"
@@ -776,15 +776,15 @@ def _build_full_system_instruction(user_id: int) -> str:
         else:
             user_name = "personnel"
             user_roles = ["member"]
-        
+
         # Build dynamic context using the context_builder
         dynamic_context = build_ash_context(user_name, user_roles, is_pops_arcade)
-        
+
         # Combine base system instruction with dynamic context
         full_instruction = f"{ASH_SYSTEM_INSTRUCTION}\n\n{dynamic_context}"
-        
+
         return full_instruction
-        
+
     except Exception as e:
         print(f"⚠️ Error building system instruction: {e}")
         # Fallback to base instruction only

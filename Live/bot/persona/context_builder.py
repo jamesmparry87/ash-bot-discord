@@ -6,7 +6,7 @@ def build_ash_context(user_name, user_roles, is_pops_arcade=False):
     """
     Constructs the dynamic context string to append to the system prompt.
     """
-    
+
     # 1. Determine Clearance Level
     if "Captain" in user_roles or "Owner" in user_roles:
         clearance = "COMMANDING OFFICER (Absolute Authority)"
@@ -40,5 +40,5 @@ def build_ash_context(user_name, user_roles, is_pops_arcade=False):
     Database Status: {data_freshness}
     -----------------------------------
     """
-    
+
     return context_string

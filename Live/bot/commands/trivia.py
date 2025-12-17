@@ -90,13 +90,13 @@ class TriviaCommands(commands.Cog):
     def _validate_multiple_choice_options(self, choices: list, correct_answer: str) -> dict:
         """
         ✅ FIX #6: Validate multiple choice options for count and consistency
-        
+
         Ensures:
         - Minimum 2 options (required for multiple choice)
         - Maximum 4 options (A, B, C, D limit)
         - Correct answer letter corresponds to valid option
         - No empty options
-        
+
         Returns dict with 'valid' (bool) and 'error' (str if invalid)
         """
         # Check minimum options
@@ -105,14 +105,14 @@ class TriviaCommands(commands.Cog):
                 'valid': False,
                 'error': f"Multiple choice requires at least 2 options (found {len(choices)})"
             }
-        
+
         # Check maximum options
         if len(choices) > 4:
             return {
                 'valid': False,
                 'error': f"Multiple choice limited to 4 options (A-D), found {len(choices)}"
             }
-        
+
         # Check for empty options
         for i, choice in enumerate(choices):
             if not choice or not choice.strip():
@@ -120,21 +120,21 @@ class TriviaCommands(commands.Cog):
                     'valid': False,
                     'error': f"Option {chr(65+i)} is empty"
                 }
-        
+
         # Validate correct answer letter
         if not correct_answer or len(correct_answer) != 1:
             return {
                 'valid': False,
                 'error': "Correct answer must be a single letter (A-D)"
             }
-        
+
         correct_answer_upper = correct_answer.upper()
         if correct_answer_upper not in ['A', 'B', 'C', 'D']:
             return {
                 'valid': False,
                 'error': f"Correct answer must be A, B, C, or D (got '{correct_answer}')"
             }
-        
+
         # Check if correct answer corresponds to available option
         choice_index = ord(correct_answer_upper) - ord('A')
         if choice_index >= len(choices):
@@ -142,7 +142,7 @@ class TriviaCommands(commands.Cog):
                 'valid': False,
                 'error': f"Correct answer '{correct_answer_upper}' exceeds available options (only {len(choices)} options: {chr(65)}-{chr(64+len(choices))})"
             }
-        
+
         # All validations passed
         return {'valid': True, 'error': None}
 
@@ -413,22 +413,22 @@ class TriviaCommands(commands.Cog):
     def _validate_question_quality(self, question_data: dict) -> tuple[bool, str, float]:
         """
         ✅ FIX #5: Validate AI-generated question quality before approval.
-        
+
         Checks for:
         - Question clarity and completeness
         - Answer appropriateness
         - No ambiguity or multiple interpretations
         - Fan-answerable difficulty
-        
+
         Returns: (is_valid, reason, quality_score)
         """
         question_text = question_data.get('question_text', '')
         answer = question_data.get('correct_answer', '')
-        
+
         # Quality score starts at 100
         quality_score = 100.0
         issues = []
-        
+
         # Check question length (not too short, not too long)
         if len(question_text) < 15:
             quality_score -= 40
@@ -436,12 +436,12 @@ class TriviaCommands(commands.Cog):
         elif len(question_text) > 200:
             quality_score -= 20
             issues.append("Question too verbose")
-        
+
         # Check for question mark
         if not question_text.endswith('?'):
             quality_score -= 10
             issues.append("Missing question mark")
-        
+
         # Check answer length (reasonable)
         if len(answer) < 2:
             quality_score -= 30
@@ -449,7 +449,7 @@ class TriviaCommands(commands.Cog):
         elif len(answer) > 100:
             quality_score -= 15
             issues.append("Answer too long")
-        
+
         # Check for problematic patterns
         bad_patterns = [
             ('exact number', r'\d{4,}'),  # Exact large numbers (too specific)
@@ -457,28 +457,28 @@ class TriviaCommands(commands.Cog):
             ('multiple questions', r'\?.*\?'),  # Multiple question marks
             ('incomplete', r'\.\.\.$'),  # Trailing ellipsis
         ]
-        
+
         for pattern_name, pattern in bad_patterns:
             if re.search(pattern, question_text):
                 quality_score -= 25
                 issues.append(f"Contains {pattern_name}")
-        
+
         # Check for ambiguous words
         ambiguous_words = ['maybe', 'approximately', 'around', 'roughly', 'about']
         if any(word in question_text.lower() for word in ambiguous_words):
             quality_score -= 10
             issues.append("Contains ambiguous language")
-        
+
         # Reject if quality score too low
         is_valid = quality_score >= 60  # Minimum 60% quality
         reason = "; ".join(issues) if issues else "Quality check passed"
-        
+
         return is_valid, reason, quality_score
 
     async def _generate_ai_question_fallback(self):
         """
         ✅ FIX #5: Enhanced AI question generation with quality validation.
-        
+
         Improvements:
         - Stricter prompts with clear guidelines
         - Quality validation before approval
@@ -490,7 +490,7 @@ class TriviaCommands(commands.Cog):
             youtube_question = await self._generate_youtube_analytics_question()
             if youtube_question:
                 logger.info("Generated YouTube analytics-powered trivia question")
-                
+
                 # ✅ FIX #5: Validate YouTube question quality
                 is_valid, reason, score = self._validate_question_quality(youtube_question)
                 if is_valid:
@@ -503,8 +503,7 @@ class TriviaCommands(commands.Cog):
             # ✅ FIX #5: Enhanced prompts with stricter guidelines
             question_types = [
                 {
-                    'type': 'fan_observable',
-                    'prompt': (
+                    'type': 'fan_observable', 'prompt': (
                         "Generate a trivia question about Captain Jonesy's gaming that fans could answer from watching streams.\n\n"
                         "STRICT REQUIREMENTS:\n"
                         "- Question must be answerable by regular viewers\n"
@@ -515,12 +514,8 @@ class TriviaCommands(commands.Cog):
                         "- Answer must be 2-30 words\n\n"
                         "GOOD: 'What genre does Captain Jonesy play most often?'\n"
                         "BAD: 'How many episodes of God of War has Jonesy uploaded?' (too specific)\n\n"
-                        "Format EXACTLY: Question: [your question] | Answer: [your answer]"
-                    )
-                },
-                {
-                    'type': 'gaming_knowledge',
-                    'prompt': (
+                        "Format EXACTLY: Question: [your question] | Answer: [your answer]")}, {
+                    'type': 'gaming_knowledge', 'prompt': (
                         "Generate general gaming trivia related to games Captain Jonesy has played.\n\n"
                         "STRICT REQUIREMENTS:\n"
                         "- Focus on gaming industry knowledge\n"
@@ -531,42 +526,31 @@ class TriviaCommands(commands.Cog):
                         "- No ambiguous or subjective questions\n\n"
                         "GOOD: 'What genre is The Last of Us?'\n"
                         "BAD: 'What is the best game ever?' (subjective)\n\n"
-                        "Format EXACTLY: Question: [your question] | Answer: [your answer]"
-                    )
-                },
-                {
-                    'type': 'broad_trends',
-                    'prompt': (
-                        "Generate a trivia question about observable trends in Captain Jonesy's gaming.\n\n"
-                        "STRICT REQUIREMENTS:\n"
-                        "- Use broad categories (action vs RPG, horror vs platformer)\n"
-                        "- Avoid exact numbers or dates\n"
-                        "- Focus on comparative questions\n"
-                        "- ONE clear correct answer\n"
-                        "- Question must end with '?'\n"
-                        "- Answer must be 2-30 words\n\n"
-                        "GOOD: 'Does Jonesy play more horror or action games?'\n"
-                        "BAD: 'Exactly how many horror games has Jonesy completed?' (too specific)\n\n"
-                        "Format EXACTLY: Question: [your question] | Answer: [your answer]"
-                    )
-                },
-                {
-                    'type': 'series_knowledge',
-                    'prompt': (
-                        "Generate trivia about game series Captain Jonesy has played.\n\n"
-                        "STRICT REQUIREMENTS:\n"
-                        "- Focus on multi-entry series (God of War, Resident Evil, etc.)\n"
-                        "- Must be verifiable from stream history\n"
-                        "- ONE clear correct answer\n"
-                        "- Question must end with '?'\n"
-                        "- Answer must be 2-30 words\n"
-                        "- Avoid exact episode/date counts\n\n"
-                        "GOOD: 'Which game series has Jonesy completed multiple entries from?'\n"
-                        "BAD: 'On what date did Jonesy start God of War?' (too specific)\n\n"
-                        "Format EXACTLY: Question: [your question] | Answer: [your answer]"
-                    )
-                }
-            ]
+                        "Format EXACTLY: Question: [your question] | Answer: [your answer]")}, {
+                    'type': 'broad_trends', 'prompt': (
+                            "Generate a trivia question about observable trends in Captain Jonesy's gaming.\n\n"
+                            "STRICT REQUIREMENTS:\n"
+                            "- Use broad categories (action vs RPG, horror vs platformer)\n"
+                            "- Avoid exact numbers or dates\n"
+                            "- Focus on comparative questions\n"
+                            "- ONE clear correct answer\n"
+                            "- Question must end with '?'\n"
+                            "- Answer must be 2-30 words\n\n"
+                            "GOOD: 'Does Jonesy play more horror or action games?'\n"
+                            "BAD: 'Exactly how many horror games has Jonesy completed?' (too specific)\n\n"
+                            "Format EXACTLY: Question: [your question] | Answer: [your answer]")}, {
+                                'type': 'series_knowledge', 'prompt': (
+                                    "Generate trivia about game series Captain Jonesy has played.\n\n"
+                                    "STRICT REQUIREMENTS:\n"
+                                    "- Focus on multi-entry series (God of War, Resident Evil, etc.)\n"
+                                    "- Must be verifiable from stream history\n"
+                                    "- ONE clear correct answer\n"
+                                    "- Question must end with '?'\n"
+                                    "- Answer must be 2-30 words\n"
+                                    "- Avoid exact episode/date counts\n\n"
+                                    "GOOD: 'Which game series has Jonesy completed multiple entries from?'\n"
+                                    "BAD: 'On what date did Jonesy start God of War?' (too specific)\n\n"
+                                    "Format EXACTLY: Question: [your question] | Answer: [your answer]")}]
 
             # ✅ FIX #5: Retry logic for quality - try up to 2 times
             max_attempts = 2
@@ -574,14 +558,15 @@ class TriviaCommands(commands.Cog):
                 # Randomly select a question type for variety
                 selected_type = random.choice(question_types)
 
-                logger.info(f"Generating trivia question (attempt {attempt + 1}/{max_attempts}): {selected_type['type']}")
+                logger.info(
+                    f"Generating trivia question (attempt {attempt + 1}/{max_attempts}): {selected_type['type']}")
                 response_text, status = await call_ai_with_rate_limiting(selected_type['prompt'], JAM_USER_ID)
 
                 if response_text:
                     # ✅ FIX #5: Enhanced parsing with multiple fallback strategies
                     question_text = ""
                     answer = ""
-                    
+
                     # Strategy 1: Line-by-line parsing
                     lines = response_text.strip().split('\n')
                     for line in lines:
@@ -599,11 +584,11 @@ class TriviaCommands(commands.Cog):
                                 if len(parts) >= 2:
                                     q_part = parts[0].strip()
                                     a_part = parts[1].strip()
-                                    
+
                                     # Extract question
                                     if 'Question:' in q_part or not question_text:
                                         question_text = q_part.replace('Question:', '').strip()
-                                    
+
                                     # Extract answer
                                     if 'Answer:' in a_part or not answer:
                                         answer = a_part.replace('Answer:', '').strip()
@@ -633,12 +618,14 @@ class TriviaCommands(commands.Cog):
 
                         # ✅ FIX #5: Validate quality before returning
                         is_valid, reason, quality_score = self._validate_question_quality(question_data)
-                        
+
                         if is_valid:
-                            logger.info(f"✅ Generated quality question (score: {quality_score:.1f}%): {question_text[:50]}...")
+                            logger.info(
+                                f"✅ Generated quality question (score: {quality_score:.1f}%): {question_text[:50]}...")
                             return question_data
                         else:
-                            logger.warning(f"⚠️ Generated question failed quality check ({quality_score:.1f}%): {reason}")
+                            logger.warning(
+                                f"⚠️ Generated question failed quality check ({quality_score:.1f}%): {reason}")
                             # Try again if we have attempts left
                             if attempt < max_attempts - 1:
                                 await asyncio.sleep(2)  # Brief pause before retry
@@ -750,7 +737,7 @@ class TriviaCommands(commands.Cog):
                     if not choices:
                         await ctx.send("❌ **Choices required for multiple choice.** Format: `| choices:A,B,C,D`")
                         return
-                    
+
                     # ✅ FIX #6: Validate multiple choice options for pipe-separated format
                     validation = self._validate_multiple_choice_options(choices, answer)
                     if not validation['valid']:

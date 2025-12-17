@@ -3380,7 +3380,7 @@ class DatabaseManager:
                 cur.execute(
                     """
                     UPDATE trivia_questions
-                    SET last_used_at = CURRENT_TIMESTAMP, 
+                    SET last_used_at = CURRENT_TIMESTAMP,
                         usage_count = usage_count + 1,
                         status = 'answered'
                     WHERE id = %s
@@ -3389,7 +3389,8 @@ class DatabaseManager:
                 )
 
                 conn.commit()
-                logger.info(f"✅ FIX #3: Marked question {question_id} as 'answered' during session creation (early commit)")
+                logger.info(
+                    f"✅ FIX #3: Marked question {question_id} as 'answered' during session creation (early commit)")
 
                 if result:
                     session_id = int(result["id"])  # type: ignore
