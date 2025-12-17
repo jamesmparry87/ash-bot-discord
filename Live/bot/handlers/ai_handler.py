@@ -32,10 +32,12 @@ db = get_database()  # type: ignore
 
 # Try to import AI modules
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
     GENAI_AVAILABLE = True
 except ImportError:
     genai = None
+    types = None
     GENAI_AVAILABLE = False
 
 # AI Configuration
@@ -736,8 +738,6 @@ async def call_ai_with_rate_limiting(
 def _convert_few_shot_examples_to_gemini_format(examples: list) -> list:
     """Convert our few-shot examples to Gemini's Content format"""
     try:
-        import google.generativeai as genai
-
         gemini_history = []
         for example in examples:
             # User message
