@@ -36,16 +36,8 @@ except ImportError:
     genai = None
     GENAI_AVAILABLE = False
 
-try:
-    import requests
-    HUGGINGFACE_AVAILABLE = True
-except ImportError:
-    requests = None
-    HUGGINGFACE_AVAILABLE = False
-
 # AI Configuration
 GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
-HUGGINGFACE_API_KEY = os.getenv('HUGGINGFACE_API_KEY')
 
 # Gemini model cascade configuration (priority order)
 # These models are tested on startup and used with automatic fallback
@@ -56,12 +48,10 @@ GEMINI_MODEL_CASCADE = [
 
 # AI instances
 gemini_model = None
-huggingface_headers = None
-working_hf_model = None
 ai_enabled = False
 ai_status_message = "Offline"
 primary_ai = None
-backup_ai = None
+backup_ai = None  # Legacy variable - no longer used but kept for compatibility
 
 # Model cascade tracking (Phase 2)
 current_gemini_model = None  # Currently active Gemini model
@@ -574,62 +564,6 @@ PUN RESPONSE PROTOCOL:
     return enhanced_prompt
 
 
-def attempt_backup_ai(prompt: str) -> Tuple[Optional[str], str]:
-    """Attempt to use backup AI when primary AI fails"""
-    global ai_usage_stats
-
-    if backup_ai != "huggingface" or huggingface_headers is None:
-        return None, "no_backup_available"
-
-    ai_usage_stats["backup_active"] = True
-    ai_usage_stats["last_backup_attempt"] = datetime.now(pacific_tz)
-
-    try:
-        print(f"🔄 Attempting backup AI (Hugging Face) - daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS}")
-
-        # Format prompt for Mixtral instruction format
-        formatted_prompt = f"<s>[INST] {prompt} [/INST]"
-
-        payload = {
-            "inputs": formatted_prompt,
-            "parameters": {
-                "max_new_tokens": 300,
-                "temperature": 0.7,
-                "return_full_text": False
-            }
-        }
-
-        # Use the working model that was found during setup
-        model_to_use = working_hf_model if working_hf_model else "mistralai/Mixtral-8x7B-Instruct-v0.1"
-
-        response = requests.post(  # type: ignore
-            f"https://api-inference.huggingface.co/models/{model_to_use}",
-            headers=huggingface_headers,
-            json=payload,
-            timeout=30
-        )
-
-        if response.status_code == 200:
-            response_data = response.json()
-            if response_data and len(response_data) > 0:
-                hf_text = response_data[0].get("generated_text", "").strip()
-                if hf_text:
-                    record_ai_request()  # Count backup usage toward daily total
-                    print(f"✅ Backup AI (Hugging Face) successful")
-                    return hf_text, "backup_success"
-
-        print(f"❌ Backup AI failed: HTTP {response.status_code}")
-        ai_usage_stats["backup_ai_errors"] += 1
-        record_ai_error()
-        return None, f"backup_failed:{response.status_code}"
-
-    except Exception as e:
-        print(f"❌ Backup AI error: {e}")
-        ai_usage_stats["backup_ai_errors"] += 1
-        record_ai_error()
-        return None, f"backup_error:{str(e)}"
-
-
 async def call_ai_with_rate_limiting(
         prompt: str, user_id: int, context: str = "") -> Tuple[Optional[str], str]:
     """Make an AI call with proper rate limiting and error handling"""
@@ -650,13 +584,6 @@ async def call_ai_with_rate_limiting(
     can_request, reason = check_rate_limits(priority)
     if not can_request:
         print(f"⚠️ AI request blocked ({priority} priority): {reason}")
-
-        # If primary AI quota is exhausted, try backup AI
-        if "Daily request limit reached" in reason and backup_ai and not ai_usage_stats.get("backup_active", False):
-            backup_response, backup_status = attempt_backup_ai(prompt)
-            if backup_response:
-                return backup_response, "backup_used"
-
         return None, f"rate_limit:{reason}"
 
     # Import user alias state from utils module
@@ -828,19 +755,11 @@ async def call_ai_with_rate_limiting(
                 
                 record_ai_error()
 
-        # If primary AI failed or quota exhausted, try backup AI
-        if not response_text:
-            if backup_ai == "huggingface" and huggingface_headers is not None:
-                backup_response, backup_status = attempt_backup_ai(prompt)
-                if backup_response:
-                    response_text = backup_response
-                    return response_text, backup_status
-                else:
-                    return None, backup_status
-            else:
-                return None, "no_ai_available"
-
-        return response_text, "success"
+        # Return response or error
+        if response_text:
+            return response_text, "success"
+        else:
+            return None, "no_ai_available"
 
     except Exception as e:
         print(f"❌ AI call error: {e}")
@@ -1888,21 +1807,9 @@ async def initialize_ai_async():
             gemini_ok = False
             print("⚠️ Gemini AI not available - missing API key or module")
         
-        # Hugging Face backup (disabled)
-        huggingface_ok = await setup_ai_provider_async(
-            "huggingface", HUGGINGFACE_API_KEY, requests, HUGGINGFACE_AVAILABLE)
-
+        # Set AI status
         if gemini_ok:
             primary_ai = "gemini"
-            if huggingface_ok:
-                backup_ai = "huggingface"
-                print("✅ Hugging Face AI configured successfully - set as backup AI")
-        elif huggingface_ok:
-            primary_ai = "huggingface"
-            print("✅ Hugging Face AI configured successfully - set as primary AI")
-
-        # Set AI status
-        if primary_ai:
             ai_enabled = True
             if backup_ai:
                 ai_status_message = f"Online ({primary_ai.title()} + {backup_ai.title()} backup)"
@@ -1922,33 +1829,19 @@ async def initialize_ai_async():
 
 def initialize_ai():
     """Synchronous initialize AI providers - for backward compatibility"""
-    global ai_enabled, ai_status_message, primary_ai, backup_ai
+    global ai_enabled, ai_status_message, primary_ai
 
     print("🤖 Starting synchronous AI initialization (basic setup only)...")
 
-    # Setup AI providers without testing (testing done in async version)
+    # Setup Gemini AI provider (testing done in async version)
     gemini_ok = setup_ai_provider(
         "gemini", GEMINI_API_KEY, genai, GENAI_AVAILABLE)
-    huggingface_ok = setup_ai_provider(
-        "huggingface", HUGGINGFACE_API_KEY, requests, HUGGINGFACE_AVAILABLE)
-
-    if gemini_ok:
-        primary_ai = "gemini"
-        print("✅ Gemini AI configured (testing deferred)")
-        if huggingface_ok:
-            backup_ai = "huggingface"
-            print("✅ Hugging Face AI configured - set as backup AI")
-    elif huggingface_ok:
-        primary_ai = "huggingface"
-        print("✅ Hugging Face AI configured - set as primary AI")
 
     # Set basic AI status (will be updated by async init if called)
-    if primary_ai:
+    if gemini_ok:
+        primary_ai = "gemini"
         ai_enabled = True
-        if backup_ai:
-            ai_status_message = f"Configured ({primary_ai.title()} + {backup_ai.title()} backup) - testing pending"
-        else:
-            ai_status_message = f"Configured ({primary_ai.title()} only) - testing pending"
+        ai_status_message = f"Configured ({primary_ai.title()} only) - testing pending"
         print(f"🔧 Basic AI setup complete: {ai_status_message}")
     else:
         ai_enabled = False
