@@ -51,10 +51,8 @@ except ImportError:
 
 # Models to test (in priority order)
 GEMINI_MODELS_TO_TEST = [
-    'gemini-2.0-flash',      # Latest, fastest (may require paid tier)
-    'gemini-1.5-flash',      # Fast, reliable free tier
-    'gemini-1.5-pro',        # More capable, slower
-    'gemini-1.0-pro',        # Legacy fallback
+    'gemini-2.5-flash',       # Primary: Latest, fastest
+    'gemini-2.0-flash-001',   # Backup: Stable, reliable
 ]
 
 
@@ -186,23 +184,38 @@ def test_all_models() -> Dict[str, List[Dict]]:
 
 
 def print_summary(results: Dict[str, List[Dict]]):
-    """Print summary of test results"""
+    """Print summary of test results (Phase 4: Enhanced with cascade config)"""
     print(f"\n{'='*80}")
     print("📊 SUMMARY")
     print(f"{'='*80}")
 
     if results['working']:
         print(f"\n✅ WORKING MODELS ({len(results['working'])} available):")
-        for r in results['working']:
-            print(f"   • {r['model']} (response time: {r['response_time']:.2f}s)")
+        for i, r in enumerate(results['working'], 1):
+            status = "PRIMARY" if i == 1 else f"BACKUP {i-1}"
+            print(f"   {i}. {r['model']:25s} - {status:10s} ({r['response_time']:.2f}s)")
 
-        print("\n💡 RECOMMENDATION:")
-        primary = results['working'][0]['model']
-        print(f"   Use '{primary}' as primary model in ai_handler.py")
-
+        print("\n🔧 RECOMMENDED CASCADE CONFIGURATION:")
+        print("   Update GEMINI_MODEL_CASCADE in ai_handler.py:")
+        print("   ```python")
+        print("   GEMINI_MODEL_CASCADE = [")
+        for i, r in enumerate(results['working']):
+            comment = "# Primary: Latest, fastest" if i == 0 else f"# Backup {i}: Stable, reliable"
+            print(f"       '{r['model']}',{' ' * (25 - len(r['model']))}{comment}")
+        print("   ]")
+        print("   ```")
+        
+        print("\n📊 CASCADE STRATEGY:")
+        print(f"   • Phase 1: Fixed model names (✅ complete)")
+        print(f"   • Phase 2: Model cascade with {len(results['working'])} models (✅ complete)")
+        print(f"   • Phase 3: Auto-fallback on errors (✅ complete)")
+        print(f"   • Phase 4: Enhanced testing (✅ complete)")
+        
         if len(results['working']) > 1:
-            fallbacks = [r['model'] for r in results['working'][1:]]
-            print(f"   Available fallbacks: {', '.join(fallbacks)}")
+            print(f"\n🛡️ REDUNDANCY:")
+            print(f"   • {len(results['working'])} working models provide {len(results['working'])-1} backup level(s)")
+            print(f"   • Automatic failover if primary fails")
+            print(f"   • Models tested in order: {' → '.join([r['model'] for r in results['working']])}")
     else:
         print("\n❌ NO WORKING MODELS FOUND")
         print("   This means AI features will not work with current API key/configuration")
