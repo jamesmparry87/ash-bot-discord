@@ -51,6 +51,7 @@ GEMINI_MODEL_CASCADE = [
 ]
 
 # AI instances
+gemini_client = None  # New SDK uses client-based architecture
 gemini_model = None
 ai_enabled = False
 ai_status_message = "Offline"
@@ -865,9 +866,12 @@ async def setup_ai_provider_async(
     try:
         if name == "gemini":
             global gemini_model
-            module.configure(api_key=api_key)
+            # New SDK doesn't need configure() - create model with api_key directly
             # Use first model from cascade (gemini-2.5-flash)
-            gemini_model = module.GenerativeModel(GEMINI_MODEL_CASCADE[0])
+            gemini_model = module.GenerativeModel(
+                model_name=GEMINI_MODEL_CASCADE[0],
+                api_key=api_key
+            )
 
             # Test with timeout to prevent hanging - using proper async/await
             test_generation_config = {
@@ -932,11 +936,10 @@ def setup_ai_provider(
             return False
 
         if name == "gemini":
-            global gemini_model
-            module.configure(api_key=api_key)
-            # Use first model from cascade (gemini-2.5-flash)
-            gemini_model = module.GenerativeModel(GEMINI_MODEL_CASCADE[0])
-            print(f"✅ Gemini AI configured with {GEMINI_MODEL_CASCADE[0]} (testing deferred to async initialization)")
+            global gemini_client, gemini_model
+            # New SDK uses client-based architecture
+            gemini_client = module.Client(api_key=api_key)
+            print(f"✅ Gemini client created (testing deferred to async initialization)")
             return True
         elif name == "huggingface":
             print("⚠️ Hugging Face AI disabled to prevent deployment hangs")
@@ -1822,7 +1825,7 @@ async def initialize_ai_async():
     try:
         # Initialize Gemini with model cascade testing
         if GEMINI_API_KEY and GENAI_AVAILABLE and genai:
-            genai.configure(api_key=GEMINI_API_KEY)  # type: ignore
+            # New SDK doesn't need configure() - models are created with API key directly
             gemini_ok = await initialize_gemini_models()
 
             if gemini_ok:
