@@ -64,11 +64,11 @@ game_review_conversations: Dict[int, Dict[str, Any]] = {}
 def validate_numbered_input(content: str, valid_options: list[str]) -> bool:
     """
     Validates that user input matches one of the expected numbered options.
-    
+
     Args:
         content: User's message content (stripped)
         valid_options: List of valid option strings (e.g., ['1', '2', '3'])
-    
+
     Returns:
         True if input is valid, False otherwise
     """
@@ -78,37 +78,37 @@ def validate_numbered_input(content: str, valid_options: list[str]) -> bool:
 def create_invalid_input_message(content: str, valid_numbers: list[str], example_text: Optional[str] = None) -> str:
     """
     Creates a standardized error message for invalid input.
-    
+
     Args:
         content: The invalid input the user provided
         valid_numbers: List of valid option numbers (e.g., ['1', '2', '3'])
         example_text: Optional example of valid text alternatives
-    
+
     Returns:
         Formatted error message string
     """
     valid_list = ', '.join(valid_numbers)
-    
+
     error_msg = (
         f"⚠️ **Invalid response:** '{content}'\n\n"
         f"**Valid options:** {valid_list}\n"
     )
-    
+
     if example_text:
         error_msg += f"**Text alternatives:** {example_text}\n"
-    
+
     error_msg += "\n*Please respond with one of the valid options listed above.*"
-    
+
     return error_msg
 
 
 def extract_expected_options_from_prompt(prompt: str) -> list[str]:
     """
     Parse a prompt message to extract expected option numbers (for testing).
-    
+
     Args:
         prompt: The prompt message text
-    
+
     Returns:
         List of option numbers found in the prompt (e.g., ['1', '2', '3', '4'])
     """
@@ -117,7 +117,6 @@ def extract_expected_options_from_prompt(prompt: str) -> list[str]:
     # Find all "**N.**" patterns
     matches = re.findall(r'\*\*(\d+)\.\*\*', prompt)
     return matches
-
 
 
 def cleanup_announcement_conversations():
