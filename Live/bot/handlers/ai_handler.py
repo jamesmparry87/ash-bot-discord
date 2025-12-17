@@ -430,7 +430,11 @@ def handle_quota_exhaustion():
 async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
     """Test if a specific Gemini model works (Phase 2: Model Cascade)"""
     try:
-        test_model = genai.GenerativeModel(model_name)  # type: ignore
+        # New SDK requires api_key parameter
+        test_model = genai.GenerativeModel(  # type: ignore
+            model_name=model_name,
+            api_key=GEMINI_API_KEY
+        )
 
         # Use thread executor to avoid blocking
         import asyncio
@@ -479,7 +483,11 @@ async def initialize_gemini_models() -> bool:
 
     if working_gemini_models:
         current_gemini_model = working_gemini_models[0]
-        gemini_model = genai.GenerativeModel(current_gemini_model)  # type: ignore
+        # New SDK requires api_key parameter
+        gemini_model = genai.GenerativeModel(  # type: ignore
+            model_name=current_gemini_model,
+            api_key=GEMINI_API_KEY
+        )
         print(f"✅ Primary Gemini model: {current_gemini_model}")
         if len(working_gemini_models) > 1:
             print(f"🔄 Backup Gemini models: {working_gemini_models[1:]}")
@@ -504,7 +512,11 @@ async def switch_to_backup_gemini_model() -> bool:
             # Test the backup before switching
             if await test_gemini_model(next_model, timeout=5.0):
                 current_gemini_model = next_model
-                gemini_model = genai.GenerativeModel(next_model)  # type: ignore
+                # New SDK requires api_key parameter
+                gemini_model = genai.GenerativeModel(  # type: ignore
+                    model_name=next_model,
+                    api_key=GEMINI_API_KEY
+                )
                 last_model_switch = datetime.now(ZoneInfo("Europe/London"))
                 print(f"🔄 Switched to backup Gemini model: {next_model}")
                 return True
@@ -612,9 +624,11 @@ async def call_ai_with_rate_limiting(
                     if not current_gemini_model:
                         raise ValueError("No Gemini model available")
 
+                    # New SDK requires api_key parameter
                     user_model = genai.GenerativeModel(  # type: ignore
                         model_name=current_gemini_model,
-                        system_instruction=system_instruction
+                        system_instruction=system_instruction,
+                        api_key=GEMINI_API_KEY
                     )
 
                     # Convert few-shot examples to Gemini format
