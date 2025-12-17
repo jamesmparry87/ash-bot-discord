@@ -95,7 +95,7 @@ def list_available_models():
         return []
 
 
-def test_model(model_name: str) -> Dict[str, any]:
+def test_model(model_name: str) -> Dict[str, Any]:
     """Test if a specific model works with current API key"""
     result = {
         'model': model_name,
