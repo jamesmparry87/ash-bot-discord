@@ -113,6 +113,7 @@ def extract_expected_options_from_prompt(prompt: str) -> list[str]:
         List of option numbers found in the prompt (e.g., ['1', '2', '3', '4'])
     """
     import re
+
     # Find all "**N.**" patterns
     matches = re.findall(r'\*\*(\d+)\.\*\*', prompt)
     return matches
