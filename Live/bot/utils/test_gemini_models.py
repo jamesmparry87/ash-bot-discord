@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 # Load environment variables from .env file
 try:
     from pathlib import Path
-    
+
     # Find .env file in Live directory
     env_path = Path(__file__).parent.parent.parent / '.env'
     
