@@ -1,6 +1,7 @@
 # Live/bot/persona/context_builder.py
 import datetime
 
+
 def build_ash_context(user_name, user_roles, is_pops_arcade=False):
     """
     Constructs the dynamic context string to append to the system prompt.

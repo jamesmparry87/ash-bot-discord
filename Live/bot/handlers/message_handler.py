@@ -31,8 +31,8 @@ from ..config import (
     POPS_ARCADE_USER_ID,
     VIOLATION_CHANNEL_ID,
 )
-from ..persona.faqs import ASH_FAQ_RESPONSES
 from ..database_module import DatabaseManager, get_database
+from ..persona.faqs import ASH_FAQ_RESPONSES
 from ..utils.permissions import (
     cleanup_expired_aliases,
     get_member_conversation_count,

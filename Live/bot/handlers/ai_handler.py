@@ -22,10 +22,10 @@ from ..config import (
     RATE_LIMIT_COOLDOWN,
     RATE_LIMIT_COOLDOWNS,
 )
-from ..persona.prompts import ASH_SYSTEM_INSTRUCTION
-from ..persona.examples import ASH_FEW_SHOT_EXAMPLES
-from ..persona.context_builder import build_ash_context
 from ..database import get_database
+from ..persona.context_builder import build_ash_context
+from ..persona.examples import ASH_FEW_SHOT_EXAMPLES
+from ..persona.prompts import ASH_SYSTEM_INSTRUCTION
 
 # Get database instance
 db = get_database()  # type: ignore
