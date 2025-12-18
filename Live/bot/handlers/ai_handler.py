@@ -433,7 +433,7 @@ async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
         if not GEMINI_API_KEY:
             print(f"❌ CRITICAL: GOOGLE_API_KEY environment variable not set! Cannot test model '{model_name}'")
             return False
-        
+
         if not gemini_client:
             print(f"❌ CRITICAL: Gemini client not initialized!")
             return False
@@ -598,7 +598,8 @@ async def call_ai_with_rate_limiting(
             print("🔄 Attempting to resume primary AI usage")
 
         # Try primary AI first (unless quota is exhausted)
-        if primary_ai == "gemini" and gemini_client is not None and current_gemini_model and not ai_usage_stats.get("quota_exhausted", False):
+        if primary_ai == "gemini" and gemini_client is not None and current_gemini_model and not ai_usage_stats.get(
+                "quota_exhausted", False):
             try:
                 print(
                     f"Making Gemini request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
@@ -618,17 +619,17 @@ async def call_ai_with_rate_limiting(
                     """Synchronous Gemini call using NEW CLIENT API"""
                     if not current_gemini_model:
                         raise ValueError("No Gemini model available")
-                    
+
                     if not gemini_client:
                         raise ValueError("Gemini client not initialized")
 
                     # NEW API: Use client.models.generate_content() directly
                     # Note: System instructions and chat history handled differently in new API
                     system_instruction = _build_full_system_instruction(user_id)
-                    
+
                     # For now, include system instruction in the prompt
                     full_prompt = f"{system_instruction}\n\nUser: {prompt}"
-                    
+
                     response = gemini_client.models.generate_content(
                         model=current_gemini_model,
                         contents=full_prompt,
@@ -865,6 +866,7 @@ def filter_ai_response(response_text: str) -> str:
         result += '.'
 
     return result
+
 
 def setup_ai_provider(
         name: str,
