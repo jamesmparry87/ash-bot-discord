@@ -604,7 +604,7 @@ async def call_ai_with_rate_limiting(
                 print(
                     f"Making Gemini request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
                 generation_config = {
-                    "max_output_tokens": 300,
+                    "max_output_tokens": 1000,  # Increased to allow complete responses (~750 words)
                     "temperature": 0.7}
 
                 # Determine timeout based on context priority
