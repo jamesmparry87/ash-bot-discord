@@ -47,12 +47,11 @@ GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
 # These models are tested on startup and used with automatic fallback
 GEMINI_MODEL_CASCADE = [
     'gemini-2.5-flash',       # Primary: Latest, fastest
-    'gemini-2.0-flash-001',   # Backup: Stable, reliable
+    'gemini-2.0-flash-001',   # Backup: Stable version
 ]
 
-# AI instances
-gemini_client = None  # New SDK uses client-based architecture
-gemini_model = None
+# AI instances (google-genai v1.56+ API)
+gemini_client = None  # Client instance with API key
 ai_enabled = False
 ai_status_message = "Offline"
 primary_ai = None
@@ -428,26 +427,29 @@ def handle_quota_exhaustion():
 
 
 async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
-    """Test if a specific Gemini model works (Phase 2: Model Cascade)"""
+    """Test if a specific Gemini model works using new Client API (google-genai v1.56+)"""
     try:
         # Validate API key is present
         if not GEMINI_API_KEY:
             print(f"❌ CRITICAL: GOOGLE_API_KEY environment variable not set! Cannot test model '{model_name}'")
             return False
-
-        test_model = genai.GenerativeModel(  # type: ignore
-            model_name=model_name,
-            api_key=GEMINI_API_KEY
-        )
+        
+        if not gemini_client:
+            print(f"❌ CRITICAL: Gemini client not initialized!")
+            return False
 
         # Use thread executor to avoid blocking
         import asyncio
         import concurrent.futures
 
         def sync_test():
-            return test_model.generate_content(
-                "Test",
-                generation_config={"max_output_tokens": 5}
+            # New API: use client.models.generate_content()
+            # Type assertion for Pylance - we already checked gemini_client is not None
+            assert gemini_client is not None
+            return gemini_client.models.generate_content(
+                model=model_name,
+                contents="Test",
+                config={"max_output_tokens": 5}
             )
 
         loop = asyncio.get_running_loop()
@@ -455,6 +457,7 @@ async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
             future = loop.run_in_executor(executor, sync_test)
             response = await asyncio.wait_for(future, timeout=timeout)
 
+        # Check response format from new API
         if response and hasattr(response, 'text') and response.text:
             print(f"✅ Gemini model '{model_name}' is working")
             return True
@@ -475,8 +478,8 @@ async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
 
 
 async def initialize_gemini_models() -> bool:
-    """Test all Gemini models and build priority list (Phase 2: Model Cascade)"""
-    global working_gemini_models, current_gemini_model, gemini_model
+    """Test all Gemini models and build priority list (NEW CLIENT API)"""
+    global working_gemini_models, current_gemini_model
 
     working_gemini_models = []
 
@@ -487,11 +490,7 @@ async def initialize_gemini_models() -> bool:
 
     if working_gemini_models:
         current_gemini_model = working_gemini_models[0]
-        # New SDK requires api_key parameter
-        gemini_model = genai.GenerativeModel(  # type: ignore
-            model_name=current_gemini_model,
-            api_key=GEMINI_API_KEY
-        )
+        # NEW API: No model object creation - just track the model name
         print(f"✅ Primary Gemini model: {current_gemini_model}")
         if len(working_gemini_models) > 1:
             print(f"🔄 Backup Gemini models: {working_gemini_models[1:]}")
@@ -502,8 +501,8 @@ async def initialize_gemini_models() -> bool:
 
 
 async def switch_to_backup_gemini_model() -> bool:
-    """Switch to next available Gemini model after failure (Phase 2: Model Cascade)"""
-    global current_gemini_model, gemini_model, working_gemini_models, last_model_switch
+    """Switch to next available Gemini model after failure (NEW CLIENT API)"""
+    global current_gemini_model, working_gemini_models, last_model_switch
 
     if not current_gemini_model or not working_gemini_models:
         return False
@@ -516,11 +515,7 @@ async def switch_to_backup_gemini_model() -> bool:
             # Test the backup before switching
             if await test_gemini_model(next_model, timeout=5.0):
                 current_gemini_model = next_model
-                # New SDK requires api_key parameter
-                gemini_model = genai.GenerativeModel(  # type: ignore
-                    model_name=next_model,
-                    api_key=GEMINI_API_KEY
-                )
+                # NEW API: Just update the model name, no object creation needed
                 last_model_switch = datetime.now(ZoneInfo("Europe/London"))
                 print(f"🔄 Switched to backup Gemini model: {next_model}")
                 return True
@@ -603,7 +598,7 @@ async def call_ai_with_rate_limiting(
             print("🔄 Attempting to resume primary AI usage")
 
         # Try primary AI first (unless quota is exhausted)
-        if primary_ai == "gemini" and gemini_model is not None and not ai_usage_stats.get("quota_exhausted", False):
+        if primary_ai == "gemini" and gemini_client is not None and current_gemini_model and not ai_usage_stats.get("quota_exhausted", False):
             try:
                 print(
                     f"Making Gemini request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
@@ -620,29 +615,25 @@ async def call_ai_with_rate_limiting(
                 import concurrent.futures
 
                 def sync_gemini_call():
-                    """Synchronous Gemini call to run in thread pool with full persona integration"""
-                    # Phase 2: Build user-specific system instruction with dynamic context
-                    system_instruction = _build_full_system_instruction(user_id)
-
-                    # Create a user-specific model with system instruction
+                    """Synchronous Gemini call using NEW CLIENT API"""
                     if not current_gemini_model:
                         raise ValueError("No Gemini model available")
+                    
+                    if not gemini_client:
+                        raise ValueError("Gemini client not initialized")
 
-                    # New SDK requires api_key parameter
-                    user_model = genai.GenerativeModel(  # type: ignore
-                        model_name=current_gemini_model,
-                        system_instruction=system_instruction,
-                        api_key=GEMINI_API_KEY
+                    # NEW API: Use client.models.generate_content() directly
+                    # Note: System instructions and chat history handled differently in new API
+                    system_instruction = _build_full_system_instruction(user_id)
+                    
+                    # For now, include system instruction in the prompt
+                    full_prompt = f"{system_instruction}\n\nUser: {prompt}"
+                    
+                    response = gemini_client.models.generate_content(
+                        model=current_gemini_model,
+                        contents=full_prompt,
+                        config=generation_config
                     )
-
-                    # Convert few-shot examples to Gemini format
-                    chat_history = _convert_few_shot_examples_to_gemini_format(ASH_FEW_SHOT_EXAMPLES)
-
-                    # Start chat with few-shot examples as history
-                    chat = user_model.start_chat(history=chat_history)
-
-                    # Send the user's actual message
-                    response = chat.send_message(prompt, generation_config=generation_config)  # type: ignore
 
                     return response
 
@@ -874,77 +865,6 @@ def filter_ai_response(response_text: str) -> str:
         result += '.'
 
     return result
-
-
-async def setup_ai_provider_async(
-        name: str,
-        api_key: Optional[str],
-        module: Optional[Any],
-        is_available: bool) -> bool:
-    """Async initialize and test an AI provider (Gemini only - Hugging Face disabled)."""
-    if not api_key:
-        print(
-            f"⚠️ {name.upper()}_API_KEY not found - {name.title()} features disabled")
-        return False
-    if not is_available or module is None:
-        print(f"⚠️ {name} module not available - {name.title()} features disabled")
-        return False
-
-    try:
-        if name == "gemini":
-            global gemini_model
-            # New SDK doesn't need configure() - create model with api_key directly
-            # Use first model from cascade (gemini-2.5-flash)
-            gemini_model = module.GenerativeModel(
-                model_name=GEMINI_MODEL_CASCADE[0],
-                api_key=api_key
-            )
-
-            # Test with timeout to prevent hanging - using proper async/await
-            test_generation_config = {
-                "max_output_tokens": 10,
-                "temperature": 0.7
-            }
-
-            # Async test function using thread executor to avoid blocking
-            import asyncio
-            import concurrent.futures
-
-            def sync_test_gemini():
-                """Synchronous test for thread execution"""
-                return gemini_model.generate_content("Test", generation_config=test_generation_config)  # type: ignore
-
-            try:
-                # Use thread pool to run sync Gemini call without blocking event loop
-                loop = asyncio.get_event_loop()
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = loop.run_in_executor(executor, sync_test_gemini)
-                    test_response = await asyncio.wait_for(future, timeout=10.0)
-
-                if test_response and hasattr(test_response, 'text') and test_response.text:
-                    print(f"✅ Gemini AI test successful (async with timeout protection)")
-                    return True
-                else:
-                    print(f"⚠️ Gemini AI test response was empty or invalid")
-                    return False
-            except asyncio.TimeoutError:
-                print(f"❌ Gemini AI test timed out after 10 seconds")
-                return False
-            except Exception as test_error:
-                print(f"❌ Gemini AI test failed: {test_error}")
-                return False
-
-        elif name == "huggingface":
-            # Hugging Face backup explicitly disabled to prevent hanging
-            print("⚠️ Hugging Face AI disabled to prevent deployment hangs")
-            return False
-
-        print(f"⚠️ {name.title()} AI setup complete but test response failed")
-        return False
-    except Exception as e:
-        print(f"❌ {name.title()} AI configuration failed: {e}")
-        return False
-
 
 def setup_ai_provider(
         name: str,
