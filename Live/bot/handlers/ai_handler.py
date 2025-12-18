@@ -434,7 +434,7 @@ async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
         if not GEMINI_API_KEY:
             print(f"❌ CRITICAL: GOOGLE_API_KEY environment variable not set! Cannot test model '{model_name}'")
             return False
-            
+
         test_model = genai.GenerativeModel(  # type: ignore
             model_name=model_name,
             api_key=GEMINI_API_KEY

@@ -622,7 +622,7 @@ async def on_ready():
 
     # Initialize all modular components
     status_report = await initialize_modular_components()
-    
+
     # CRITICAL: Initialize AI with async model testing
     try:
         from bot.handlers.ai_handler import safe_initialize_ai_async
