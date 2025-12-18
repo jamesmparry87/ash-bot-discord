@@ -5,64 +5,10 @@ Handles AI integration, rate limiting, and response processing for the Discord b
 Supports both Gemini and Hugging Face APIs with automatic fallback functionality.
 """
 
-import json
-import logging
-import os
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
-from zoneinfo import ZoneInfo
-
-
-# Configure user-friendly logging for AI libraries
-class UserFriendlyAILogFilter(logging.Filter):
-    """Custom filter to make google-genai and httpx logs more readable"""
-    
-    def filter(self, record):
-        # Keep all non-INFO messages unchanged (warnings, errors)
-        if record.levelno != logging.INFO:
-            return True
-            
-        # Format google-genai messages
-        if record.name == "google_genai.models":
-            if "AFC is enabled" in record.getMessage():
-                # Extract max calls if present
-                msg = record.getMessage()
-                if "max remote calls:" in msg:
-                    max_calls = msg.split("max remote calls:")[-1].strip().rstrip('.')
-                    record.msg = f"🤖 Gemini: AFC enabled (max calls: {max_calls})"
-                else:
-                    record.msg = "🤖 Gemini: AFC enabled"
-                record.args = ()
-                
-        # Format httpx HTTP request messages
-        elif record.name == "httpx":
-            msg = record.getMessage()
-            if "HTTP Request: POST" in msg and "generateContent" in msg:
-                # Extract model name and status
-                if "gemini-" in msg:
-                    model_start = msg.find("gemini-")
-                    model_end = msg.find(":", model_start)
-                    model_name = msg[model_start:model_end]
-                    
-                    if '"HTTP/1.1 200 OK"' in msg:
-                        record.msg = f"✅ API Success: {model_name} responded (200 OK)"
-                    elif '"HTTP/1.1' in msg:
-                        # Extract status code for errors
-                        status_start = msg.find('"HTTP/1.1') + 9
-                        status_end = msg.find('"', status_start)
-                        status = msg[status_start:status_end].strip()
-                        record.msg = f"⚠️ API Response: {model_name} returned ({status})"
-                    else:
-                        record.msg = f"🌐 API Call: {model_name}"
-                    record.args = ()
-                    
-        return True
-
-# Apply the filter to google-genai and httpx loggers
-for logger_name in ["google_genai.models", "httpx"]:
-    logger = logging.getLogger(logger_name)
-    logger.addFilter(UserFriendlyAILogFilter())
-
+from ..persona.prompts import ASH_SYSTEM_INSTRUCTION
+from ..persona.examples import ASH_FEW_SHOT_EXAMPLES
+from ..persona.context_builder import build_ash_context
+from ..database import get_database
 from ..config import (
     JAM_USER_ID,
     JONESY_USER_ID,
@@ -74,10 +20,65 @@ from ..config import (
     RATE_LIMIT_COOLDOWN,
     RATE_LIMIT_COOLDOWNS,
 )
-from ..database import get_database
-from ..persona.context_builder import build_ash_context
-from ..persona.examples import ASH_FEW_SHOT_EXAMPLES
-from ..persona.prompts import ASH_SYSTEM_INSTRUCTION
+import json
+import logging
+import os
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
+
+
+# Configure user-friendly logging for AI libraries
+class UserFriendlyAILogFilter(logging.Filter):
+    """Custom filter to make google-genai and httpx logs more readable"""
+
+    def filter(self, record):
+        # Keep all non-INFO messages unchanged (warnings, errors)
+        if record.levelno != logging.INFO:
+            return True
+
+        # Format google-genai messages
+        if record.name == "google_genai.models":
+            if "AFC is enabled" in record.getMessage():
+                # Extract max calls if present
+                msg = record.getMessage()
+                if "max remote calls:" in msg:
+                    max_calls = msg.split("max remote calls:")[-1].strip().rstrip('.')
+                    record.msg = f"🤖 Gemini: AFC enabled (max calls: {max_calls})"
+                else:
+                    record.msg = "🤖 Gemini: AFC enabled"
+                record.args = ()
+
+        # Format httpx HTTP request messages
+        elif record.name == "httpx":
+            msg = record.getMessage()
+            if "HTTP Request: POST" in msg and "generateContent" in msg:
+                # Extract model name and status
+                if "gemini-" in msg:
+                    model_start = msg.find("gemini-")
+                    model_end = msg.find(":", model_start)
+                    model_name = msg[model_start:model_end]
+
+                    if '"HTTP/1.1 200 OK"' in msg:
+                        record.msg = f"✅ API Success: {model_name} responded (200 OK)"
+                    elif '"HTTP/1.1' in msg:
+                        # Extract status code for errors
+                        status_start = msg.find('"HTTP/1.1') + 9
+                        status_end = msg.find('"', status_start)
+                        status = msg[status_start:status_end].strip()
+                        record.msg = f"⚠️ API Response: {model_name} returned ({status})"
+                    else:
+                        record.msg = f"🌐 API Call: {model_name}"
+                    record.args = ()
+
+        return True
+
+
+# Apply the filter to google-genai and httpx loggers
+for logger_name in ["google_genai.models", "httpx"]:
+    logger = logging.getLogger(logger_name)
+    logger.addFilter(UserFriendlyAILogFilter())
+
 
 # Get database instance
 db = get_database()  # type: ignore
