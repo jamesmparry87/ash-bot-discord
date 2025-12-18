@@ -430,6 +430,11 @@ def handle_quota_exhaustion():
 async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
     """Test if a specific Gemini model works (Phase 2: Model Cascade)"""
     try:
+        # Validate API key is present
+        if not GEMINI_API_KEY:
+            print(f"❌ CRITICAL: GOOGLE_API_KEY environment variable not set! Cannot test model '{model_name}'")
+            return False
+            
         test_model = genai.GenerativeModel(  # type: ignore
             model_name=model_name,
             api_key=GEMINI_API_KEY
