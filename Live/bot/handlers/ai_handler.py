@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
+
 # Configure user-friendly logging for AI libraries
 class UserFriendlyAILogFilter(logging.Filter):
     """Custom filter to make google-genai and httpx logs more readable"""
