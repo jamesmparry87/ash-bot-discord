@@ -5,10 +5,13 @@ Handles AI integration, rate limiting, and response processing for the Discord b
 Supports both Gemini and Hugging Face APIs with automatic fallback functionality.
 """
 
-from ..persona.prompts import ASH_SYSTEM_INSTRUCTION
-from ..persona.examples import ASH_FEW_SHOT_EXAMPLES
-from ..persona.context_builder import build_ash_context
-from ..database import get_database
+import json
+import logging
+import os
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
+
 from ..config import (
     JAM_USER_ID,
     JONESY_USER_ID,
@@ -20,12 +23,10 @@ from ..config import (
     RATE_LIMIT_COOLDOWN,
     RATE_LIMIT_COOLDOWNS,
 )
-import json
-import logging
-import os
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
-from zoneinfo import ZoneInfo
+from ..database import get_database
+from ..persona.context_builder import build_ash_context
+from ..persona.examples import ASH_FEW_SHOT_EXAMPLES
+from ..persona.prompts import ASH_SYSTEM_INSTRUCTION
 
 
 # Configure user-friendly logging for AI libraries
