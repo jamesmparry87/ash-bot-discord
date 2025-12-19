@@ -837,7 +837,7 @@ def _build_full_system_instruction(user_id: int, user_input: str = "") -> str:
     try:
         # Determine user context
         is_pops_arcade = (user_id == POPS_ARCADE_USER_ID)
-        
+
         # TEMPORARY: Test trigger for Pops persona (for debugging without logging in as Pops)
         if "simulate_pops" in user_input.lower():
             is_pops_arcade = True

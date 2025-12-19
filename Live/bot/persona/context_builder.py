@@ -7,7 +7,7 @@ def build_ash_context(user_name, user_roles, is_pops_arcade=False):
     Constructs the dynamic context string to append to the system prompt.
     Uses case-insensitive matching for robustness.
     """
-    
+
     # Normalize inputs for case-insensitive comparisons
     user_name_lower = user_name.lower()
     user_roles_lower = [r.lower() for r in user_roles]
@@ -33,7 +33,7 @@ def build_ash_context(user_name, user_roles, is_pops_arcade=False):
     # This helps Ash explain why he doesn't know about a video uploaded 5 mins ago
     current_date = datetime.datetime.now().strftime("%Y-%m-%d")
     data_freshness = "Data cached: Weekly batch analysis active."
-    
+
     # Debug logging for verification
     print(f"📊 Context Built: Clearance='{clearance}', Relationship='{relationship}'")
 
