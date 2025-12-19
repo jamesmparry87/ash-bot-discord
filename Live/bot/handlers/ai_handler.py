@@ -676,7 +676,8 @@ async def call_ai_with_rate_limiting(
 
                     # NEW API: Use client.models.generate_content() directly
                     # Note: System instructions and chat history handled differently in new API
-                    system_instruction = _build_full_system_instruction(user_id)
+                    # Pass the user's prompt to enable context features like "simulate_pops"
+                    system_instruction = _build_full_system_instruction(user_id, prompt)
 
                     # For now, include system instruction in the prompt
                     full_prompt = f"{system_instruction}\n\nUser: {prompt}"
@@ -828,25 +829,33 @@ def _convert_few_shot_examples_to_gemini_format(examples: list) -> list:
         return []
 
 
-def _build_full_system_instruction(user_id: int) -> str:
+def _build_full_system_instruction(user_id: int, user_input: str = "") -> str:
     """Build complete system instruction with dynamic context"""
     try:
         # Determine user context
         is_pops_arcade = (user_id == POPS_ARCADE_USER_ID)
+        
+        # TEMPORARY: Test trigger for Pops persona (for debugging without logging in as Pops)
+        if "simulate_pops" in user_input.lower():
+            is_pops_arcade = True
+            print("🧪 TEST MODE: Simulating Pops Arcade persona")
 
-        # Determine user name and roles based on user_id
+        # Determine user name and roles based on user_id (CAPITALIZED for context_builder matching)
         if user_id == JONESY_USER_ID:
             user_name = "Captain Jonesy"
-            user_roles = ["captain", "owner"]
+            user_roles = ["Captain", "Owner"]
         elif user_id == JAM_USER_ID:
             user_name = "Sir Decent Jam"
-            user_roles = ["creator", "admin"]
+            user_roles = ["Creator", "Admin", "Moderator"]  # Added Moderator for proper clearance
         elif user_id == POPS_ARCADE_USER_ID:
             user_name = "Pops Arcade"
-            user_roles = ["moderator"]
+            user_roles = ["Moderator"]
         else:
             user_name = "personnel"
-            user_roles = ["member"]
+            user_roles = ["Member"]
+
+        # DEBUG LOGGING: Verify context extraction
+        print(f"🔍 CONTEXT DEBUG: Name='{user_name}', Roles={user_roles}, ID={user_id}, Pops={is_pops_arcade}")
 
         # Build dynamic context using the context_builder
         dynamic_context = build_ash_context(user_name, user_roles, is_pops_arcade)
