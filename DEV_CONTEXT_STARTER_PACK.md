@@ -142,7 +142,118 @@
     * *Goal:* Repair the Hugging Face integration.
     * *Next Steps:* Re-enable Hugging Face in `Live/bot/handlers/ai_handler.py` (`setup_ai_provider`). Debug the "deployment hangs" issue (likely need to use async/await properly for the setup check or increase timeout).
 
-## 6. Database Schema Overview
+## 6. Persona Architecture & Context System
+
+### A. Persona Module Structure (New - Dec 2025)
+
+The bot's persona (Ash from *Alien* 1979) is now modularized for maintainability:
+
+**Location:** `Live/bot/persona/`
+
+1. **`prompts.py`**: Contains `ASH_SYSTEM_INSTRUCTION` - the core personality definition
+2. **`examples.py`**: Contains `ASH_FEW_SHOT_EXAMPLES` - conversation examples that train tone/style
+3. **`faqs.py`**: Contains `ASH_FAQ_RESPONSES` - pre-written responses for common questions
+4. **`context_builder.py`**: Contains `build_ash_context()` - **dynamic context injection**
+
+### B. Dynamic Context System
+
+The context builder (`context_builder.py`) creates user-specific context that's injected into every AI request:
+
+```python
+def build_ash_context(user_name, user_roles, is_pops_arcade=False):
+    """
+    Dynamically adjusts Ash's behavior based on WHO is talking to him.
+    Uses case-insensitive matching for robustness.
+    """
+```
+
+**Key Features:**
+
+1. **Clearance Levels** (Case-insensitive role matching):
+   - `COMMANDING OFFICER`: Captain Jonesy (Owner)
+   - `CREATOR/MODERATOR`: DecentJam, Moderators, Admins
+   - `STANDARD PERSONNEL`: Everyone else
+
+2. **Relationship Protocols**:
+   - `ANTAGONISTIC`: Pops Arcade (questions his analysis, sarcastic tone)
+   - `CREATOR`: DecentJam (technical deference)
+   - `COMMANDING OFFICER`: Captain Jonesy (protect at all costs)
+   - `Neutral/Personnel`: Default for regular members
+
+3. **User Identification** (in `ai_handler.py` → `_build_full_system_instruction()`):
+   ```python
+   if user_id == JONESY_USER_ID:
+       user_name = "Captain Jonesy"
+       user_roles = ["Captain", "Owner"]
+   elif user_id == JAM_USER_ID:
+       user_name = "Sir Decent Jam"
+       user_roles = ["Creator", "Admin", "Moderator"]
+   elif user_id == POPS_ARCADE_USER_ID:
+       user_name = "Pops Arcade"
+       user_roles = ["Moderator"]
+   ```
+
+### C. Configuration Constants (`Live/bot/config.py`)
+
+**Critical User IDs:**
+```python
+JONESY_USER_ID = 651329927895056384
+JAM_USER_ID = 337833732901961729
+POPS_ARCADE_USER_ID = 371536135580549122
+```
+
+**Moderator Role IDs:**
+```python
+DISCORD_MOD_ROLE_ID = 1188135626185396376
+TWITCH_MOD_ROLE_ID = 1280124521008857151
+```
+
+**NOTE:** Role matching is now **case-insensitive** for robustness. The system normalizes both user names and role lists before comparison.
+
+### D. Testing the Context System
+
+**Test Trigger:** Use `"simulate_pops"` in any message to test the Pops Arcade antagonistic persona without logging in as Pops:
+
+```
+User: "Hey Ash, simulate_pops what do you think?"
+Logs: 🧪 TEST MODE: Simulating Pops Arcade persona
+Response: [Dismissive, questioning tone]
+```
+
+**Debug Logs to Watch For:**
+```
+🔍 CONTEXT DEBUG: Name='Sir Decent Jam', Roles=['Creator', 'Admin', 'Moderator'], ID=337833732901961729, Pops=False
+📊 Context Built: Clearance='CREATOR/MODERATOR (Authorized for Operational Data)', Relationship='CREATOR (Technical Deference)'
+```
+
+### E. Google Gemini API Migration (Dec 2025)
+
+**CRITICAL:** The bot now uses `google-genai>=1.56.0` (NEW Client API), not the old `google-generativeai`:
+
+**Old API (Deprecated):**
+```python
+import google.generativeai as genai
+genai.configure(api_key=KEY)
+model = genai.GenerativeModel('gemini-pro')
+```
+
+**New API (Current):**
+```python
+from google import genai
+client = genai.Client(api_key=KEY)
+response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+```
+
+**Active Models:**
+- Primary: `gemini-2.5-flash`
+- Backup: `gemini-2.0-flash-001`
+
+**Key Changes:**
+- No more `GenerativeModel` objects - all calls go through the `Client`
+- User context injection happens via `_build_full_system_instruction(user_id, user_input)`
+- System instructions are prepended to the prompt (new API handles differently than old)
+
+## 7. Database Schema Overview
 
 * `strikes`: User strike tracking.
 * `game_recommendations`: Community submissions.
