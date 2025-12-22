@@ -522,8 +522,8 @@ class UtilityCommands(commands.Cog):
         """
         try:
             from ..handlers.ai_handler import detect_user_context
-            from ..utils.permissions import user_alias_state, cleanup_expired_aliases
-            
+            from ..utils.permissions import cleanup_expired_aliases, user_alias_state
+
             # If no persona type, show current detection
             if not persona_type:
                 user_context = await detect_user_context(ctx.author.id, ctx.author, self.bot)
