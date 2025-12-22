@@ -163,8 +163,8 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
     Detect user context from Discord member object with hierarchical priority and DM handling.
 
     Priority order:
-    1. Special User IDs (hardcoded personalities) - Jonesy, JAM, Pops
-    2. Alias Override (for testing) - checks user_alias_state
+    1. Alias Override (for testing) - checks user_alias_state - HIGHEST PRIORITY
+    2. Special User IDs (hardcoded personalities) - Jonesy, JAM, Pops
     3. Discord Moderator Roles (dynamic role-based detection)
     4. Discord Member Roles (paid vs regular members)
     5. Default (standard member)
@@ -178,39 +178,8 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
         Dict with user_name, user_roles, clearance_level, relationship_type, is_pops_arcade
     """
 
-    # TIER 1: Special User ID Overrides (highest priority)
-    # These override everything else - even if they're in a DM or have different roles
-    if user_id == JONESY_USER_ID:
-        return {
-            'user_name': 'Captain Jonesy',
-            'user_roles': ['Captain', 'Owner', 'Commanding Officer'],
-            'clearance_level': 'COMMANDING_OFFICER',
-            'relationship_type': 'COMMANDING_OFFICER',
-            'is_pops_arcade': False,
-            'detection_method': 'user_id_override_jonesy'
-        }
-
-    if user_id == JAM_USER_ID:
-        return {
-            'user_name': 'Sir Decent Jam',
-            'user_roles': ['Creator', 'Admin', 'Moderator'],
-            'clearance_level': 'CREATOR',
-            'relationship_type': 'CREATOR',
-            'is_pops_arcade': False,
-            'detection_method': 'user_id_override_jam'
-        }
-
-    if user_id == POPS_ARCADE_USER_ID:
-        return {
-            'user_name': 'Pops Arcade',
-            'user_roles': ['Moderator', 'Antagonist'],
-            'clearance_level': 'MODERATOR',
-            'relationship_type': 'ANTAGONISTIC',
-            'is_pops_arcade': True,
-            'detection_method': 'user_id_override_pops'
-        }
-
-    # TIER 2: Alias Override Check (for testing)
+    # TIER 1: Alias Override Check (HIGHEST PRIORITY - for testing)
+    # This must come FIRST so test aliases override even hardcoded user IDs
     try:
         from ..utils.permissions import cleanup_expired_aliases, user_alias_state
         cleanup_expired_aliases()
@@ -266,6 +235,38 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
                 return alias_context_map[alias_type]
     except ImportError:
         pass  # Continue without alias handling
+
+    # TIER 2: Special User ID Overrides
+    # Hardcoded personalities - only apply if no alias is active
+    if user_id == JONESY_USER_ID:
+        return {
+            'user_name': 'Captain Jonesy',
+            'user_roles': ['Captain', 'Owner', 'Commanding Officer'],
+            'clearance_level': 'COMMANDING_OFFICER',
+            'relationship_type': 'COMMANDING_OFFICER',
+            'is_pops_arcade': False,
+            'detection_method': 'user_id_override_jonesy'
+        }
+
+    if user_id == JAM_USER_ID:
+        return {
+            'user_name': 'Sir Decent Jam',
+            'user_roles': ['Creator', 'Admin', 'Moderator'],
+            'clearance_level': 'CREATOR',
+            'relationship_type': 'CREATOR',
+            'is_pops_arcade': False,
+            'detection_method': 'user_id_override_jam'
+        }
+
+    if user_id == POPS_ARCADE_USER_ID:
+        return {
+            'user_name': 'Pops Arcade',
+            'user_roles': ['Moderator', 'Antagonist'],
+            'clearance_level': 'MODERATOR',
+            'relationship_type': 'ANTAGONISTIC',
+            'is_pops_arcade': True,
+            'detection_method': 'user_id_override_pops'
+        }
 
     # TIER 3: DM Handling - Try to fetch member from guild if in DM
     if not member_obj and bot and DISCORD_AVAILABLE:
