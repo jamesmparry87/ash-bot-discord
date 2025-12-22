@@ -64,69 +64,7 @@
 
 ## 5. Current Development State
 
-### A. Priority Bug List (Known Issues)
-
-1. **Trivia Approval Lock:**
-    * *Issue:* If the moderator approval process for a new question is interrupted, the bot can sometimes get stuck in an "awaiting approval" state, blocking other interactions.
-    * *Next Steps:* Review `Live/bot/handlers/conversation_handler.py` (`handle_jam_approval_conversation`). Ensure `cleanup_jam_approval_conversations` is called correctly on startup and that the timeout logic (currently 15 mins) is robust. Consider adding a manual `!resetapproval` command to force-clear the state.
-    * **✅ FIX APPLIED (Dec 2025):**
-        - Extended approval timeout from 2 hours to 24 hours to accommodate late responses
-        - Implemented `!resetapproval` command for manual session reset
-        - Added `force_reset_approval_session()` function to clear stuck states
-        - Improved session cleanup with detailed logging
-
-2. **Trivia "Answered" Flag Failure:**
-    * *Issue:* Questions used in Trivia Tuesday are not being marked as "used/answered" in the DB.
-    * *Next Steps:* Check `Live/bot/database_module.py` (`complete_trivia_session`). Verify that `UPDATE trivia_questions SET status = 'answered'` is actually executing. Ensure `complete_trivia_session` is called in all session end scenarios (manual `!endtrivia` and auto-end in `check_stale_trivia_sessions`).
-    * **✅ FIX APPLIED (Dec 2025):**
-        - Implemented comprehensive retry logic with up to 3 attempts to mark questions as 'answered'
-        - Added pre-verification to check question exists before update
-        - Added post-verification to read back status and confirm it was actually set to 'answered'
-        - Enhanced logging at every step showing current status, update attempt, and verification results
-        - Added retry delays (0.5s) between attempts if update fails
-        - Critical errors now logged if question cannot be marked as 'answered' after all retries
-        - **Result:** Robust status update with verification loop ensures questions are properly marked
-
-3. **Trivia Pool Generation:**
-    * *Issue:* The bot is supposed to maintain a buffer of 5 verified questions (AI or Mod generated). This check/generation on startup is failing.
-    * *Next Steps:* Investigate `Live/bot/tasks/scheduled.py` (`validate_startup_trivia_questions`). It calls `_background_question_generation`. Check if the AI generation (`generate_ai_trivia_question` in `ai_handler.py`) is failing silently or if the approval workflow (`start_jam_question_approval`) is getting stuck, preventing questions from becoming "available".
-    * **✅ FIX APPLIED (Dec 2025):**
-        - Implemented sequential approval system to prevent overwhelming JAM with multiple questions
-        - Questions now sent one at a time with 60-second delays between approvals
-        - Added emergency trivia approval for build day scenarios (< 1 hour until trivia)
-        - Implemented 2-minute delayed startup validation to avoid Discord heartbeat blocking
-        - Added comprehensive error handling and retry logic for question generation
-
-4. **Multiple Choice UX:**
-    * *Issue:* The `!addtrivia` flow is confusing and defaults to single-answer.
-    * *Next Steps:* Refactor `Live/bot/handlers/conversation_handler.py` (`handle_mod_trivia_conversation`). Modify the flow to explicitly ask "Single Answer or Multiple Choice?" *before* asking for the question text. Update `Live/bot/commands/trivia.py` (`add_trivia_question`) to match this new flow.
-    * **✅ FIX APPLIED (Dec 2025):**
-        - Flow now explicitly asks for format selection (Single Answer or Multiple Choice) BEFORE question input
-        - Changed choices input from bulk entry to one-at-a-time conversational flow
-        - Step sequence: question_type_selection → format_selection → question_input → choice_a_input → choice_b_input → choice_c_input → choice_d_input → answer_input → preview
-        - Each choice is recorded individually with confirmation ("✅ Choice A recorded: [value]")
-        - All choices are reviewed together before asking for the correct answer
-        - Much clearer UX - no formatting confusion, easier error correction
-
-5. **Monday Stats Update:**
-    * *Issue:* Weekly DB updates for YouTube/Twitch stats are intermittent/unreliable.
-    * *Next Steps:* Review `Live/bot/integrations/youtube.py` (`fetch_playlist_based_content_since`). Add better error logging for API quota limits or network timeouts. Consider adding a retry mechanism in `Live/bot/tasks/scheduled.py` (`monday_content_sync`).
-    * **✅ FIX APPLIED (Dec 2025):**
-        - Implemented pagination support in `fetch_playlist_based_content_since` to handle channels with >50 playlists
-        - Added retry logic with 3 attempts and exponential backoff (1 min, 2 min, 3 min delays)
-        - Enhanced error handling with detailed error messages sent to JAM
-        - Added comprehensive error notifications via `notify_jam_weekly_message_failure()`
-
-6. **Multiple Question Timeout:**
-    * *Issue:* Timeout messages for approval conversations are confusing.
-    * *Next Steps:* Update timeout handling to provide clearer feedback.
-    * **✅ FIX APPLIED (Dec 2025):**
-        - Extended timeout from 2 hours to 24 hours (same fix as issue #1)
-        - Improved timeout messages with actionable commands (`!approvequestion auto`, `!resetapproval`)
-        - Added age tracking and restart count for deployment scenarios
-        - Timeout messages now include conversation age and next steps
-
-## 5B. Strategic Development Roadmap (2025)
+### Strategic Development Roadmap (2025)
 
 ### 🧠 Priority 1: The "Server Cortex" (Memory & Lore)
 
@@ -261,12 +199,14 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
 `build_ash_context()` in `context_builder.py` now accepts both formats:
 
 1. **New format** (structured dict from `detect_user_context()`):
+
    ```python
    user_context = await detect_user_context(user_id, member_obj, bot)
    dynamic_context = build_ash_context(user_context)
    ```
 
 2. **Legacy format** (backward compatible):
+
    ```python
    dynamic_context = build_ash_context(user_name, user_roles, is_pops_arcade)
    ```
@@ -294,6 +234,7 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
 ### C. Configuration Constants (`Live/bot/config.py`)
 
 **Critical User IDs:**
+
 ```python
 JONESY_USER_ID = 651329927895056384
 JAM_USER_ID = 337833732901961729
