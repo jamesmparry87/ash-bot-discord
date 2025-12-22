@@ -234,6 +234,14 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
     # Exact match
     if extracted_lower == igdb_lower:
         return 1.0
+    
+    # Prefix match: "Halo" → "Halo: Combat Evolved" should be high confidence
+    if igdb_lower.startswith(extracted_lower + ':') or igdb_lower.startswith(extracted_lower + ' -'):
+        return 0.95
+    
+    # Suffix match for series: "Combat Evolved" → "Halo: Combat Evolved" (medium confidence)
+    if igdb_lower.endswith(extracted_lower):
+        return 0.85
 
     # Function to remove articles for comparison
     def remove_articles(text):

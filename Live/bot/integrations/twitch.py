@@ -39,31 +39,11 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
     Returns:
         Tuple of (extracted_name, confidence_score)
     """
-    # Strategy 1: Use standard extraction
-    extracted = extract_game_name_from_title(title)
-    best_name = extracted
+    best_name = None
     best_confidence = 0.0
 
-    if extracted:
-        # Clean episode markers before IGDB validation
-        cleaned_extracted = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', extracted, flags=re.IGNORECASE)
-        cleaned_extracted = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]',
-                                   '', cleaned_extracted, flags=re.IGNORECASE)
-        cleaned_extracted = cleaned_extracted.strip()
-
-        print(f"🔍 Validating '{cleaned_extracted}' with IGDB...")
-        igdb_result = await igdb.validate_and_enrich(cleaned_extracted)
-        best_confidence = igdb_result.get('confidence', 0.0)
-        best_name = cleaned_extracted
-
-        # If we got good confidence, use it
-        if best_confidence >= 0.8:
-            return cleaned_extracted, best_confidence
-
-        print(f"⚠️ Low confidence ({best_confidence:.2f}), trying alternative extractions...")
-
-    # Strategy 2: Try extracting from dash-separated titles
-    # PRIORITIZE "after dash" first (common format: "Description - Game Name (dayX)")
+    # PRIORITY Strategy 1: Try extracting from dash-separated titles FIRST
+    # This is most common format for Twitch: "Description - Game Name (dayX)"
     if ' - ' in title or ' | ' in title:
         separator = ' - ' if ' - ' in title else ' | '
         parts = title.split(separator)
@@ -77,20 +57,21 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
             after_dash = cleanup_game_name(after_dash)
 
             if len(after_dash) >= 3 and not is_generic_term(after_dash):
+                print(f"🔍 Validating '{after_dash}' (after dash) with IGDB...")
                 igdb_result = await igdb.validate_and_enrich(after_dash)
                 confidence = igdb_result.get('confidence', 0.0)
-                print(f"  Trying part after dash (PRIORITY): '{after_dash}' → confidence: {confidence:.2f}")
+                print(f"  → confidence: {confidence:.2f}")
 
                 if confidence > best_confidence:
                     best_name = after_dash
                     best_confidence = confidence
 
-                    # Higher confidence threshold since this is the priority extraction
+                    # High confidence threshold since this is the priority extraction
                     if confidence >= 0.8:
                         return best_name, best_confidence
 
-        # FALLBACK: Try the FIRST part (before separator) if after-dash had low confidence
-        if len(parts) > 1:
+        # Try the FIRST part (before separator) as backup
+        if len(parts) > 1 and best_confidence < 0.8:
             before_dash = parts[0].strip()
             # Clean common prefixes
             before_dash = re.sub(
@@ -101,9 +82,10 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
             before_dash = cleanup_game_name(before_dash)
 
             if len(before_dash) >= 3 and not is_generic_term(before_dash):
+                print(f"🔍 Validating '{before_dash}' (before dash) with IGDB...")
                 igdb_result = await igdb.validate_and_enrich(before_dash)
                 confidence = igdb_result.get('confidence', 0.0)
-                print(f"  Trying part before dash (FALLBACK): '{before_dash}' → confidence: {confidence:.2f}")
+                print(f"  → confidence: {confidence:.2f}")
 
                 if confidence > best_confidence:
                     best_name = before_dash
@@ -112,22 +94,47 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
                     if confidence >= 0.8:
                         return best_name, best_confidence
 
-    # Strategy 3: Try just removing prefixes and suffixes without complex pattern matching
-    simple_clean = title
-    simple_clean = re.sub(r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*', '', simple_clean, flags=re.IGNORECASE)
-    simple_clean = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', simple_clean, flags=re.IGNORECASE)
-    simple_clean = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]', '', simple_clean, flags=re.IGNORECASE)
-    simple_clean = re.sub(r'\s+(?:Thanks|Thx|@|#).*$', '', simple_clean, flags=re.IGNORECASE)
-    simple_clean = cleanup_game_name(simple_clean)
+    # Strategy 2: Try standard extraction as fallback
+    if best_confidence < 0.8:
+        extracted = extract_game_name_from_title(title)
+        if extracted:
+            # Clean episode markers before IGDB validation
+            cleaned_extracted = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', extracted, flags=re.IGNORECASE)
+            cleaned_extracted = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]',
+                                       '', cleaned_extracted, flags=re.IGNORECASE)
+            cleaned_extracted = cleaned_extracted.strip()
 
-    if len(simple_clean) >= 3 and not is_generic_term(simple_clean) and simple_clean != best_name:
-        igdb_result = await igdb.validate_and_enrich(simple_clean)
-        confidence = igdb_result.get('confidence', 0.0)
-        print(f"  Trying simple clean: '{simple_clean}' → confidence: {confidence:.2f}")
+            if cleaned_extracted != best_name:  # Avoid duplicate validation
+                print(f"🔍 Validating '{cleaned_extracted}' (standard extraction) with IGDB...")
+                igdb_result = await igdb.validate_and_enrich(cleaned_extracted)
+                confidence = igdb_result.get('confidence', 0.0)
+                print(f"  → confidence: {confidence:.2f}")
 
-        if confidence > best_confidence:
-            best_name = simple_clean
-            best_confidence = confidence
+                if confidence > best_confidence:
+                    best_name = cleaned_extracted
+                    best_confidence = confidence
+
+                    if best_confidence >= 0.8:
+                        return best_name, best_confidence
+
+    # Strategy 3: Try simple cleaning of full title
+    if best_confidence < 0.8:
+        simple_clean = title
+        simple_clean = re.sub(r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*', '', simple_clean, flags=re.IGNORECASE)
+        simple_clean = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', simple_clean, flags=re.IGNORECASE)
+        simple_clean = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]', '', simple_clean, flags=re.IGNORECASE)
+        simple_clean = re.sub(r'\s+(?:Thanks|Thx|@|#).*$', '', simple_clean, flags=re.IGNORECASE)
+        simple_clean = cleanup_game_name(simple_clean)
+
+        if len(simple_clean) >= 3 and not is_generic_term(simple_clean) and simple_clean != best_name:
+            print(f"🔍 Validating '{simple_clean}' (simple clean) with IGDB...")
+            igdb_result = await igdb.validate_and_enrich(simple_clean)
+            confidence = igdb_result.get('confidence', 0.0)
+            print(f"  → confidence: {confidence:.2f}")
+
+            if confidence > best_confidence:
+                best_name = simple_clean
+                best_confidence = confidence
 
     return best_name, best_confidence
 
