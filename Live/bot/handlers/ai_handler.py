@@ -926,6 +926,9 @@ async def call_ai_with_rate_limiting(
                     # Build full prompt with system instruction, examples, and user prompt
                     full_prompt = f"{system_instruction}{examples_text}\n\nUser: {prompt}"
 
+                    # DEBUG: Print first 500 chars of prompt to diagnose addressing issue
+                    print(f"🐛 DEBUG PROMPT (first 500 chars):\n{full_prompt[:500]}...")
+
                     response = gemini_client.models.generate_content(
                         model=current_gemini_model,
                         contents=full_prompt,
