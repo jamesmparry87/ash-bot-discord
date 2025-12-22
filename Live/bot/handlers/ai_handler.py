@@ -931,7 +931,7 @@ async def call_ai_with_rate_limiting(
                     op_context_start = full_prompt.find("--- CURRENT OPERATIONAL CONTEXT ---")
                     if op_context_start >= 0:
                         # Show the OPERATIONAL CONTEXT section (about 400 chars should cover it)
-                        op_context_section = full_prompt[op_context_start:op_context_start+400]
+                        op_context_section = full_prompt[op_context_start:op_context_start + 400]
                         print(f"🐛 DEBUG - OPERATIONAL CONTEXT FOUND at position {op_context_start}:")
                         print(op_context_section)
                     else:

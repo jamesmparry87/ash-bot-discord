@@ -79,10 +79,10 @@ async def cleanup_expired_aliases(bot=None):
         user_id for user_id, data in user_alias_state.items()
         if data["last_activity"] < cutoff_time
     ]
-    
+
     for user_id in expired_users:
         alias_type = user_alias_state[user_id].get("alias_type", "unknown")
-        
+
         # Try to notify user via DM if bot is available
         if bot:
             try:
@@ -97,7 +97,7 @@ async def cleanup_expired_aliases(bot=None):
                     print(f"✅ Sent alias expiry notification to user {user_id} ({alias_type})")
             except Exception as e:
                 print(f"⚠️ Could not send alias expiry notification to user {user_id}: {e}")
-        
+
         # Remove the expired alias
         del user_alias_state[user_id]
 
