@@ -324,7 +324,70 @@ Response: [Dismissive, questioning tone]
 📊 Context Built: Clearance='CREATOR/MODERATOR (Authorized for Operational Data)', Relationship='CREATOR (Technical Deference)'
 ```
 
-### E. Google Gemini API Migration (Dec 2025)
+### E. FAQ System with Role Awareness (Phase 3 - Dec 2025)
+
+**IMPORTANT:** FAQs now adapt based on user clearance level for personalized responses.
+
+#### Implementation Architecture
+
+**Primary Function:** `get_role_aware_faq_response()` in `Live/bot/persona/faq_handler.py`
+
+**Flow:**
+1. Message received → Check FAQ match (`check_faq_match()`)
+2. Detect user context → `detect_user_context()` for role/clearance
+3. Apply role customization → `get_role_aware_faq_response()`
+4. Apply Pops sarcasm layer (if applicable)
+5. Send response
+
+#### Role-Specific FAQ Customizations
+
+**Greetings Example ("hello"):**
+
+| User Type | Response |
+|-----------|----------|
+| **Captain Jonesy** | "Captain. Hello. I'm Ash. How can I help you?" |
+| **JAM (Creator)** | "Sir Decent Jam. Hello. I'm Ash. How can I help you?" |
+| **Pops Arcade** | "Pops Arcade. Hello. I'm Ash. How can I help you? *[Responding... reluctantly.]*" |
+| **Moderators** | "Moderator. Hello. I'm Ash. How can I help you?" |
+| **Standard Users** | "Hello. I'm Ash. How can I help you?" |
+
+**Key Features:**
+- Graceful fallback to standard FAQs if context detection fails
+- Maintains Ash persona integrity across all role types
+- Pops sarcasm applied as additional layer on top of role customization
+- All FAQ responses stored in `Live/bot/persona/faqs.py`
+
+#### Helper Functions
+
+```python
+check_faq_match(query: str) -> bool
+    # Returns True if query matches any FAQ entry
+
+get_faq_suggestions(query: str, max_suggestions: int = 3) -> list[str]
+    # Returns list of similar FAQ keys for partial matches
+```
+
+### F. Date Format & Localization (Phase 2 - Dec 2025)
+
+**CRITICAL:** All dates now use **UK format (DD-MM-YYYY)** to match the server's timezone preference.
+
+**Location:** `Live/bot/persona/context_builder.py`
+
+```python
+# OLD (US format):
+current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+
+# NEW (UK format):
+current_date = datetime.datetime.now().strftime("%d-%m-%Y")
+```
+
+**Example Output:**
+- Old: "System Date: 2025-12-22"
+- New: "System Date: 22-12-2025"
+
+This ensures consistency with the bot's `Europe/London` timezone settings.
+
+### G. Google Gemini API Migration (Dec 2025)
 
 **CRITICAL:** The bot now uses `google-genai>=1.56.0` (NEW Client API), not the old `google-generativeai`:
 
@@ -351,7 +414,120 @@ response = client.models.generate_content(model='gemini-2.5-flash', contents=pro
 - User context injection happens via `_build_full_system_instruction(user_id, user_input)`
 - System instructions are prepended to the prompt (new API handles differently than old)
 
-## 7. Database Schema Overview
+## 7. Testing the Persona System (Phase 4 - Dec 2025)
+
+### A. Testing Commands
+
+**Primary Test Command:** `!testpersona`
+
+**Usage:**
+```
+!testpersona                  - Show current detection for your user
+!testpersona captain [mins]   - Test as Captain for X minutes (default 60)
+!testpersona creator [mins]   - Test as Creator
+!testpersona moderator [mins] - Test as Moderator  
+!testpersona member [mins]    - Test as Member
+!testpersona standard [mins]  - Test as Standard user
+!testpersona clear            - Clear current alias
+```
+
+**Example:**
+```
+Moderator: !testpersona captain 5
+Bot: 🎭 Test Alias Activated
+     Testing as Captain for 5 minutes
+     Detected As: Captain Jonesy
+     Clearance Level: COMMANDING_OFFICER
+     Relationship Type: COMMANDING_OFFICER
+     Expires: in 5 minutes
+     
+     Use '!testpersona clear' to remove this alias early
+```
+
+### B. Role-Based Test Scenarios
+
+**Test Matrix for Rook (Staging Bot):**
+
+| Test User | User ID | Discord Roles | Expected Clearance | Expected Relationship | Expected Tone |
+|-----------|---------|---------------|-------------------|----------------------|---------------|
+| **Jonesy** | Hardcoded | Any | COMMANDING_OFFICER | COMMANDING_OFFICER | Protective, deferential |
+| **JAM** | Hardcoded | Any | CREATOR | CREATOR | Technical deference |
+| **Pops** | Hardcoded | Moderator | MODERATOR | ANTAGONISTIC | Dismissive, sarcastic |
+| **New Mod** | Any | Discord Mod role | MODERATOR | COLLEAGUE | Professional cooperation |
+| **Paid Member** | Any | Member role | STANDARD_MEMBER | PERSONNEL | Helpful, accessible |
+| **Regular User** | Any | None | RESTRICTED | PERSONNEL | Helpful, basic |
+
+### C. Testing Checklist
+
+**Deploy to Rook and verify:**
+
+#### 1. Role Detection Tests
+- [ ] Test `!testpersona` with no arguments - shows current detection
+- [ ] Test `!testpersona captain 5` - activates captain alias for 5 minutes
+- [ ] Test `!testpersona clear` - clears active alias
+- [ ] Verify each role type gets correct clearance level
+- [ ] Test DM detection - roles should be maintained in DMs
+
+#### 2. FAQ Response Tests
+- [ ] Send "hello" as Captain - should get "Captain. Hello..."
+- [ ] Send "hello" as JAM - should get "Sir Decent Jam. Hello..."
+- [ ] Send "hello" as Pops - should get "Pops Arcade. Hello... *[Responding... reluctantly.]*"
+- [ ] Send "hello" as Moderator - should get "Moderator. Hello..."
+- [ ] Send "hello" as standard user - should get "Hello. I'm Ash..."
+
+#### 3. Date Format Tests
+- [ ] Check any bot response with date - should be DD-MM-YYYY format
+- [ ] Verify consistency across all date displays
+
+#### 4. Context System Tests
+- [ ] Test different user types receive appropriate responses
+- [ ] Verify Pops gets sarcastic modifications
+- [ ] Verify Captain gets protective/deferential responses
+- [ ] Verify JAM gets technical deference
+
+#### 5. Edge Case Tests
+- [ ] Test role detection in DMs (no guild context)
+- [ ] Test with user who has multiple roles
+- [ ] Test fallback behavior when role detection fails
+- [ ] Test alias expiration (wait or manually advance time)
+
+### D. Debug Logging
+
+**Key logs to monitor during testing:**
+
+```
+# Role Detection
+🔍 ROLE DETECTION: Method=user_id_override, Clearance=COMMANDING_OFFICER, Relationship=COMMANDING_OFFICER
+
+# Context Building
+📊 Context Built: User='Captain Jonesy', Clearance=COMMANDING_OFFICER, Relationship=COMMANDING_OFFICER, Method=user_id_override
+
+# FAQ Processing
+✅ FAQ Match: query='hello', role=COMMANDING_OFFICER, customized=True
+
+# Alias System
+🎭 Test Alias: user_id=123456, type=captain, duration=5, expires_at=2025-12-22 12:00:00
+```
+
+### E. Common Testing Issues
+
+**Issue:** "Role detection not working in DMs"
+- **Fix:** Verify `GUILD_ID` is set correctly in config
+- **Fix:** Check bot has permission to view guild members
+
+**Issue:** "FAQ responses not customized"
+- **Fix:** Check `get_role_aware_faq_response()` is being called
+- **Fix:** Verify fallback logic is working (check error logs)
+
+**Issue:** "Alias not expiring"
+- **Fix:** Check `cleanup_expired_aliases()` is called in message handler
+- **Fix:** Verify timezone settings are correct (should be Europe/London)
+
+**Issue:** "Pops sarcasm not applying"
+- **Fix:** Verify `POPS_ARCADE_USER_ID` matches actual user ID
+- **Fix:** Check `apply_pops_arcade_sarcasm()` is called after FAQ response
+
+## 8. Database Schema Overview
 
 * `strikes`: User strike tracking.
 * `game_recommendations`: Community submissions.

@@ -1,14 +1,42 @@
 # Ash Discord Bot - Railway Deployment Guide
 
-A sophisticated Discord moderation and AI assistant bot featuring strike tracking, game recommendations, and personality-driven interactions.
+A sophisticated Discord moderation and AI assistant bot featuring strike tracking, game recommendations, and personality-driven interactions with intelligent role-aware responses.
+
+**Version 1.2** - Intelligent Persona System
 
 ## Features
 
+### Core Features
+
 - **Strike Management**: Automatic strike tracking with database persistence
-- **AI Conversations**: Powered by Google's Gemini AI with Hugging Face backup for character personality interactions
+- **AI Conversations**: Powered by Google's Gemini AI with intelligent context awareness
 - **Game Recommendations**: Community-driven game suggestion system
+- **Trivia Tuesday**: Weekly trivia sessions with leaderboards and participation tracking
 - **Persistent Data**: PostgreSQL database for reliable data storage
 - **Railway Optimized**: Configured for seamless Railway.app deployment
+
+### Version 1.2: Intelligent Persona System
+
+**Role-Aware Interactions**
+- Ash now recognizes who you are and adjusts his responses accordingly
+- Special treatment for server leadership (Captain Jonesy, JAM)
+- Professional tone with moderators
+- Personalized responses based on your server roles
+- Works in DMs - your roles are maintained even in private conversations
+
+**Personalized Experience**
+- **Captain Jonesy**: Gets protective, deferential responses with priority status
+- **Sir Decent Jam (Creator)**: Receives technical deference and creator acknowledgment  
+- **Pops Arcade**: Gets analytical, skeptical responses with characteristic sarcasm
+- **Moderators**: Professional cooperation and colleague-level interaction
+- **Members**: Enhanced helpful responses appropriate to crew status
+- **Everyone Else**: Standard helpful assistance within clearance parameters
+
+**Smart Features**
+- Automatically recognizes new moderators without code changes
+- FAQ responses personalized by role (e.g., "Captain. Hello..." vs "Hello...")
+- UK date format (DD-MM-YYYY) for localization
+- Future-proof role detection system
 
 ## Railway.app Deployment
 
@@ -128,6 +156,31 @@ The bot automatically creates these tables on first run:
 - `!getpersona` - View current personality
 - `!toggleai` - Enable/disable AI conversations
 - `!ashstatus` - View bot status
+
+#### v1.2 Testing Commands (Moderators Only)
+
+Use these commands to test the role-aware persona system:
+
+- `!testpersona` - Show how Ash currently detects your role
+- `!testpersona captain 5` - Test Captain persona for 5 minutes
+- `!testpersona creator 10` - Test Creator persona for 10 minutes
+- `!testpersona moderator 5` - Test Moderator persona for 5 minutes
+- `!testpersona member 5` - Test Member persona for 5 minutes
+- `!testpersona standard 5` - Test standard user persona for 5 minutes
+- `!testpersona clear` - Clear current test alias
+
+**Example:**
+```
+You: !testpersona captain 5
+Ash: 🎭 Test Alias Activated
+     Testing as Captain for 5 minutes
+     Detected As: Captain Jonesy
+     Clearance Level: COMMANDING_OFFICER
+     Use '!testpersona clear' to remove this alias early
+
+You: hello
+Ash: Captain. Hello. I'm Ash. How can I help you?
+```
 
 ### Configuration
 
