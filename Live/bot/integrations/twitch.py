@@ -57,6 +57,10 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
             after_dash = cleanup_game_name(after_dash)
 
             if len(after_dash) >= 3 and not is_generic_term(after_dash):
+                # Keep this extraction even if IGDB fails
+                if best_name is None:
+                    best_name = after_dash
+                    
                 print(f"🔍 Validating '{after_dash}' (after dash) with IGDB...")
                 igdb_result = await igdb.validate_and_enrich(after_dash)
                 confidence = igdb_result.get('confidence', 0.0)
@@ -105,6 +109,10 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
             cleaned_extracted = cleaned_extracted.strip()
 
             if cleaned_extracted != best_name:  # Avoid duplicate validation
+                # Keep this extraction even if IGDB fails
+                if best_name is None:
+                    best_name = cleaned_extracted
+                    
                 print(f"🔍 Validating '{cleaned_extracted}' (standard extraction) with IGDB...")
                 igdb_result = await igdb.validate_and_enrich(cleaned_extracted)
                 confidence = igdb_result.get('confidence', 0.0)
@@ -127,6 +135,10 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
         simple_clean = cleanup_game_name(simple_clean)
 
         if len(simple_clean) >= 3 and not is_generic_term(simple_clean) and simple_clean != best_name:
+            # Keep this extraction even if IGDB fails
+            if best_name is None:
+                best_name = simple_clean
+                
             print(f"🔍 Validating '{simple_clean}' (simple clean) with IGDB...")
             igdb_result = await igdb.validate_and_enrich(simple_clean)
             confidence = igdb_result.get('confidence', 0.0)

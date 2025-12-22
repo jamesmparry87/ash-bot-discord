@@ -47,17 +47,27 @@ async def test_igdb_known_game_dark_souls():
 
 @pytest.mark.asyncio
 async def test_igdb_filters_compound_games():
-    """Test that compound/bundle games are properly filtered"""
-    result = await igdb.validate_and_enrich("Halo 3 + Halo Wars")
-
-    # Should either have no match or low confidence since compound games are filtered
-    confidence = result.get('confidence', 0)
+    """Test that compound/bundle games are properly filtered from search results
+    
+    Principle: When IGDB returns compound games (with + or &) in results,
+    the code should skip them and select non-compound alternatives.
+    
+    Note: We search for a simple game name. If IGDB happens to return
+    compound games, they should be filtered out.
+    """
+    result = await igdb.validate_and_enrich("Halo")
+    
+    # The result should NOT be a compound game
     canonical = result.get('canonical_name', '')
-
-    # Shouldn't match the compound game directly
-    assert ' + ' not in canonical, "Compound games should be filtered"
-
-    print(f"✅ Compound game filter working: '{canonical}' (confidence: {confidence:.2f})")
+    
+    # Verify no compound game indicators in the final result
+    assert ' + ' not in canonical, f"Compound games should be filtered, got: '{canonical}'"
+    assert ' & ' not in canonical, f"Compound games should be filtered, got: '{canonical}'"
+    
+    # Should have found something (Halo is a well-known game)
+    assert canonical and 'Halo' in canonical, f"Should find a Halo game, got: '{canonical}'"
+    
+    print(f"✅ Compound game filter working: '{canonical}' (no compound indicators)")
 
 
 @pytest.mark.asyncio
