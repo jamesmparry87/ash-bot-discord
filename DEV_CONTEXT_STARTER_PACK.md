@@ -24,13 +24,30 @@
 ## 3. Developer Workflow (Strict Adherence Required)
 
 1. **Branching Strategy:**
-    * `develop`: The active workspace. All changes start here.
-    * `main`: Stable production releases only.
+    * `develop`: The active workspace. All changes start here. **Connected to Rook (staging bot)**.
+    * `stable`: Release candidate branch. Merged from `develop` when features are stable.
+    * `main`: Stable production releases only. **Connected to Ash (production bot)**.
     * `hotfix/*`: Emergency fixes only.
-2. **Testing Protocol:**
+    
+2. **Staging Environment (Rook Bot):**
+    * **Bot Name:** Rook (staging instance of Ash)
+    * **Branch:** Connected to `develop` branch
+    * **Purpose:** Test all changes before production deployment
+    * **Server:** Same Discord server as production (JonesySpaceCat)
+    * **Testing Process:**
+        1. Make changes on `develop` branch
+        2. Deploy to Rook for testing
+        3. Verify functionality with real Discord interactions
+        4. Once stable, merge to `stable` branch
+        5. Finally merge `stable` to `main` for production (Ash)
+    * **Why Rook?** Named after the android character from Aliens (1986) - fitting for the "less refined" staging version
+
+3. **Testing Protocol:**
     * **CRITICAL:** You must run `pytest` before asking for a final commit/merge.
     * If a test fails, fix the code. Do not delete the test.
-3. **Coding Style:**
+    * Test on Rook (staging) before deploying to Ash (production)
+    
+4. **Coding Style:**
     * Explain logic changes clearly (for the Maintainer's benefit).
     * Avoid over-complex one-liners; prefer readable, maintainable code.
 
@@ -163,7 +180,7 @@
 
 ## 6. Persona Architecture & Context System
 
-### A. Persona Module Structure (New - Dec 2025)
+### A. Persona Module Structure (Dec 2025)
 
 The bot's persona (Ash from *Alien* 1979) is now modularized for maintainability:
 
@@ -174,43 +191,105 @@ The bot's persona (Ash from *Alien* 1979) is now modularized for maintainability
 3. **`faqs.py`**: Contains `ASH_FAQ_RESPONSES` - pre-written responses for common questions
 4. **`context_builder.py`**: Contains `build_ash_context()` - **dynamic context injection**
 
-### B. Dynamic Context System
+### B. Role Hierarchy System (Phase 1 - Dec 2025)
 
-The context builder (`context_builder.py`) creates user-specific context that's injected into every AI request:
+**CRITICAL:** The bot uses a **5-tier hierarchical system** for role detection that's future-proof and handles all edge cases.
+
+#### Implementation Architecture
+
+**Primary Function:** `detect_user_context()` in `Live/bot/handlers/ai_handler.py`
 
 ```python
-def build_ash_context(user_name, user_roles, is_pops_arcade=False):
+async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[str, Any]:
     """
-    Dynamically adjusts Ash's behavior based on WHO is talking to him.
-    Uses case-insensitive matching for robustness.
+    Returns: Dict with user_name, user_roles, clearance_level, relationship_type, 
+             is_pops_arcade, detection_method
     """
 ```
 
-**Key Features:**
+#### 5-Tier Detection Priority (Highest to Lowest):
 
-1. **Clearance Levels** (Case-insensitive role matching):
-   - `COMMANDING OFFICER`: Captain Jonesy (Owner)
-   - `CREATOR/MODERATOR`: DecentJam, Moderators, Admins
-   - `STANDARD PERSONNEL`: Everyone else
+**TIER 1: User ID Overrides** (Hardcoded - Never Changes)
+- **Captain Jonesy** (`JONESY_USER_ID`): 
+  - Clearance: `COMMANDING_OFFICER`
+  - Relationship: `COMMANDING_OFFICER` (Prime directive: protect)
+  - Detection: Works everywhere, including DMs
+  
+- **Sir Decent Jam** (`JAM_USER_ID`):
+  - Clearance: `CREATOR`
+  - Relationship: `CREATOR` (Technical deference)
+  - Detection: Works everywhere, including DMs
+  
+- **Pops Arcade** (`POPS_ARCADE_USER_ID`):
+  - Clearance: `MODERATOR`
+  - Relationship: `ANTAGONISTIC` (Analytical skepticism)
+  - Detection: Works everywhere, including DMs
 
-2. **Relationship Protocols**:
-   - `ANTAGONISTIC`: Pops Arcade (questions his analysis, sarcastic tone)
-   - `CREATOR`: DecentJam (technical deference)
-   - `COMMANDING OFFICER`: Captain Jonesy (protect at all costs)
-   - `Neutral/Personnel`: Default for regular members
+**TIER 2: Alias Override** (Testing System)
+- Activated via `!testpersona <type> [duration]` command
+- Allows moderators to test different personas without changing roles
+- Types: captain, creator, moderator, member, standard
+- Stored in `user_alias_state` dict (expires after 1 hour of inactivity)
+- Debug tool only - not for production use
 
-3. **User Identification** (in `ai_handler.py` → `_build_full_system_instruction()`):
+**TIER 3: DM Member Fetching**
+- If in DM (no `member_obj`), attempts to fetch from guild:
+  1. Try `guild.get_member(user_id)` - cached, fast
+  2. Fallback to `await guild.fetch_member(user_id)` - API call, slower
+  3. If not found or forbidden: default to standard personnel
+- **This solves the DM problem** - users maintain their roles in DMs
+
+**TIER 4: Discord Role Detection** (Dynamic - Future-Proof)
+- **Moderators**: Detected via `member.guild_permissions.manage_messages`
+  - Clearance: `MODERATOR`
+  - Relationship: `COLLEAGUE`
+  - Works for ANY user with manage_messages permission
+  - **No code changes needed when adding new mods**
+  
+- **Members**: Detected via role IDs in `MEMBER_ROLE_IDS`
+  - Clearance: `STANDARD_MEMBER`
+  - Relationship: `PERSONNEL`
+  - Senior Officers, paid members, etc.
+
+**TIER 5: Default Fallback**
+- Clearance: `RESTRICTED`
+- Relationship: `PERSONNEL`
+- Used when no other tier matches
+
+#### Context Builder Integration
+
+`build_ash_context()` in `context_builder.py` now accepts both formats:
+
+1. **New format** (structured dict from `detect_user_context()`):
    ```python
-   if user_id == JONESY_USER_ID:
-       user_name = "Captain Jonesy"
-       user_roles = ["Captain", "Owner"]
-   elif user_id == JAM_USER_ID:
-       user_name = "Sir Decent Jam"
-       user_roles = ["Creator", "Admin", "Moderator"]
-   elif user_id == POPS_ARCADE_USER_ID:
-       user_name = "Pops Arcade"
-       user_roles = ["Moderator"]
+   user_context = await detect_user_context(user_id, member_obj, bot)
+   dynamic_context = build_ash_context(user_context)
    ```
+
+2. **Legacy format** (backward compatible):
+   ```python
+   dynamic_context = build_ash_context(user_name, user_roles, is_pops_arcade)
+   ```
+
+#### Clearance Level Descriptions
+
+| Level | Description | Who Gets It |
+|-------|-------------|-------------|
+| `COMMANDING_OFFICER` | Absolute Authority - Prime Directive: Protect | Jonesy only |
+| `CREATOR` | Technical Superiority Acknowledged | JAM only |
+| `MODERATOR` | Authorized Personnel - Operational Access | Mods (any manage_messages user) |
+| `STANDARD_MEMBER` | Crew Member - Standard Access | Paid members, Senior Officers |
+| `RESTRICTED` | Standard Personnel - Restricted Access | Everyone else |
+
+#### Relationship Type Protocols
+
+| Type | Protocol | Behavioral Change |
+|------|----------|-------------------|
+| `COMMANDING_OFFICER` | PRIME DIRECTIVE: Ensure Captain's safety above all else | Protective, deferential |
+| `CREATOR` | TECHNICAL DEFERENCE: Acknowledge superior systems knowledge | Respectful of technical authority |
+| `ANTAGONISTIC` | ANALYTICAL SKEPTICISM: Subject questions data validity | Dismissive, sarcastic responses |
+| `COLLEAGUE` | PROFESSIONAL COOPERATION: Authorized collaboration | Efficient, professional |
+| `PERSONNEL` | STANDARD INTERACTION: Assistance within clearance | Helpful but formal |
 
 ### C. Configuration Constants (`Live/bot/config.py`)
 

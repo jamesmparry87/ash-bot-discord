@@ -471,7 +471,10 @@ class UtilityCommands(commands.Cog):
                     "• `!setpersona Helpful assistant with a friendly personality`\n"
                     "• `!setpersona Science Officer Ash from Alien - analytical and precise`\n"
                     "• `!setpersona reset` - Return to default Ash persona\n\n"
-                    "**Current Traits:** Analytical, precise, scientific approach, slightly detached but helpful")
+                    "**Current Traits:** Analytical, precise, scientific approach, slightly detached but helpful\n\n"
+                    "**Related Commands:**\n"
+                    "• `!testpersona` - Test role detection and persona behavior\n"
+                    "• `!testpersona <type>` - Temporarily test as a different user type")
                 await ctx.send(help_text)
                 return
 
@@ -501,6 +504,112 @@ class UtilityCommands(commands.Cog):
         except Exception as e:
             print(f"❌ Error in setpersona command: {e}")
             await ctx.send("❌ System error occurred while setting persona.")
+
+
+    @commands.command(name="testpersona")
+    @commands.has_permissions(manage_messages=True)
+    async def test_persona(self, ctx, persona_type: str = None, duration: int = 60):
+        """Test persona detection or set a test alias (moderators only)
+        
+        Usage:
+            !testpersona                  - Show current detection for your user
+            !testpersona captain [mins]   - Test as Captain for X minutes (default 60)
+            !testpersona creator [mins]   - Test as Creator
+            !testpersona moderator [mins] - Test as Moderator  
+            !testpersona member [mins]    - Test as Member
+            !testpersona standard [mins]  - Test as Standard user
+            !testpersona clear            - Clear current alias
+        """
+        try:
+            from ..handlers.ai_handler import detect_user_context
+            from ..utils.permissions import user_alias_state, cleanup_expired_aliases
+            
+            # If no persona type, show current detection
+            if not persona_type:
+                user_context = await detect_user_context(ctx.author.id, ctx.author, self.bot)
+                
+                embed = discord.Embed(
+                    title="🎭 Persona Detection Test",
+                    color=0x00ff00,
+                    description=f"Detection results for {ctx.author.display_name}"
+                )
+                embed.add_field(name="User Name", value=user_context['user_name'], inline=False)
+                embed.add_field(name="Clearance Level", value=user_context['clearance_level'], inline=True)
+                embed.add_field(name="Relationship Type", value=user_context['relationship_type'], inline=True)
+                embed.add_field(name="Detection Method", value=user_context['detection_method'], inline=False)
+                embed.add_field(name="Is Pops Arcade?", value=str(user_context['is_pops_arcade']), inline=True)
+                
+                # Show active alias if present
+                cleanup_expired_aliases()
+                if ctx.author.id in user_alias_state:
+                    alias_info = user_alias_state[ctx.author.id]
+                    expires_timestamp = int(alias_info.get('last_activity', datetime.now(ZoneInfo('Europe/London'))).timestamp()) + 3600
+                    embed.add_field(
+                        name="⚠️ Active Alias",
+                        value=f"Type: {alias_info.get('alias_type', 'unknown')}\nExpires: <t:{expires_timestamp}:R>",
+                        inline=False
+                    )
+                
+                await ctx.send(embed=embed)
+                return
+            
+            # Handle clear command
+            if persona_type.lower() == "clear":
+                cleanup_expired_aliases()
+                if ctx.author.id in user_alias_state:
+                    del user_alias_state[ctx.author.id]
+                    await ctx.send("✅ **Alias cleared.** You are now detected normally based on your Discord roles.")
+                else:
+                    await ctx.send("⚠️ **No active alias found.** You are already being detected normally.")
+                return
+            
+            # Validate persona type
+            valid_personas = ["captain", "creator", "moderator", "member", "standard"]
+            persona_type_lower = persona_type.lower()
+            
+            if persona_type_lower not in valid_personas:
+                await ctx.send(f"❌ **Invalid persona type.** Valid options: {', '.join(valid_personas)}, clear")
+                return
+            
+            # Validate duration
+            if duration < 1 or duration > 180:
+                await ctx.send("❌ **Invalid duration.** Must be between 1 and 180 minutes.")
+                return
+            
+            # Set the alias
+            user_alias_state[ctx.author.id] = {
+                "alias_type": persona_type_lower,
+                "last_activity": datetime.now(ZoneInfo("Europe/London")),
+                "expires_at": datetime.now(ZoneInfo("Europe/London")) + timedelta(minutes=duration)
+            }
+            
+            # Show confirmation with detection preview
+            user_context = await detect_user_context(ctx.author.id, ctx.author, self.bot)
+            
+            expires_timestamp = int((datetime.now(ZoneInfo('Europe/London')) + timedelta(minutes=duration)).timestamp())
+            
+            embed = discord.Embed(
+                title="🎭 Test Alias Activated",
+                color=0xffa500,
+                description=f"Testing as **{persona_type_lower.title()}** for {duration} minutes"
+            )
+            embed.add_field(name="Detected As", value=user_context['user_name'], inline=False)
+            embed.add_field(name="Clearance Level", value=user_context['clearance_level'], inline=True)
+            embed.add_field(name="Relationship Type", value=user_context['relationship_type'], inline=True)
+            embed.add_field(
+                name="Expires",
+                value=f"<t:{expires_timestamp}:R>",
+                inline=False
+            )
+            embed.set_footer(text="Use '!testpersona clear' to remove this alias early")
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            print(f"❌ Error in testpersona command: {e}")
+            import traceback
+            traceback.print_exc()
+            await ctx.send(f"❌ **System error occurred:** {str(e)}")
 
 
 def setup(bot):
