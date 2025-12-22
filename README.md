@@ -17,14 +17,16 @@ A sophisticated Discord moderation and AI assistant bot featuring strike trackin
 
 ### Version 1.2: Intelligent Persona System
 
-**Role-Aware Interactions**
+#### Role-Aware Interactions
+
 - Ash now recognizes who you are and adjusts his responses accordingly
 - Special treatment for server leadership (Captain Jonesy, JAM)
 - Professional tone with moderators
 - Personalized responses based on your server roles
 - Works in DMs - your roles are maintained even in private conversations
 
-**Personalized Experience**
+#### Personalized Experience
+
 - **Captain Jonesy**: Gets protective, deferential responses with priority status
 - **Sir Decent Jam (Creator)**: Receives technical deference and creator acknowledgment  
 - **Pops Arcade**: Gets analytical, skeptical responses with characteristic sarcasm
@@ -32,7 +34,8 @@ A sophisticated Discord moderation and AI assistant bot featuring strike trackin
 - **Members**: Enhanced helpful responses appropriate to crew status
 - **Everyone Else**: Standard helpful assistance within clearance parameters
 
-**Smart Features**
+#### Smart Features
+
 - Automatically recognizes new moderators without code changes
 - FAQ responses personalized by role (e.g., "Captain. Hello..." vs "Hello...")
 - UK date format (DD-MM-YYYY) for localization
@@ -170,7 +173,8 @@ Use these commands to test the role-aware persona system:
 - `!testpersona clear` - Clear current test alias
 
 **Example:**
-```
+
+```text
 You: !testpersona captain 5
 Ash: 🎭 Test Alias Activated
      Testing as Captain for 5 minutes
