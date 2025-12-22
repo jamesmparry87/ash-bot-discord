@@ -1099,84 +1099,84 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
             # For now, detect synchronously using basic logic
             # This will be replaced when we make this function async
 
-            # TIER 1: Special User ID Overrides
-            if user_id == JONESY_USER_ID:
-                user_context = {
-                    'user_name': 'Captain Jonesy',
-                    'user_roles': ['Captain', 'Owner', 'Commanding Officer'],
-                    'clearance_level': 'COMMANDING_OFFICER',
-                    'relationship_type': 'COMMANDING_OFFICER',
-                    'is_pops_arcade': False,
-                    'detection_method': 'sync_user_id_override_jonesy'
-                }
-            elif user_id == JAM_USER_ID:
-                user_context = {
-                    'user_name': 'Sir Decent Jam',
-                    'user_roles': ['Creator', 'Admin', 'Moderator'],
-                    'clearance_level': 'CREATOR',
-                    'relationship_type': 'CREATOR',
-                    'is_pops_arcade': False,
-                    'detection_method': 'sync_user_id_override_jam'
-                }
-            elif user_id == POPS_ARCADE_USER_ID:
-                user_context = {
-                    'user_name': 'Pops Arcade',
-                    'user_roles': ['Moderator', 'Antagonist'],
-                    'clearance_level': 'MODERATOR',
-                    'relationship_type': 'ANTAGONISTIC',
-                    'is_pops_arcade': True,
-                    'detection_method': 'sync_user_id_override_pops'
-                }
-            else:
-                # TIER 2: Check alias state
-                try:
-                    from ..utils.permissions import cleanup_expired_aliases, user_alias_state
-                    cleanup_expired_aliases()
+            # TIER 0: Alias Override Check (HIGHEST PRIORITY - must come before special user IDs!)
+            user_context = None
+            try:
+                from ..utils.permissions import cleanup_expired_aliases, user_alias_state
+                cleanup_expired_aliases()
 
-                    if user_id in user_alias_state:
-                        alias_type = user_alias_state[user_id].get("alias_type", "standard")
-                        alias_name = member_obj.display_name if member_obj else "User"
+                if user_id in user_alias_state:
+                    alias_type = user_alias_state[user_id].get("alias_type", "standard")
+                    alias_name = member_obj.display_name if member_obj else "User"
 
-                        alias_map = {
-                            "captain": {
-                                'user_name': f'{alias_name} (Testing as Captain)',
-                                'clearance_level': 'COMMANDING_OFFICER',
-                                'relationship_type': 'COMMANDING_OFFICER'},
-                            "creator": {
-                                'user_name': f'{alias_name} (Testing as Creator)',
-                                'clearance_level': 'CREATOR',
-                                'relationship_type': 'CREATOR'},
-                            "moderator": {
-                                'user_name': f'{alias_name} (Testing as Moderator)',
-                                'clearance_level': 'MODERATOR',
-                                'relationship_type': 'COLLEAGUE'},
-                            "member": {
-                                'user_name': f'{alias_name} (Testing as Member)',
-                                'clearance_level': 'STANDARD_MEMBER',
-                                'relationship_type': 'PERSONNEL'},
-                            "standard": {
-                                'user_name': f'{alias_name} (Testing as Standard)',
-                                'clearance_level': 'RESTRICTED',
-                                'relationship_type': 'PERSONNEL'}}
+                    alias_map = {
+                        "captain": {
+                            'user_name': f'{alias_name} (Testing as Captain)',
+                            'clearance_level': 'COMMANDING_OFFICER',
+                            'relationship_type': 'COMMANDING_OFFICER'},
+                        "creator": {
+                            'user_name': f'{alias_name} (Testing as Creator)',
+                            'clearance_level': 'CREATOR',
+                            'relationship_type': 'CREATOR'},
+                        "moderator": {
+                            'user_name': f'{alias_name} (Testing as Moderator)',
+                            'clearance_level': 'MODERATOR',
+                            'relationship_type': 'COLLEAGUE'},
+                        "member": {
+                            'user_name': f'{alias_name} (Testing as Member)',
+                            'clearance_level': 'STANDARD_MEMBER',
+                            'relationship_type': 'PERSONNEL'},
+                        "standard": {
+                            'user_name': f'{alias_name} (Testing as Standard)',
+                            'clearance_level': 'RESTRICTED',
+                            'relationship_type': 'PERSONNEL'}}
 
-                        if alias_type in alias_map:
-                            alias_data = alias_map[alias_type]
-                            user_context = {
-                                'user_name': alias_data['user_name'],
-                                'user_roles': [alias_type.title()],
-                                'clearance_level': alias_data['clearance_level'],
-                                'relationship_type': alias_data['relationship_type'],
-                                'is_pops_arcade': False,
-                                'detection_method': f'sync_alias_override_{alias_type}'
-                            }
-                        else:
-                            raise ValueError("Unknown alias type")
-                    else:
-                        # No alias, use role detection
-                        raise ImportError  # Fall through to role detection
+                    if alias_type in alias_map:
+                        alias_data = alias_map[alias_type]
+                        user_context = {
+                            'user_name': alias_data['user_name'],
+                            'user_roles': [alias_type.title()],
+                            'clearance_level': alias_data['clearance_level'],
+                            'relationship_type': alias_data['relationship_type'],
+                            'is_pops_arcade': False,
+                            'detection_method': f'sync_alias_override_{alias_type}'
+                        }
+                        print(f"🎭 ALIAS ACTIVE: Testing as {alias_type.title()} (overriding user ID detection)")
+            except (ImportError, ValueError):
+                pass  # Continue to normal detection if alias handling fails
 
-                except (ImportError, ValueError):
-                    # TIER 3-5: Discord role detection (synchronous version)
+            # Only proceed with normal detection if NO alias was active
+            if user_context is None:
+                # TIER 1: Special User ID Overrides
+                if user_id == JONESY_USER_ID:
+                    user_context = {
+                        'user_name': 'Captain Jonesy',
+                        'user_roles': ['Captain', 'Owner', 'Commanding Officer'],
+                        'clearance_level': 'COMMANDING_OFFICER',
+                        'relationship_type': 'COMMANDING_OFFICER',
+                        'is_pops_arcade': False,
+                        'detection_method': 'sync_user_id_override_jonesy'
+                    }
+                elif user_id == JAM_USER_ID:
+                    user_context = {
+                        'user_name': 'Sir Decent Jam',
+                        'user_roles': ['Creator', 'Admin', 'Moderator'],
+                        'clearance_level': 'CREATOR',
+                        'relationship_type': 'CREATOR',
+                        'is_pops_arcade': False,
+                        'detection_method': 'sync_user_id_override_jam'
+                    }
+                elif user_id == POPS_ARCADE_USER_ID:
+                    user_context = {
+                        'user_name': 'Pops Arcade',
+                        'user_roles': ['Moderator', 'Antagonist'],
+                        'clearance_level': 'MODERATOR',
+                        'relationship_type': 'ANTAGONISTIC',
+                        'is_pops_arcade': True,
+                        'detection_method': 'sync_user_id_override_pops'
+                    }
+                else:
+                    # TIER 2: Discord role detection
                     if member_obj and DISCORD_AVAILABLE and hasattr(member_obj, 'roles'):
                         # Check for moderator permissions
                         if hasattr(member_obj, 'guild_permissions') and member_obj.guild_permissions.manage_messages:
@@ -1201,7 +1201,7 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                                     'detection_method': 'sync_discord_role_member'
                                 }
                             else:
-                                # Default
+                                # Default with member
                                 user_context = {
                                     'user_name': member_obj.display_name,
                                     'user_roles': ['Standard User'],
