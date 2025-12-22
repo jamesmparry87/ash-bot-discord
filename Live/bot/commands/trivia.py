@@ -360,7 +360,9 @@ class TriviaCommands(commands.Cog):
                 f"Format: Question: [question] | Answer: [answer]"
             )
 
-            response_text, status = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+            response_text, status = await call_ai_with_rate_limiting(
+                prompt, JAM_USER_ID, context="trivia_generation",
+                member_obj=None, bot=self.bot)
 
             if response_text:
                 # Parse response
@@ -560,7 +562,9 @@ class TriviaCommands(commands.Cog):
 
                 logger.info(
                     f"Generating trivia question (attempt {attempt + 1}/{max_attempts}): {selected_type['type']}")
-                response_text, status = await call_ai_with_rate_limiting(selected_type['prompt'], JAM_USER_ID)
+                response_text, status = await call_ai_with_rate_limiting(
+                    selected_type['prompt'], JAM_USER_ID, context="trivia_generation",
+                    member_obj=None, bot=self.bot)
 
                 if response_text:
                     # ✅ FIX #5: Enhanced parsing with multiple fallback strategies

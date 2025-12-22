@@ -398,7 +398,9 @@ async def amend_weekly_content_with_ai(
     """
 
     # Phase 2: Persona handled automatically by system_instruction
-    response_text, status_message = await call_ai_with_rate_limiting(amendment_prompt, JAM_USER_ID)
+    response_text, status_message = await call_ai_with_rate_limiting(
+        amendment_prompt, JAM_USER_ID, context="amendment", 
+        member_obj=None, bot=_get_bot_instance())
 
     if response_text:
         return filter_ai_response(response_text)
@@ -440,7 +442,9 @@ async def _regenerate_weekly_announcement_content(
         CRITICAL: The new version must be substantially different from the original.
         """
         # Phase 2: Persona handled automatically by system_instruction
-        response_text, status_message = await call_ai_with_rate_limiting(content_prompt, JAM_USER_ID)
+        response_text, status_message = await call_ai_with_rate_limiting(
+            content_prompt, JAM_USER_ID, context="weekly_regeneration",
+            member_obj=None, bot=_get_bot_instance())
 
         if response_text:
             return filter_ai_response(response_text)
@@ -472,7 +476,9 @@ async def _regenerate_weekly_announcement_content(
         Start with "Good morning, personnel. A secondary analysis of the past week's crew engagement is complete."
         """
         # Phase 2: Persona handled automatically by system_instruction
-        response_text, status_message = await call_ai_with_rate_limiting(content_prompt, JAM_USER_ID)
+        response_text, status_message = await call_ai_with_rate_limiting(
+            content_prompt, JAM_USER_ID, context="weekly_regeneration",
+            member_obj=None, bot=_get_bot_instance())
 
         if response_text:
             return filter_ai_response(response_text)
@@ -774,7 +780,9 @@ Write 2-4 sentences maximum. Stay faithful to the original content while adding 
             prompt = content_prompt
 
         # Call AI with rate limiting
-        response_text, status_message = await call_ai_with_rate_limiting(prompt, user_id)
+        response_text, status_message = await call_ai_with_rate_limiting(
+            prompt, user_id, context="announcement_creation",
+            member_obj=None, bot=_get_bot_instance())
 
         if response_text:
             enhanced_content = filter_ai_response(response_text)

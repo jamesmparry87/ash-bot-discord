@@ -1909,7 +1909,9 @@ CRITICAL DISAMBIGUATION RULE: In this server, "Jonesy" ALWAYS refers to Captain 
 Be analytical, precise, and helpful. Keep responses concise (2-3 sentences max).
 Respond to: {content}"""
 
-            response_text, status_message = await call_ai_with_rate_limiting(ai_prompt, message.author.id)
+            response_text, status_message = await call_ai_with_rate_limiting(
+                ai_prompt, message.author.id, context="personality_response", 
+                member_obj=message.author, bot=bot)
             if response_text:
                 filtered_response = filter_ai_response(response_text)
                 await message.reply(filtered_response)

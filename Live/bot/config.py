@@ -8,9 +8,57 @@ import os
 # Discord Configuration
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD_ID = 869525857562161182  # Captain Jonesy's Discord Server ID
-JONESY_USER_ID = 651329927895056384
-JAM_USER_ID = 337833732901961729
-POPS_ARCADE_USER_ID = 371536135580549122  # Moderator Pops Arcade - special sarcastic responses
+
+# ============================================================================
+# ROLE DETECTION SYSTEM - HIERARCHICAL PRIORITY
+# ============================================================================
+# The bot uses a tiered system to determine user clearance and relationship:
+#
+# TIER 1: User ID Overrides (Highest Priority - Never Changes)
+# These specific individuals have hardcoded personalities that override all other detection
+JONESY_USER_ID = 651329927895056384       # Captain Jonesy - Commanding Officer
+                                           # Clearance: COMMANDING_OFFICER
+                                           # Relationship: COMMANDING_OFFICER (Protect at all costs)
+                                           
+JAM_USER_ID = 337833732901961729          # DecentJam - Creator/Architect  
+                                           # Clearance: CREATOR
+                                           # Relationship: CREATOR (Technical deference)
+                                           
+POPS_ARCADE_USER_ID = 371536135580549122  # Pops Arcade - Moderator + Antagonist
+                                           # Clearance: MODERATOR
+                                           # Relationship: ANTAGONISTIC (Question his analysis)
+#
+# TIER 2: Alias Override (Testing System - see bot/utils/permissions.py)
+# When users set an alias with !setalias, they can test different persona tiers
+# This is checked after user ID overrides but before Discord role detection
+#
+# TIER 3: Discord Moderator Roles (Dynamic Detection - Future-Proof)
+# Any user with these roles gets moderator clearance automatically
+# This ensures new mods are handled correctly without code changes
+DISCORD_MOD_ROLE_ID = 1188135626185396376  # Discord Moderator role
+TWITCH_MOD_ROLE_ID = 1280124521008857151   # Twitch Moderator role
+# Detection method: Checks guild_permissions.manage_messages for most reliable detection
+#
+# TIER 4: Discord Member Roles (Paid/Senior Members)
+# Users with these roles get enhanced member status and privileges
+MEMBER_ROLE_IDS = [
+    869526205166702652,  # Senior Officers
+    888820289776013444,  # Members (paid)
+]
+#
+# TIER 5: Default - Standard user (no special roles detected)
+# All users who don't match any of the above tiers get standard personnel clearance
+#
+# DM HANDLING:
+# - In DMs, users don't have a Member object with roles
+# - The system will try to fetch the member from the guild (cached first, then API)
+# - If fetch fails or user not in guild, defaults to standard personnel
+# - Tier 1 overrides still work in DMs (Jonesy, JAM, Pops always detected)
+#
+# STAGING ENVIRONMENT:
+# - develop branch connects to Rook (staging bot) for testing
+# - main branch connects to Ash (production bot)
+# ============================================================================
 
 # Bot Configuration
 LOCK_FILE = "bot.lock"
