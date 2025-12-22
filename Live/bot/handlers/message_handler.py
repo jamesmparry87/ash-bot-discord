@@ -33,6 +33,7 @@ from ..config import (
 )
 from ..database_module import DatabaseManager, get_database
 from ..persona.faqs import ASH_FAQ_RESPONSES
+from ..persona.faq_handler import get_role_aware_faq_response, check_faq_match
 from ..utils.permissions import (
     cleanup_expired_aliases,
     get_member_conversation_count,
@@ -1878,12 +1879,27 @@ async def handle_general_conversation(message: discord.Message, bot: commands.Bo
             if channel_id != MEMBERS_CHANNEL_ID and channel_id is not None:
                 increment_member_conversation_count(message.author.id)
 
-        # PRIORITY A: Check for FAQ responses
-        if content_lower in ASH_FAQ_RESPONSES:
-            response = ASH_FAQ_RESPONSES[content_lower]
-            response = apply_pops_arcade_sarcasm(response, message.author.id)
-            await message.reply(response)
-            return
+        # PRIORITY A: Check for FAQ responses with role awareness
+        if check_faq_match(content_lower):
+            # Get user context for role-aware FAQ responses
+            try:
+                from .ai_handler import detect_user_context
+                user_context = await detect_user_context(message.author.id, message.author, bot)
+                response = get_role_aware_faq_response(content_lower, user_context)
+                
+                if response:
+                    # Still apply Pops sarcasm for additional modifications
+                    response = apply_pops_arcade_sarcasm(response, message.author.id)
+                    await message.reply(response)
+                    return
+            except Exception as faq_error:
+                print(f"⚠️ Error in role-aware FAQ: {faq_error}, falling back to standard FAQ")
+                # Fallback to standard FAQ
+                response = ASH_FAQ_RESPONSES.get(content_lower)
+                if response:
+                    response = apply_pops_arcade_sarcasm(response, message.author.id)
+                    await message.reply(response)
+                    return
 
         # PRIORITY B: Check for announcement creation intent
         announcement_keywords = ["announcement", "announce", "update"]
