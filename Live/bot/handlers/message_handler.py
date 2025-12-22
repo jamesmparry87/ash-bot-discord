@@ -1886,7 +1886,7 @@ async def handle_general_conversation(message: discord.Message, bot: commands.Bo
                 from .ai_handler import detect_user_context
                 user_context = await detect_user_context(message.author.id, message.author, bot)
                 response = get_role_aware_faq_response(content_lower, user_context)
-                
+
                 if response:
                     # Still apply Pops sarcasm for additional modifications
                     response = apply_pops_arcade_sarcasm(response, message.author.id)
