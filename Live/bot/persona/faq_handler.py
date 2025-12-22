@@ -4,7 +4,8 @@ Role-Aware FAQ Handler
 Enhances FAQ responses based on user role/clearance level
 """
 
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 from .faqs import ASH_FAQ_RESPONSES
 
 
