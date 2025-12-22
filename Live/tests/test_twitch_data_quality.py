@@ -17,7 +17,7 @@ class TestGameNameExtraction:
     @pytest.mark.asyncio
     async def test_game_extraction_after_dash(self):
         """Test extraction prioritizes content AFTER dash (common Twitch format)
-        
+
         Principle: Extraction logic can parse dash-separated titles correctly,
         regardless of IGDB availability. Confidence is tested separately in IGDB tests.
         """
@@ -39,7 +39,7 @@ class TestGameNameExtraction:
     @pytest.mark.asyncio
     async def test_game_extraction_with_episode_markers(self):
         """Test extraction handles episode/day markers correctly
-        
+
         Principle: Extraction can clean episode markers from titles.
         Confidence depends on IGDB availability, tested separately.
         """
@@ -60,7 +60,7 @@ class TestGameNameExtraction:
     @pytest.mark.asyncio
     async def test_game_extraction_new_game_markers(self):
         """Test extraction handles 'NEW GAME' announcements
-        
+
         Principle: Extraction can clean announcement prefixes from titles.
         """
         from bot.integrations.twitch import smart_extract_with_validation
@@ -277,7 +277,7 @@ class TestTwitchSyncIntegration:
     @pytest.mark.asyncio
     async def test_high_confidence_auto_accepts(self):
         """Test that clear titles can be extracted successfully
-        
+
         Principle: Extraction works for straightforward titles.
         Confidence scoring depends on IGDB availability, tested separately in IGDB tests.
         """
@@ -359,7 +359,7 @@ class TestRegressionPrevention:
         from "Certified Zombie Pest Control Specialist - Zombie Army 4 (day7)"
 
         This was a known failing case that should now work.
-        
+
         Principle: Extraction prioritizes content AFTER dash over content before dash.
         """
         from bot.integrations.twitch import smart_extract_with_validation
