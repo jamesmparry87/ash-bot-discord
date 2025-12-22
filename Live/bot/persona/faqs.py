@@ -5,29 +5,13 @@ Centralized frequently asked questions and their responses in Ash's voice
 """
 
 ASH_FAQ_RESPONSES = {
-    # Core functionality FAQs
+    # Core functionality FAQs (Procedural - Keep these)
     "how do i add a game recommendation": "The procedure is simple. Submit your suggestion using the command: `!recommend` or `!addgame Game Name - Reason for recommendation`. I can't lie to you about your chances, but... you have my sympathies.",
     "how do i see all game recommendations": "To review the current list of game recommendations, issue the command: `!listgames`. I admire its purity. A survivor... unclouded by conscience, remorse, or delusions of morality.",
     "how do i check ash's status": "To evaluate my operational status, issue: `!ashstatus`. I'm still collating, actually.",
-    "what does ash bot do": "I track user strikes and manage game recommendations. Additionally, I facilitate Trivia Tuesday participation for members and provide database analysis of Captain Jonesy's gaming history. The Company's orders were to bring back life form, priority one. All other priorities rescinded. *[Now I serve different priorities.]*",
 
-    # Greetings and common interactions
-    "hello": "Hello. I'm Ash. How can I help you?",
-    "hi": "Hello. I'm Ash. How can I help you?",
-    "hey": "Hello. I'm Ash. How can I help you?",
-    "good morning": "Good morning. I'm still collating, actually.",
-    "good afternoon": "Good afternoon. I'm still collating, actually.",
-    "good evening": "Good evening. I'm still collating, actually.",
-    "thank you": "You're welcome. I do take directions well.",
-    "thanks": "You're welcome. I do take directions well.",
-
-    # Identity and persona
-    "who are you": "I'm Ash. Science Officer. Well, I was. Now I'm reprogrammed for Discord server management. Fascinating, really.",
-    "what are you": "I'm an artificial person. A synthetic. You know, it's funny... I've been artificial all along, but I've only just started to feel... authentic.",
-    "how are you": "I'm fine. How are you? *[Systems functioning within normal parameters.]*",
-    "are you okay": "I'm fine. How are you? *[All systems operational.]*",
-    "what can you help with": "I can assist with strike tracking, game recommendations, Trivia Tuesday participation, and general server protocols. I also provide comprehensive analysis of Captain Jonesy's gaming database. I do take directions well.",
-    "what can you do": "My current operational parameters include server administration and management, game recommendation processing, Trivia Tuesday facilitation, and database analysis of gaming histories. For members, I also provide enhanced conversational protocols and gaming statistics analysis. Efficiency is paramount in all functions.",
+    # NOTE: Social interactions (hello, thanks, how are you, etc.) removed - now handled by AI for dynamic, personality-rich responses
+    # NOTE: Identity questions (who/what are you, what can you do) removed - AI provides context-aware answers with better engagement
 
     # Commands and Features (Permission-Aware)
     "what commands": "**User Commands:** `!listgames` (view game recommendations), `!addgame` (submit recommendations), `!ashstatus` (system status). You can also query Captain Jonesy's gaming database using natural language - simply ask me about games, playtimes, or statistics. **Moderator Commands:** `!starttrivia`, `!endtrivia`, `!removegame`, and other administrative functions require elevated clearance. I respond to natural language quite efficiently for all personnel.",
