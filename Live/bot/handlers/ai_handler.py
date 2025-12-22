@@ -911,14 +911,14 @@ async def call_ai_with_rate_limiting(
                             user_text = example.get('user_input', example.get('user', ''))
                             ash_text = example.get('ash_response', example.get('assistant', ''))
                             context_note = example.get('context', '')
-                            
+
                             if context_note:
                                 examples_text += f"Example {idx} [{context_note}]:\n"
                             else:
                                 examples_text += f"Example {idx}:\n"
                             examples_text += f"User: {user_text}\n"
                             examples_text += f"Ash: {ash_text}\n\n"
-                        
+
                         examples_text += "--- END EXAMPLES ---\n"
                         print(f"✅ Including {len(ASH_FEW_SHOT_EXAMPLES)} few-shot examples in prompt")
 
