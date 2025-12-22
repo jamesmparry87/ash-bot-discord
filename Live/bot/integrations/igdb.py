@@ -26,8 +26,8 @@ _request_interval = 0.25  # 250ms between requests = 4 req/sec
 
 async def get_igdb_access_token() -> Optional[str]:
     """Get OAuth access token for IGDB API using Twitch credentials"""
-    client_id = os.getenv('IGDB_CLIENT_ID') or os.getenv('TWITCH_CLIENT_ID')
-    client_secret = os.getenv('IGDB_CLIENT_SECRET') or os.getenv('TWITCH_CLIENT_SECRET')
+    client_id = os.getenv('IGDB_CLIENT_ID') or os.getenv('IGDB_TWITCH_CLIENT_ID') or os.getenv('TWITCH_CLIENT_ID')
+    client_secret = os.getenv('IGDB_CLIENT_SECRET') or os.getenv('IGDB_TWITCH_SECRET') or os.getenv('TWITCH_CLIENT_SECRET')
 
     if not client_id or not client_secret:
         print("⚠️ IGDB credentials not configured")
@@ -70,7 +70,7 @@ async def search_igdb(game_name: str, access_token: str) -> List[Dict[str, Any]]
     """Search IGDB for a game by name"""
     await _rate_limit()
 
-    client_id = os.getenv('IGDB_CLIENT_ID') or os.getenv('TWITCH_CLIENT_ID')
+    client_id = os.getenv('IGDB_CLIENT_ID') or os.getenv('IGDB_TWITCH_CLIENT_ID') or os.getenv('TWITCH_CLIENT_ID')
 
     if not client_id:
         print("⚠️ IGDB Client ID not configured")
@@ -331,7 +331,7 @@ def calculate_confidence(extracted_name: str, igdb_name: str) -> float:
 
 def filter_english_names(names: List[str]) -> List[str]:
     """
-    Filter alternative names to English-only (removes non-Latin scripts).
+    Filter alternative names to English-only (removes non-Latin scripts and non-English languages).
 
     Args:
         names: List of game names in various languages
@@ -345,6 +345,29 @@ def filter_english_names(names: List[str]) -> List[str]:
         return []
 
     english_names = []
+    
+    # Common non-English keywords to detect and filter (case-insensitive)
+    # Spanish/Portuguese indicators
+    spanish_keywords = [
+        r'\bel\b', r'\bla\b', r'\blos\b', r'\blas\b',  # Spanish articles
+        r'\bdel\b', r'\bde\b', r'\bal\b',  # Spanish prepositions
+        r'\bcombate\b', r'\bha\b', r'\bevolucionado\b',  # Combat/has evolved (Spanish)
+        r'\by\b(?!\s*the\b)',  # 'y' (and in Spanish) - but not "y the"
+    ]
+    # French indicators
+    french_keywords = [
+        r'\ble\b', r'\bun\b', r'\bune\b', r'\bdes\b',
+        r'\bdu\b', r'\bdans\b',
+    ]
+    # German indicators  
+    german_keywords = [
+        r'\bder\b', r'\bdie\b', r'\bdas\b', r'\bden\b',
+        r'\bein\b', r'\beine\b',
+    ]
+    
+    # Combine all patterns
+    non_english_patterns = spanish_keywords + french_keywords + german_keywords
+    non_english_regex = re.compile('|'.join(non_english_patterns), re.IGNORECASE)
 
     for name in names:
         if not name or not isinstance(name, str):
@@ -353,11 +376,23 @@ def filter_english_names(names: List[str]) -> List[str]:
         # Allow ASCII + Latin Extended-A (covers English + European accents like é, ñ, ö)
         # Unicode range: 0-591 covers Basic Latin + Latin Extended-A
         try:
-            if all(ord(c) < 592 for c in name):
-                # Additional check: Skip if contains only CJK characters
-                # CJK ranges: Chinese (4e00-9fff), Hiragana (3040-309f), Katakana (30a0-30ff)
-                if not re.match(r'^[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]+$', name):
-                    english_names.append(name)
+            # First check: Must use Latin characters
+            if not all(ord(c) < 592 for c in name):
+                continue
+                
+            # Second check: Skip if contains only CJK characters
+            # CJK ranges: Chinese (4e00-9fff), Hiragana (3040-309f), Katakana (30a0-30ff)
+            if re.match(r'^[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]+$', name):
+                continue
+            
+            # Third check: Detect non-English keywords
+            if non_english_regex.search(name):
+                print(f"🔤 Filtered non-English name: '{name}'")
+                continue
+                
+            # Passed all checks - add to English names
+            english_names.append(name)
+            
         except Exception as e:
             # If we can't process the name, skip it
             print(f"⚠️ IGDB: Error filtering name '{name[:20]}...': {e}")

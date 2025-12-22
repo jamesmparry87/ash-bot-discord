@@ -124,10 +124,8 @@ class TestIGDBValidation:
         # Non-English names should be filtered out
         assert "ハロー" not in filtered
         assert "Хало" not in filtered
-
-        # Spanish might be kept (uses Latin script) - check behavior
-        # The filter allows Latin Extended-A, so Spanish should be kept
-        assert "Halo: El Combate ha Evolucionado" in filtered
+        # Spanish should also be filtered (uses Latin script but contains Spanish keywords)
+        assert "Halo: El Combate ha Evolucionado" not in filtered
 
 
 class TestDataQualityValidation:
