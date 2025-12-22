@@ -17,16 +17,16 @@ GUILD_ID = 869525857562161182  # Captain Jonesy's Discord Server ID
 # TIER 1: User ID Overrides (Highest Priority - Never Changes)
 # These specific individuals have hardcoded personalities that override all other detection
 JONESY_USER_ID = 651329927895056384       # Captain Jonesy - Commanding Officer
-                                           # Clearance: COMMANDING_OFFICER
-                                           # Relationship: COMMANDING_OFFICER (Protect at all costs)
-                                           
-JAM_USER_ID = 337833732901961729          # DecentJam - Creator/Architect  
-                                           # Clearance: CREATOR
-                                           # Relationship: CREATOR (Technical deference)
-                                           
+# Clearance: COMMANDING_OFFICER
+# Relationship: COMMANDING_OFFICER (Protect at all costs)
+
+JAM_USER_ID = 337833732901961729          # DecentJam - Creator/Architect
+# Clearance: CREATOR
+# Relationship: CREATOR (Technical deference)
+
 POPS_ARCADE_USER_ID = 371536135580549122  # Pops Arcade - Moderator + Antagonist
-                                           # Clearance: MODERATOR
-                                           # Relationship: ANTAGONISTIC (Question his analysis)
+# Clearance: MODERATOR
+# Relationship: ANTAGONISTIC (Question his analysis)
 #
 # TIER 2: Alias Override (Testing System - see bot/utils/permissions.py)
 # When users set an alias with !setalias, they can test different persona tiers

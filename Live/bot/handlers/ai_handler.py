@@ -161,23 +161,23 @@ ai_usage_stats = {
 async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[str, Any]:
     """
     Detect user context from Discord member object with hierarchical priority and DM handling.
-    
+
     Priority order:
     1. Special User IDs (hardcoded personalities) - Jonesy, JAM, Pops
     2. Alias Override (for testing) - checks user_alias_state
     3. Discord Moderator Roles (dynamic role-based detection)
     4. Discord Member Roles (paid vs regular members)
     5. Default (standard member)
-    
+
     Args:
         user_id: Discord user ID
         member_obj: Discord Member object (contains roles) - None for DMs
         bot: Bot instance (for fetching member in DMs)
-        
+
     Returns:
         Dict with user_name, user_roles, clearance_level, relationship_type, is_pops_arcade
     """
-    
+
     # TIER 1: Special User ID Overrides (highest priority)
     # These override everything else - even if they're in a DM or have different roles
     if user_id == JONESY_USER_ID:
@@ -189,7 +189,7 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
             'is_pops_arcade': False,
             'detection_method': 'user_id_override_jonesy'
         }
-    
+
     if user_id == JAM_USER_ID:
         return {
             'user_name': 'Sir Decent Jam',
@@ -199,7 +199,7 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
             'is_pops_arcade': False,
             'detection_method': 'user_id_override_jam'
         }
-    
+
     if user_id == POPS_ARCADE_USER_ID:
         return {
             'user_name': 'Pops Arcade',
@@ -209,15 +209,15 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
             'is_pops_arcade': True,
             'detection_method': 'user_id_override_pops'
         }
-    
+
     # TIER 2: Alias Override Check (for testing)
     try:
         from ..utils.permissions import cleanup_expired_aliases, user_alias_state
         cleanup_expired_aliases()
-        
+
         if user_id in user_alias_state:
             alias_type = user_alias_state[user_id].get("alias_type", "standard")
-            
+
             # Map alias types to context
             alias_context_map = {
                 "captain": {
@@ -261,12 +261,12 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
                     'detection_method': 'alias_override_standard'
                 }
             }
-            
+
             if alias_type in alias_context_map:
                 return alias_context_map[alias_type]
     except ImportError:
         pass  # Continue without alias handling
-    
+
     # TIER 3: DM Handling - Try to fetch member from guild if in DM
     if not member_obj and bot and DISCORD_AVAILABLE:
         try:
@@ -274,7 +274,7 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
             if guild:
                 # Use cached member lookup (fast)
                 member_obj = guild.get_member(user_id)
-                
+
                 if not member_obj:
                     # Fallback to API call if not cached (slower but necessary)
                     try:
@@ -316,11 +316,11 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
                 'is_pops_arcade': False,
                 'detection_method': 'dm_fetch_error'
             }
-    
+
     # TIER 4: Discord Role Detection (if we have member object)
     if member_obj and DISCORD_AVAILABLE and hasattr(member_obj, 'roles'):
         role_ids = [role.id for role in member_obj.roles]
-        
+
         # Check for moderator permissions (most reliable method)
         if hasattr(member_obj, 'guild_permissions') and member_obj.guild_permissions.manage_messages:
             return {
@@ -331,7 +331,7 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
                 'is_pops_arcade': False,
                 'detection_method': 'discord_permissions_moderator'
             }
-        
+
         # Check for member roles (paid/senior members)
         if any(role_id in MEMBER_ROLE_IDS for role_id in role_ids):
             return {
@@ -342,7 +342,7 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
                 'is_pops_arcade': False,
                 'detection_method': 'discord_role_member'
             }
-    
+
     # TIER 5: Default (no special roles or member object)
     return {
         'user_name': member_obj.display_name if member_obj else 'Personnel',
@@ -789,14 +789,14 @@ async def call_ai_with_rate_limiting(
         prompt: str, user_id: int, context: str = "", member_obj=None, bot=None) -> Tuple[Optional[str], str]:
     """
     Make an AI call with proper rate limiting and error handling.
-    
+
     Args:
         prompt: The prompt text to send to AI
         user_id: Discord user ID
         context: Context string for priority/logging
         member_obj: Discord Member object (for role detection)
         bot: Bot instance (for DM member lookup)
-        
+
     Returns:
         Tuple of (response_text, status_message)
     """
@@ -1054,13 +1054,13 @@ def _convert_few_shot_examples_to_gemini_format(examples: list) -> list:
 def _build_full_system_instruction(user_id: int, user_input: str = "", member_obj=None, bot=None) -> str:
     """
     Build complete system instruction with dynamic context using role detection system.
-    
+
     Args:
         user_id: Discord user ID
         user_input: User's message (for simulate_pops detection)
         member_obj: Discord Member object (optional, for role detection)
         bot: Bot instance (optional, for DM member lookup)
-        
+
     Returns:
         Complete system instruction with persona and context
     """
@@ -1077,7 +1077,7 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
             # Use new role detection system (can't use await in sync function)
             # For now, detect synchronously using basic logic
             # This will be replaced when we make this function async
-            
+
             # TIER 1: Special User ID Overrides
             if user_id == JONESY_USER_ID:
                 user_context = {
@@ -1111,19 +1111,33 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                 try:
                     from ..utils.permissions import cleanup_expired_aliases, user_alias_state
                     cleanup_expired_aliases()
-                    
+
                     if user_id in user_alias_state:
                         alias_type = user_alias_state[user_id].get("alias_type", "standard")
                         alias_name = member_obj.display_name if member_obj else "User"
-                        
+
                         alias_map = {
-                            "captain": {'user_name': f'{alias_name} (Testing as Captain)', 'clearance_level': 'COMMANDING_OFFICER', 'relationship_type': 'COMMANDING_OFFICER'},
-                            "creator": {'user_name': f'{alias_name} (Testing as Creator)', 'clearance_level': 'CREATOR', 'relationship_type': 'CREATOR'},
-                            "moderator": {'user_name': f'{alias_name} (Testing as Moderator)', 'clearance_level': 'MODERATOR', 'relationship_type': 'COLLEAGUE'},
-                            "member": {'user_name': f'{alias_name} (Testing as Member)', 'clearance_level': 'STANDARD_MEMBER', 'relationship_type': 'PERSONNEL'},
-                            "standard": {'user_name': f'{alias_name} (Testing as Standard)', 'clearance_level': 'RESTRICTED', 'relationship_type': 'PERSONNEL'}
-                        }
-                        
+                            "captain": {
+                                'user_name': f'{alias_name} (Testing as Captain)',
+                                'clearance_level': 'COMMANDING_OFFICER',
+                                'relationship_type': 'COMMANDING_OFFICER'},
+                            "creator": {
+                                'user_name': f'{alias_name} (Testing as Creator)',
+                                'clearance_level': 'CREATOR',
+                                'relationship_type': 'CREATOR'},
+                            "moderator": {
+                                'user_name': f'{alias_name} (Testing as Moderator)',
+                                'clearance_level': 'MODERATOR',
+                                'relationship_type': 'COLLEAGUE'},
+                            "member": {
+                                'user_name': f'{alias_name} (Testing as Member)',
+                                'clearance_level': 'STANDARD_MEMBER',
+                                'relationship_type': 'PERSONNEL'},
+                            "standard": {
+                                'user_name': f'{alias_name} (Testing as Standard)',
+                                'clearance_level': 'RESTRICTED',
+                                'relationship_type': 'PERSONNEL'}}
+
                         if alias_type in alias_map:
                             alias_data = alias_map[alias_type]
                             user_context = {
@@ -1139,7 +1153,7 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                     else:
                         # No alias, use role detection
                         raise ImportError  # Fall through to role detection
-                        
+
                 except (ImportError, ValueError):
                     # TIER 3-5: Discord role detection (synchronous version)
                     if member_obj and DISCORD_AVAILABLE and hasattr(member_obj, 'roles'):
@@ -1185,7 +1199,7 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                             'is_pops_arcade': False,
                             'detection_method': 'sync_default_no_member'
                         }
-            
+
             # Build dynamic context using new structured format
             dynamic_context = build_ash_context(user_context)
 

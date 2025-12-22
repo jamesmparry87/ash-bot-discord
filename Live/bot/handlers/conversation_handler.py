@@ -399,7 +399,7 @@ async def amend_weekly_content_with_ai(
 
     # Phase 2: Persona handled automatically by system_instruction
     response_text, status_message = await call_ai_with_rate_limiting(
-        amendment_prompt, JAM_USER_ID, context="amendment", 
+        amendment_prompt, JAM_USER_ID, context="amendment",
         member_obj=None, bot=_get_bot_instance())
 
     if response_text:
