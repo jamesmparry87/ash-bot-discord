@@ -557,8 +557,8 @@ class UtilityCommands(commands.Cog):
                 embed.add_field(name="Detection Method", value=user_context['detection_method'], inline=False)
                 embed.add_field(name="Is Pops Arcade?", value=str(user_context['is_pops_arcade']), inline=True)
 
-                # Show active alias if present
-                cleanup_expired_aliases()
+                # Show active alias if present (with notification support)
+                await cleanup_expired_aliases(self.bot)
                 if ctx.author.id in user_alias_state:
                     alias_info = user_alias_state[ctx.author.id]
                     expires_timestamp = int(
@@ -576,7 +576,7 @@ class UtilityCommands(commands.Cog):
 
             # Handle clear command
             if persona_type.lower() == "clear":
-                cleanup_expired_aliases()
+                await cleanup_expired_aliases(self.bot)
                 if ctx.author.id in user_alias_state:
                     del user_alias_state[ctx.author.id]
                     await ctx.send("✅ **Alias cleared.** You are now detected normally based on your Discord roles.")

@@ -181,8 +181,8 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
     # TIER 1: Alias Override Check (HIGHEST PRIORITY - for testing)
     # This must come FIRST so test aliases override even hardcoded user IDs
     try:
-        from ..utils.permissions import cleanup_expired_aliases, user_alias_state
-        cleanup_expired_aliases()
+        from ..utils.permissions import cleanup_expired_aliases_sync, user_alias_state
+        cleanup_expired_aliases_sync()
 
         if user_id in user_alias_state:
             alias_type = user_alias_state[user_id].get("alias_type", "standard")
@@ -819,10 +819,10 @@ async def call_ai_with_rate_limiting(
 
     # Import user alias state from utils module
     try:
-        from ..utils.permissions import cleanup_expired_aliases, update_alias_activity, user_alias_state
+        from ..utils.permissions import cleanup_expired_aliases_sync, update_alias_activity, user_alias_state
 
         # Improved alias rate limiting with better UX
-        cleanup_expired_aliases()
+        cleanup_expired_aliases_sync()
         if user_id in user_alias_state:
             # Check for alias-specific cooldown
             alias_data = user_alias_state[user_id]
@@ -926,10 +926,18 @@ async def call_ai_with_rate_limiting(
                     # Build full prompt with system instruction, examples, and user prompt
                     full_prompt = f"{system_instruction}{examples_text}\n\nUser: {prompt}"
 
-                    # DEBUG: Print key sections to diagnose addressing issue
-                    print(f"🐛 DEBUG PROMPT - System Instruction (first 300 chars):\n{system_instruction[:300]}...")
-                    print(f"🐛 DEBUG PROMPT - Context Section (chars 800-1400):\n{full_prompt[800:1400]}...")
-                    print(f"🐛 DEBUG PROMPT - User Query Section (last 200 chars):\n...{full_prompt[-200:]}")
+                    # DEBUG: Enhanced logging to find where User Designation appears
+                    # Search for the OPERATIONAL CONTEXT section
+                    op_context_start = full_prompt.find("--- CURRENT OPERATIONAL CONTEXT ---")
+                    if op_context_start >= 0:
+                        # Show the OPERATIONAL CONTEXT section (about 400 chars should cover it)
+                        op_context_section = full_prompt[op_context_start:op_context_start+400]
+                        print(f"🐛 DEBUG - OPERATIONAL CONTEXT FOUND at position {op_context_start}:")
+                        print(op_context_section)
+                    else:
+                        print(f"🚨 DEBUG - OPERATIONAL CONTEXT NOT FOUND IN PROMPT!")
+                        print(f"🐛 DEBUG - System instruction length: {len(system_instruction)}")
+                        print(f"🐛 DEBUG - System instruction ends with:\n...{system_instruction[-200:]}")
 
                     response = gemini_client.models.generate_content(
                         model=current_gemini_model,
@@ -1108,8 +1116,8 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
             # TIER 0: Alias Override Check (HIGHEST PRIORITY - must come before special user IDs!)
             user_context = None
             try:
-                from ..utils.permissions import cleanup_expired_aliases, user_alias_state
-                cleanup_expired_aliases()
+                from ..utils.permissions import cleanup_expired_aliases_sync, user_alias_state
+                cleanup_expired_aliases_sync()
 
                 if user_id in user_alias_state:
                     alias_type = user_alias_state[user_id].get("alias_type", "standard")
