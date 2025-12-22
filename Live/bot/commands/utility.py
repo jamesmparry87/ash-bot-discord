@@ -494,7 +494,9 @@ class UtilityCommands(commands.Cog):
                 success = set_ai_persona(persona_description)
 
                 if success:
-                    await ctx.send(f"✅ **AI persona updated.**\n\n**New personality:** {persona_description[:200]}{'...' if len(persona_description) > 200 else ''}\n\n*Changes will take effect with the next AI response.*")
+                    desc_preview = persona_description[:200]
+                    has_more = len(persona_description) > 200
+                    await ctx.send(f"✅ **AI persona updated.**\n\n**New personality:** {desc_preview}{'...' if has_more else ''}\n\n*Changes will take effect with the next AI response.*")
                 else:
                     await ctx.send("❌ **Failed to update persona.** Please try again or check the persona description length.")
 
@@ -508,7 +510,7 @@ class UtilityCommands(commands.Cog):
 
     @commands.command(name="testpersona")
     @commands.has_permissions(manage_messages=True)
-    async def test_persona(self, ctx, persona_type: str = None, duration: int = 60):
+    async def test_persona(self, ctx, persona_type: str | None = None, duration: int = 60):
         """Test persona detection or set a test alias (moderators only)
         
         Usage:

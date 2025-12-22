@@ -91,7 +91,8 @@ def build_ash_context(
 
     # 3. Time Context (to explain latency)
     # This helps Ash explain why he doesn't know about a video uploaded 5 mins ago
-    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    # UK date format (DD-MM-YYYY) for consistency with UK timezone preference
+    current_date = datetime.datetime.now().strftime("%d-%m-%Y")
     data_freshness = "Data cached: Weekly batch analysis active."
 
     # 4. Construct the Context String (Ash's analytical style)
