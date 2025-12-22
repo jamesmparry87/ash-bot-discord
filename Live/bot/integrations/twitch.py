@@ -60,7 +60,7 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
                 # Keep this extraction even if IGDB fails
                 if best_name is None:
                     best_name = after_dash
-                    
+
                 print(f"🔍 Validating '{after_dash}' (after dash) with IGDB...")
                 igdb_result = await igdb.validate_and_enrich(after_dash)
                 confidence = igdb_result.get('confidence', 0.0)
@@ -112,7 +112,7 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
                 # Keep this extraction even if IGDB fails
                 if best_name is None:
                     best_name = cleaned_extracted
-                    
+
                 print(f"🔍 Validating '{cleaned_extracted}' (standard extraction) with IGDB...")
                 igdb_result = await igdb.validate_and_enrich(cleaned_extracted)
                 confidence = igdb_result.get('confidence', 0.0)
@@ -138,7 +138,7 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
             # Keep this extraction even if IGDB fails
             if best_name is None:
                 best_name = simple_clean
-                
+
             print(f"🔍 Validating '{simple_clean}' (simple clean) with IGDB...")
             igdb_result = await igdb.validate_and_enrich(simple_clean)
             confidence = igdb_result.get('confidence', 0.0)
