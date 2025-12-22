@@ -45,13 +45,19 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
     best_confidence = 0.0
 
     if extracted:
-        print(f"🔍 Validating '{extracted}' with IGDB...")
-        igdb_result = await igdb.validate_and_enrich(extracted)
+        # Clean episode markers before IGDB validation
+        cleaned_extracted = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', extracted, flags=re.IGNORECASE)
+        cleaned_extracted = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]', '', cleaned_extracted, flags=re.IGNORECASE)
+        cleaned_extracted = cleaned_extracted.strip()
+        
+        print(f"🔍 Validating '{cleaned_extracted}' with IGDB...")
+        igdb_result = await igdb.validate_and_enrich(cleaned_extracted)
         best_confidence = igdb_result.get('confidence', 0.0)
+        best_name = cleaned_extracted
 
         # If we got good confidence, use it
         if best_confidence >= 0.8:
-            return extracted, best_confidence
+            return cleaned_extracted, best_confidence
 
         print(f"⚠️ Low confidence ({best_confidence:.2f}), trying alternative extractions...")
 
