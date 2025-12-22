@@ -7,7 +7,7 @@ Tests the context detection patterns and FAQ responses
 import os
 import sys
 
-from bot.config import FAQ_RESPONSES
+from bot.persona.faqs import ASH_FAQ_RESPONSES
 from bot.handlers.context_manager import detect_jonesy_context
 
 sys.path.append(os.path.join(os.path.dirname(__file__)))
@@ -81,10 +81,10 @@ def test_faq_responses():
 
     all_present = True
     for faq in disambiguation_faqs:
-        if faq in FAQ_RESPONSES:
+        if faq in ASH_FAQ_RESPONSES:
             print(f"✅ FAQ '{faq}' present")
             # Show a snippet of the response
-            response = FAQ_RESPONSES[faq]
+            response = ASH_FAQ_RESPONSES[faq]
             snippet = response[:80] + "..." if len(response) > 80 else response
             print(f"   Response: {snippet}")
         else:

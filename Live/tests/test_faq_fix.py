@@ -8,7 +8,7 @@ This script tests that the FAQ system properly handles:
 3. FAQ responses take priority over AI generation
 """
 
-from bot.config import FAQ_RESPONSES
+from bot.persona.faqs import ASH_FAQ_RESPONSES
 import asyncio
 import sys
 import os
@@ -114,7 +114,7 @@ async def test_faq_responses():
                 "what's your mission": "My original directive was to bring back life form, priority one. Now... well, you have given me new priorities. Server management, you might say.",
                 "what is your mission": "My original directive was to bring back life form, priority one. Now... well, you have given me new priorities. Server management, you might say."}
         else:
-            simple_faqs = FAQ_RESPONSES
+            simple_faqs = ASH_FAQ_RESPONSES
 
         # Check for FAQ match
         found_response = None
