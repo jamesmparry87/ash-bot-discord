@@ -188,9 +188,10 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
             alias_type = user_alias_state[user_id].get("alias_type", "standard")
 
             # Map alias types to context
+            # Use role-based names only (no username) to avoid AI confusion
             alias_context_map = {
                 "captain": {
-                    'user_name': f'{member_obj.display_name if member_obj else "User"} (Testing as Captain)',
+                    'user_name': 'Captain (Test Mode)',
                     'user_roles': ['Captain', 'Owner'],
                     'clearance_level': 'COMMANDING_OFFICER',
                     'relationship_type': 'COMMANDING_OFFICER',
@@ -198,7 +199,7 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
                     'detection_method': 'alias_override_captain'
                 },
                 "creator": {
-                    'user_name': f'{member_obj.display_name if member_obj else "User"} (Testing as Creator)',
+                    'user_name': 'Creator (Test Mode)',
                     'user_roles': ['Creator', 'Admin'],
                     'clearance_level': 'CREATOR',
                     'relationship_type': 'CREATOR',
@@ -206,7 +207,7 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
                     'detection_method': 'alias_override_creator'
                 },
                 "moderator": {
-                    'user_name': f'{member_obj.display_name if member_obj else "User"} (Testing as Moderator)',
+                    'user_name': 'Moderator (Test Mode)',
                     'user_roles': ['Moderator', 'Staff'],
                     'clearance_level': 'MODERATOR',
                     'relationship_type': 'COLLEAGUE',
@@ -214,7 +215,7 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
                     'detection_method': 'alias_override_moderator'
                 },
                 "member": {
-                    'user_name': f'{member_obj.display_name if member_obj else "User"} (Testing as Member)',
+                    'user_name': 'Member (Test Mode)',
                     'user_roles': ['Member', 'Crew'],
                     'clearance_level': 'STANDARD_MEMBER',
                     'relationship_type': 'PERSONNEL',
@@ -222,7 +223,7 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
                     'detection_method': 'alias_override_member'
                 },
                 "standard": {
-                    'user_name': f'{member_obj.display_name if member_obj else "User"} (Testing as Standard)',
+                    'user_name': 'Standard Personnel (Test Mode)',
                     'user_roles': ['Standard User'],
                     'clearance_level': 'RESTRICTED',
                     'relationship_type': 'PERSONNEL',
@@ -1109,25 +1110,26 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                     alias_type = user_alias_state[user_id].get("alias_type", "standard")
                     alias_name = member_obj.display_name if member_obj else "User"
 
+                    # Use role-based names only (no username) to avoid AI confusion
                     alias_map = {
                         "captain": {
-                            'user_name': f'{alias_name} (Testing as Captain)',
+                            'user_name': 'Captain (Test Mode)',
                             'clearance_level': 'COMMANDING_OFFICER',
                             'relationship_type': 'COMMANDING_OFFICER'},
                         "creator": {
-                            'user_name': f'{alias_name} (Testing as Creator)',
+                            'user_name': 'Creator (Test Mode)',
                             'clearance_level': 'CREATOR',
                             'relationship_type': 'CREATOR'},
                         "moderator": {
-                            'user_name': f'{alias_name} (Testing as Moderator)',
+                            'user_name': 'Moderator (Test Mode)',
                             'clearance_level': 'MODERATOR',
                             'relationship_type': 'COLLEAGUE'},
                         "member": {
-                            'user_name': f'{alias_name} (Testing as Member)',
+                            'user_name': 'Member (Test Mode)',
                             'clearance_level': 'STANDARD_MEMBER',
                             'relationship_type': 'PERSONNEL'},
                         "standard": {
-                            'user_name': f'{alias_name} (Testing as Standard)',
+                            'user_name': 'Standard Personnel (Test Mode)',
                             'clearance_level': 'RESTRICTED',
                             'relationship_type': 'PERSONNEL'}}
 
