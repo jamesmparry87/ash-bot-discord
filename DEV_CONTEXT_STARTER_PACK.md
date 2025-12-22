@@ -109,38 +109,57 @@
         - Added age tracking and restart count for deployment scenarios
         - Timeout messages now include conversation age and next steps
 
-### B. Feature Wishlist (Roadmap)
+## 5B. Strategic Development Roadmap (2025)
 
-1. **Enhanced Memory & Context:**
-    * *Goal:* Improve the bot's ability to "remember" specific user interactions and "Jonesy Lore".
-    * *Next Steps:* Create a new `lore_memory` table in `Live/bot/database_module.py`. Update `Live/bot/handlers/context_manager.py` to query this table. Implement a mechanism (command or AI extraction) to populate this table from chat history.
-2. **Contextual Interaction Example (Goal):**
-    * *Goal:* Encourage more interactions like the "Haddock Parrying" example.
-    * *Next Steps:* Use the example to fine-tune the system prompt in `Live/bot/config.py` (`BOT_PERSONA`). Ensure `Live/bot/handlers/ai_handler.py` injects relevant "Jonesy Lore" from the new memory system into the prompt context.
-    > **Fragile Hamster (user):** Morning and Happy Friday! Last night I learned to parry! Well, a bit. So @Ash-Bot how are your parrying skills?
-    >
-    > **Ash-Bot:** Fragile Hamster, my programming does not encompass physical combat simulations. However, I can analyze optimal parrying techniques based on available data and predict probabilities of success for various scenarios. Would you like me to access tactical databases for relevant data?
-    >
-    > **Fragile Hamster:** Oooo yes please
-    >
-    > **Ash-Bot:** Fragile Hamster, your request is acknowledged. Please specify the parameters of your query. I require more data to provide a useful response.
-    >
-    > **Fragile Hamster:** Techniques for parrying an attacker who is using a large haddock
-    >
-    > **Ash-Bot:** Fragile Hamster, analyzing your query: the primary concern is the large haddock's surface area. Utilize a wide, rigid parrying tool for optimal deflection and consider the haddock's structural integrity as a potential weakness.
-    >
-    > **Fragile Hamster:** Thank you @Ash-Bot that is excellent advice!
-    >
-    > **Ash-Bot:** Acknowledged, Fragile Hamster. My analysis indicates that providing beneficial counsel is an efficient allocation of my processing resources. I am programmed to assist with scientific and technical matters to the best of my ability.
-3. **Tailored Trivia Generation:**
-    * *Goal:* Use aggregated knowledge to build new trivia questions tailored to the server.
-    * *Next Steps:* Update `Live/bot/handlers/ai_handler.py` (`generate_ai_trivia_question`) to include "Jonesy Lore" from the database in the generation prompt, allowing for more specific and personalized questions.
-4. **Voice Support:**
-    * *Goal:* Enable voice connections for the bot.
-    * *Next Steps:* Install `PyNaCl` (add to `requirements.txt`). Update `Live/bot_modular.py` to enable voice intents. Create a new `Live/bot/handlers/voice_handler.py` to manage voice connections and audio streaming.
-5. **Fix Fallback AI:**
-    * *Goal:* Repair the Hugging Face integration.
-    * *Next Steps:* Re-enable Hugging Face in `Live/bot/handlers/ai_handler.py` (`setup_ai_provider`). Debug the "deployment hangs" issue (likely need to use async/await properly for the setup check or increase timeout).
+### 🧠 Priority 1: The "Server Cortex" (Memory & Lore)
+
+**Goal:** Create a persistent memory of "Jonesy Lore" to make Ash feel like a long-term crew member, not just a chatbot.
+
+* **1.1 The Lore Database (PostgreSQL)**
+    * **Task:** Create `lore_memory` table (`id`, `category`, `content`, `added_by`, `date`).
+    * **Usage:** Store funny quotes, community "wins" (like the Haddock Parry), and notable stream moments.
+* **1.2 Active Learning (`!remember`)**
+    * **Task:** Command for Mods to inject lore on the fly.
+    * **Example:** `!remember quote "I don't need a map, I have instincts" - Jonesy, Subnautica Stream.`
+* **1.3 Context Injection**
+    * **Task:** When Ash generates text (Greetings or Trivia), he queries this DB to reference past events, making the content feel specific to this server.
+
+### 🧹 Priority 2: Data Integrity & Game Knowledge (The DB Overhaul)
+**Goal:** Fix the "Played Games" database once and for all. Bad data = bad trivia = low engagement.
+
+* **2.1 The "Cline Audit" (Diagnosis)**
+    * **Task:** Write a script (`scripts/audit_games_db.py`) to dump a sample of raw rows from the `played_games` table.
+    * **Objective:** Visually inspect why alternate names are trapped in moustache brackets `{}` and why IGDB data isn't sticking.
+* **2.2 Schema Normalization**
+    * **Task:** Move from "ugly JSON strings" to proper PostgreSQL `JSONB` columns or a separate `game_aliases` table.
+    * **Fix:** Write a migration script to clean existing `{}` artifacts.
+* **2.3 Aggressive IGDB Resync**
+    * **Task:** Re-write the IGDB integration to be authoritative. If a game exists in our DB, force-update its metadata (Genre, Release Year, Developer) from IGDB to ensure trivia questions have valid facts to pull from.
+
+### 📢 Priority 3: "Report to the Bridge" (Monday/Friday Greeting Overhaul)
+**Goal:** Transform "Cold Stats" into "Ash's Mission Report."
+
+* **3.1 Source Expansion (The "Clips" Pipeline)**
+    * **Problem:** Currently only checks 2 sources.
+    * **Solution:** Integrate a "Clips Scanner" that pulls the *titles and descriptions* of the top 5 clips from the #clips Discord channel or Twitch directly.
+    * **Output:** Ash uses these titles to summarize the week's "tactical highlights."
+* **3.2 "Verve" Injection (LLM Editorializing)**
+    * **Problem:** Monday stats are just numbers.
+    * **Solution:** Feed the raw stats (Subs, Views, Watch time) into Gemini with the prompt: *"Analyze these performance metrics as a Science Officer reporting to the Captain. Highlight anomalies. Be precise but complimentary where warranted."*
+    * **Result:** Instead of "Views: 500", Ash says: *"Captain, visual engagement has increased by 15% efficiency. The crew responded well to the Subnautica operations."*
+
+### 👾 Priority 4: Cross-Platform Operations (Twitch Integration)
+**Goal:** Expand Ash's territory beyond Discord.
+
+* **4.1 "Ash Raid" Capability (Experimental)**
+    * **Task:** Investigate `TwitchIO` (Python library).
+    * **Concept:** Ash connects to the Twitch chat as a bot user.
+    * **Feature:** Periodic "Status Checks." Once per stream, Ash joins chat, drops a specialized greeting or lore-based comment (e.g., *"Scanners indicate high stress levels, Captain. Recommend hydration."*), and then leaves or lurks.
+    * **Constraint:** Must be strictly rate-limited to avoid spamming.
+
+### 🔊 Priority 5: The "Voice" of Ash (Long Term)
+* **5.1 Voice Synthesis:** Integration with ElevenLabs/OpenAI for VC announcements.
+* **5.2 Entry/Exit Protocols:** "Captain on deck" audio cues when Jonesy joins a voice channel.
 
 ## 6. Persona Architecture & Context System
 
