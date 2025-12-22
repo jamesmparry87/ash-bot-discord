@@ -508,7 +508,6 @@ class UtilityCommands(commands.Cog):
             await ctx.send("❌ System error occurred while setting persona.")
 
     @commands.command(name="testpersona")
-    @commands.has_permissions(manage_messages=True)
     async def test_persona(self, ctx, persona_type: str | None = None, duration: int = 60):
         """Test persona detection or set a test alias (moderators only)
 
@@ -522,6 +521,24 @@ class UtilityCommands(commands.Cog):
             !testpersona clear            - Clear current alias
         """
         try:
+            # Check permissions - allow in DMs for authorized users, or mods in guilds
+            is_authorized = False
+
+            if ctx.guild is None:  # DM
+                # Allow JAM, JONESY, and moderators in DMs
+                if ctx.author.id in [JAM_USER_ID, JONESY_USER_ID]:
+                    is_authorized = True
+                else:
+                    # Check if user is a mod
+                    is_authorized = await self._user_is_mod_by_id(ctx.author.id)
+            else:  # Guild
+                # Check standard mod permissions
+                is_authorized = await self._user_is_mod(ctx)
+
+            if not is_authorized:
+                await ctx.send("⚠️ **Access denied.** Persona testing protocols require elevated clearance. Authorization restricted to Captain Jonesy, Sir Decent Jam, and server moderators only.")
+                return
+
             from ..handlers.ai_handler import detect_user_context
             from ..utils.permissions import cleanup_expired_aliases, user_alias_state
 
