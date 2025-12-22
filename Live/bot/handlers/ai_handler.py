@@ -902,8 +902,28 @@ async def call_ai_with_rate_limiting(
                     # Also pass member_obj and bot for role detection
                     system_instruction = _build_full_system_instruction(user_id, prompt, member_obj, bot)
 
-                    # For now, include system instruction in the prompt
-                    full_prompt = f"{system_instruction}\n\nUser: {prompt}"
+                    # Convert few-shot examples to string format for inclusion
+                    examples_text = ""
+                    if ASH_FEW_SHOT_EXAMPLES:
+                        examples_text = "\n\n--- BEHAVIORAL EXAMPLES ---\n"
+                        examples_text += "These examples demonstrate proper response patterns:\n\n"
+                        for idx, example in enumerate(ASH_FEW_SHOT_EXAMPLES, 1):
+                            user_text = example.get('user_input', example.get('user', ''))
+                            ash_text = example.get('ash_response', example.get('assistant', ''))
+                            context_note = example.get('context', '')
+                            
+                            if context_note:
+                                examples_text += f"Example {idx} [{context_note}]:\n"
+                            else:
+                                examples_text += f"Example {idx}:\n"
+                            examples_text += f"User: {user_text}\n"
+                            examples_text += f"Ash: {ash_text}\n\n"
+                        
+                        examples_text += "--- END EXAMPLES ---\n"
+                        print(f"✅ Including {len(ASH_FEW_SHOT_EXAMPLES)} few-shot examples in prompt")
+
+                    # Build full prompt with system instruction, examples, and user prompt
+                    full_prompt = f"{system_instruction}{examples_text}\n\nUser: {prompt}"
 
                     response = gemini_client.models.generate_content(
                         model=current_gemini_model,
