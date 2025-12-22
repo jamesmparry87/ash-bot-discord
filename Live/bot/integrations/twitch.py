@@ -47,9 +47,10 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
     if extracted:
         # Clean episode markers before IGDB validation
         cleaned_extracted = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', extracted, flags=re.IGNORECASE)
-        cleaned_extracted = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]', '', cleaned_extracted, flags=re.IGNORECASE)
+        cleaned_extracted = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]',
+                                   '', cleaned_extracted, flags=re.IGNORECASE)
         cleaned_extracted = cleaned_extracted.strip()
-        
+
         print(f"🔍 Validating '{cleaned_extracted}' with IGDB...")
         igdb_result = await igdb.validate_and_enrich(cleaned_extracted)
         best_confidence = igdb_result.get('confidence', 0.0)

@@ -141,12 +141,12 @@ async def validate_and_enrich(game_name: str) -> Dict[str, Any]:
 
     for result in results[:5]:  # Check up to 5 results
         igdb_name = result.get('name', '')
-        
+
         # Skip compound/bundle games (e.g., "Halo 3 + Halo Wars")
         if ' + ' in igdb_name or ' & ' in igdb_name:
             print(f"⚠️ Skipping compound game: '{igdb_name}'")
             continue
-        
+
         confidence = calculate_confidence(game_name, igdb_name)
 
         if confidence > best_confidence:
