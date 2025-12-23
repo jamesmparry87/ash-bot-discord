@@ -215,7 +215,7 @@ class DataCleanupCommands(commands.Cog):
                 # 🔧 FIX: Save IGDB metadata fields (previously missing!)
                 if igdb_data.get('igdb_id'):
                     update_params['igdb_id'] = igdb_data['igdb_id']
-                
+
                 update_params['data_confidence'] = igdb_data.get('confidence', 0.0)
                 update_params['igdb_last_validated'] = datetime.now()
 
@@ -378,7 +378,7 @@ class DataCleanupCommands(commands.Cog):
                         # 🔧 FIX: Save IGDB metadata fields (previously missing!)
                         if igdb_data.get('igdb_id'):
                             update_params['igdb_id'] = igdb_data['igdb_id']
-                        
+
                         update_params['data_confidence'] = igdb_data.get('confidence', 0.0)
                         update_params['igdb_last_validated'] = datetime.now()
 
