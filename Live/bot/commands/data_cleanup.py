@@ -4,6 +4,7 @@ Data Cleanup Commands Module
 Admin commands for cleaning and validating the played games database.
 """
 
+from datetime import datetime
 from typing import Optional
 
 import discord
@@ -211,6 +212,13 @@ class DataCleanupCommands(commands.Cog):
                     from ..integrations.igdb import filter_english_names
                     update_params['alternative_names'] = filter_english_names(igdb_data['alternative_names'])[:5]
 
+                # 🔧 FIX: Save IGDB metadata fields (previously missing!)
+                if igdb_data.get('igdb_id'):
+                    update_params['igdb_id'] = igdb_data['igdb_id']
+                
+                update_params['data_confidence'] = igdb_data.get('confidence', 0.0)
+                update_params['igdb_last_validated'] = datetime.now()
+
                 self.db.update_played_game(game_id, **update_params)
                 success_count += 1
                 print(f"✅ Updated: {item['current_name']} → {new_name}")
@@ -366,6 +374,13 @@ class DataCleanupCommands(commands.Cog):
                         if igdb_data.get('alternative_names'):
                             update_params['alternative_names'] = filter_english_names(
                                 igdb_data['alternative_names'])[:5]
+
+                        # 🔧 FIX: Save IGDB metadata fields (previously missing!)
+                        if igdb_data.get('igdb_id'):
+                            update_params['igdb_id'] = igdb_data['igdb_id']
+                        
+                        update_params['data_confidence'] = igdb_data.get('confidence', 0.0)
+                        update_params['igdb_last_validated'] = datetime.now()
 
                         self.db.update_played_game(game_id, **update_params)
                         success_count += 1
