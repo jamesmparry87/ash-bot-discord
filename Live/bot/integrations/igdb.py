@@ -147,7 +147,7 @@ async def validate_and_enrich(game_name: str) -> Dict[str, Any]:
         if ' + ' in igdb_name or ' & ' in igdb_name:
             print(f"⚠️ Skipping compound game: '{igdb_name}'")
             continue
-        
+
         # Skip DLC, skins, packs, and similar content
         dlc_patterns = [
             r'\s+-\s+.*\s+(?:Skin|DLC|Pack|Costume|Bundle|Expansion)$',
@@ -155,15 +155,18 @@ async def validate_and_enrich(game_name: str) -> Dict[str, Any]:
             r'^DLC:',
             r'^Expansion:',
         ]
-        
+
         is_dlc = False
         for pattern in dlc_patterns:
             if re.search(pattern, igdb_name, re.IGNORECASE):
                 # Exception: Keep main editions (GOTY, Complete, Definitive)
-                if not re.search(r'(GOTY|Game of the Year|Complete|Definitive|Ultimate|Remastered|Remake)', igdb_name, re.IGNORECASE):
+                if not re.search(
+                    r'(GOTY|Game of the Year|Complete|Definitive|Ultimate|Remastered|Remake)',
+                    igdb_name,
+                        re.IGNORECASE):
                     is_dlc = True
                     break
-        
+
         if is_dlc:
             print(f"⚠️ Skipping DLC/addon: '{igdb_name}'")
             continue
