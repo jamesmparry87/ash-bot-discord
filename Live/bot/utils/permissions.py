@@ -75,15 +75,15 @@ async def cleanup_expired_aliases(bot=None):
     """Remove expired aliases (either by explicit expiry time or 1 hour inactivity) and notify users"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
     inactivity_cutoff = uk_now - timedelta(hours=1)
-    
+
     # Check BOTH conditions: explicit expiry OR inactivity timeout
     expired_users = [
         user_id for user_id, data in user_alias_state.items()
         if (
             # Condition 1: Explicit expiry time has passed
-            (data.get("expires_at") and uk_now >= data["expires_at"])
+            (data.get("expires_at") and uk_now >= data["expires_at"]) or
             # Condition 2: OR more than 1 hour of inactivity
-            or data["last_activity"] < inactivity_cutoff
+            data["last_activity"] < inactivity_cutoff
         )
     ]
 
@@ -113,18 +113,18 @@ def cleanup_expired_aliases_sync():
     """Synchronous version for backward compatibility - removes expired aliases without notification"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
     inactivity_cutoff = uk_now - timedelta(hours=1)
-    
+
     # Check BOTH conditions: explicit expiry OR inactivity timeout
     expired_users = [
         user_id for user_id, data in user_alias_state.items()
         if (
             # Condition 1: Explicit expiry time has passed
-            (data.get("expires_at") and uk_now >= data["expires_at"])
+            (data.get("expires_at") and uk_now >= data["expires_at"]) or
             # Condition 2: OR more than 1 hour of inactivity
-            or data["last_activity"] < inactivity_cutoff
+            data["last_activity"] < inactivity_cutoff
         )
     ]
-    
+
     for user_id in expired_users:
         del user_alias_state[user_id]
 
