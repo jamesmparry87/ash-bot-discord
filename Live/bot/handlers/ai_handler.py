@@ -2350,6 +2350,9 @@ async def safe_initialize_ai_async():
         return True
     except Exception as e:
         print(f"⚠️ Safe async AI initialization caught error: {e}")
+        import traceback
+        print("📋 Full error traceback:")
+        traceback.print_exc()
         global ai_enabled, ai_status_message
         ai_enabled = False
         ai_status_message = "Async AI initialization failed (safe mode)"
