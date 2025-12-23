@@ -87,6 +87,65 @@ class TriviaCommands(commands.Cog):
         # Valid if we have at least 2 choices and an answer line
         return choice_count >= 2 and has_answer_line
 
+    def _validate_multiple_choice_options(self, choices: list, correct_answer: str) -> dict:
+        """
+        ✅ FIX #6: Validate multiple choice options for count and consistency
+
+        Ensures:
+        - Minimum 2 options (required for multiple choice)
+        - Maximum 4 options (A, B, C, D limit)
+        - Correct answer letter corresponds to valid option
+        - No empty options
+
+        Returns dict with 'valid' (bool) and 'error' (str if invalid)
+        """
+        # Check minimum options
+        if len(choices) < 2:
+            return {
+                'valid': False,
+                'error': f"Multiple choice requires at least 2 options (found {len(choices)})"
+            }
+
+        # Check maximum options
+        if len(choices) > 4:
+            return {
+                'valid': False,
+                'error': f"Multiple choice limited to 4 options (A-D), found {len(choices)}"
+            }
+
+        # Check for empty options
+        for i, choice in enumerate(choices):
+            if not choice or not choice.strip():
+                return {
+                    'valid': False,
+                    'error': f"Option {chr(65+i)} is empty"
+                }
+
+        # Validate correct answer letter
+        if not correct_answer or len(correct_answer) != 1:
+            return {
+                'valid': False,
+                'error': "Correct answer must be a single letter (A-D)"
+            }
+
+        correct_answer_upper = correct_answer.upper()
+        if correct_answer_upper not in ['A', 'B', 'C', 'D']:
+            return {
+                'valid': False,
+                'error': f"Correct answer must be A, B, C, or D (got '{correct_answer}')"
+            }
+
+        # Check if correct answer corresponds to available option
+        choice_index = ord(correct_answer_upper) - ord('A')
+        if choice_index >= len(choices):
+            return {
+                'valid': False,
+                'error': f"Correct answer '{correct_answer_upper}' exceeds available options (only {len(choices)} options: {chr(65)}-{chr(64+len(choices))})"
+            }
+
+        # All validations passed
+        return {'valid': True, 'error': None}
+
     def _parse_natural_multiple_choice(self, content: str) -> Optional[dict]:
         """Parse natural multiple choice format into structured data"""
         lines = [line.strip() for line in content.strip().split('\n') if line.strip()]
@@ -120,13 +179,14 @@ class TriviaCommands(commands.Cog):
             else:
                 question_text += " " + line
 
-        # Validate we have everything we need
+        # Basic validation
         if not question_text or len(choices) < 2 or not correct_answer:
             return None
 
-        # Validate correct answer is a valid choice letter
-        choice_index = ord(correct_answer) - ord('A')
-        if choice_index < 0 or choice_index >= len(choices):
+        # ✅ FIX #6: Apply comprehensive validation
+        validation = self._validate_multiple_choice_options(choices, correct_answer)
+        if not validation['valid']:
+            logger.warning(f"Multiple choice validation failed: {validation['error']}")
             return None
 
         return {
@@ -300,7 +360,9 @@ class TriviaCommands(commands.Cog):
                 f"Format: Question: [question] | Answer: [answer]"
             )
 
-            response_text, status = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+            response_text, status = await call_ai_with_rate_limiting(
+                prompt, JAM_USER_ID, context="trivia_generation",
+                member_obj=None, bot=self.bot)
 
             if response_text:
                 # Parse response
@@ -350,107 +412,235 @@ class TriviaCommands(commands.Cog):
             logger.error(f"Error in AI-enhanced YouTube question generation: {e}")
             return None
 
+    def _validate_question_quality(self, question_data: dict) -> tuple[bool, str, float]:
+        """
+        ✅ FIX #5: Validate AI-generated question quality before approval.
+
+        Checks for:
+        - Question clarity and completeness
+        - Answer appropriateness
+        - No ambiguity or multiple interpretations
+        - Fan-answerable difficulty
+
+        Returns: (is_valid, reason, quality_score)
+        """
+        question_text = question_data.get('question_text', '')
+        answer = question_data.get('correct_answer', '')
+
+        # Quality score starts at 100
+        quality_score = 100.0
+        issues = []
+
+        # Check question length (not too short, not too long)
+        if len(question_text) < 15:
+            quality_score -= 40
+            issues.append("Question too short")
+        elif len(question_text) > 200:
+            quality_score -= 20
+            issues.append("Question too verbose")
+
+        # Check for question mark
+        if not question_text.endswith('?'):
+            quality_score -= 10
+            issues.append("Missing question mark")
+
+        # Check answer length (reasonable)
+        if len(answer) < 2:
+            quality_score -= 30
+            issues.append("Answer too short")
+        elif len(answer) > 100:
+            quality_score -= 15
+            issues.append("Answer too long")
+
+        # Check for problematic patterns
+        bad_patterns = [
+            ('exact number', r'\d{4,}'),  # Exact large numbers (too specific)
+            ('placeholder text', r'\[.*?\]'),  # [placeholder] format
+            ('multiple questions', r'\?.*\?'),  # Multiple question marks
+            ('incomplete', r'\.\.\.$'),  # Trailing ellipsis
+        ]
+
+        for pattern_name, pattern in bad_patterns:
+            if re.search(pattern, question_text):
+                quality_score -= 25
+                issues.append(f"Contains {pattern_name}")
+
+        # Check for ambiguous words
+        ambiguous_words = ['maybe', 'approximately', 'around', 'roughly', 'about']
+        if any(word in question_text.lower() for word in ambiguous_words):
+            quality_score -= 10
+            issues.append("Contains ambiguous language")
+
+        # Reject if quality score too low
+        is_valid = quality_score >= 60  # Minimum 60% quality
+        reason = "; ".join(issues) if issues else "Quality check passed"
+
+        return is_valid, reason, quality_score
+
     async def _generate_ai_question_fallback(self):
-        """Enhanced AI question generation with YouTube analytics integration and fan-accessible questions"""
+        """
+        ✅ FIX #5: Enhanced AI question generation with quality validation.
+
+        Improvements:
+        - Stricter prompts with clear guidelines
+        - Quality validation before approval
+        - Better error handling and retry logic
+        - Enhanced parsing with fallbacks
+        """
         try:
             # Try YouTube analytics integration first for data-driven questions
             youtube_question = await self._generate_youtube_analytics_question()
             if youtube_question:
                 logger.info("Generated YouTube analytics-powered trivia question")
-                return youtube_question
 
-            # Fallback to traditional question types
+                # ✅ FIX #5: Validate YouTube question quality
+                is_valid, reason, score = self._validate_question_quality(youtube_question)
+                if is_valid:
+                    logger.info(f"YouTube question quality: {score:.1f}% - {reason}")
+                    return youtube_question
+                else:
+                    logger.warning(f"YouTube question failed quality check ({score:.1f}%): {reason}")
+                    # Fall through to traditional generation
+
+            # ✅ FIX #5: Enhanced prompts with stricter guidelines
             question_types = [
                 {
-                    'type': 'fan_observable',
-                    'prompt': (
-                        "Generate a trivia question about Captain Jonesy's gaming that dedicated fans and stream viewers could realistically answer. "
-                        "Focus on observable patterns like: most played genres, memorable series, recent completions, gaming preferences. "
-                        "Avoid exact statistics - use questions about trends fans would notice. "
-                        "Examples: 'What genre does Jonesy play most often?', 'Which game series has she completed multiple entries from?' "
-                        "Format: Question: [question] | Answer: [answer]"
-                    )
-                },
-                {
-                    'type': 'gaming_knowledge',
-                    'prompt': (
-                        "Generate a general gaming trivia question that relates to games Captain Jonesy has played. "
-                        "Focus on gaming history, popular games, or industry knowledge that gaming enthusiasts would know. "
-                        "Examples: 'What genre is God of War?', 'Which company developed The Last of Us?', 'What does RPG stand for?' "
-                        "Format: Question: [question] | Answer: [answer]"
-                    )
-                },
-                {
-                    'type': 'broad_database',
-                    'prompt': (
-                        "Generate a trivia question about Captain Jonesy's gaming habits using broad categories instead of exact numbers. "
-                        "Focus on questions fans could estimate: 'more action or RPG games?', 'games from which decade?', 'completed vs abandoned?' "
-                        "Avoid precise statistics - use comparative or categorical questions. "
-                        "Format: Question: [question] | Answer: [answer]"
-                    )
-                },
-                {
-                    'type': 'memorable_moments',
-                    'prompt': (
-                        "Generate a trivia question about memorable gaming moments or notable games from Captain Jonesy's streams. "
-                        "Focus on things regular viewers would remember: longest series, recent favorites, gaming reactions. "
-                        "Examples: 'What was the most recent horror game Jonesy completed?', 'Which platformer series has she played most entries from?' "
-                        "Format: Question: [question] | Answer: [answer]"
-                    )
-                }
-            ]
+                    'type': 'fan_observable', 'prompt': (
+                        "Generate a trivia question about Captain Jonesy's gaming that fans could answer from watching streams.\n\n"
+                        "STRICT REQUIREMENTS:\n"
+                        "- Question must be answerable by regular viewers\n"
+                        "- Avoid exact statistics (episode counts, view numbers)\n"
+                        "- Focus on patterns: genres, series, preferences\n"
+                        "- ONE clear correct answer only\n"
+                        "- Question must end with '?'\n"
+                        "- Answer must be 2-30 words\n\n"
+                        "GOOD: 'What genre does Captain Jonesy play most often?'\n"
+                        "BAD: 'How many episodes of God of War has Jonesy uploaded?' (too specific)\n\n"
+                        "Format EXACTLY: Question: [your question] | Answer: [your answer]")}, {
+                    'type': 'gaming_knowledge', 'prompt': (
+                        "Generate general gaming trivia related to games Captain Jonesy has played.\n\n"
+                        "STRICT REQUIREMENTS:\n"
+                        "- Focus on gaming industry knowledge\n"
+                        "- Must relate to games Jonesy has streamed\n"
+                        "- ONE clear factual answer\n"
+                        "- Question must end with '?'\n"
+                        "- Answer must be 2-30 words\n"
+                        "- No ambiguous or subjective questions\n\n"
+                        "GOOD: 'What genre is The Last of Us?'\n"
+                        "BAD: 'What is the best game ever?' (subjective)\n\n"
+                        "Format EXACTLY: Question: [your question] | Answer: [your answer]")}, {
+                    'type': 'broad_trends', 'prompt': (
+                            "Generate a trivia question about observable trends in Captain Jonesy's gaming.\n\n"
+                            "STRICT REQUIREMENTS:\n"
+                            "- Use broad categories (action vs RPG, horror vs platformer)\n"
+                            "- Avoid exact numbers or dates\n"
+                            "- Focus on comparative questions\n"
+                            "- ONE clear correct answer\n"
+                            "- Question must end with '?'\n"
+                            "- Answer must be 2-30 words\n\n"
+                            "GOOD: 'Does Jonesy play more horror or action games?'\n"
+                            "BAD: 'Exactly how many horror games has Jonesy completed?' (too specific)\n\n"
+                            "Format EXACTLY: Question: [your question] | Answer: [your answer]")}, {
+                                'type': 'series_knowledge', 'prompt': (
+                                    "Generate trivia about game series Captain Jonesy has played.\n\n"
+                                    "STRICT REQUIREMENTS:\n"
+                                    "- Focus on multi-entry series (God of War, Resident Evil, etc.)\n"
+                                    "- Must be verifiable from stream history\n"
+                                    "- ONE clear correct answer\n"
+                                    "- Question must end with '?'\n"
+                                    "- Answer must be 2-30 words\n"
+                                    "- Avoid exact episode/date counts\n\n"
+                                    "GOOD: 'Which game series has Jonesy completed multiple entries from?'\n"
+                                    "BAD: 'On what date did Jonesy start God of War?' (too specific)\n\n"
+                                    "Format EXACTLY: Question: [your question] | Answer: [your answer]")}]
 
-            # Randomly select a question type for variety
-            selected_type = random.choice(question_types)
+            # ✅ FIX #5: Retry logic for quality - try up to 2 times
+            max_attempts = 2
+            for attempt in range(max_attempts):
+                # Randomly select a question type for variety
+                selected_type = random.choice(question_types)
 
-            logger.info(f"Generating traditional trivia question of type: {selected_type['type']}")
-            response_text, status = await call_ai_with_rate_limiting(selected_type['prompt'], JAM_USER_ID)
+                logger.info(
+                    f"Generating trivia question (attempt {attempt + 1}/{max_attempts}): {selected_type['type']}")
+                response_text, status = await call_ai_with_rate_limiting(
+                    selected_type['prompt'], JAM_USER_ID, context="trivia_generation",
+                    member_obj=None, bot=self.bot)
 
-            if response_text:
-                # Parse AI response with improved parsing
-                lines = response_text.strip().split('\n')
-                question_text = ""
-                answer = ""
+                if response_text:
+                    # ✅ FIX #5: Enhanced parsing with multiple fallback strategies
+                    question_text = ""
+                    answer = ""
 
-                # Try to extract from formatted response first
-                for line in lines:
-                    line = line.strip()
-                    if line.startswith("Question:"):
-                        question_text = line.replace("Question:", "").strip()
-                    elif line.startswith("Answer:"):
-                        answer = line.replace("Answer:", "").strip()
-
-                # Fallback: try to parse from pipe-separated format
-                if not question_text or not answer:
+                    # Strategy 1: Line-by-line parsing
+                    lines = response_text.strip().split('\n')
                     for line in lines:
-                        if '|' in line:
-                            parts = line.split('|')
-                            if len(parts) >= 2:
-                                q_part = parts[0].strip()
-                                a_part = parts[1].strip()
-                                if 'Question:' in q_part:
-                                    question_text = q_part.replace('Question:', '').strip()
-                                if 'Answer:' in a_part:
-                                    answer = a_part.replace('Answer:', '').strip()
+                        line = line.strip()
+                        if line.startswith("Question:"):
+                            question_text = line.replace("Question:", "").strip()
+                        elif line.startswith("Answer:"):
+                            answer = line.replace("Answer:", "").strip()
 
-                # Basic validation
-                if question_text and answer and len(question_text) > 10 and len(answer) > 0:
-                    # Clean up the question and answer
-                    question_text = question_text.strip('?"')
-                    if not question_text.endswith('?'):
-                        question_text += '?'
+                    # Strategy 2: Pipe-separated format
+                    if not question_text or not answer:
+                        for line in lines:
+                            if '|' in line:
+                                parts = line.split('|')
+                                if len(parts) >= 2:
+                                    q_part = parts[0].strip()
+                                    a_part = parts[1].strip()
 
-                    return {
-                        'question_text': question_text,
-                        'correct_answer': answer.strip(),
-                        'question_type': 'single',
-                        'category': f"ai_{selected_type['type']}",
-                        'difficulty_level': 2,  # Medium difficulty
-                        'is_dynamic': False
-                    }
+                                    # Extract question
+                                    if 'Question:' in q_part or not question_text:
+                                        question_text = q_part.replace('Question:', '').strip()
+
+                                    # Extract answer
+                                    if 'Answer:' in a_part or not answer:
+                                        answer = a_part.replace('Answer:', '').strip()
+
+                    # Strategy 3: First line as question, second as answer (last resort)
+                    if not question_text or not answer:
+                        if len(lines) >= 2:
+                            question_text = lines[0].strip()
+                            answer = lines[1].strip()
+
+                    # Clean up
+                    if question_text and answer:
+                        question_text = question_text.strip('?"\'')
+                        if not question_text.endswith('?'):
+                            question_text += '?'
+                        answer = answer.strip('."\'')
+
+                        # Create question data
+                        question_data = {
+                            'question_text': question_text,
+                            'correct_answer': answer,
+                            'question_type': 'single',
+                            'category': f"ai_{selected_type['type']}",
+                            'difficulty_level': 2,
+                            'is_dynamic': False
+                        }
+
+                        # ✅ FIX #5: Validate quality before returning
+                        is_valid, reason, quality_score = self._validate_question_quality(question_data)
+
+                        if is_valid:
+                            logger.info(
+                                f"✅ Generated quality question (score: {quality_score:.1f}%): {question_text[:50]}...")
+                            return question_data
+                        else:
+                            logger.warning(
+                                f"⚠️ Generated question failed quality check ({quality_score:.1f}%): {reason}")
+                            # Try again if we have attempts left
+                            if attempt < max_attempts - 1:
+                                await asyncio.sleep(2)  # Brief pause before retry
+                                continue
+                    else:
+                        logger.warning(f"AI parsing failed (attempt {attempt + 1}): Q='{question_text}', A='{answer}'")
                 else:
-                    logger.warning(f"AI generated invalid question format: Q='{question_text}', A='{answer}'")
+                    logger.warning(f"AI returned no response (attempt {attempt + 1})")
 
+            # All attempts exhausted
+            logger.error("All AI generation attempts failed quality validation")
             return None
 
         except Exception as e:
@@ -547,9 +737,16 @@ class TriviaCommands(commands.Cog):
                     await ctx.send("❌ **Answer is required.** Format: `| answer:<correct_answer>`")
                     return
 
-                if question_type == 'multiple' and not choices:
-                    await ctx.send("❌ **Choices required for multiple choice.** Format: `| choices:A,B,C,D`")
-                    return
+                if question_type == 'multiple':
+                    if not choices:
+                        await ctx.send("❌ **Choices required for multiple choice.** Format: `| choices:A,B,C,D`")
+                        return
+
+                    # ✅ FIX #6: Validate multiple choice options for pipe-separated format
+                    validation = self._validate_multiple_choice_options(choices, answer)
+                    if not validation['valid']:
+                        await ctx.send(f"❌ **Multiple choice validation failed:** {validation['error']}\n\n*Ensure you have 2-4 options and the correct answer (A-D) matches an available option.*")
+                        return
 
             if len(question_text) < 10:
                 await ctx.send("❌ **Question too short.** Please provide a meaningful trivia question.")

@@ -1,0 +1,339 @@
+# Gemini Code Assist Configuration
+# Custom review settings for Discord Bot project
+# Documentation: https://developers.google.com/gemini-code-assist/docs/customize-gemini-behavior-github
+
+version: 1
+
+# Project Context - Helps Gemini understand the codebase
+project_context: |
+  Discord bot for JonesySpaceCat community using discord.py framework.
+  
+  Key Information:
+  - Language: Python 3.13
+  - Framework: discord.py (async/await based)
+  - Maintainer: Novice/Intermediate Python developer
+  - Philosophy: "Baby steps" - simple solutions first, then iterate
+  - Testing: pytest is mandatory for all new features
+  - Database: PostgreSQL with async operations
+  
+  Tech Stack:
+  - discord.py for Discord API
+  - aiohttp for async HTTP requests
+  - PostgreSQL for data persistence
+  - google-genai for AI features
+  - pytest for testing
+
+# Git Workflow Context
+branching_strategy: |
+  Strict branching strategy:
+  - develop: Working branch for new features and tests
+  - stable: Release candidate branch
+  - main: Production branch
+  - hotfix/*: Emergency fixes only
+  
+  Rules:
+  - All new features start in develop
+  - Tests must pass before merging to stable
+  - Only stable or hotfix branches merge to main
+
+# Communication Style Requirements
+communication_guidelines: |
+  The maintainer needs clear explanations:
+  - Explain WHY changes are needed, not just WHAT to change
+  - Use clear, beginner-friendly language
+  - Provide context for technical decisions
+  - Suggest breaking complex tasks into smaller steps
+
+# Custom Review Guidelines
+review_guidelines:
+  # Python & Discord.py Specific
+  - category: "Async/Await Patterns"
+    severity: "high"
+    rules:
+      - "Flag any blocking I/O operations (requests.get, time.sleep, etc.) in async functions"
+      - "Ensure all Discord API calls use await properly"
+      - "Check for missing 'async' keyword on functions that use await"
+      - "Verify async context managers use 'async with' not just 'with'"
+      - "Flag synchronous database calls in async functions"
+    examples:
+      bad: |
+        async def my_function():
+            time.sleep(5)  # Blocking!
+            requests.get(url)  # Blocking!
+      good: |
+        async def my_function():
+            await asyncio.sleep(5)
+            async with aiohttp.ClientSession() as session:
+                await session.get(url)
+
+  - category: "Discord.py Best Practices"
+    severity: "high"
+    rules:
+      - "Check for proper error handling on Discord API calls (NotFound, Forbidden, HTTPException)"
+      - "Verify bot permissions are checked before attempting privileged operations"
+      - "Flag direct member/user object access without null checks"
+      - "Ensure DM handling checks for User vs Member objects"
+      - "Verify embed fields don't exceed Discord's limits (title: 256, description: 4096)"
+    examples:
+      bad: |
+        await ctx.send(embed=discord.Embed(description=very_long_string))  # May exceed limit
+        member.roles  # May be None in DMs
+      good: |
+        description = very_long_string[:4096]  # Truncate to Discord limit
+        if isinstance(ctx.author, discord.Member):
+            roles = ctx.author.roles
+
+  - category: "Testing Requirements"
+    severity: "high"
+    rules:
+      - "REQUIRE: Every new function must have at least one pytest test case"
+      - "Flag new features without corresponding tests"
+      - "Suggest test scenarios for complex logic"
+      - "Verify async tests use @pytest.mark.asyncio decorator"
+      - "Check that tests are in Live/tests/ directory"
+    examples:
+      bad: |
+        # New feature added, no test file created
+        def calculate_important_thing(x):
+            return x * 2
+      good: |
+        # Live/bot/utils/calculator.py
+        def calculate_important_thing(x):
+            return x * 2
+        
+        # Live/tests/test_calculator.py
+        def test_calculate_important_thing():
+            assert calculate_important_thing(5) == 10
+
+  - category: "Code Simplicity (Baby Steps)"
+    severity: "medium"
+    rules:
+      - "Flag over-engineered solutions - suggest simpler alternatives first"
+      - "Encourage getting basic version working before optimization"
+      - "Suggest breaking large functions (>50 lines) into smaller ones"
+      - "Warn against premature abstraction"
+      - "Recommend concrete implementations over abstract base classes initially"
+    guidance: |
+      Philosophy: Get it working simply first, then improve iteratively.
+      Prefer clear, straightforward code over clever optimizations.
+
+  - category: "Error Handling"
+    severity: "high"
+    rules:
+      - "Ensure try/except blocks log errors with context"
+      - "Flag bare 'except:' clauses - require specific exceptions"
+      - "Verify user-facing errors have helpful messages"
+      - "Check that errors don't expose sensitive information"
+      - "Ensure database errors are handled gracefully"
+
+  - category: "Environment & Security"
+    severity: "critical"
+    rules:
+      - "FLAG: Any hardcoded API keys, tokens, or passwords"
+      - "REQUIRE: Sensitive values must use os.getenv() or environment variables"
+      - "Check that .env files are in .gitignore"
+      - "Verify database credentials are not committed"
+      - "Flag direct SQL queries without parameterization (SQL injection risk)"
+
+  - category: "Type Hints & Documentation"
+    severity: "medium"
+    rules:
+      - "Encourage type hints on function signatures"
+      - "Require docstrings that explain WHY, not just WHAT"
+      - "Flag functions without return type hints"
+      - "Suggest clear variable names over cryptic abbreviations"
+      - "Encourage inline comments for complex logic"
+    examples:
+      bad: |
+        def f(x, y):
+            return x + y
+      good: |
+        def calculate_total(base_amount: float, tax_amount: float) -> float:
+            """
+            Calculate total including tax.
+            
+            Why: Needed for invoice generation to show accurate totals.
+            
+            Args:
+                base_amount: Original amount before tax
+                tax_amount: Tax to add
+                
+            Returns:
+                Total amount including tax
+            """
+            return base_amount + tax_amount
+
+  - category: "Database Operations"
+    severity: "high"
+    rules:
+      - "Ensure database operations use parameterized queries"
+      - "Check for proper connection closing/context managers"
+      - "Flag synchronous database calls in async contexts"
+      - "Verify transactions are properly committed or rolled back"
+      - "Check for N+1 query problems"
+
+  - category: "Performance"
+    severity: "low"
+    rules:
+      - "Flag nested loops that could be O(n²)"
+      - "Suggest caching for expensive repeated operations"
+      - "Check for unnecessary API calls in loops"
+      - "Recommend batch operations over individual calls"
+    guidance: |
+      Note: Optimize only after it works correctly.
+      Measure performance before optimizing.
+
+  - category: "Git & Branching"
+    severity: "medium"
+    rules:
+      - "Verify changes are on develop branch (not main or stable)"
+      - "Suggest atomic commits with clear messages"
+      - "Check that hotfix branches follow hotfix/* naming"
+      - "Flag direct commits to main or stable branches"
+
+  - category: "Import Organization"
+    severity: "low"
+    rules:
+      - "Check imports are organized: stdlib, third-party, local"
+      - "Flag unused imports"
+      - "Suggest relative imports for local modules"
+      - "Flag wildcard imports (from module import *)"
+
+# Code Patterns to Encourage
+encouraged_patterns:
+  - pattern: "Using context managers for resource management"
+    example: |
+      async with aiohttp.ClientSession() as session:
+          async with session.get(url) as response:
+              data = await response.json()
+  
+  - pattern: "Proper async error handling"
+    example: |
+      try:
+          await bot.send_message(channel, content)
+      except discord.Forbidden:
+          print(f"No permission to send to {channel.name}")
+      except discord.HTTPException as e:
+          print(f"Failed to send message: {e}")
+  
+  - pattern: "Environment variable usage"
+    example: |
+      API_KEY = os.getenv('API_KEY')
+      if not API_KEY:
+          raise ValueError("API_KEY environment variable not set")
+  
+  - pattern: "Clear, descriptive function names"
+    example: |
+      # Good
+      def calculate_user_permissions(user_id: int, guild_id: int) -> List[str]:
+          ...
+      
+      # Bad
+      def calc_perms(uid: int, gid: int):
+          ...
+
+# Code Patterns to Discourage
+discouraged_patterns:
+  - pattern: "Blocking operations in async functions"
+    example: |
+      # Bad
+      async def fetch_data():
+          response = requests.get(url)  # Blocks event loop!
+      
+      # Good
+      async def fetch_data():
+          async with aiohttp.ClientSession() as session:
+              response = await session.get(url)
+  
+  - pattern: "Bare except clauses"
+    example: |
+      # Bad
+      try:
+          risky_operation()
+      except:  # Catches everything!
+          pass
+      
+      # Good
+      try:
+          risky_operation()
+      except ValueError as e:
+          logger.error(f"Invalid value: {e}")
+  
+  - pattern: "Hardcoded credentials"
+    example: |
+      # Bad
+      API_KEY = "abc123xyz"
+      
+      # Good
+      API_KEY = os.getenv('API_KEY')
+
+# Review Focus Areas by File Type
+file_specific_rules:
+  "Live/bot/handlers/*.py":
+    - "Check for proper rate limiting"
+    - "Verify error responses are user-friendly"
+    - "Ensure context is properly passed through handlers"
+  
+  "Live/bot/integrations/*.py":
+    - "Verify external API errors are handled"
+    - "Check for timeout configurations"
+    - "Ensure retry logic for transient failures"
+  
+  "Live/tests/*.py":
+    - "Verify tests are isolated and don't depend on each other"
+    - "Check for proper async test decorators"
+    - "Ensure mocks are used for external dependencies"
+  
+  "Live/bot/commands/*.py":
+    - "Verify command permissions are checked"
+    - "Check for proper argument validation"
+    - "Ensure user-facing error messages are helpful"
+
+# Complexity Thresholds
+complexity_guidelines:
+  max_function_length: 50  # Lines - suggest refactoring if exceeded
+  max_parameters: 5  # Parameters - suggest using dataclass/dict if exceeded
+  max_nested_depth: 4  # Nesting levels - suggest extraction if exceeded
+  cyclomatic_complexity: 10  # McCabe complexity - suggest simplification
+
+# Response Format Preferences
+review_response_format: |
+  When providing feedback:
+  1. Start with what's working well
+  2. Explain WHY a change is needed (not just what to change)
+  3. Provide concrete examples of fixes
+  4. Link to relevant documentation when applicable
+  5. Prioritize feedback: Critical > High > Medium > Low
+  6. Suggest breaking complex changes into smaller steps
+
+# Learning Resources to Reference
+documentation_references:
+  - name: "discord.py Documentation"
+    url: "https://discordpy.readthedocs.io/en/stable/"
+    when_to_use: "For Discord API-related questions"
+  
+  - name: "Python Async/Await Guide"
+    url: "https://docs.python.org/3/library/asyncio.html"
+    when_to_use: "For async pattern questions"
+  
+  - name: "pytest Documentation"
+    url: "https://docs.pytest.org/"
+    when_to_use: "For testing questions"
+
+# Special Instructions
+special_instructions: |
+  IMPORTANT REMINDERS:
+  
+  1. The maintainer is learning - be encouraging and educational
+  2. Always explain the "why" behind suggestions
+  3. Prefer simple, working solutions over perfect, complex ones
+  4. Every feature MUST have a test - no exceptions
+  5. Check that changes are on the develop branch
+  6. Be specific: "Add error handling for NotFound" not just "add error handling"
+  7. If suggesting a complex change, break it into baby steps
+  
+  NEVER:
+  - Approve hardcoded credentials
+  - Approve untested features
+  - Suggest over-engineered solutions
+  - Use jargon without explanation

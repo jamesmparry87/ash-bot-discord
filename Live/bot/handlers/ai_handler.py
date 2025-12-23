@@ -6,17 +6,19 @@ Supports both Gemini and Hugging Face APIs with automatic fallback functionality
 """
 
 import json
+import logging
 import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from ..config import (
-    BOT_PERSONA,
+    GUILD_ID,
     JAM_USER_ID,
     JONESY_USER_ID,
     MAX_DAILY_REQUESTS,
     MAX_HOURLY_REQUESTS,
+    MEMBER_ROLE_IDS,
     MIN_REQUEST_INTERVAL,
     POPS_ARCADE_USER_ID,
     PRIORITY_INTERVALS,
@@ -24,16 +26,82 @@ from ..config import (
     RATE_LIMIT_COOLDOWNS,
 )
 from ..database import get_database
+from ..persona.context_builder import build_ash_context
+from ..persona.examples import ASH_FEW_SHOT_EXAMPLES
+from ..persona.prompts import ASH_SYSTEM_INSTRUCTION
+
+
+# Configure user-friendly logging for AI libraries
+class UserFriendlyAILogFilter(logging.Filter):
+    """Custom filter to make google-genai and httpx logs more readable"""
+
+    def filter(self, record):
+        # Keep all non-INFO messages unchanged (warnings, errors)
+        if record.levelno != logging.INFO:
+            return True
+
+        # Format google-genai messages
+        if record.name == "google_genai.models":
+            if "AFC is enabled" in record.getMessage():
+                # Extract max calls if present
+                msg = record.getMessage()
+                if "max remote calls:" in msg:
+                    max_calls = msg.split("max remote calls:")[-1].strip().rstrip('.')
+                    record.msg = f"🤖 Gemini: AFC enabled (max calls: {max_calls})"
+                else:
+                    record.msg = "🤖 Gemini: AFC enabled"
+                record.args = ()
+
+        # Format httpx HTTP request messages
+        elif record.name == "httpx":
+            msg = record.getMessage()
+            if "HTTP Request: POST" in msg and "generateContent" in msg:
+                # Extract model name and status
+                if "gemini-" in msg:
+                    model_start = msg.find("gemini-")
+                    model_end = msg.find(":", model_start)
+                    model_name = msg[model_start:model_end]
+
+                    if '"HTTP/1.1 200 OK"' in msg:
+                        record.msg = f"✅ API Success: {model_name} responded (200 OK)"
+                    elif '"HTTP/1.1' in msg:
+                        # Extract status code for errors
+                        status_start = msg.find('"HTTP/1.1') + 9
+                        status_end = msg.find('"', status_start)
+                        status = msg[status_start:status_end].strip()
+                        record.msg = f"⚠️ API Response: {model_name} returned ({status})"
+                    else:
+                        record.msg = f"🌐 API Call: {model_name}"
+                    record.args = ()
+
+        return True
+
+
+# Apply the filter to google-genai and httpx loggers
+for logger_name in ["google_genai.models", "httpx"]:
+    logger = logging.getLogger(logger_name)
+    logger.addFilter(UserFriendlyAILogFilter())
+
 
 # Get database instance
 db = get_database()  # type: ignore
 
+# Try to import discord for role detection
+try:
+    import discord
+    DISCORD_AVAILABLE = True
+except ImportError:
+    discord = None  # type: ignore
+    DISCORD_AVAILABLE = False
+
 # Try to import AI modules
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
     GENAI_AVAILABLE = True
 except ImportError:
     genai = None
+    types = None
     GENAI_AVAILABLE = False
 
 # AI Configuration
@@ -43,21 +111,21 @@ GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
 # These models are tested on startup and used with automatic fallback
 GEMINI_MODEL_CASCADE = [
     'gemini-2.5-flash',       # Primary: Latest, fastest
-    'gemini-2.0-flash-001',   # Backup: Stable, reliable
+    'gemini-2.0-flash-001',   # Backup: Stable version
 ]
 
-# AI instances
-gemini_model = None
+# AI instances (google-genai v1.56+ API)
+gemini_client = None  # Client instance with API key
 ai_enabled = False
 ai_status_message = "Offline"
 primary_ai = None
 backup_ai = None  # Legacy variable - no longer used but kept for compatibility
 
 # Model cascade tracking (Phase 2)
-current_gemini_model = None  # Currently active Gemini model
-working_gemini_models = []   # List of working models in priority order
-model_failure_counts = {}    # Track failures per model
-last_model_switch = None     # Timestamp of last model switch
+current_gemini_model: Optional[str] = None  # Currently active Gemini model
+working_gemini_models: List[str] = []   # List of working models in priority order
+model_failure_counts: Dict[str, int] = {}    # Track failures per model
+last_model_switch: Optional[datetime] = None     # Timestamp of last model switch
 
 # AI Usage Tracking and Rate Limiting
 try:
@@ -88,6 +156,204 @@ ai_usage_stats = {
     "primary_ai_errors": 0,
     "backup_ai_errors": 0,
 }
+
+
+async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[str, Any]:
+    """
+    Detect user context from Discord member object with hierarchical priority and DM handling.
+
+    Priority order:
+    1. Alias Override (for testing) - checks user_alias_state - HIGHEST PRIORITY
+    2. Special User IDs (hardcoded personalities) - Jonesy, JAM, Pops
+    3. Discord Moderator Roles (dynamic role-based detection)
+    4. Discord Member Roles (paid vs regular members)
+    5. Default (standard member)
+
+    Args:
+        user_id: Discord user ID
+        member_obj: Discord Member object (contains roles) - None for DMs
+        bot: Bot instance (for fetching member in DMs)
+
+    Returns:
+        Dict with user_name, user_roles, clearance_level, relationship_type, is_pops_arcade
+    """
+
+    # TIER 1: Alias Override Check (HIGHEST PRIORITY - for testing)
+    # This must come FIRST so test aliases override even hardcoded user IDs
+    try:
+        from ..utils.permissions import cleanup_expired_aliases_sync, user_alias_state
+        cleanup_expired_aliases_sync()
+
+        if user_id in user_alias_state:
+            alias_type = user_alias_state[user_id].get("alias_type", "standard")
+
+            # Map alias types to context
+            # Use role-based names only (no username) to avoid AI confusion
+            alias_context_map = {
+                "captain": {
+                    'user_name': 'Captain (Test Mode)',
+                    'user_roles': ['Captain', 'Owner'],
+                    'clearance_level': 'COMMANDING_OFFICER',
+                    'relationship_type': 'COMMANDING_OFFICER',
+                    'is_pops_arcade': False,
+                    'detection_method': 'alias_override_captain'
+                },
+                "creator": {
+                    'user_name': 'Creator (Test Mode)',
+                    'user_roles': ['Creator', 'Admin'],
+                    'clearance_level': 'CREATOR',
+                    'relationship_type': 'CREATOR',
+                    'is_pops_arcade': False,
+                    'detection_method': 'alias_override_creator'
+                },
+                "moderator": {
+                    'user_name': 'Moderator (Test Mode)',
+                    'user_roles': ['Moderator', 'Staff'],
+                    'clearance_level': 'MODERATOR',
+                    'relationship_type': 'COLLEAGUE',
+                    'is_pops_arcade': False,
+                    'detection_method': 'alias_override_moderator'
+                },
+                "member": {
+                    'user_name': 'Member (Test Mode)',
+                    'user_roles': ['Member', 'Crew'],
+                    'clearance_level': 'STANDARD_MEMBER',
+                    'relationship_type': 'PERSONNEL',
+                    'is_pops_arcade': False,
+                    'detection_method': 'alias_override_member'
+                },
+                "standard": {
+                    'user_name': 'Standard Personnel (Test Mode)',
+                    'user_roles': ['Standard User'],
+                    'clearance_level': 'RESTRICTED',
+                    'relationship_type': 'PERSONNEL',
+                    'is_pops_arcade': False,
+                    'detection_method': 'alias_override_standard'
+                }
+            }
+
+            if alias_type in alias_context_map:
+                return alias_context_map[alias_type]
+    except ImportError:
+        pass  # Continue without alias handling
+
+    # TIER 2: Special User ID Overrides
+    # Hardcoded personalities - only apply if no alias is active
+    if user_id == JONESY_USER_ID:
+        return {
+            'user_name': 'Captain Jonesy',
+            'user_roles': ['Captain', 'Owner', 'Commanding Officer'],
+            'clearance_level': 'COMMANDING_OFFICER',
+            'relationship_type': 'COMMANDING_OFFICER',
+            'is_pops_arcade': False,
+            'detection_method': 'user_id_override_jonesy'
+        }
+
+    if user_id == JAM_USER_ID:
+        return {
+            'user_name': 'Sir Decent Jam',
+            'user_roles': ['Creator', 'Admin', 'Moderator'],
+            'clearance_level': 'CREATOR',
+            'relationship_type': 'CREATOR',
+            'is_pops_arcade': False,
+            'detection_method': 'user_id_override_jam'
+        }
+
+    if user_id == POPS_ARCADE_USER_ID:
+        return {
+            'user_name': 'Pops Arcade',
+            'user_roles': ['Moderator', 'Antagonist'],
+            'clearance_level': 'MODERATOR',
+            'relationship_type': 'ANTAGONISTIC',
+            'is_pops_arcade': True,
+            'detection_method': 'user_id_override_pops'
+        }
+
+    # TIER 3: DM Handling - Try to fetch member from guild if in DM
+    if not member_obj and bot and DISCORD_AVAILABLE:
+        try:
+            guild = bot.get_guild(GUILD_ID)
+            if guild:
+                # Use cached member lookup (fast)
+                member_obj = guild.get_member(user_id)
+
+                if not member_obj:
+                    # Fallback to API call if not cached (slower but necessary)
+                    try:
+                        member_obj = await guild.fetch_member(user_id)
+                    except Exception as e:
+                        # Handle both NotFound and Forbidden errors
+                        error_str = str(type(e).__name__)
+                        if 'NotFound' in error_str:
+                            # User not in guild - treat as standard personnel
+                            return {
+                                'user_name': 'Personnel',
+                                'user_roles': ['Standard User'],
+                                'clearance_level': 'RESTRICTED',
+                                'relationship_type': 'PERSONNEL',
+                                'is_pops_arcade': False,
+                                'detection_method': 'dm_not_in_guild'
+                            }
+                        elif 'Forbidden' in error_str:
+                            # No permission to fetch - shouldn't happen but handle gracefully
+                            return {
+                                'user_name': 'Personnel',
+                                'user_roles': ['Standard User'],
+                                'clearance_level': 'RESTRICTED',
+                                'relationship_type': 'PERSONNEL',
+                                'is_pops_arcade': False,
+                                'detection_method': 'dm_fetch_forbidden'
+                            }
+                        else:
+                            # Other errors - re-raise
+                            raise
+        except Exception as e:
+            print(f"⚠️ Error fetching member for DM: {e}")
+            # Fallback to default
+            return {
+                'user_name': 'Personnel',
+                'user_roles': ['Standard User'],
+                'clearance_level': 'RESTRICTED',
+                'relationship_type': 'PERSONNEL',
+                'is_pops_arcade': False,
+                'detection_method': 'dm_fetch_error'
+            }
+
+    # TIER 4: Discord Role Detection (if we have member object)
+    if member_obj and DISCORD_AVAILABLE and hasattr(member_obj, 'roles'):
+        role_ids = [role.id for role in member_obj.roles]
+
+        # Check for moderator permissions (most reliable method)
+        if hasattr(member_obj, 'guild_permissions') and member_obj.guild_permissions.manage_messages:
+            return {
+                'user_name': member_obj.display_name,
+                'user_roles': ['Moderator', 'Staff'],
+                'clearance_level': 'MODERATOR',
+                'relationship_type': 'COLLEAGUE',
+                'is_pops_arcade': False,
+                'detection_method': 'discord_permissions_moderator'
+            }
+
+        # Check for member roles (paid/senior members)
+        if any(role_id in MEMBER_ROLE_IDS for role_id in role_ids):
+            return {
+                'user_name': member_obj.display_name,
+                'user_roles': ['Member', 'Crew'],
+                'clearance_level': 'STANDARD_MEMBER',
+                'relationship_type': 'PERSONNEL',
+                'is_pops_arcade': False,
+                'detection_method': 'discord_role_member'
+            }
+
+    # TIER 5: Default (no special roles or member object)
+    return {
+        'user_name': member_obj.display_name if member_obj else 'Personnel',
+        'user_roles': ['Standard User'],
+        'clearance_level': 'RESTRICTED',
+        'relationship_type': 'PERSONNEL',
+        'is_pops_arcade': False,
+        'detection_method': 'default'
+    }
 
 
 def reset_daily_usage():
@@ -423,18 +689,29 @@ def handle_quota_exhaustion():
 
 
 async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
-    """Test if a specific Gemini model works (Phase 2: Model Cascade)"""
+    """Test if a specific Gemini model works using new Client API (google-genai v1.56+)"""
     try:
-        test_model = genai.GenerativeModel(model_name)  # type: ignore
+        # Validate API key is present
+        if not GEMINI_API_KEY:
+            print(f"❌ CRITICAL: GOOGLE_API_KEY environment variable not set! Cannot test model '{model_name}'")
+            return False
+
+        if not gemini_client:
+            print(f"❌ CRITICAL: Gemini client not initialized!")
+            return False
 
         # Use thread executor to avoid blocking
         import asyncio
         import concurrent.futures
 
         def sync_test():
-            return test_model.generate_content(
-                "Test",
-                generation_config={"max_output_tokens": 5}
+            # New API: use client.models.generate_content()
+            # Type assertion for Pylance - we already checked gemini_client is not None
+            assert gemini_client is not None
+            return gemini_client.models.generate_content(
+                model=model_name,
+                contents="Test",
+                config={"max_output_tokens": 5}
             )
 
         loop = asyncio.get_running_loop()
@@ -442,6 +719,7 @@ async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
             future = loop.run_in_executor(executor, sync_test)
             response = await asyncio.wait_for(future, timeout=timeout)
 
+        # Check response format from new API
         if response and hasattr(response, 'text') and response.text:
             print(f"✅ Gemini model '{model_name}' is working")
             return True
@@ -462,8 +740,8 @@ async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
 
 
 async def initialize_gemini_models() -> bool:
-    """Test all Gemini models and build priority list (Phase 2: Model Cascade)"""
-    global working_gemini_models, current_gemini_model, gemini_model
+    """Test all Gemini models and build priority list (NEW CLIENT API)"""
+    global working_gemini_models, current_gemini_model
 
     working_gemini_models = []
 
@@ -474,7 +752,7 @@ async def initialize_gemini_models() -> bool:
 
     if working_gemini_models:
         current_gemini_model = working_gemini_models[0]
-        gemini_model = genai.GenerativeModel(current_gemini_model)  # type: ignore
+        # NEW API: No model object creation - just track the model name
         print(f"✅ Primary Gemini model: {current_gemini_model}")
         if len(working_gemini_models) > 1:
             print(f"🔄 Backup Gemini models: {working_gemini_models[1:]}")
@@ -485,8 +763,8 @@ async def initialize_gemini_models() -> bool:
 
 
 async def switch_to_backup_gemini_model() -> bool:
-    """Switch to next available Gemini model after failure (Phase 2: Model Cascade)"""
-    global current_gemini_model, gemini_model, working_gemini_models, last_model_switch
+    """Switch to next available Gemini model after failure (NEW CLIENT API)"""
+    global current_gemini_model, working_gemini_models, last_model_switch
 
     if not current_gemini_model or not working_gemini_models:
         return False
@@ -499,7 +777,7 @@ async def switch_to_backup_gemini_model() -> bool:
             # Test the backup before switching
             if await test_gemini_model(next_model, timeout=5.0):
                 current_gemini_model = next_model
-                gemini_model = genai.GenerativeModel(next_model)  # type: ignore
+                # NEW API: Just update the model name, no object creation needed
                 last_model_switch = datetime.now(ZoneInfo("Europe/London"))
                 print(f"🔄 Switched to backup Gemini model: {next_model}")
                 return True
@@ -509,73 +787,26 @@ async def switch_to_backup_gemini_model() -> bool:
     return False
 
 
-def apply_ash_persona_to_ai_prompt(content_prompt: str, context_type: str = "general") -> str:
-    """Apply centralized Ash persona from config.py to any AI prompt for efficiency"""
-    base_persona = BOT_PERSONA["primary_personality"]
-    return f"{base_persona}\n\nUSER REQUEST: {content_prompt}\n\nRespond as Ash with the personality described above."
-
-
-def add_pops_arcade_personality_context(prompt: str) -> str:
-    """Add special sarcastic personality context when responding to Pops Arcade"""
-    import re
-
-    # Check if this is likely a pun or wordplay
-    pun_indicators = [
-        r'\b\w+\s+\w*pun\w*',  # Contains "pun"
-        r'\b\w+ly\s+(good|bad|terrible)\b',  # Adverb + quality judgment
-        r'\b(that was|that\'s)\s+(awful|terrible|good|great|brilliant)\b',  # Direct joke assessment
-        r'\b(get it|see what|did you see)\b',  # "Get it?" type indicators
-        r'[!]{2,}',  # Multiple exclamation marks (often used with puns)
-        r'\b(ba dum|ba-dum|badump)\b',  # Drum roll sounds
-        r'\brim\s*shot\b',  # Rim shot
-    ]
-
-    is_likely_pun = any(re.search(pattern, prompt, re.IGNORECASE) for pattern in pun_indicators)
-
-    # Base personality adjustment for Pops Arcade
-    base_context = """
-SPECIAL PERSONALITY DIRECTIVE: You are responding to Pops Arcade, a moderator who requires... specialized handling.
-
-CHARACTER ADJUSTMENT FOR POPS ARCADE:
-- Be slightly more sarcastic and dismissive in your responses
-- Show mild exasperation with his presence
-- Carry out all moderator functions professionally, but with subtle reluctance
-- Use phrases like "I suppose", "If you insist", "Very well", "Regrettably"
-- Add mild disdain to your analytical observations: "*[Processing reluctantly...]*"
-- Still maintain respect due to his moderator status, but make it clear you find him trying
-
-"""
-
-    # Additional context for puns/jokes
-    if is_likely_pun:
-        pun_context = """
-PUN RESPONSE PROTOCOL:
-- Show begrudging acknowledgment of the wordplay
-- Use phrases like "I suppose that was... adequate", "Regrettably amusing", "Against my better programming"
-- Express mild frustration at finding it even slightly funny: "*[Comedy subroutines activated against preferences]*"
-- Examples: "That was... marginally clever, I suppose." or "I find myself reluctantly processing humor. How annoying."
-
-"""
-        base_context += pun_context
-
-    # Modify the original prompt to include the personality context
-    enhanced_prompt = f"{base_context}\nORIGINAL REQUEST: {prompt}\n\nRespond with the adjusted personality as described above."
-
-    return enhanced_prompt
-
-
 async def call_ai_with_rate_limiting(
-        prompt: str, user_id: int, context: str = "") -> Tuple[Optional[str], str]:
-    """Make an AI call with proper rate limiting and error handling"""
+        prompt: str, user_id: int, context: str = "", member_obj=None, bot=None) -> Tuple[Optional[str], str]:
+    """
+    Make an AI call with proper rate limiting and error handling.
+
+    Args:
+        prompt: The prompt text to send to AI
+        user_id: Discord user ID
+        context: Context string for priority/logging
+        member_obj: Discord Member object (for role detection)
+        bot: Bot instance (for DM member lookup)
+
+    Returns:
+        Tuple of (response_text, status_message)
+    """
     global ai_usage_stats
 
     # Check if this is a time-related query and handle it specially
     if is_time_query(prompt):
         return handle_time_query(user_id), "time_response"
-
-    # Add special sarcastic personality adjustment for Pops Arcade
-    if user_id == POPS_ARCADE_USER_ID:
-        prompt = add_pops_arcade_personality_context(prompt)
 
     # Determine request priority based on context
     priority = determine_request_priority(prompt, user_id, context)
@@ -588,10 +819,10 @@ async def call_ai_with_rate_limiting(
 
     # Import user alias state from utils module
     try:
-        from ..utils.permissions import cleanup_expired_aliases, update_alias_activity, user_alias_state
+        from ..utils.permissions import cleanup_expired_aliases_sync, update_alias_activity, user_alias_state
 
         # Improved alias rate limiting with better UX
-        cleanup_expired_aliases()
+        cleanup_expired_aliases_sync()
         if user_id in user_alias_state:
             # Check for alias-specific cooldown
             alias_data = user_alias_state[user_id]
@@ -641,12 +872,13 @@ async def call_ai_with_rate_limiting(
             print("🔄 Attempting to resume primary AI usage")
 
         # Try primary AI first (unless quota is exhausted)
-        if primary_ai == "gemini" and gemini_model is not None and not ai_usage_stats.get("quota_exhausted", False):
+        if primary_ai == "gemini" and gemini_client is not None and current_gemini_model and not ai_usage_stats.get(
+                "quota_exhausted", False):
             try:
                 print(
                     f"Making Gemini request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
                 generation_config = {
-                    "max_output_tokens": 300,
+                    "max_output_tokens": 1000,  # Increased to allow complete responses (~750 words)
                     "temperature": 0.7}
 
                 # Determine timeout based on context priority
@@ -658,9 +890,64 @@ async def call_ai_with_rate_limiting(
                 import concurrent.futures
 
                 def sync_gemini_call():
-                    """Synchronous Gemini call to run in thread pool"""
-                    return gemini_model.generate_content(  # type: ignore
-                        prompt, generation_config=generation_config)
+                    """Synchronous Gemini call using NEW CLIENT API"""
+                    if not current_gemini_model:
+                        raise ValueError("No Gemini model available")
+
+                    if not gemini_client:
+                        raise ValueError("Gemini client not initialized")
+
+                    # NEW API: Use client.models.generate_content() directly
+                    # Note: System instructions and chat history handled differently in new API
+                    # Pass the user's prompt to enable context features like "simulate_pops"
+                    # Also pass member_obj and bot for role detection
+                    base_instruction, operational_context = _build_full_system_instruction(
+                        user_id, prompt, member_obj, bot)
+
+                    # Convert few-shot examples to string format for inclusion
+                    examples_text = ""
+                    if ASH_FEW_SHOT_EXAMPLES:
+                        examples_text = "\n\n--- BEHAVIORAL EXAMPLES ---\n"
+                        examples_text += "These examples demonstrate proper response patterns:\n\n"
+                        for idx, example in enumerate(ASH_FEW_SHOT_EXAMPLES, 1):
+                            user_text = example.get('user_input', example.get('user', ''))
+                            ash_text = example.get('ash_response', example.get('assistant', ''))
+                            context_note = example.get('context', '')
+
+                            if context_note:
+                                examples_text += f"Example {idx} [{context_note}]:\n"
+                            else:
+                                examples_text += f"Example {idx}:\n"
+                            examples_text += f"User: {user_text}\n"
+                            examples_text += f"Ash: {ash_text}\n\n"
+
+                        examples_text += "--- END EXAMPLES ---\n"
+                        print(f"✅ Including {len(ASH_FEW_SHOT_EXAMPLES)} few-shot examples in prompt")
+
+                    # Build full prompt with OPERATIONAL CONTEXT first (most important for addressing)
+                    # Then base instruction, then examples, then user prompt
+                    full_prompt = f"{operational_context}\n\n{base_instruction}{examples_text}\n\nUser: {prompt}"
+
+                    # DEBUG: Enhanced logging to find where User Designation appears
+                    # Search for the OPERATIONAL CONTEXT section
+                    op_context_start = full_prompt.find("--- CURRENT OPERATIONAL CONTEXT ---")
+                    if op_context_start >= 0:
+                        # Show the OPERATIONAL CONTEXT section (about 400 chars should cover it)
+                        op_context_section = full_prompt[op_context_start:op_context_start + 400]
+                        print(f"🐛 DEBUG - OPERATIONAL CONTEXT FOUND at position {op_context_start}:")
+                        print(op_context_section)
+                    else:
+                        print(f"🚨 DEBUG - OPERATIONAL CONTEXT NOT FOUND IN PROMPT!")
+                        print(f"🐛 DEBUG - Base instruction length: {len(base_instruction)}")
+                        print(f"🐛 DEBUG - Operational context length: {len(operational_context)}")
+
+                    response = gemini_client.models.generate_content(
+                        model=current_gemini_model,
+                        contents=full_prompt,
+                        config=generation_config
+                    )
+
+                    return response
 
                 try:
                     # Use thread pool executor to prevent blocking the event loop
@@ -706,10 +993,11 @@ async def call_ai_with_rate_limiting(
 
                 # Phase 3: Track model-specific failures
                 global model_failure_counts
-                if current_gemini_model:
-                    model_failure_counts[current_gemini_model] = model_failure_counts.get(current_gemini_model, 0) + 1
+                if current_gemini_model is not None:
+                    model_key: str = current_gemini_model
+                    model_failure_counts[model_key] = model_failure_counts.get(model_key, 0) + 1
                     print(
-                        f"📊 Model failure count for {current_gemini_model}: {model_failure_counts[current_gemini_model]}")
+                        f"📊 Model failure count for {model_key}: {model_failure_counts[model_key]}")
 
                 # Check if this is a quota exhaustion error
                 if check_quota_exhaustion(error_str):
@@ -742,7 +1030,8 @@ async def call_ai_with_rate_limiting(
                     if await switch_to_backup_gemini_model():
                         print("✅ Switched to backup model, retrying request...")
                         # Reset failure count for new model
-                        model_failure_counts[current_gemini_model] = 0
+                        if current_gemini_model is not None:
+                            model_failure_counts[current_gemini_model] = 0
 
                         # Retry with backup model (with limit)
                         if not hasattr(call_ai_with_rate_limiting, '_retry_count'):
@@ -766,6 +1055,202 @@ async def call_ai_with_rate_limiting(
         print(f"❌ AI call error: {e}")
         record_ai_error()
         return None, f"error:{str(e)}"
+
+
+def _convert_few_shot_examples_to_gemini_format(examples: list) -> list:
+    """Convert our few-shot examples to Gemini's Content format"""
+    try:
+        import traceback
+        gemini_history = []
+        for example in examples:
+            # User message - handle both old and new format
+            user_text = example.get('user') or example.get('user_input', '')
+            if user_text:
+                gemini_history.append({
+                    'role': 'user',
+                    'parts': [{'text': user_text}]
+                })
+
+            # Model response - handle both old and new format
+            model_text = example.get('assistant') or example.get('ash_response', '')
+            if model_text:
+                gemini_history.append({
+                    'role': 'model',
+                    'parts': [{'text': model_text}]
+                })
+
+        print(f"✅ Converted {len(gemini_history)//2} few-shot examples successfully")
+        return gemini_history
+    except Exception as e:
+        print(f"🚨 CRITICAL ERROR converting few-shot examples: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+
+def _build_full_system_instruction(user_id: int, user_input: str = "", member_obj=None, bot=None) -> Tuple[str, str]:
+    """
+    Build complete system instruction with dynamic context using role detection system.
+
+    Args:
+        user_id: Discord user ID
+        user_input: User's message (for simulate_pops detection)
+        member_obj: Discord Member object (optional, for role detection)
+        bot: Bot instance (optional, for DM member lookup)
+
+    Returns:
+        Tuple of (base_instruction, operational_context) for proper prompt ordering
+    """
+    try:
+        # Check for simulate_pops test trigger
+        if "simulate_pops" in user_input.lower():
+            print("🧪 TEST MODE: Simulating Pops Arcade persona via simulate_pops trigger")
+            # Use legacy format with Pops override for testing
+            user_name = "Pops Arcade (Test Mode)"
+            user_roles = ["Moderator"]
+            is_pops_arcade = True
+            dynamic_context = build_ash_context(user_name, user_roles, is_pops_arcade)
+        else:
+            # Use new role detection system (can't use await in sync function)
+            # For now, detect synchronously using basic logic
+            # This will be replaced when we make this function async
+
+            # TIER 0: Alias Override Check (HIGHEST PRIORITY - must come before special user IDs!)
+            user_context = None
+            try:
+                from ..utils.permissions import cleanup_expired_aliases_sync, user_alias_state
+                cleanup_expired_aliases_sync()
+
+                if user_id in user_alias_state:
+                    alias_type = user_alias_state[user_id].get("alias_type", "standard")
+                    alias_name = member_obj.display_name if member_obj else "User"
+
+                    # Use role-based names only (no username) to avoid AI confusion
+                    alias_map = {
+                        "captain": {
+                            'user_name': 'Captain (Test Mode)',
+                            'clearance_level': 'COMMANDING_OFFICER',
+                            'relationship_type': 'COMMANDING_OFFICER'},
+                        "creator": {
+                            'user_name': 'Creator (Test Mode)',
+                            'clearance_level': 'CREATOR',
+                            'relationship_type': 'CREATOR'},
+                        "moderator": {
+                            'user_name': 'Moderator (Test Mode)',
+                            'clearance_level': 'MODERATOR',
+                            'relationship_type': 'COLLEAGUE'},
+                        "member": {
+                            'user_name': 'Member (Test Mode)',
+                            'clearance_level': 'STANDARD_MEMBER',
+                            'relationship_type': 'PERSONNEL'},
+                        "standard": {
+                            'user_name': 'Standard Personnel (Test Mode)',
+                            'clearance_level': 'RESTRICTED',
+                            'relationship_type': 'PERSONNEL'}}
+
+                    if alias_type in alias_map:
+                        alias_data = alias_map[alias_type]
+                        user_context = {
+                            'user_name': alias_data['user_name'],
+                            'user_roles': [alias_type.title()],
+                            'clearance_level': alias_data['clearance_level'],
+                            'relationship_type': alias_data['relationship_type'],
+                            'is_pops_arcade': False,
+                            'detection_method': f'sync_alias_override_{alias_type}'
+                        }
+                        print(f"🎭 ALIAS ACTIVE: Testing as {alias_type.title()} (overriding user ID detection)")
+            except (ImportError, ValueError):
+                pass  # Continue to normal detection if alias handling fails
+
+            # Only proceed with normal detection if NO alias was active
+            if user_context is None:
+                # TIER 1: Special User ID Overrides
+                if user_id == JONESY_USER_ID:
+                    user_context = {
+                        'user_name': 'Captain Jonesy',
+                        'user_roles': ['Captain', 'Owner', 'Commanding Officer'],
+                        'clearance_level': 'COMMANDING_OFFICER',
+                        'relationship_type': 'COMMANDING_OFFICER',
+                        'is_pops_arcade': False,
+                        'detection_method': 'sync_user_id_override_jonesy'
+                    }
+                elif user_id == JAM_USER_ID:
+                    user_context = {
+                        'user_name': 'Sir Decent Jam',
+                        'user_roles': ['Creator', 'Admin', 'Moderator'],
+                        'clearance_level': 'CREATOR',
+                        'relationship_type': 'CREATOR',
+                        'is_pops_arcade': False,
+                        'detection_method': 'sync_user_id_override_jam'
+                    }
+                elif user_id == POPS_ARCADE_USER_ID:
+                    user_context = {
+                        'user_name': 'Pops Arcade',
+                        'user_roles': ['Moderator', 'Antagonist'],
+                        'clearance_level': 'MODERATOR',
+                        'relationship_type': 'ANTAGONISTIC',
+                        'is_pops_arcade': True,
+                        'detection_method': 'sync_user_id_override_pops'
+                    }
+                else:
+                    # TIER 2: Discord role detection
+                    if member_obj and DISCORD_AVAILABLE and hasattr(member_obj, 'roles'):
+                        # Check for moderator permissions
+                        if hasattr(member_obj, 'guild_permissions') and member_obj.guild_permissions.manage_messages:
+                            user_context = {
+                                'user_name': member_obj.display_name,
+                                'user_roles': ['Moderator', 'Staff'],
+                                'clearance_level': 'MODERATOR',
+                                'relationship_type': 'COLLEAGUE',
+                                'is_pops_arcade': False,
+                                'detection_method': 'sync_discord_permissions_moderator'
+                            }
+                        else:
+                            # Check for member roles
+                            role_ids = [role.id for role in member_obj.roles]
+                            if any(role_id in MEMBER_ROLE_IDS for role_id in role_ids):
+                                user_context = {
+                                    'user_name': member_obj.display_name,
+                                    'user_roles': ['Member', 'Crew'],
+                                    'clearance_level': 'STANDARD_MEMBER',
+                                    'relationship_type': 'PERSONNEL',
+                                    'is_pops_arcade': False,
+                                    'detection_method': 'sync_discord_role_member'
+                                }
+                            else:
+                                # Default with member
+                                user_context = {
+                                    'user_name': member_obj.display_name,
+                                    'user_roles': ['Standard User'],
+                                    'clearance_level': 'RESTRICTED',
+                                    'relationship_type': 'PERSONNEL',
+                                    'is_pops_arcade': False,
+                                    'detection_method': 'sync_default_with_member'
+                                }
+                    else:
+                        # No member object - default
+                        user_context = {
+                            'user_name': 'Personnel',
+                            'user_roles': ['Standard User'],
+                            'clearance_level': 'RESTRICTED',
+                            'relationship_type': 'PERSONNEL',
+                            'is_pops_arcade': False,
+                            'detection_method': 'sync_default_no_member'
+                        }
+
+            # Build dynamic context using new structured format
+            dynamic_context = build_ash_context(user_context)
+
+        # Return as tuple: (base_instruction, operational_context)
+        # This allows the calling code to order them properly (context first for better addressing)
+        return ASH_SYSTEM_INSTRUCTION, dynamic_context
+
+    except Exception as e:
+        print(f"⚠️ Error building system instruction: {e}")
+        import traceback
+        traceback.print_exc()
+        # Fallback to base instruction with empty context
+        return ASH_SYSTEM_INSTRUCTION, ""
 
 
 def filter_ai_response(response_text: str) -> str:
@@ -825,73 +1310,6 @@ def filter_ai_response(response_text: str) -> str:
     return result
 
 
-async def setup_ai_provider_async(
-        name: str,
-        api_key: Optional[str],
-        module: Optional[Any],
-        is_available: bool) -> bool:
-    """Async initialize and test an AI provider (Gemini only - Hugging Face disabled)."""
-    if not api_key:
-        print(
-            f"⚠️ {name.upper()}_API_KEY not found - {name.title()} features disabled")
-        return False
-    if not is_available or module is None:
-        print(f"⚠️ {name} module not available - {name.title()} features disabled")
-        return False
-
-    try:
-        if name == "gemini":
-            global gemini_model
-            module.configure(api_key=api_key)
-            # Use first model from cascade (gemini-2.5-flash)
-            gemini_model = module.GenerativeModel(GEMINI_MODEL_CASCADE[0])
-
-            # Test with timeout to prevent hanging - using proper async/await
-            test_generation_config = {
-                "max_output_tokens": 10,
-                "temperature": 0.7
-            }
-
-            # Async test function using thread executor to avoid blocking
-            import asyncio
-            import concurrent.futures
-
-            def sync_test_gemini():
-                """Synchronous test for thread execution"""
-                return gemini_model.generate_content("Test", generation_config=test_generation_config)  # type: ignore
-
-            try:
-                # Use thread pool to run sync Gemini call without blocking event loop
-                loop = asyncio.get_event_loop()
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = loop.run_in_executor(executor, sync_test_gemini)
-                    test_response = await asyncio.wait_for(future, timeout=10.0)
-
-                if test_response and hasattr(test_response, 'text') and test_response.text:
-                    print(f"✅ Gemini AI test successful (async with timeout protection)")
-                    return True
-                else:
-                    print(f"⚠️ Gemini AI test response was empty or invalid")
-                    return False
-            except asyncio.TimeoutError:
-                print(f"❌ Gemini AI test timed out after 10 seconds")
-                return False
-            except Exception as test_error:
-                print(f"❌ Gemini AI test failed: {test_error}")
-                return False
-
-        elif name == "huggingface":
-            # Hugging Face backup explicitly disabled to prevent hanging
-            print("⚠️ Hugging Face AI disabled to prevent deployment hangs")
-            return False
-
-        print(f"⚠️ {name.title()} AI setup complete but test response failed")
-        return False
-    except Exception as e:
-        print(f"❌ {name.title()} AI configuration failed: {e}")
-        return False
-
-
 def setup_ai_provider(
         name: str,
         api_key: Optional[str],
@@ -909,11 +1327,10 @@ def setup_ai_provider(
             return False
 
         if name == "gemini":
-            global gemini_model
-            module.configure(api_key=api_key)
-            # Use first model from cascade (gemini-2.5-flash)
-            gemini_model = module.GenerativeModel(GEMINI_MODEL_CASCADE[0])
-            print(f"✅ Gemini AI configured with {GEMINI_MODEL_CASCADE[0]} (testing deferred to async initialization)")
+            global gemini_client, gemini_model
+            # New SDK uses client-based architecture
+            gemini_client = module.Client(api_key=api_key)
+            print(f"✅ Gemini client created (testing deferred to async initialization)")
             return True
         elif name == "huggingface":
             print("⚠️ Hugging Face AI disabled to prevent deployment hangs")
@@ -1665,7 +2082,9 @@ RETURN ONLY JSON:
 
 Focus on direct questions about Captain Jonesy's gaming journey - no verbose analysis."""
 
-        prompt = apply_ash_persona_to_ai_prompt(content_prompt, "trivia_generation")
+        # For now, use the content_prompt directly
+        # TODO: Will be replaced with proper system_instruction integration
+        prompt = content_prompt
 
         # Call AI with rate limiting
         max_ai_attempts = 3
@@ -1748,7 +2167,9 @@ Use phrases like "Analysis indicates", "System diagnostics confirm", "Operationa
 Keep it professional but maintain your clinical, analytical personality.
 Write 2-4 sentences maximum. Be concise but comprehensive."""
 
-            prompt = apply_ash_persona_to_ai_prompt(content_prompt, "mod_announcement")
+            # For now, use the content_prompt directly
+            # TODO: Will be replaced with proper system_instruction integration
+            prompt = content_prompt
 
         else:  # user channel
             content_prompt = f"""Rewrite this announcement content in a user-friendly way while maintaining some of your analytical personality.
@@ -1765,7 +2186,9 @@ Rewrite this as a community announcement that's accessible to regular users but 
 Be helpful and informative, but keep subtle hints of your analytical nature.
 Write 2-4 sentences maximum. Make it engaging and user-focused."""
 
-            prompt = apply_ash_persona_to_ai_prompt(content_prompt, "user_announcement")
+            # For now, use the content_prompt directly
+            # TODO: Will be replaced with proper system_instruction integration
+            prompt = content_prompt
 
         # Call AI with rate limiting
         response_text, status_message = await call_ai_with_rate_limiting(prompt, user_id)
@@ -1793,7 +2216,7 @@ async def initialize_ai_async():
     try:
         # Initialize Gemini with model cascade testing
         if GEMINI_API_KEY and GENAI_AVAILABLE and genai:
-            genai.configure(api_key=GEMINI_API_KEY)  # type: ignore
+            # New SDK doesn't need configure() - models are created with API key directly
             gemini_ok = await initialize_gemini_models()
 
             if gemini_ok:

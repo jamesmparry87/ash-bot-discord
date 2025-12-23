@@ -22,10 +22,8 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 
 from ..config import (
-    BOT_PERSONA,
     BUSY_MESSAGE,
     ERROR_MESSAGE,
-    FAQ_RESPONSES,
     JAM_USER_ID,
     JONESY_USER_ID,
     MEMBERS_CHANNEL_ID,
@@ -34,6 +32,8 @@ from ..config import (
     VIOLATION_CHANNEL_ID,
 )
 from ..database_module import DatabaseManager, get_database
+from ..persona.faq_handler import check_faq_match, get_role_aware_faq_response
+from ..persona.faqs import ASH_FAQ_RESPONSES
 from ..utils.permissions import (
     cleanup_expired_aliases,
     get_member_conversation_count,
@@ -43,9 +43,7 @@ from ..utils.permissions import (
     user_is_mod_by_id,
 )
 from .ai_handler import (
-    add_pops_arcade_personality_context,
     ai_enabled,
-    apply_ash_persona_to_ai_prompt,
     call_ai_with_rate_limiting,
     filter_ai_response,
 )
@@ -1881,12 +1879,27 @@ async def handle_general_conversation(message: discord.Message, bot: commands.Bo
             if channel_id != MEMBERS_CHANNEL_ID and channel_id is not None:
                 increment_member_conversation_count(message.author.id)
 
-        # PRIORITY A: Check for FAQ responses
-        if content_lower in FAQ_RESPONSES:
-            response = FAQ_RESPONSES[content_lower]
-            response = apply_pops_arcade_sarcasm(response, message.author.id)
-            await message.reply(response)
-            return
+        # PRIORITY A: Check for FAQ responses with role awareness
+        if check_faq_match(content_lower):
+            # Get user context for role-aware FAQ responses
+            try:
+                from .ai_handler import detect_user_context
+                user_context = await detect_user_context(message.author.id, message.author, bot)
+                response = get_role_aware_faq_response(content_lower, user_context)
+
+                if response:
+                    # Still apply Pops sarcasm for additional modifications
+                    response = apply_pops_arcade_sarcasm(response, message.author.id)
+                    await message.reply(response)
+                    return
+            except Exception as faq_error:
+                print(f"⚠️ Error in role-aware FAQ: {faq_error}, falling back to standard FAQ")
+                # Fallback to standard FAQ
+                response = ASH_FAQ_RESPONSES.get(content_lower)
+                if response:
+                    response = apply_pops_arcade_sarcasm(response, message.author.id)
+                    await message.reply(response)
+                    return
 
         # PRIORITY B: Check for announcement creation intent
         announcement_keywords = ["announcement", "announce", "update"]
@@ -1912,14 +1925,33 @@ CRITICAL DISAMBIGUATION RULE: In this server, "Jonesy" ALWAYS refers to Captain 
 Be analytical, precise, and helpful. Keep responses concise (2-3 sentences max).
 Respond to: {content}"""
 
-            response_text, status_message = await call_ai_with_rate_limiting(ai_prompt, message.author.id)
+            response_text, status_message = await call_ai_with_rate_limiting(
+                ai_prompt, message.author.id, context="personality_response",
+                member_obj=message.author, bot=bot)
             if response_text:
                 filtered_response = filter_ai_response(response_text)
                 await message.reply(filtered_response)
             else:
+                # ADD LOUD ERROR LOGGING
+                print(f"🚨 CRITICAL AI ERROR: AI call returned None")
+                print(f"   Status message: {status_message}")
+                print(f"   User: {message.author.id} ({author_name})")
+                print(f"   Prompt: {ai_prompt[:200]}...")
+                import traceback
+                traceback.print_exc()
+
                 await message.reply("My apologies. My cognitive matrix is currently unavailable for that query.")
         else:
+            # ADD LOUD ERROR LOGGING
+            print(f"🚨 CRITICAL AI ERROR: AI is not enabled")
+            print(f"   ai_enabled flag: {ai_enabled}")
+            print(f"   User: {message.author.id} ({message.author.display_name})")
+            import traceback
+            traceback.print_exc()
+
             await message.reply("My apologies. My cognitive matrix is currently offline. Please try again later.")
     except Exception as e:
-        print(f"❌ Error in general conversation handler: {e}")
+        print(f"🚨 CRITICAL ERROR in general conversation handler: {e}")
+        import traceback
+        traceback.print_exc()
         await message.reply("System anomaly detected. Diagnostic protocols engaged.")

@@ -623,6 +623,20 @@ async def on_ready():
     # Initialize all modular components
     status_report = await initialize_modular_components()
 
+    # CRITICAL: Initialize AI with async model testing
+    try:
+        from bot.handlers.ai_handler import safe_initialize_ai_async
+        print("🤖 Starting async AI initialization with model testing...")
+        ai_success = await safe_initialize_ai_async()
+        if ai_success:
+            print("✅ Async AI initialization complete - models tested and ready")
+        else:
+            print("⚠️ Async AI initialization failed - AI features may be limited")
+    except Exception as ai_error:
+        print(f"❌ Critical error during async AI initialization: {ai_error}")
+        import traceback
+        traceback.print_exc()
+
     try:
         from bot.handlers import message_handler
         message_handler.initialize_series_list()

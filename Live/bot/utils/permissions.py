@@ -51,7 +51,7 @@ def should_limit_member_conversation(
     """Check if member conversation should be limited outside members channel"""
     # Check for active alias first - aliases are exempt from conversation
     # limits
-    cleanup_expired_aliases()
+    cleanup_expired_aliases_sync()
     if user_id in user_alias_state:
         update_alias_activity(user_id)
         return False  # Aliases are exempt from conversation limits
@@ -71,14 +71,60 @@ def should_limit_member_conversation(
 # --- Alias System Helper Functions ---
 
 
-def cleanup_expired_aliases():
-    """Remove aliases inactive for more than 1 hour"""
+async def cleanup_expired_aliases(bot=None):
+    """Remove expired aliases (either by explicit expiry time or 1 hour inactivity) and notify users"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    cutoff_time = uk_now - timedelta(hours=1)
+    inactivity_cutoff = uk_now - timedelta(hours=1)
+
+    # Check BOTH conditions: explicit expiry OR inactivity timeout
     expired_users = [
         user_id for user_id, data in user_alias_state.items()
-        if data["last_activity"] < cutoff_time
+        if (
+            # Condition 1: Explicit expiry time has passed
+            (data.get("expires_at") and uk_now >= data["expires_at"]) or
+            # Condition 2: OR more than 1 hour of inactivity
+            data["last_activity"] < inactivity_cutoff
+        )
     ]
+
+    for user_id in expired_users:
+        alias_type = user_alias_state[user_id].get("alias_type", "unknown")
+
+        # Try to notify user via DM if bot is available
+        if bot:
+            try:
+                user = await bot.fetch_user(user_id)
+                if user:
+                    await user.send(
+                        f"🎭 **Test Alias Expired**\n\n"
+                        f"Your **{alias_type.title()}** test alias has expired after 1 hour of inactivity.\n"
+                        f"You are now being detected normally based on your Discord roles.\n\n"
+                        f"*Use `!testpersona {alias_type} [minutes]` to reactivate if needed.*"
+                    )
+                    print(f"✅ Sent alias expiry notification to user {user_id} ({alias_type})")
+            except Exception as e:
+                print(f"⚠️ Could not send alias expiry notification to user {user_id}: {e}")
+
+        # Remove the expired alias
+        del user_alias_state[user_id]
+
+
+def cleanup_expired_aliases_sync():
+    """Synchronous version for backward compatibility - removes expired aliases without notification"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    inactivity_cutoff = uk_now - timedelta(hours=1)
+
+    # Check BOTH conditions: explicit expiry OR inactivity timeout
+    expired_users = [
+        user_id for user_id, data in user_alias_state.items()
+        if (
+            # Condition 1: Explicit expiry time has passed
+            (data.get("expires_at") and uk_now >= data["expires_at"]) or
+            # Condition 2: OR more than 1 hour of inactivity
+            data["last_activity"] < inactivity_cutoff
+        )
+    ]
+
     for user_id in expired_users:
         del user_alias_state[user_id]
 
@@ -193,7 +239,7 @@ async def get_user_communication_tier(
         guild = None
 
     # First check for active alias (debugging only)
-    cleanup_expired_aliases()
+    cleanup_expired_aliases_sync()
     if user_id in user_alias_state:
         update_alias_activity(user_id)
         alias_tier = user_alias_state[user_id]["alias_type"]
