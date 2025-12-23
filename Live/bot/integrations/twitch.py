@@ -51,10 +51,19 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
         # Try the SECOND part FIRST (after separator) - most common location for game name
         if len(parts) > 1:
             after_dash = parts[1].strip()
-            # Remove day/episode markers
+            # Remove day/episode markers (both parentheses and standalone)
             after_dash = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', after_dash, flags=re.IGNORECASE)
             after_dash = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]', '', after_dash, flags=re.IGNORECASE)
+            # Remove "Part X" at start or end of string
+            after_dash = re.sub(r'^(?:part|ep|episode)\s+\d+\s*[-:]?\s*', '', after_dash, flags=re.IGNORECASE)
+            after_dash = re.sub(r'\s*[-:]?\s*(?:part|ep|episode)\s+\d+$', '', after_dash, flags=re.IGNORECASE)
+            # Remove common suffixes like "Gameplay", "Playthrough", "Stream"
+            after_dash = re.sub(r'\s+(gameplay|playthrough|stream|let\'s play|walkthrough)$', '', after_dash, flags=re.IGNORECASE)
             after_dash = cleanup_game_name(after_dash)
+            
+            # Reject if it's ONLY "Part X" or similar episode marker
+            if re.match(r'^(?:part|ep|episode|day)\s+\d+$', after_dash, flags=re.IGNORECASE):
+                after_dash = ''  # Mark as invalid
 
             if len(after_dash) >= 3 and not is_generic_term(after_dash):
                 # Keep this extraction even if IGDB fails
