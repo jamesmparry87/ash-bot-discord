@@ -26,7 +26,7 @@ except ImportError:
         @staticmethod
         async def on_message(message):
             pass
-        
+
         BOT_PERSONA = {'enabled': True}
         JONESY_USER_ID = 123456
         JAM_USER_ID = 789012
@@ -40,6 +40,7 @@ except ImportError:
     bot_modular = MockBotModule()  # type: ignore
     filter_ai_response = MockAIHandler.filter_ai_response  # type: ignore
     IMPORTS_AVAILABLE = False
+
 
 class TestAIResponseFiltering:
     """Test AI response filtering and processing."""
@@ -94,6 +95,7 @@ class TestAIResponseFiltering:
 
                                         # Verify response was sent
                                         mock_discord_message.reply.assert_called_once()
+
 
 if __name__ == '__main__':
     pytest.main([__file__])

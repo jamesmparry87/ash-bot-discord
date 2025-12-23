@@ -18,7 +18,7 @@ else:
 try:
     from google import genai
     print("✅ google-genai module imported successfully")
-    
+
     # Try creating a model with the API key
     print(f"\nTesting model creation with api_key parameter...")
     test_model = genai.GenerativeModel(
@@ -26,21 +26,21 @@ try:
         api_key=GEMINI_API_KEY
     )
     print("✅ Model created successfully with api_key parameter")
-    
+
     # Try a simple generation
     print("\nTesting actual API call...")
     response = test_model.generate_content(
         "Say 'test successful' in 2 words",
         generation_config={"max_output_tokens": 10}
     )
-    
+
     if response and hasattr(response, 'text') and response.text:
         print(f"✅ Test generation successful: {response.text}")
         print("\n🎉 ALL TESTS PASSED - Gemini API is working correctly!")
     else:
         print("❌ Test generation returned empty response")
         print(f"Response object: {response}")
-        
+
 except ImportError as e:
     print(f"❌ Import error: {e}")
     print("Make sure google-genai is installed: pip install google-genai")

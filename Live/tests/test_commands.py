@@ -27,10 +27,10 @@ os.environ['TEST_MODE'] = 'true'
 
 # Import the bot module from Live directory
 try:
-    import bot_modular # type: ignore
-    from bot.commands.games import GamesCommands # type: ignore
-    from bot.commands.strikes import StrikesCommands # type: ignore
-    from bot.commands.utility import UtilityCommands # type: ignore
+    import bot_modular  # type: ignore
+    from bot.commands.games import GamesCommands  # type: ignore
+    from bot.commands.strikes import StrikesCommands  # type: ignore
+    from bot.commands.utility import UtilityCommands  # type: ignore
     MODULAR_IMPORTS_AVAILABLE = True
     print("✅ Modular bot components loaded for testing")
 except ImportError as e:
@@ -38,6 +38,8 @@ except ImportError as e:
     MODULAR_IMPORTS_AVAILABLE = False
 
 # Test fixtures
+
+
 @pytest.fixture
 def mock_discord_context():
     """Mock Discord Context for testing."""
@@ -50,6 +52,7 @@ def mock_discord_context():
     context.channel = MagicMock()
     return context
 
+
 @pytest.fixture
 def mock_discord_user():
     """Mock Discord User for testing."""
@@ -58,6 +61,7 @@ def mock_discord_user():
     user.name = "TestTarget"
     user.mention = "<@987654321>"
     return user
+
 
 @pytest.fixture
 def mock_discord_message():
@@ -71,6 +75,7 @@ def mock_discord_message():
     message.mentions = []
     message.reply = AsyncMock()
     return message
+
 
 @pytest.fixture
 def mock_db():
@@ -91,6 +96,7 @@ def mock_db():
     db.get_connection = MagicMock()
     return db
 
+
 @pytest.fixture
 def sample_game_data():
     """Sample game data for testing."""
@@ -103,12 +109,14 @@ def sample_game_data():
     }
 
 # Create bot wrapper for testing (not a test class)
+
+
 class BotWrapper:
     def __init__(self):
         if MODULAR_IMPORTS_AVAILABLE:
-            self.VIOLATION_CHANNEL_ID = bot_modular.VIOLATION_CHANNEL_ID # type: ignore
-            self.JAM_USER_ID = bot_modular.JAM_USER_ID # type: ignore
-            self.db = bot_modular.db # type: ignore
+            self.VIOLATION_CHANNEL_ID = bot_modular.VIOLATION_CHANNEL_ID  # type: ignore
+            self.JAM_USER_ID = bot_modular.JAM_USER_ID  # type: ignore
+            self.db = bot_modular.db  # type: ignore
             self.bot = None
         else:
             self.VIOLATION_CHANNEL_ID = 123456
@@ -140,16 +148,16 @@ class BotWrapper:
         game_parts = game_info.split(' - ', 1)
         game_name = game_parts[0] if game_parts else ""
         reason = game_parts[1] if len(game_parts) > 1 else "No reason provided"
-        
+
         if not game_name.strip():
             await ctx.send("⚠️ Submission invalid. Please provide at least one game name.")
             return
-        
+
         if hasattr(self, 'db') and self.db:
             if self.db.game_exists(game_name):
                 await ctx.send(f"{game_name} already exist(s) in recommendations.")
                 return
-            
+
             self.db.add_game_recommendation(game_name, reason, ctx.author.name)
             await ctx.send(f"Added {game_name} to recommendations.")
 
@@ -173,7 +181,7 @@ class BotWrapper:
             # Parse game info (simplified)
             parts = game_info.split(' | ')
             game_name = parts[0] if parts else "Test Game"
-            
+
             # Extract metadata
             kwargs = {}
             for part in parts[1:]:
@@ -187,7 +195,7 @@ class BotWrapper:
                         kwargs['release_year'] = int(value)
                     elif key == 'status':
                         kwargs['completion_status'] = value
-            
+
             self.db.add_played_game(game_name, **kwargs)
             await ctx.send("Game has been catalogued in the played games database.")
 
@@ -207,8 +215,8 @@ class BotWrapper:
     async def ash_status(self, ctx):
         """Mock ash status command."""
         # Check if this is a moderator/authorized context
-        if ctx.author.id == self.JAM_USER_ID or (hasattr(ctx.author, 'guild_permissions') and 
-                                                ctx.author.guild_permissions.manage_messages):
+        if ctx.author.id == self.JAM_USER_ID or (hasattr(ctx.author, 'guild_permissions') and
+                                                 ctx.author.guild_permissions.manage_messages):
             # Detailed status for authorized users
             await ctx.send("🤖 **Ash Bot - System Diagnostics**\n• **Database**: ✅ Connected\n• **Status**: All systems operational")
         else:
@@ -228,7 +236,7 @@ class BotWrapper:
         # Simplified message processing - just don't crash
         if hasattr(self, 'bot') and self.bot:
             if hasattr(self.bot, 'process_commands'):
-                await self.bot.process_commands(message) # type: ignore
+                await self.bot.process_commands(message)  # type: ignore
         pass
 
     def route_query(self, query):
@@ -246,7 +254,7 @@ class BotWrapper:
             if match:
                 return ('genre', match)
 
-        # Game status queries  
+        # Game status queries
         if any(pattern in query_lower for pattern in [
                 'has jonesy played', 'did captain jonesy play', 'has jonesyspacecat played']):
             import re
@@ -267,6 +275,7 @@ class BotWrapper:
         """Mock activity update function."""
         pass
 
+
 # Create global test bot instance
 test_bot = BotWrapper()
 
@@ -278,10 +287,10 @@ class TestStrikeCommands:
     async def test_get_strikes_command(self, mock_discord_context, mock_db, mock_discord_user):
         """Test the !strikes command."""
         mock_db.get_user_strikes.return_value = 3
-        
+
         with patch.object(test_bot, 'db', mock_db):
             await test_bot.get_strikes(mock_discord_context, mock_discord_user)
-            
+
             mock_db.get_user_strikes.assert_called_once_with(mock_discord_user.id)
             mock_discord_context.send.assert_called_once()
             call_args = mock_discord_context.send.call_args[0][0]
@@ -292,7 +301,7 @@ class TestStrikeCommands:
         """Test the !resetstrikes command."""
         with patch.object(test_bot, 'db', mock_db):
             await test_bot.reset_strikes(mock_discord_context, mock_discord_user)
-            
+
             mock_db.set_user_strikes.assert_called_once_with(mock_discord_user.id, 0)
             mock_discord_context.send.assert_called_once()
             call_args = mock_discord_context.send.call_args[0][0]
@@ -302,10 +311,10 @@ class TestStrikeCommands:
     async def test_all_strikes_command(self, mock_discord_context, mock_db):
         """Test the !allstrikes command."""
         mock_db.get_all_strikes.return_value = {123456789: 2, 987654321: 1}
-        
+
         with patch.object(test_bot, 'db', mock_db):
             await test_bot.all_strikes(mock_discord_context)
-            
+
             mock_db.get_all_strikes.assert_called_once()
             mock_discord_context.send.assert_called_once()
             call_args = mock_discord_context.send.call_args[0][0]
@@ -320,23 +329,23 @@ class TestGameRecommendationCommands:
         """Test successful game addition."""
         mock_db.game_exists.return_value = False
         mock_db.add_game_recommendation.return_value = True
-        
+
         with patch.object(test_bot, "db", mock_db):
             await test_bot._add_game(mock_discord_context, "Test Game - Great game")
-            
+
             mock_db.game_exists.assert_called_once_with("Test Game")
             mock_db.add_game_recommendation.assert_called_once_with(
                 "Test Game", "Great game", mock_discord_context.author.name
             )
 
-    @pytest.mark.asyncio  
+    @pytest.mark.asyncio
     async def test_add_game_command_duplicate(self, mock_discord_context, mock_db):
         """Test adding duplicate game."""
         mock_db.game_exists.return_value = True
-        
+
         with patch.object(test_bot, "db", mock_db):
             await test_bot._add_game(mock_discord_context, "Duplicate Game - Great game")
-            
+
             mock_discord_context.send.assert_called_once()
             call_args = mock_discord_context.send.call_args[0][0]
             assert "already exist(s)" in call_args
@@ -350,10 +359,10 @@ class TestGameRecommendationCommands:
             {'id': 2, 'name': 'Game 2', 'reason': 'Reason 2', 'added_by': 'User2'}
         ]
         mock_db.get_all_games.return_value = mock_games
-        
+
         with patch.object(test_bot, 'db', mock_db):
             await test_bot.list_games(mock_discord_context)
-            
+
             mock_db.get_all_games.assert_called_once()
             mock_discord_context.send.assert_called_once()
             call_args = mock_discord_context.send.call_args
@@ -363,10 +372,10 @@ class TestGameRecommendationCommands:
     async def test_remove_game_command(self, mock_discord_context, mock_db):
         """Test removing a game by name."""
         mock_db.remove_game_by_name.return_value = {"name": "Test Game", "reason": "Test"}
-        
+
         with patch.object(test_bot, "db", mock_db):
             await test_bot.remove_game(mock_discord_context, arg="Test Game")
-            
+
             mock_db.remove_game_by_name.assert_called_once_with("Test Game")
             mock_discord_context.send.assert_called()
             call_args = mock_discord_context.send.call_args[0][0]
@@ -380,12 +389,12 @@ class TestPlayedGamesCommands:
     async def test_add_played_game_command(self, mock_discord_context, mock_db):
         """Test adding a played game."""
         mock_db.add_played_game.return_value = True
-        
+
         with patch.object(test_bot, 'db', mock_db):
             await test_bot.add_played_game_cmd(
                 mock_discord_context, game_info="Test Game | series:Test Series | year:2023 | status:completed"
             )
-            
+
             mock_db.add_played_game.assert_called_once()
             call_args = mock_db.add_played_game.call_args
             assert call_args[0][0] == "Test Game"
@@ -398,10 +407,10 @@ class TestPlayedGamesCommands:
     async def test_game_info_command(self, mock_discord_context, mock_db, sample_game_data):
         """Test getting game information."""
         mock_db.get_played_game.return_value = sample_game_data
-        
+
         with patch.object(test_bot, "db", mock_db):
             await test_bot.game_info_cmd(mock_discord_context, identifier="Test Game")
-            
+
             mock_discord_context.send.assert_called_once()
             call_args = mock_discord_context.send.call_args[0][0]
             assert "Test Game" in call_args
@@ -410,10 +419,10 @@ class TestPlayedGamesCommands:
     async def test_search_played_games_command(self, mock_discord_context, mock_db, sample_game_data):
         """Test searching played games."""
         mock_db.search_played_games.return_value = [sample_game_data]
-        
+
         with patch.object(test_bot, "db", mock_db):
             await test_bot.search_played_games_cmd(mock_discord_context, query="Test")
-            
+
             mock_db.search_played_games.assert_called_once_with("Test")
             mock_discord_context.send.assert_called_once()
             call_args = mock_discord_context.send.call_args
@@ -432,19 +441,19 @@ class TestBotStatusCommands:
         mock_discord_context.channel.id = 999999999999999999  # Not public channel
         mock_discord_context.author.guild_permissions = MagicMock()
         mock_discord_context.author.guild_permissions.manage_messages = True
-        
+
         with patch.object(test_bot, 'db', mock_db):
             await test_bot.ash_status(mock_discord_context)
-            
+
             mock_discord_context.send.assert_called_once()
             call_args = mock_discord_context.send.call_args[0][0]
             assert "Bot" in call_args or "System" in call_args or "operational" in call_args.lower()
 
-    @pytest.mark.asyncio  
+    @pytest.mark.asyncio
     async def test_error_check_command(self, mock_discord_context):
         """Test the !errorcheck command."""
         await test_bot.error_check(mock_discord_context)
-        
+
         mock_discord_context.send.assert_called_once()
         call_args = mock_discord_context.send.call_args[0][0]
         assert "System malfunction detected" in call_args
@@ -453,7 +462,7 @@ class TestBotStatusCommands:
     async def test_busy_check_command(self, mock_discord_context):
         """Test the !busycheck command."""
         await test_bot.busy_check(mock_discord_context)
-        
+
         mock_discord_context.send.assert_called_once()
         call_args = mock_discord_context.send.call_args[0][0]
         assert "critical diagnostic procedure" in call_args
@@ -484,37 +493,37 @@ class TestMessageHandling:
     async def test_strike_detection_in_violation_channel(self, mock_discord_message, mock_db):
         """Test strike detection when user is mentioned in violation channel."""
         mock_discord_message.channel.id = test_bot.VIOLATION_CHANNEL_ID
-        
+
         mock_user = MagicMock()
         mock_user.id = 123456789
         mock_discord_message.mentions = [mock_user]
-        
+
         mock_db.get_user_strikes.return_value = 2
         mock_db.add_user_strike.return_value = 3
-        
+
         with patch.object(test_bot, 'db', mock_db):
             with patch.object(test_bot, 'bot') as mock_bot:
                 mock_bot.process_commands = AsyncMock()
-                
+
                 try:
                     await test_bot.on_message(mock_discord_message)
                     test_passed = True
                 except Exception:
                     test_passed = False
-                
+
                 assert test_passed, "Message processing should not crash"
 
     @pytest.mark.asyncio
     async def test_pineapple_pizza_enforcement(self, mock_discord_message):
         """Test pineapple pizza opinion enforcement."""
         mock_discord_message.content = "Pineapple doesn't belong on pizza"
-        
+
         try:
             await test_bot.on_message(mock_discord_message)
             test_passed = True
         except Exception:
             test_passed = False
-        
+
         assert test_passed, "Pineapple pizza message processing should not crash"
 
     @pytest.mark.asyncio
@@ -522,21 +531,21 @@ class TestMessageHandling:
         """Test AI response when bot is mentioned."""
         mock_bot_user = MagicMock()
         mock_bot_user.id = 12345
-        
+
         mock_discord_message.mentions = [mock_bot_user]
         mock_discord_message.content = f"<@{mock_bot_user.id}> Hello Ash"
         mock_discord_message.author.id = 123456789
-        
+
         with patch.object(test_bot, 'bot') as mock_bot:
             mock_bot.user = mock_bot_user
             mock_bot.process_commands = AsyncMock()
-            
+
             try:
                 await test_bot.on_message(mock_discord_message)
                 test_passed = True
             except Exception:
                 test_passed = False
-            
+
             assert test_passed, "AI mention message processing should not crash"
 
 
@@ -547,10 +556,10 @@ class TestQueryRouting:
         """Test routing of statistical queries."""
         test_queries = [
             "what game series has the most minutes",
-            "which game took longest to complete", 
+            "which game took longest to complete",
             "what game has highest average per episode"
         ]
-        
+
         for query in test_queries:
             query_type, match = test_bot.route_query(query)
             assert query_type == "statistical"
@@ -562,7 +571,7 @@ class TestQueryRouting:
             "did captain jonesy play Skyrim",
             "has jonesyspacecat played Zelda"
         ]
-        
+
         for query in test_queries:
             query_type, match = test_bot.route_query(query)
             assert query_type == "game_status"
@@ -574,7 +583,7 @@ class TestQueryRouting:
             "what horror games has jonesy played",
             "what RPG games did jonesy play"
         ]
-        
+
         for query in test_queries:
             query_type, match = test_bot.route_query(query)
             assert query_type == "genre"

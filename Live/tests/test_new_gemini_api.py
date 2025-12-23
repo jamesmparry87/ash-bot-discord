@@ -29,7 +29,7 @@ try:
         contents="Say hello in one sentence",
         config={"max_output_tokens": 50}
     )
-    
+
     print(f"\n✅ SUCCESS!")
     print(f"Response type: {type(response)}")
     print(f"Has text: {hasattr(response, 'text')}")
@@ -37,7 +37,7 @@ try:
         print(f"Response text: {response.text}")
     else:
         print(f"Response object: {response}")
-        
+
 except Exception as e:
     print(f"\n❌ Error: {e}")
     import traceback
