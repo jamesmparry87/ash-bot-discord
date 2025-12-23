@@ -901,7 +901,7 @@ async def call_ai_with_rate_limiting(
                     # Note: System instructions and chat history handled differently in new API
                     # Pass the user's prompt to enable context features like "simulate_pops"
                     # Also pass member_obj and bot for role detection
-                    system_instruction = _build_full_system_instruction(user_id, prompt, member_obj, bot)
+                    base_instruction, operational_context = _build_full_system_instruction(user_id, prompt, member_obj, bot)
 
                     # Convert few-shot examples to string format for inclusion
                     examples_text = ""
@@ -923,8 +923,9 @@ async def call_ai_with_rate_limiting(
                         examples_text += "--- END EXAMPLES ---\n"
                         print(f"✅ Including {len(ASH_FEW_SHOT_EXAMPLES)} few-shot examples in prompt")
 
-                    # Build full prompt with system instruction, examples, and user prompt
-                    full_prompt = f"{system_instruction}{examples_text}\n\nUser: {prompt}"
+                    # Build full prompt with OPERATIONAL CONTEXT first (most important for addressing)
+                    # Then base instruction, then examples, then user prompt
+                    full_prompt = f"{operational_context}\n\n{base_instruction}{examples_text}\n\nUser: {prompt}"
 
                     # DEBUG: Enhanced logging to find where User Designation appears
                     # Search for the OPERATIONAL CONTEXT section
@@ -936,8 +937,8 @@ async def call_ai_with_rate_limiting(
                         print(op_context_section)
                     else:
                         print(f"🚨 DEBUG - OPERATIONAL CONTEXT NOT FOUND IN PROMPT!")
-                        print(f"🐛 DEBUG - System instruction length: {len(system_instruction)}")
-                        print(f"🐛 DEBUG - System instruction ends with:\n...{system_instruction[-200:]}")
+                        print(f"🐛 DEBUG - Base instruction length: {len(base_instruction)}")
+                        print(f"🐛 DEBUG - Operational context length: {len(operational_context)}")
 
                     response = gemini_client.models.generate_content(
                         model=current_gemini_model,
@@ -1086,7 +1087,7 @@ def _convert_few_shot_examples_to_gemini_format(examples: list) -> list:
         return []
 
 
-def _build_full_system_instruction(user_id: int, user_input: str = "", member_obj=None, bot=None) -> str:
+def _build_full_system_instruction(user_id: int, user_input: str = "", member_obj=None, bot=None) -> Tuple[str, str]:
     """
     Build complete system instruction with dynamic context using role detection system.
 
@@ -1097,7 +1098,7 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
         bot: Bot instance (optional, for DM member lookup)
 
     Returns:
-        Complete system instruction with persona and context
+        Tuple of (base_instruction, operational_context) for proper prompt ordering
     """
     try:
         # Check for simulate_pops test trigger
@@ -1239,17 +1240,16 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
             # Build dynamic context using new structured format
             dynamic_context = build_ash_context(user_context)
 
-        # Combine base system instruction with dynamic context
-        full_instruction = f"{ASH_SYSTEM_INSTRUCTION}\n\n{dynamic_context}"
-
-        return full_instruction
+        # Return as tuple: (base_instruction, operational_context)
+        # This allows the calling code to order them properly (context first for better addressing)
+        return ASH_SYSTEM_INSTRUCTION, dynamic_context
 
     except Exception as e:
         print(f"⚠️ Error building system instruction: {e}")
         import traceback
         traceback.print_exc()
-        # Fallback to base instruction only
-        return ASH_SYSTEM_INSTRUCTION
+        # Fallback to base instruction with empty context
+        return ASH_SYSTEM_INSTRUCTION, ""
 
 
 def filter_ai_response(response_text: str) -> str:
