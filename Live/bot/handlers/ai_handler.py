@@ -901,7 +901,8 @@ async def call_ai_with_rate_limiting(
                     # Note: System instructions and chat history handled differently in new API
                     # Pass the user's prompt to enable context features like "simulate_pops"
                     # Also pass member_obj and bot for role detection
-                    base_instruction, operational_context = _build_full_system_instruction(user_id, prompt, member_obj, bot)
+                    base_instruction, operational_context = _build_full_system_instruction(
+                        user_id, prompt, member_obj, bot)
 
                     # Convert few-shot examples to string format for inclusion
                     examples_text = ""
