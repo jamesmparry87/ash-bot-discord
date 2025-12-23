@@ -58,9 +58,13 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
             after_dash = re.sub(r'^(?:part|ep|episode)\s+\d+\s*[-:]?\s*', '', after_dash, flags=re.IGNORECASE)
             after_dash = re.sub(r'\s*[-:]?\s*(?:part|ep|episode)\s+\d+$', '', after_dash, flags=re.IGNORECASE)
             # Remove common suffixes like "Gameplay", "Playthrough", "Stream"
-            after_dash = re.sub(r'\s+(gameplay|playthrough|stream|let\'s play|walkthrough)$', '', after_dash, flags=re.IGNORECASE)
+            after_dash = re.sub(
+                r'\s+(gameplay|playthrough|stream|let\'s play|walkthrough)$',
+                '',
+                after_dash,
+                flags=re.IGNORECASE)
             after_dash = cleanup_game_name(after_dash)
-            
+
             # Reject if it's ONLY "Part X" or similar episode marker
             if re.match(r'^(?:part|ep|episode|day)\s+\d+$', after_dash, flags=re.IGNORECASE):
                 after_dash = ''  # Mark as invalid
