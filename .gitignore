@@ -79,3 +79,8 @@ recommend_list_message_id.txt
 # Cline AI assistant files
 .cline/
 .clinerules
+
+# Database audit/debugging tools (local use only)
+Live/audit_database.py
+audit_report.json
+**/audit_report*.json
