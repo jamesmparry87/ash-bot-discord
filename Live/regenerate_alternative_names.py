@@ -10,6 +10,8 @@ Usage:
     python Live/regenerate_alternative_names.py               # Apply changes
 """
 
+from bot.integrations import igdb
+from bot.database_module import get_database
 import asyncio
 import os
 import sys
@@ -18,14 +20,11 @@ from typing import Any, Dict
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from bot.database_module import get_database
-from bot.integrations import igdb
-
 
 async def regenerate_all_alternative_names(db, dry_run: bool = True) -> Dict[str, Any]:
     """
     Clear all alternative names and regenerate from IGDB.
-    
+
     This is a nuclear option that guarantees clean data by:
     1. Clearing all existing alternative names
     2. Querying IGDB for each game
@@ -35,7 +34,7 @@ async def regenerate_all_alternative_names(db, dry_run: bool = True) -> Dict[str
     print("ALTERNATIVE NAMES REGENERATION")
     print("=" * 80)
     print(f"\nMode: {'🔍 DRY RUN (no changes will be made)' if dry_run else '✍️  LIVE MODE (changes will be applied)'}\n")
-    
+
     # Check if IGDB is available
     try:
         test_result = await igdb.validate_and_enrich("Test Game")
@@ -53,7 +52,7 @@ async def regenerate_all_alternative_names(db, dry_run: bool = True) -> Dict[str
             'skipped': 0,
             'errors': ['IGDB not configured']
         }
-    
+
     stats = {
         'total_games': 0,
         'cleared': 0,
@@ -62,26 +61,26 @@ async def regenerate_all_alternative_names(db, dry_run: bool = True) -> Dict[str
         'skipped': 0,
         'errors': []
     }
-    
+
     # Get all games
     games = db.get_all_played_games()
     stats['total_games'] = len(games)
-    
+
     print(f"📊 Found {len(games)} games in database\n")
     print("=" * 80)
     print("PHASE 1: Clearing Existing Alternative Names")
     print("=" * 80 + "\n")
-    
+
     # Phase 1: Clear all alternative names
     for game in games:
         canonical_name = game['canonical_name']
         game_id = game['id']
         current_alt_names = game.get('alternative_names', [])
-        
+
         print(f"🧹 Clearing: {canonical_name}")
         if current_alt_names:
             print(f"   Removing: {current_alt_names}")
-        
+
         if not dry_run:
             try:
                 success = db.update_played_game(game_id, alternative_names=[])
@@ -97,43 +96,43 @@ async def regenerate_all_alternative_names(db, dry_run: bool = True) -> Dict[str
         else:
             stats['cleared'] += 1
             print(f"   🔍 DRY RUN - Would clear")
-        
+
         print()
-    
+
     print(f"\n📊 Phase 1 Summary:")
     print(f"   Games processed: {len(games)}")
     print(f"   Cleared: {stats['cleared']}")
     print(f"   Failed: {stats['failed']}")
-    
+
     # Phase 2: Regenerate from IGDB
     print("\n" + "=" * 80)
     print("PHASE 2: Regenerating Alternative Names from IGDB")
     print("=" * 80 + "\n")
     print("⏱️  Note: This may take a few minutes due to API rate limiting...\n")
-    
+
     for i, game in enumerate(games, 1):
         canonical_name = game['canonical_name']
         game_id = game['id']
-        
+
         print(f"[{i}/{len(games)}] 🔄 Regenerating: {canonical_name}")
-        
+
         try:
             # Query IGDB for fresh data
             igdb_result = await igdb.validate_and_enrich(canonical_name)
-            
+
             if not igdb_result:
                 stats['failed'] += 1
                 print(f"   ❌ IGDB returned no result")
                 print()
                 continue
-            
+
             confidence = igdb_result.get('confidence', 0.0)
             new_alt_names = igdb_result.get('alternative_names', [])
             new_canonical = igdb_result.get('canonical_name', canonical_name)
-            
+
             print(f"   IGDB: '{new_canonical}' (confidence: {confidence:.2f})")
             print(f"   Alternative names: {new_alt_names}")
-            
+
             # Only update if we have good confidence
             if confidence >= 0.7:
                 if not dry_run:
@@ -147,10 +146,10 @@ async def regenerate_all_alternative_names(db, dry_run: bool = True) -> Dict[str
                         'igdb_id': igdb_result.get('igdb_id'),
                         'data_confidence': confidence
                     }
-                    
+
                     # Remove None values
                     updates = {k: v for k, v in updates.items() if v is not None}
-                    
+
                     try:
                         success = db.update_played_game(game_id, **updates)
                         if success:
@@ -166,64 +165,64 @@ async def regenerate_all_alternative_names(db, dry_run: bool = True) -> Dict[str
                 else:
                     stats['regenerated'] += 1
                     print(f"   🔍 DRY RUN - Would regenerate with {len(new_alt_names)} alternative names")
-            
+
             elif confidence >= 0.4:
                 # Medium confidence - note it but skip
                 stats['skipped'] += 1
                 print(f"   ⚠️ Medium confidence ({confidence:.2f}) - skipping for safety")
-            
+
             else:
                 # Low confidence - skip
                 stats['skipped'] += 1
                 print(f"   ⚠️ Low confidence ({confidence:.2f}) - skipping")
-            
+
             print()
-            
+
             # Add small delay to respect API rate limits (if not dry-run)
             if not dry_run and i < len(games):
                 await asyncio.sleep(0.5)  # 500ms between requests
-        
+
         except Exception as e:
             stats['errors'].append(f"{canonical_name}: Regeneration failed - {str(e)}")
             stats['failed'] += 1
             print(f"   ❌ Error: {e}\n")
-    
+
     # Final summary
     print("\n" + "=" * 80)
     print("FINAL SUMMARY")
     print("=" * 80 + "\n")
-    
+
     print(f"Total games: {stats['total_games']}")
     print(f"Cleared: {stats['cleared']}")
     print(f"Regenerated: {stats['regenerated']}")
     print(f"Skipped (low confidence): {stats['skipped']}")
     print(f"Failed: {stats['failed']}")
     print(f"Errors: {len(stats['errors'])}")
-    
+
     if stats['errors']:
         print(f"\n⚠️  Errors encountered:")
         for error in stats['errors'][:10]:  # Show first 10 errors
             print(f"   • {error}")
         if len(stats['errors']) > 10:
             print(f"   ... and {len(stats['errors']) - 10} more")
-    
+
     success_rate = (stats['regenerated'] / stats['total_games'] * 100) if stats['total_games'] > 0 else 0
     print(f"\n✅ Success rate: {success_rate:.1f}% ({stats['regenerated']}/{stats['total_games']})")
-    
+
     if dry_run:
         print("\n🔍 DRY RUN COMPLETE - No changes were made")
         print("   Run without --dry-run to apply these changes")
     else:
         print("\n✅ REGENERATION COMPLETE")
         print("   All alternative names have been regenerated from IGDB")
-    
+
     return stats
 
 
 async def main():
     """Main entry point."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(
         description='Regenerate alternative names from IGDB (clears existing data)'
     )
@@ -232,9 +231,9 @@ async def main():
         action='store_true',
         help='Preview changes without applying them'
     )
-    
+
     args = parser.parse_args()
-    
+
     if not args.dry_run:
         print("\n" + "=" * 80)
         print("⚠️  WARNING: This will CLEAR all existing alternative names!")
@@ -245,20 +244,20 @@ async def main():
         print("  3. Update with validated alternative names from IGDB")
         print("\nThis is a destructive operation and cannot be undone.")
         print("Make sure you have a database backup before proceeding!\n")
-        
+
         confirm = input("Are you sure you want to continue? (yes/no): ")
         if confirm.lower() != 'yes':
             print("\nAborted. No changes were made.")
             return
-        
+
         print("\n✅ Proceeding with regeneration...\n")
-    
+
     # Get database instance
     db = get_database()
-    
+
     # Run regeneration
     stats = await regenerate_all_alternative_names(db, dry_run=args.dry_run)
-    
+
     # Exit with appropriate code
     if stats.get('errors'):
         sys.exit(1)  # Errors occurred
