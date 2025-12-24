@@ -1,6 +1,8 @@
 import os
 import sys
+
 import psycopg2
+
 
 def apply_sql():
     # 1. Get Database URL

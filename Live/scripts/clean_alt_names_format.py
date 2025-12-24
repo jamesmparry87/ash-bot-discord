@@ -1,8 +1,10 @@
-import os
 import json
+import os
 import re
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
+
 
 def parse_postgres_array(array_str):
     """

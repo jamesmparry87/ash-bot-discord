@@ -1,9 +1,11 @@
+import datetime
+import json
 import os
 import sys
-import json
-import datetime
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
+
 
 def json_serial(obj):
     """JSON serializer for objects not serializable by default json code"""

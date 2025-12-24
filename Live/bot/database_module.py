@@ -1015,6 +1015,7 @@ class DatabaseManager:
             # Remove outer braces
             text = text[1:-1]
             import re
+
             # Regex to handle quoted strings properly
             items = re.findall(r'"([^"]*)"', text)
             if not items and text:  # Handle unquoted simple items
