@@ -1002,7 +1002,7 @@ class DatabaseManager:
             return []
 
         text = text.strip()
-        
+
         # 1. Handle JSON format (The new standard) e.g. ["Game 1", "Game 2"]
         if text.startswith('[') and text.endswith(']'):
             try:
@@ -1267,17 +1267,17 @@ class DatabaseManager:
         try:
             # Validate order
             order_clause = self._validate_order_direction(order)
-            
+
             with conn.cursor() as cur:
                 cur.execute(f"""
-                    SELECT 
-                        canonical_name, 
-                        first_played_date, 
-                        release_year, 
-                        genre, 
+                    SELECT
+                        canonical_name,
+                        first_played_date,
+                        release_year,
+                        genre,
                         series_name,
                         completion_status
-                    FROM played_games 
+                    FROM played_games
                     WHERE first_played_date IS NOT NULL
                     ORDER BY first_played_date {order_clause}
                 """)
@@ -1776,8 +1776,10 @@ class DatabaseManager:
                             merged_data["completion_status"] = duplicate_game["completion_status"]
 
                     # NEW: Convert lists to JSON format for robust database storage
-                    alt_names_str = json.dumps(merged_data["alternative_names"]) if merged_data["alternative_names"] else '[]'
-                    vod_urls_str = json.dumps(merged_data["twitch_vod_urls"]) if merged_data["twitch_vod_urls"] else '[]'
+                    alt_names_str = json.dumps(merged_data["alternative_names"]
+                                               ) if merged_data["alternative_names"] else '[]'
+                    vod_urls_str = json.dumps(
+                        merged_data["twitch_vod_urls"]) if merged_data["twitch_vod_urls"] else '[]'
 
                     # Update the master record with merged data
                     cur.execute("""

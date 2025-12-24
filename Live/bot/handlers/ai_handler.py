@@ -1240,34 +1240,34 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
 
             # Build dynamic context using new structured format
             dynamic_context = build_ash_context(user_context)
-            
+
             # === ENHANCEMENT: Add gaming timeline context for temporal questions ===
             if db and hasattr(db, 'get_gaming_timeline'):
                 try:
                     # Get first 3 and last 3 games chronologically for temporal awareness
                     timeline_asc = db.get_gaming_timeline(order='ASC')[:3]
                     timeline_desc = db.get_gaming_timeline(order='DESC')[:3]
-                    
+
                     if timeline_asc or timeline_desc:
                         timeline_text = "\n\n--- GAMING TIMELINE DATA ---\n"
-                        
+
                         if timeline_asc:
                             timeline_text += "First games played chronologically:\n"
                             for game in timeline_asc:
                                 played_date = game.get('first_played_date', 'Unknown')
                                 release_year = game.get('release_year', 'Unknown')
                                 timeline_text += f"  • {game['canonical_name']} (played: {played_date}, released: {release_year})\n"
-                        
+
                         if timeline_desc:
                             timeline_text += "\nMost recently played games:\n"
                             for game in timeline_desc:
                                 played_date = game.get('first_played_date', 'Unknown')
                                 release_year = game.get('release_year', 'Unknown')
                                 timeline_text += f"  • {game['canonical_name']} (played: {played_date}, released: {release_year})\n"
-                        
+
                         timeline_text += "\nYou can answer temporal questions like 'what game did Jonesy play first' or 'oldest game by release year'.\n"
                         timeline_text += "--- END TIMELINE DATA ---\n"
-                        
+
                         # Append timeline data to operational context
                         dynamic_context += timeline_text
                 except Exception as timeline_error:

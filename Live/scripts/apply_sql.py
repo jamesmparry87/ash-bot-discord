@@ -46,5 +46,6 @@ def apply_sql():
         if 'conn' in locals() and conn:
             conn.close()
 
+
 if __name__ == "__main__":
     apply_sql()
