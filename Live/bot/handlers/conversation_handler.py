@@ -1993,6 +1993,8 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                             "⚠️ **Could not start approval for replacement.** "
                             "Please use `!starttrivia` manually at 11:00 AM."
                         )
+                        # Only delete conversation if replacement approval failed
+                        del jam_approval_conversations[user_id]
                 else:
                     await message.reply(
                         "⚠️ **No Alternative Questions Available**\n\n"
@@ -2000,18 +2002,22 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                         "• Generate a new question with `!generatequestions 1`\n"
                         "• Start trivia manually with `!starttrivia` at 11:00 AM"
                     )
+                    # Delete conversation when no alternatives exist
+                    del jam_approval_conversations[user_id]
             except Exception as e:
                 print(f"❌ Error fetching replacement question: {e}")
                 await message.reply(
                     "❌ **Error finding replacement.** Please start trivia manually at 11:00 AM."
                 )
+                # Delete conversation on error
+                del jam_approval_conversations[user_id]
 
-            del jam_approval_conversations[user_id]
+            # Don't delete conversation here - the new approval workflow takes over
         else:
             await message.reply("⚠️ Invalid input. Please respond with **1** (Approve) or **2** (Reject).")
         return
 
-    timeout_minutes = 15
+    timeout_minutes = 180  # 3 hours - extended for flexible approval timing
     last_activity = conversation.get('last_activity', datetime.now(ZoneInfo("Europe/London")))
     if datetime.now(ZoneInfo("Europe/London")) > last_activity + timedelta(minutes=timeout_minutes):
         print(f"⌛️ JAM APPROVAL: Detected expired conversation for user {user_id}. Cleaning up.")
@@ -2489,7 +2495,7 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
                 session_type='question_approval',
                 conversation_step='approval',
                 question_data=question_data,
-                timeout_minutes=15
+                timeout_minutes=180  # 3 hours - extended for flexible approval timing
             )
 
             if not session_id:

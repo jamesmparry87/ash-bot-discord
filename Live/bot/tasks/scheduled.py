@@ -534,7 +534,7 @@ async def pre_trivia_approval():
 
         # Get available questions using the same logic as the main trivia system
         available_questions = db.get_available_trivia_questions()  # type: ignore
-        if not available_questions:
+        if not available_questions or len(available_questions) == 0:
             print("❌ No available trivia questions for pre-approval")
 
             # Try to generate an emergency question
@@ -575,11 +575,14 @@ async def pre_trivia_approval():
 
             return
 
-        # Select question using priority system
-        # Priority 1: Recent mod-submitted questions
-        # Priority 2: AI-generated questions
-        # Priority 3: Any unused questions
-        selected_question = available_questions[0]
+        # Select question using random selection from pool of 5 (or fewer if less available)
+        # This ensures variety and prevents the same old questions from always being picked
+        import random
+        pool_size = min(5, len(available_questions))
+        question_pool = available_questions[:pool_size]
+        selected_question = random.choice(question_pool)
+        
+        print(f"🎲 Selected question #{selected_question.get('id')} randomly from pool of {pool_size} questions")
 
         # If it's a dynamic question, calculate the answer
         if selected_question.get('is_dynamic'):
