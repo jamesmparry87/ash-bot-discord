@@ -808,11 +808,9 @@ class DatabaseManager:
 
         try:
             with conn.cursor() as cur:
-                # Convert lists to comma-separated strings for TEXT fields
-                alt_names_str = ','.join(
-                    alternative_names) if alternative_names else ''
-                vod_urls_str = ','.join(
-                    twitch_vod_urls) if twitch_vod_urls else ''
+                # NEW: Convert lists to JSON strings for robust storage
+                alt_names_str = json.dumps(alternative_names) if alternative_names else '[]'
+                vod_urls_str = json.dumps(twitch_vod_urls) if twitch_vod_urls else '[]'
 
                 cur.execute("""
                     INSERT INTO played_games (
@@ -999,22 +997,31 @@ class DatabaseManager:
             return 0
 
     def _parse_comma_separated_list(self, text: Optional[str]) -> List[str]:
-        """Convert a comma-separated string OR PostgreSQL array to a list of stripped, non-empty items"""
+        """Convert JSON string, PostgreSQL array, or comma-separated string to list"""
         if not text or not isinstance(text, str):
             return []
 
         text = text.strip()
+        
+        # 1. Handle JSON format (The new standard) e.g. ["Game 1", "Game 2"]
+        if text.startswith('[') and text.endswith(']'):
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                pass  # Fallback to other methods if JSON parse fails
 
-        # Handle PostgreSQL array syntax: {"item1","item2","item3"}
+        # 2. Handle PostgreSQL array syntax: {"item1","item2"}
         if text.startswith('{') and text.endswith('}'):
             # Remove outer braces
             text = text[1:-1]
-            # Split by comma and clean up quotes
             import re
+            # Regex to handle quoted strings properly
             items = re.findall(r'"([^"]*)"', text)
+            if not items and text:  # Handle unquoted simple items
+                items = text.split(',')
             return [item.strip() for item in items if item.strip()]
 
-        # Handle regular comma-separated format
+        # 3. Handle legacy comma-separated format
         return [item.strip() for item in text.split(',') if item.strip()]
 
     def _convert_text_to_arrays(
@@ -1250,6 +1257,35 @@ class DatabaseManager:
             logger.error(f"Error getting played games: {e}")
             return []
 
+    def get_gaming_timeline(self, order: str = 'ASC') -> List[Dict[str, Any]]:
+        """Get the full history of played games ordered by date"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            # Validate order
+            order_clause = self._validate_order_direction(order)
+            
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT 
+                        canonical_name, 
+                        first_played_date, 
+                        release_year, 
+                        genre, 
+                        series_name,
+                        completion_status
+                    FROM played_games 
+                    WHERE first_played_date IS NOT NULL
+                    ORDER BY first_played_date {order_clause}
+                """)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting gaming timeline: {e}")
+            return []
+
     def update_played_game(self, game_id: int, **kwargs) -> bool:
         """Update a played game's details"""
         conn = self.get_connection()
@@ -1280,16 +1316,16 @@ class DatabaseManager:
 
                 for field, value in kwargs.items():
                     if field in valid_fields:
-                        # Special handling for array fields
+                        # Special handling for array fields - NEW: Store as JSON
                         if field in ['alternative_names', 'twitch_vod_urls']:
                             if isinstance(value, list):
-                                # Convert list to PostgreSQL array format
+                                # Convert list to JSON string
                                 updates.append(f"{field} = %s")
-                                values.append(value)
+                                values.append(json.dumps(value))
                             elif isinstance(value, str):
-                                # Handle single string by converting to list
+                                # Handle single string by converting to list then JSON
                                 updates.append(f"{field} = %s")
-                                values.append([value])
+                                values.append(json.dumps([value]))
                             else:
                                 # Skip invalid array values
                                 continue
@@ -1738,12 +1774,9 @@ class DatabaseManager:
                         if duplicate_priority > current_priority:
                             merged_data["completion_status"] = duplicate_game["completion_status"]
 
-                    # Convert lists to TEXT format for database storage
-                    alt_names_str = (
-                        ",".join(
-                            merged_data["alternative_names"]) if merged_data["alternative_names"] else "")
-                    vod_urls_str = ",".join(
-                        merged_data["twitch_vod_urls"]) if merged_data["twitch_vod_urls"] else ""
+                    # NEW: Convert lists to JSON format for robust database storage
+                    alt_names_str = json.dumps(merged_data["alternative_names"]) if merged_data["alternative_names"] else '[]'
+                    vod_urls_str = json.dumps(merged_data["twitch_vod_urls"]) if merged_data["twitch_vod_urls"] else '[]'
 
                     # Update the master record with merged data
                     cur.execute("""

@@ -1240,6 +1240,39 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
 
             # Build dynamic context using new structured format
             dynamic_context = build_ash_context(user_context)
+            
+            # === ENHANCEMENT: Add gaming timeline context for temporal questions ===
+            if db and hasattr(db, 'get_gaming_timeline'):
+                try:
+                    # Get first 3 and last 3 games chronologically for temporal awareness
+                    timeline_asc = db.get_gaming_timeline(order='ASC')[:3]
+                    timeline_desc = db.get_gaming_timeline(order='DESC')[:3]
+                    
+                    if timeline_asc or timeline_desc:
+                        timeline_text = "\n\n--- GAMING TIMELINE DATA ---\n"
+                        
+                        if timeline_asc:
+                            timeline_text += "First games played chronologically:\n"
+                            for game in timeline_asc:
+                                played_date = game.get('first_played_date', 'Unknown')
+                                release_year = game.get('release_year', 'Unknown')
+                                timeline_text += f"  • {game['canonical_name']} (played: {played_date}, released: {release_year})\n"
+                        
+                        if timeline_desc:
+                            timeline_text += "\nMost recently played games:\n"
+                            for game in timeline_desc:
+                                played_date = game.get('first_played_date', 'Unknown')
+                                release_year = game.get('release_year', 'Unknown')
+                                timeline_text += f"  • {game['canonical_name']} (played: {played_date}, released: {release_year})\n"
+                        
+                        timeline_text += "\nYou can answer temporal questions like 'what game did Jonesy play first' or 'oldest game by release year'.\n"
+                        timeline_text += "--- END TIMELINE DATA ---\n"
+                        
+                        # Append timeline data to operational context
+                        dynamic_context += timeline_text
+                except Exception as timeline_error:
+                    # Silently fail if timeline data unavailable - not critical
+                    pass
 
         # Return as tuple: (base_instruction, operational_context)
         # This allows the calling code to order them properly (context first for better addressing)
@@ -1935,6 +1968,69 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
                 "question_type": "multiple_choice",
                 "multiple_choice_options": choice_names
             }
+
+    # === TEMPORAL GAMING TIMELINE LOGIC ===
+    elif logic == "oldest_game_by_release":
+        # Find oldest game by release year
+        games_with_release = [g for g in games_data if g.get("release_year")]
+        if games_with_release:
+            oldest = min(games_with_release, key=lambda x: x.get("release_year", 9999))
+            return {
+                "question_text": template["template"],
+                "correct_answer": oldest["canonical_name"],
+                "question_type": "single_answer",
+                "context_data": {
+                    "release_year": oldest.get("release_year"),
+                    "first_played_date": oldest.get("first_played_date")
+                }
+            }
+
+    elif logic == "newest_game_by_release":
+        # Find newest game by release year
+        games_with_release = [g for g in games_data if g.get("release_year")]
+        if games_with_release:
+            newest = max(games_with_release, key=lambda x: x.get("release_year", 0))
+            return {
+                "question_text": template["template"],
+                "correct_answer": newest["canonical_name"],
+                "question_type": "single_answer",
+                "context_data": {
+                    "release_year": newest.get("release_year"),
+                    "first_played_date": newest.get("first_played_date")
+                }
+            }
+
+    elif logic == "first_played_game":
+        # Find first game by first_played_date using get_gaming_timeline
+        if db and hasattr(db, 'get_gaming_timeline'):
+            timeline = db.get_gaming_timeline(order='ASC')
+            if timeline:
+                first_game = timeline[0]
+                return {
+                    "question_text": template["template"],
+                    "correct_answer": first_game["canonical_name"],
+                    "question_type": "single_answer",
+                    "context_data": {
+                        "first_played_date": first_game.get("first_played_date"),
+                        "release_year": first_game.get("release_year")
+                    }
+                }
+
+    elif logic == "last_played_game":
+        # Find most recently played game using get_gaming_timeline
+        if db and hasattr(db, 'get_gaming_timeline'):
+            timeline = db.get_gaming_timeline(order='DESC')
+            if timeline:
+                last_game = timeline[0]
+                return {
+                    "question_text": template["template"],
+                    "correct_answer": last_game["canonical_name"],
+                    "question_type": "single_answer",
+                    "context_data": {
+                        "first_played_date": last_game.get("first_played_date"),
+                        "release_year": last_game.get("release_year")
+                    }
+                }
 
     # Fallback - return empty dict if logic couldn't execute
     return {}

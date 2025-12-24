@@ -81,6 +81,6 @@ recommend_list_message_id.txt
 .clinerules
 
 # Database audit/debugging tools (local use only)
-Live/audit_database.py
+Live/scripts/audit_database.py
 audit_report.json
 **/audit_report*.json
