@@ -89,6 +89,59 @@ except ImportError:
         print("⚠️ notify_jam_weekly_message_failure not available - handler not loaded")
         return False
 
+# === PRIORITY 2: API RESILIENCE UTILITIES ===
+async def retry_with_timeout(
+    func,
+    *args,
+    max_retries: int = 3,
+    timeout_seconds: int = 30,
+    backoff_base: float = 2.0,
+    **kwargs
+):
+    """
+    Retry an async function with exponential backoff and timeout.
+    
+    Args:
+        func: Async function to retry
+        max_retries: Maximum number of retry attempts
+        timeout_seconds: Timeout for each attempt
+        backoff_base: Base multiplier for exponential backoff (seconds)
+    
+    Returns:
+        Result from func, or None if all retries failed
+    """
+    for attempt in range(max_retries):
+        try:
+            # Apply timeout to the function call
+            result = await asyncio.wait_for(
+                func(*args, **kwargs),
+                timeout=timeout_seconds
+            )
+            return result
+            
+        except asyncio.TimeoutError:
+            print(f"⏱️ RETRY: Timeout on attempt {attempt + 1}/{max_retries} for {func.__name__}")
+            if attempt < max_retries - 1:
+                wait_time = backoff_base ** attempt
+                print(f"⏳ RETRY: Waiting {wait_time:.1f}s before retry...")
+                await asyncio.sleep(wait_time)
+            else:
+                print(f"❌ RETRY: All attempts timed out for {func.__name__}")
+                return None
+                
+        except Exception as e:
+            print(f"❌ RETRY: Error on attempt {attempt + 1}/{max_retries} for {func.__name__}: {e}")
+            if attempt < max_retries - 1:
+                wait_time = backoff_base ** attempt
+                print(f"⏳ RETRY: Waiting {wait_time:.1f}s before retry...")
+                await asyncio.sleep(wait_time)
+            else:
+                print(f"❌ RETRY: All attempts failed for {func.__name__}")
+                return None
+    
+    return None
+
+
 # Global state for trivia and bot instance
 _bot_instance = None  # Store the bot instance globally
 _bot_ready = False  # Track if bot is fully ready
