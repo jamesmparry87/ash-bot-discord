@@ -90,6 +90,8 @@ except ImportError:
         return False
 
 # === PRIORITY 2: API RESILIENCE UTILITIES ===
+
+
 async def retry_with_timeout(
     func,
     *args,
@@ -100,13 +102,13 @@ async def retry_with_timeout(
 ):
     """
     Retry an async function with exponential backoff and timeout.
-    
+
     Args:
         func: Async function to retry
         max_retries: Maximum number of retry attempts
         timeout_seconds: Timeout for each attempt
         backoff_base: Base multiplier for exponential backoff (seconds)
-    
+
     Returns:
         Result from func, or None if all retries failed
     """
@@ -118,7 +120,7 @@ async def retry_with_timeout(
                 timeout=timeout_seconds
             )
             return result
-            
+
         except asyncio.TimeoutError:
             print(f"⏱️ RETRY: Timeout on attempt {attempt + 1}/{max_retries} for {func.__name__}")
             if attempt < max_retries - 1:
@@ -128,7 +130,7 @@ async def retry_with_timeout(
             else:
                 print(f"❌ RETRY: All attempts timed out for {func.__name__}")
                 return None
-                
+
         except Exception as e:
             print(f"❌ RETRY: Error on attempt {attempt + 1}/{max_retries} for {func.__name__}: {e}")
             if attempt < max_retries - 1:
@@ -138,7 +140,7 @@ async def retry_with_timeout(
             else:
                 print(f"❌ RETRY: All attempts failed for {func.__name__}")
                 return None
-    
+
     return None
 
 
