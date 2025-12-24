@@ -1475,185 +1475,199 @@ question_history = {
 
 
 def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
-    """Get diverse question templates organized by category - now with more engaging varieties!"""
+    """Get diverse question templates organized by category - IMPROVED for variety!"""
     return {
+        # CONSOLIDATED: Only ONE playtime question (was 3 redundant ones)
         "playtime_champion": [
             {
                 "template": "What game has Jonesy spent the most time playing?",
                 "answer_logic": "max_playtime",
                 "type": "single_answer",
-                "weight": 2.0  # Highest weight - most common interpretation of "most played"
-            },
-            {
-                "template": "Which game has the highest total playtime in Jonesy's collection?",
-                "answer_logic": "max_playtime",
-                "type": "single_answer",
-                "weight": 1.9
-            },
-            {
-                "template": "What's Jonesy's most played game by time spent?",
-                "answer_logic": "max_playtime",
-                "type": "single_answer",
-                "weight": 1.8
+                "weight": 1.2  # Reduced from 2.0 to prevent over-representation
             }
         ],
-        "genre_adventures": [
+
+        # ENHANCED: More genre variety
+        "genre_insights": [
             {
                 "template": "What horror game did Jonesy play most recently?",
                 "answer_logic": "latest_genre_game",
                 "type": "single_answer",
-                "weight": 1.8,  # High weight - very engaging
+                "weight": 1.4,
                 "genre_filter": "horror"
             },
             {
                 "template": "Which RPG took Jonesy the most episodes to complete?",
                 "answer_logic": "longest_episodes_by_genre",
                 "type": "single_answer",
-                "weight": 1.6,
+                "weight": 1.3,
                 "genre_filter": "rpg"
             },
             {
                 "template": "How many different horror games has Jonesy played?",
                 "answer_logic": "count_games_by_genre",
                 "type": "single_answer",
-                "weight": 1.5,
+                "weight": 1.3,
                 "genre_filter": "horror"
+            },
+            {
+                "template": "What genre has Jonesy played the most games in?",
+                "answer_logic": "most_common_genre",
+                "type": "single_answer",
+                "weight": 1.4
             }
         ],
+
+        # NEW: Platform distinction (YouTube vs Twitch)
+        "platform_detective": [
+            {
+                "template": "Which game has the most YouTube views?",
+                "answer_logic": "most_youtube_views",
+                "type": "single_answer",
+                "weight": 1.5  # High engagement - real metrics
+            },
+            {
+                "template": "What's Jonesy's longest YouTube playthrough by episodes?",
+                "answer_logic": "most_youtube_episodes",
+                "type": "single_answer",
+                "weight": 1.3
+            },
+            {
+                "template": "How many games has Jonesy played on both YouTube and Twitch?",
+                "answer_logic": "count_both_platforms",
+                "type": "single_answer",
+                "weight": 1.2
+            }
+        ],
+
+        # NEW: Temporal questions using release_year and first_played_date
+        "temporal_gaming": [
+            {
+                "template": "What's the oldest game (by release year) that Jonesy has played?",
+                "answer_logic": "oldest_game_by_release",
+                "type": "single_answer",
+                "weight": 1.4
+            },
+            {
+                "template": "What's the newest game in Jonesy's collection?",
+                "answer_logic": "newest_game_by_release",
+                "type": "single_answer",
+                "weight": 1.3
+            },
+            {
+                "template": "Which game did Jonesy play first chronologically?",
+                "answer_logic": "first_played_game",
+                "type": "single_answer",
+                "weight": 1.2
+            }
+        ],
+
+        # NEW: Completion status focus
+        "completion_tracker": [
+            {
+                "template": "What percentage of Jonesy's games are completed?",
+                "answer_logic": "completion_percentage",
+                "type": "single_answer",
+                "weight": 1.3
+            },
+            {
+                "template": "What's Jonesy's longest abandoned game (by episodes)?",
+                "answer_logic": "longest_dropped_game",
+                "type": "single_answer",
+                "weight": 1.2
+            },
+            {
+                "template": "How many games are currently ongoing?",
+                "answer_logic": "count_ongoing_games",
+                "type": "single_answer",
+                "weight": 1.1
+            }
+        ],
+
+        # ENHANCED: Series questions with more depth
+        "series_master": [
+            {
+                "template": "Which series has Jonesy spent the most total time on?",
+                "answer_logic": "series_most_time",
+                "type": "single_answer",
+                "weight": 1.4
+            },
+            {
+                "template": "What series has the most games in Jonesy's collection?",
+                "answer_logic": "largest_series",
+                "type": "single_answer",
+                "weight": 1.3
+            },
+            {
+                "template": "How many different game series has Jonesy explored?",
+                "answer_logic": "unique_series_count",
+                "type": "single_answer",
+                "weight": 1.2
+            }
+        ],
+
+        # IMPROVED: Gaming milestones (no playtime redundancy)
         "gaming_milestones": [
             {
                 "template": "Which was Jonesy's first completed game?",
                 "answer_logic": "first_completed_game",
                 "type": "single_answer",
-                "weight": 1.9  # Very interesting milestone
+                "weight": 1.4
             },
             {
-                "template": "What's the shortest game Jonesy has completed?",
+                "template": "What's the shortest completed game by playtime?",
                 "answer_logic": "shortest_completed_game",
                 "type": "single_answer",
-                "weight": 1.7
-            },
-            {
-                "template": "Which game did Jonesy abandon after the fewest episodes?",
-                "answer_logic": "earliest_dropped_game",
-                "type": "single_answer",
-                "weight": 1.4
+                "weight": 1.2
             }
         ],
-        "series_explorer": [
-            {
-                "template": "How many games has Jonesy played in the {series} series?",
-                "answer_logic": "count_series_games",
-                "type": "single_answer",
-                "weight": 1.6
-            },
-            {
-                "template": "Which series has Jonesy spent the most time playing?",
-                "answer_logic": "series_most_time",
-                "type": "single_answer",
-                "weight": 1.5
-            },
-            {
-                "template": "What's the largest game series in Jonesy's collection?",
-                "answer_logic": "largest_series",
-                "type": "single_answer",
-                "weight": 1.3
-            }
-        ],
+
+        # REFINED: Gaming stories (episode-focused, NOT playtime)
         "gaming_stories": [
             {
-                "template": "What game took Jonesy the most episodes to finish?",
+                "template": "What game took Jonesy the most episodes to complete?",
                 "answer_logic": "max_episodes",
                 "type": "single_answer",
-                "weight": 1.2  # Improved weight, more story-focused phrasing
-            },
-            {
-                "template": "Which completed game had Jonesy's longest individual episodes?",
-                "answer_logic": "longest_avg_episode_completed",
-                "type": "single_answer",
-                "weight": 1.4
+                "weight": 1.3  # Clear distinction: episodes, not time
             },
             {
                 "template": "What's the most recent game Jonesy completed?",
                 "answer_logic": "most_recent_completion",
                 "type": "single_answer",
-                "weight": 1.6
+                "weight": 1.4
             }
         ],
+
+        # KEPT: Timeline comparisons (still engaging)
         "timeline_fun": [
             {
                 "template": "Which game did Jonesy complete first - {game1} or {game2}?",
                 "answer_logic": "compare_completion_order",
                 "type": "single_answer",
-                "weight": 1.5
+                "weight": 1.3
             },
             {
                 "template": "Did Jonesy play {game1} before or after {game2}?",
                 "answer_logic": "compare_play_order",
                 "type": "single_answer",
-                "weight": 1.4
-            },
-            {
-                "template": "Which came first in Jonesy's gaming journey - {game1} or {game2}?",
-                "answer_logic": "compare_first_played",
-                "type": "single_answer",
-                "weight": 1.3
+                "weight": 1.2
             }
         ],
-        "fun_facts": [
-            {
-                "template": "What percentage of Jonesy's games are completed?",
-                "answer_logic": "completion_percentage",
-                "type": "single_answer",
-                "weight": 1.4  # More engaging phrasing
-            },
-            {
-                "template": "How many different genres has Jonesy explored?",
-                "answer_logic": "unique_genres_count",
-                "type": "single_answer",
-                "weight": 1.7
-            },
-            {
-                "template": "What's Jonesy's most played genre?",
-                "answer_logic": "most_common_genre",
-                "type": "single_answer",
-                "weight": 1.5
-            }
-        ],
+
+        # KEPT: Multiple choice variety
         "multiple_choice_fun": [
             {
                 "template": "Which of these games did Jonesy complete?",
                 "answer_logic": "mc_completed_game",
                 "type": "multiple_choice",
-                "weight": 1.8  # Very engaging
+                "weight": 1.5
             },
             {
                 "template": "Which horror game has Jonesy played?",
                 "answer_logic": "mc_genre_game",
                 "type": "multiple_choice",
-                "weight": 1.7,
+                "weight": 1.4,
                 "genre_filter": "horror"
-            },
-            {
-                "template": "Which of these is a series Jonesy has explored?",
-                "answer_logic": "mc_series_played",
-                "type": "multiple_choice",
-                "weight": 1.6
-            }
-        ],
-        # Keep some of the old ones with reduced weights
-        "legacy_stats": [
-            {
-                "template": "Which game took the longest to complete?",
-                "answer_logic": "max_playtime",
-                "type": "single_answer",
-                "weight": 0.2  # Very low weight - legacy/backup
-            },
-            {
-                "template": "What game has the most episodes?",
-                "answer_logic": "max_episodes",
-                "type": "single_answer",
-                "weight": 0.3  # Low weight - backup only
             }
         ]
     }
