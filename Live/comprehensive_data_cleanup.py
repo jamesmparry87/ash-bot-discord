@@ -11,14 +11,15 @@ Fixes 4 major data quality issues:
 Run with: python3 Live/comprehensive_data_cleanup.py --dry-run
 """
 
-from bot.integrations import igdb
-from bot.database_module import get_database
 import asyncio
 import json
 import os
 import re
 import sys
 from typing import Any, Dict, List, Optional, Tuple
+
+from bot.database_module import get_database
+from bot.integrations import igdb
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
