@@ -4,11 +4,6 @@ from datetime import datetime
 
 import requests
 
-# --- CONFIGURATION ---
-YOUTUBE_API_KEY = "AIzaSyC--8CymRuKHzSxznwqCrSh7TWftIM9hzI"
-TWITCH_CLIENT_ID = "a4ywgixzibm7pfxe68i5mdw8es2ewj"
-TWITCH_CLIENT_SECRET = "yfqgjp31cmletsk9n8iawo830pygkx"
-
 # --- SMART MAPPINGS ---
 SMART_MAPPINGS = {
     "God of War": ["God of War 2018", "GoW 2018", "Dad of War"],
