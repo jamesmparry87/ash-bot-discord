@@ -852,9 +852,9 @@ class TriviaCommands(commands.Cog):
 
                     # Add choices for multiple choice
                     if question_data['question_type'] == 'multiple' and question_data.get(
-                            'choices'):
+                            'multiple_choice_options'):
                         choices_text = '\n'.join(
-                            [f"**{chr(65+i)}.** {choice}" for i, choice in enumerate(question_data['choices'])])
+                            [f"**{chr(65+i)}.** {choice}" for i, choice in enumerate(question_data['multiple_choice_options'])])
                         embed.add_field(
                             name="📝 **Answer Choices:**",
                             value=choices_text,
