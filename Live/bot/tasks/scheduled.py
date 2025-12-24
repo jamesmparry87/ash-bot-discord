@@ -581,7 +581,7 @@ async def pre_trivia_approval():
         pool_size = min(5, len(available_questions))
         question_pool = available_questions[:pool_size]
         selected_question = random.choice(question_pool)
-        
+
         print(f"🎲 Selected question #{selected_question.get('id')} randomly from pool of {pool_size} questions")
 
         # If it's a dynamic question, calculate the answer

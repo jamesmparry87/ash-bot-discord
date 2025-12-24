@@ -1486,7 +1486,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
                 "weight": 1.2  # Reduced from 2.0 to prevent over-representation
             }
         ],
-        
+
         # ENHANCED: More genre variety
         "genre_insights": [
             {
@@ -1517,7 +1517,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
                 "weight": 1.4
             }
         ],
-        
+
         # NEW: Platform distinction (YouTube vs Twitch)
         "platform_detective": [
             {
@@ -1539,7 +1539,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
                 "weight": 1.2
             }
         ],
-        
+
         # NEW: Temporal questions using release_year and first_played_date
         "temporal_gaming": [
             {
@@ -1561,7 +1561,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
                 "weight": 1.2
             }
         ],
-        
+
         # NEW: Completion status focus
         "completion_tracker": [
             {
@@ -1583,7 +1583,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
                 "weight": 1.1
             }
         ],
-        
+
         # ENHANCED: Series questions with more depth
         "series_master": [
             {
@@ -1605,7 +1605,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
                 "weight": 1.2
             }
         ],
-        
+
         # IMPROVED: Gaming milestones (no playtime redundancy)
         "gaming_milestones": [
             {
@@ -1621,7 +1621,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
                 "weight": 1.2
             }
         ],
-        
+
         # REFINED: Gaming stories (episode-focused, NOT playtime)
         "gaming_stories": [
             {
@@ -1637,7 +1637,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
                 "weight": 1.4
             }
         ],
-        
+
         # KEPT: Timeline comparisons (still engaging)
         "timeline_fun": [
             {
@@ -1653,7 +1653,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
                 "weight": 1.2
             }
         ],
-        
+
         # KEPT: Multiple choice variety
         "multiple_choice_fun": [
             {
