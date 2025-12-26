@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from Live.bot.database_module import get_database
 
+
 def parse_alternative_names(alt_names_value):
     """Parse alternative_names from various formats to Python list"""
     if not alt_names_value:
