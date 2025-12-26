@@ -2043,7 +2043,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                     'youtube_playlist_url': game_data.get('youtube_playlist_url'),
                     'completion_status': completion_status
                 }
-                
+
                 # PROTECTED FIELDS (never overwritten by sync):
                 # ❌ alternative_names - Manually curated JSON data
                 # ❌ series_name - Doesn't change over time
