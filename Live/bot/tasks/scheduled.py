@@ -2035,21 +2035,24 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                     print(
                         f"🎯 SYNC: Detected completion for '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes")
 
-                # Update existing game with aggregated data
+                # FIXED: Only update dynamic stats, protect metadata fields
                 update_params = {
-                    'series_name': series_name,
                     'total_playtime_minutes': game_data.get('total_playtime_minutes', 0),
                     'total_episodes': game_data.get('total_episodes', 0),
                     'youtube_views': game_data.get('youtube_views', 0),
                     'youtube_playlist_url': game_data.get('youtube_playlist_url'),
-                    'completion_status': completion_status,
-                    'alternative_names': game_data.get('alternative_names', []),
-                    'notes': game_data.get('notes', '')
+                    'completion_status': completion_status
                 }
+                
+                # PROTECTED FIELDS (never overwritten by sync):
+                # ❌ alternative_names - Manually curated JSON data
+                # ❌ series_name - Doesn't change over time
+                # ❌ notes - Manually added annotations
+                # ❌ first_played_date - Historical record
 
                 db.update_played_game(existing_game['id'], **update_params)
                 print(
-                    f"✅ SYNC: Updated '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, status: {completion_status}")
+                    f"✅ SYNC: Updated '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, status: {completion_status} (metadata protected)")
                 games_updated += 1
 
             else:
