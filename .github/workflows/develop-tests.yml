@@ -108,8 +108,6 @@ jobs:
         YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}  # pyright: ignore
         TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}  # pyright: ignore
         TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}  # pyright: ignore
-        IGDB_TWITCH_CLIENT_ID: ${{ secrets.IGDB_TWITCH_CLIENT_ID }}  # pyright: ignore
-        IGDB_TWITCH_SECRET: ${{ secrets.IGDB_TWITCH_SECRET }}  # pyright: ignore
         TEST_MODE: true
         GUILD_ID: "123456789"
         VIOLATION_CHANNEL_ID: "123456790"
