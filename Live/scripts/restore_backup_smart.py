@@ -8,11 +8,12 @@ Usage:
     python Live/scripts/restore_backup_smart.py
 """
 
-from Live.bot.database_module import get_database
 import json
 import os
 import sys
 from datetime import datetime
+
+from Live.bot.database_module import get_database
 
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
