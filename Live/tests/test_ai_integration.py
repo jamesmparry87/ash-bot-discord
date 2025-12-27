@@ -35,7 +35,31 @@ except ImportError:
     class MockAIHandler:  # type: ignore
         @staticmethod
         def filter_ai_response(response):
-            return response
+            """Mock implementation that matches real filter_ai_response logic"""
+            if not response:
+                return response
+
+            # Split into sentences
+            sentences = [s.strip() for s in response.split('.') if s.strip()]
+
+            # Remove duplicate sentences (case-insensitive)
+            seen_sentences = set()
+            filtered_sentences = []
+            for sentence in sentences:
+                sentence_lower = sentence.lower()
+                if sentence_lower not in seen_sentences:
+                    seen_sentences.add(sentence_lower)
+                    filtered_sentences.append(sentence)
+
+            # Limit to maximum 4 sentences for conciseness
+            final_sentences = filtered_sentences[:4]
+
+            # Reconstruct response
+            result = '. '.join(final_sentences)
+            if result and not result.endswith('.'):
+                result += '.'
+
+            return result
 
     bot_modular = MockBotModule()  # type: ignore
     filter_ai_response = MockAIHandler.filter_ai_response  # type: ignore
