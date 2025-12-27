@@ -29,8 +29,8 @@ def get_val(row, key, index):
 def get_table_columns(cur, table_name):
     """Dynamically fetch column names excluding 'id'"""
     cur.execute("""
-        SELECT column_name 
-        FROM information_schema.columns 
+        SELECT column_name
+        FROM information_schema.columns
         WHERE table_name = %s AND column_name != 'id'
         ORDER BY ordinal_position
     """, (table_name,))
@@ -41,7 +41,7 @@ def reset_ids_chronological(dry_run=True):
     print("=" * 80)
     print("🔄 RESET IDS TO CHRONOLOGICAL ORDER (REFILL METHOD)")
     print("=" * 80)
-    
+
     if dry_run:
         print("\n⚠️ DRY RUN MODE - No changes will be made")
     else:
@@ -51,13 +51,13 @@ def reset_ids_chronological(dry_run=True):
         if response != "CONFIRM":
             print("❌ Operation cancelled.")
             return False
-    
+
     db = get_database()
     conn = db.get_connection()
     if not conn:
         print("❌ Failed to connect to database")
         return False
-    
+
     try:
         with conn.cursor() as cur:
             # Step 1: Detect Columns
@@ -69,7 +69,7 @@ def reset_ids_chronological(dry_run=True):
             print("\n📋 Step 2: Fetching data in chronological order...")
             query = f"""
                 SELECT {col_str}
-                FROM played_games 
+                FROM played_games
                 ORDER BY first_played_date ASC NULLS LAST, created_at ASC
             """
             cur.execute(query)
@@ -85,35 +85,35 @@ def reset_ids_chronological(dry_run=True):
                     # Trying to find the name column dynamically or falling back to index 0
                     try:
                         name = game['canonical_name']
-                    except:
-                        name = game[0] # Fallback if columns are ordered
+                    except BaseException:
+                        name = game[0]  # Fallback if columns are ordered
                     print(f"   New ID {i:3} : {name}")
                 return True
 
             # Step 3: Nuke the Data (But keep the table structure!)
             print("\n💣 Step 3: Clearing table data...")
             cur.execute("TRUNCATE TABLE played_games RESTART IDENTITY")
-            
+
             # Step 4: Re-Insert Data
             print("\n🔄 Step 4: Refilling table with new IDs...")
-            
+
             insert_query = f"""
                 INSERT INTO played_games (id, {col_str})
                 VALUES (%s, {', '.join(['%s'] * len(columns))})
             """
-            
+
             for new_id, game in enumerate(all_games, start=1):
                 # Convert row object to list of values matching 'columns' order
                 if isinstance(game, dict):
                     values = [game[col] for col in columns]
                 else:
-                    values = list(game) # tuple to list
+                    values = list(game)  # tuple to list
 
                 # Prepend the new ID
                 insert_args = [new_id] + values
-                
+
                 cur.execute(insert_query, insert_args)
-                
+
                 if new_id % 10 == 0:
                     sys.stdout.write(f"\r   Restored {new_id}/{total_games} games...")
                     sys.stdout.flush()
@@ -123,9 +123,9 @@ def reset_ids_chronological(dry_run=True):
             # Step 5: Fix Sequence (Just in case TRUNCATE didn't reset it perfectly)
             print("\n🔢 Step 5: Syncing ID sequence...")
             cur.execute("SELECT setval('played_games_id_seq', %s, true)", (total_games,))
-            
+
             conn.commit()
-            
+
             print("\n" + "=" * 80)
             print("✅ SUCCESS: IDs Reset Complete")
             print("=" * 80)
@@ -139,10 +139,11 @@ def reset_ids_chronological(dry_run=True):
         conn.rollback()
         return False
 
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Reset IDs')
     parser.add_argument('--apply', action='store_true', help='Apply changes')
     args = parser.parse_args()
-    
+
     reset_ids_chronological(dry_run=not args.apply)
