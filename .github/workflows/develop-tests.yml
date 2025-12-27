@@ -286,6 +286,61 @@ jobs:
         pip3 install -r Live/requirements.txt
         safety check --json --output safety-report.json || echo "Safety check completed"
     
+    - name: Check for hardcoded API credentials (BLOCKING)
+      run: |
+        echo "🔍 Scanning for hardcoded API credentials..."
+        echo "This check prevents accidental commits of real API keys, tokens, and secrets."
+        echo ""
+        
+        # Search for variables with API/TOKEN/KEY/SECRET/PASSWORD that have alphanumeric values
+        # Pattern: Matches assignments with 20+ character alphanumeric strings
+        # Excludes: test files, mocks, placeholders, env var references
+        
+        VIOLATIONS=$(grep -r -n \
+          -E '(API|TOKEN|KEY|SECRET|PASSWORD)[_A-Z0-9]*\s*=\s*["'"'"'][A-Za-z0-9_\-]{20,}["'"'"']' \
+          --include="*.py" \
+          --exclude-dir="tests" \
+          --exclude-dir=".git" \
+          --exclude-dir="__pycache__" \
+          --exclude-dir="venv" \
+          --exclude-dir="node_modules" \
+          Live/ | \
+          grep -v "test_" | \
+          grep -v "mock_" | \
+          grep -v "your-.*-here" | \
+          grep -v "example" | \
+          grep -v "placeholder" | \
+          grep -v "os.getenv" | \
+          grep -v "os.environ" | \
+          grep -v "TEST_" | \
+          grep -v "FAKE_" | \
+          grep -v "DUMMY_" | \
+          grep -v "xxx" | \
+          grep -v "123" || true)
+        
+        if [ -n "$VIOLATIONS" ]; then
+          echo "❌ SECURITY VIOLATION: Hardcoded credentials detected!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "$VIOLATIONS"
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "⚠️  Found API credentials or secrets hardcoded in source files."
+          echo ""
+          echo "🔒 Security Best Practices:"
+          echo "   • Use environment variables: os.getenv('API_KEY')"
+          echo "   • Use GitHub secrets in workflows"
+          echo "   • Store credentials in .env files (git ignored)"
+          echo "   • Never commit real API keys to version control"
+          echo ""
+          echo "❌ This is a BLOCKING error - merge is prevented until resolved."
+          exit 1
+        else
+          echo "✅ No hardcoded credentials detected"
+          echo "   All API keys and secrets appear to be properly externalized."
+        fi
+    
     - name: Upload security reports
       uses: actions/upload-artifact@v4
       with:

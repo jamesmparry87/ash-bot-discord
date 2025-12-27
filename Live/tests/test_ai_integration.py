@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from .test_commands import mock_discord_message  # type: ignore
+from test_commands import mock_discord_message  # type: ignore
 
 # Add the Live directory to sys.path
 live_path = os.path.join(os.path.dirname(__file__), '..', 'Live')
