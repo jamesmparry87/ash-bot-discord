@@ -114,7 +114,7 @@ class DatabaseManager:
                     logger.info("✅ Cleaned up unused columns from played_games table")
                 except Exception as cleanup_error:
                     logger.warning(f"Column cleanup warning (table may not exist yet): {cleanup_error}")
-                
+
                 # Create strikes table
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS strikes (
@@ -1005,11 +1005,11 @@ class DatabaseManager:
         conn = self.get_connection()
         if not conn:
             return []
-        
+
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT 
+                    SELECT
                         canonical_name,
                         series_name,
                         twitch_views,
@@ -1033,11 +1033,11 @@ class DatabaseManager:
         conn = self.get_connection()
         if not conn:
             return []
-        
+
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT 
+                    SELECT
                         canonical_name,
                         series_name,
                         youtube_views,
@@ -1064,52 +1064,52 @@ class DatabaseManager:
         conn = self.get_connection()
         if not conn:
             return {}
-        
+
         try:
             with conn.cursor() as cur:
                 # YouTube statistics
                 cur.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as game_count,
                         SUM(youtube_views) as total_views,
                         AVG(youtube_views) as avg_views_per_game,
                         SUM(total_episodes) as total_episodes
                     FROM played_games
-                    WHERE youtube_playlist_url IS NOT NULL 
+                    WHERE youtube_playlist_url IS NOT NULL
                     AND youtube_playlist_url != ''
                     AND youtube_views > 0
                 """)
                 youtube_stats = cur.fetchone()
-                
+
                 # Twitch statistics
                 cur.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as game_count,
                         SUM(twitch_views) as total_views,
                         AVG(twitch_views) as avg_views_per_game,
                         SUM(total_episodes) as total_vods
                     FROM played_games
-                    WHERE twitch_vod_urls IS NOT NULL 
+                    WHERE twitch_vod_urls IS NOT NULL
                     AND twitch_vod_urls != ''
                     AND twitch_vod_urls != '{}'
                     AND twitch_views > 0
                 """)
                 twitch_stats = cur.fetchone()
-                
+
                 # Cross-platform games
                 cur.execute("""
                     SELECT COUNT(*) as cross_platform_count
                     FROM played_games
-                    WHERE youtube_views > 0 
+                    WHERE youtube_views > 0
                     AND twitch_views > 0
                 """)
                 cross_platform = cur.fetchone()
-                
+
                 # Safe dictionary access with proper null handling
                 youtube_dict = dict(youtube_stats) if youtube_stats else {}
                 twitch_dict = dict(twitch_stats) if twitch_stats else {}
                 cross_platform_dict = dict(cross_platform) if cross_platform else {}
-                
+
                 return {
                     'youtube': {
                         'game_count': int(youtube_dict.get('game_count') or 0),
@@ -1138,13 +1138,13 @@ class DatabaseManager:
         conn = self.get_connection()
         if not conn:
             return []
-        
+
         try:
             with conn.cursor() as cur:
                 if game_name:
                     # Get metrics for specific game
                     cur.execute("""
-                        SELECT 
+                        SELECT
                             canonical_name,
                             series_name,
                             youtube_views,
@@ -1153,15 +1153,15 @@ class DatabaseManager:
                             total_episodes,
                             total_playtime_minutes,
                             completion_status,
-                            CASE 
-                                WHEN total_episodes > 0 THEN 
+                            CASE
+                                WHEN total_episodes > 0 THEN
                                     ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / total_episodes, 1)
-                                ELSE 0 
+                                ELSE 0
                             END as views_per_episode,
-                            CASE 
-                                WHEN total_playtime_minutes > 0 THEN 
+                            CASE
+                                WHEN total_playtime_minutes > 0 THEN
                                     ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / (total_playtime_minutes::float / 60), 1)
-                                ELSE 0 
+                                ELSE 0
                             END as views_per_hour
                         FROM played_games
                         WHERE LOWER(canonical_name) LIKE LOWER(%s)
@@ -1171,7 +1171,7 @@ class DatabaseManager:
                 else:
                     # Get top games by engagement rate
                     cur.execute("""
-                        SELECT 
+                        SELECT
                             canonical_name,
                             series_name,
                             youtube_views,
@@ -1180,29 +1180,29 @@ class DatabaseManager:
                             total_episodes,
                             total_playtime_minutes,
                             completion_status,
-                            CASE 
-                                WHEN total_episodes > 0 THEN 
+                            CASE
+                                WHEN total_episodes > 0 THEN
                                     ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / total_episodes, 1)
-                                ELSE 0 
+                                ELSE 0
                             END as views_per_episode,
-                            CASE 
-                                WHEN total_playtime_minutes > 0 THEN 
+                            CASE
+                                WHEN total_playtime_minutes > 0 THEN
                                     ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / (total_playtime_minutes::float / 60), 1)
-                                ELSE 0 
+                                ELSE 0
                             END as views_per_hour
                         FROM played_games
                         WHERE (youtube_views > 0 OR twitch_views > 0)
                         AND total_episodes > 0
                         AND total_playtime_minutes > 0
-                        ORDER BY 
-                            CASE 
-                                WHEN total_playtime_minutes > 0 THEN 
+                        ORDER BY
+                            CASE
+                                WHEN total_playtime_minutes > 0 THEN
                                     (COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / (total_playtime_minutes::float / 60)
-                                ELSE 0 
+                                ELSE 0
                             END DESC
                         LIMIT %s
                     """, (limit,))
-                
+
                 results = cur.fetchall()
                 return [dict(row) for row in results]
         except Exception as e:
@@ -3656,9 +3656,9 @@ class DatabaseManager:
     def get_active_trivia_session(self) -> Optional[Dict[str, Any]]:
         """
         Get the current active trivia session
-        
+
         ✅ FIX #6: Optimized with caching for frequent access during reply detection
-        
+
         Performance notes:
         - Called on EVERY message during reply detection
         - Cached result to avoid repeated database queries
@@ -3773,9 +3773,9 @@ class DatabaseManager:
             normalized_answer: Optional[str] = None) -> Optional[int]:
         """
         Submit an answer to a trivia session
-        
+
         ✅ FIX #6: Optimized for concurrent answer submissions
-        
+
         Performance notes:
         - Uses simple INSERT for fast write performance
         - Conflict detection done via single query
@@ -3834,7 +3834,7 @@ class DatabaseManager:
     ) -> bool:
         """
         ✅ FIX #5: Complete trivia session with enhanced transaction management
-        
+
         Improvements:
         - SAVEPOINT transactions for atomic operations
         - Exponential backoff retry logic
@@ -3849,13 +3849,13 @@ class DatabaseManager:
         # ✅ FIX #5: Exponential backoff configuration
         max_retries = 3
         base_delay = 0.5  # seconds
-        
+
         for attempt in range(max_retries):
             try:
                 # ✅ FIX #5: Start SAVEPOINT transaction for atomicity
                 with conn.cursor() as cur:
                     cur.execute("SAVEPOINT trivia_completion")
-                    
+
                     try:
                         # Get session details
                         cur.execute("""
@@ -3863,7 +3863,7 @@ class DatabaseManager:
                             JOIN trivia_questions tq ON ts.question_id = tq.id
                             WHERE ts.id = %s
                         """, (session_id,))
-                        
+
                         session = cur.fetchone()
                         if not session:
                             logger.error(f"❌ FIX #5: Trivia session {session_id} not found")
@@ -3953,8 +3953,10 @@ class DatabaseManager:
 
                             if counts:
                                 counts_dict = dict(counts)
-                                total_participants = int(counts_dict["total_participants"]) if total_participants is None else total_participants
-                                correct_count = int(counts_dict["correct_count"]) if correct_count is None else correct_count
+                                total_participants = int(
+                                    counts_dict["total_participants"]) if total_participants is None else total_participants
+                                correct_count = int(
+                                    counts_dict["correct_count"]) if correct_count is None else correct_count
 
                         total_participants = total_participants or 0
                         correct_count = correct_count or 0
@@ -4001,8 +4003,9 @@ class DatabaseManager:
                         # ✅ FIX #5: Release savepoint and commit entire transaction atomically
                         cur.execute("RELEASE SAVEPOINT trivia_completion")
                         conn.commit()
-                        
-                        logger.info(f"✅ FIX #5: Session {session_id} completed successfully - {correct_count}/{total_participants} correct")
+
+                        logger.info(
+                            f"✅ FIX #5: Session {session_id} completed successfully - {correct_count}/{total_participants} correct")
                         return True
 
                     except Exception as inner_error:
@@ -4014,7 +4017,7 @@ class DatabaseManager:
             except Exception as e:
                 logger.error(f"❌ FIX #5: Transaction attempt {attempt + 1}/{max_retries} failed: {e}")
                 conn.rollback()
-                
+
                 # ✅ FIX #5: Exponential backoff before retry
                 if attempt < max_retries - 1:
                     delay = base_delay * (2 ** attempt)  # 0.5s, 1s, 2s

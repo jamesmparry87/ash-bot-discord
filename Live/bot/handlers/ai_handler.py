@@ -1279,43 +1279,46 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                 try:
                     engagement_context = "\n\n--- ENGAGEMENT METRICS AVAILABLE ---\n"
                     engagement_context += "The database tracks cross-platform engagement analytics:\n\n"
-                    
+
                     # Get platform statistics
                     if hasattr(db, 'get_platform_comparison_stats'):
                         platform_stats = db.get_platform_comparison_stats()
                         if platform_stats:
                             yt_stats = platform_stats.get('youtube', {})
                             tw_stats = platform_stats.get('twitch', {})
-                            
+
                             engagement_context += "📊 Platform Metrics:\n"
                             engagement_context += f"  • YouTube: {yt_stats.get('game_count', 0)} games, {yt_stats.get('total_views', 0):,} total views\n"
                             engagement_context += f"  • Twitch: {tw_stats.get('game_count', 0)} games, {tw_stats.get('total_views', 0):,} total views\n"
                             engagement_context += f"  • Cross-platform titles: {platform_stats.get('cross_platform_count', 0)}\n\n"
-                    
+
                     # Get top games by different metrics
                     engagement_context += "🎮 Top Performers by Metric:\n"
-                    
+
                     if hasattr(db, 'get_games_by_twitch_views'):
                         top_twitch = db.get_games_by_twitch_views(limit=3)
                         if top_twitch:
                             engagement_context += "  • Twitch Leaders: "
-                            engagement_context += ", ".join([f"{g['canonical_name']} ({g.get('twitch_views', 0):,} views)" for g in top_twitch])
+                            engagement_context += ", ".join(
+                                [f"{g['canonical_name']} ({g.get('twitch_views', 0):,} views)" for g in top_twitch])
                             engagement_context += "\n"
-                    
+
                     if hasattr(db, 'get_games_by_total_views'):
                         top_total = db.get_games_by_total_views(limit=3)
                         if top_total:
                             engagement_context += "  • Combined Leaders: "
-                            engagement_context += ", ".join([f"{g['canonical_name']} ({g.get('total_views', 0):,} views)" for g in top_total])
+                            engagement_context += ", ".join(
+                                [f"{g['canonical_name']} ({g.get('total_views', 0):,} views)" for g in top_total])
                             engagement_context += "\n"
-                    
+
                     if hasattr(db, 'get_engagement_metrics'):
                         top_efficiency = db.get_engagement_metrics(limit=3)
                         if top_efficiency:
                             engagement_context += "  • Engagement Efficiency: "
-                            engagement_context += ", ".join([f"{g['canonical_name']} ({g.get('views_per_hour', 0):,.0f} views/hr)" for g in top_efficiency])
+                            engagement_context += ", ".join(
+                                [f"{g['canonical_name']} ({g.get('views_per_hour', 0):,.0f} views/hr)" for g in top_efficiency])
                             engagement_context += "\n"
-                    
+
                     engagement_context += "\n📌 Query Capabilities:\n"
                     engagement_context += "  • Twitch-specific analytics (views, VOD counts)\n"
                     engagement_context += "  • Cross-platform comparisons (YouTube vs Twitch)\n"
@@ -1323,7 +1326,7 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                     engagement_context += "  • Platform performance analysis\n"
                     engagement_context += "\nUse this data to answer engagement and popularity questions naturally.\n"
                     engagement_context += "--- END ENGAGEMENT METRICS ---\n"
-                    
+
                     # Append engagement data to operational context
                     dynamic_context += engagement_context
                 except Exception as engagement_error:

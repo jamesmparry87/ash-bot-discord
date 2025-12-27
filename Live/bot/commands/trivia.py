@@ -627,7 +627,7 @@ class TriviaCommands(commands.Cog):
                             # ✅ FIX #4: Check for duplicates in AI-generated questions
                             try:
                                 duplicate_check = db.check_question_duplicate(question_text, similarity_threshold=0.85)
-                                
+
                                 if duplicate_check:
                                     similarity = duplicate_check['similarity_score']
                                     duplicate_id = duplicate_check['duplicate_id']
@@ -643,7 +643,7 @@ class TriviaCommands(commands.Cog):
                             except Exception as dup_error:
                                 logger.warning(f"Duplicate check failed for AI question: {dup_error}")
                                 # Continue with the question if duplicate check fails
-                            
+
                             logger.info(
                                 f"✅ Generated quality question (score: {quality_score:.1f}%): {question_text[:50]}...")
                             return question_data
@@ -778,16 +778,17 @@ class TriviaCommands(commands.Cog):
                 'correct_answer': answer,
                 'question_type': question_type
             }
-            
+
             is_valid, reason, quality_score = self._validate_question_quality(question_data_for_validation)
-            
+
             if not is_valid:
                 await ctx.send(
                     f"❌ **Question quality check failed** (score: {quality_score:.0f}%):\n"
                     f"**Issues:** {reason}\n\n"
                     f"*Please revise your question to improve clarity and answerability.*"
                 )
-                logger.warning(f"Manual question submission failed quality check: {reason} (score: {quality_score:.0f}%)")
+                logger.warning(
+                    f"Manual question submission failed quality check: {reason} (score: {quality_score:.0f}%)")
                 return
             elif quality_score < 80:
                 # Warn but allow submission if score is between 60-80
@@ -796,32 +797,31 @@ class TriviaCommands(commands.Cog):
             # ✅ FIX #4: Check for duplicate questions before adding
             try:
                 duplicate_check = db.check_question_duplicate(question_text, similarity_threshold=0.8)
-                
+
                 if duplicate_check:
                     # Found a similar question
                     duplicate_id = duplicate_check['duplicate_id']
                     duplicate_text = duplicate_check['duplicate_text']
                     similarity = duplicate_check['similarity_score']
                     duplicate_status = duplicate_check['status']
-                    
+
                     embed = discord.Embed(
                         title="⚠️ **Duplicate Question Detected**",
                         description=f"A similar question already exists in the database ({similarity*100:.1f}% match)",
                         color=0xffaa00
                     )
-                    
+
                     embed.add_field(
                         name="📋 **Your Question:**",
                         value=question_text[:200] + ("..." if len(question_text) > 200 else ""),
                         inline=False
                     )
-                    
+
                     embed.add_field(
                         name="🔍 **Existing Question:**",
                         value=f"**#{duplicate_id}** ({duplicate_status})\n{duplicate_text[:200] + ('...' if len(duplicate_text) > 200 else '')}",
-                        inline=False
-                    )
-                    
+                        inline=False)
+
                     embed.add_field(
                         name="💡 **Options:**",
                         value=(
@@ -831,11 +831,12 @@ class TriviaCommands(commands.Cog):
                         ),
                         inline=False
                     )
-                    
+
                     await ctx.send(embed=embed)
-                    logger.info(f"Blocked duplicate question submission: {similarity*100:.1f}% match to Q#{duplicate_id}")
+                    logger.info(
+                        f"Blocked duplicate question submission: {similarity*100:.1f}% match to Q#{duplicate_id}")
                     return
-                    
+
             except Exception as dup_error:
                 logger.warning(f"Duplicate check failed, proceeding with addition: {dup_error}")
                 # Continue with addition if duplicate check fails

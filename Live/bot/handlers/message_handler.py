@@ -1417,7 +1417,7 @@ async def handle_twitch_views_query(message: discord.Message) -> None:
 
         # Get games ranked by Twitch views
         twitch_games = db.get_games_by_twitch_views(limit=10)
-        
+
         if not twitch_games:
             await message.reply("Database analysis complete. Insufficient Twitch engagement data available for ranking.")
             return
@@ -1427,7 +1427,7 @@ async def handle_twitch_views_query(message: discord.Message) -> None:
 
         # Calculate VOD count
         vod_count = top_game.get('total_episodes', 0)
-        
+
         response = (
             f"🎮 Twitch Analytics: '{top_game['canonical_name']}' demonstrates maximum Twitch engagement "
             f"with {top_game.get('twitch_views', 0):,} total views across {vod_count} VODs. "
@@ -1452,7 +1452,7 @@ async def handle_total_views_query(message: discord.Message) -> None:
 
         # Get games ranked by total views
         total_views_games = db.get_games_by_total_views(limit=10)
-        
+
         if not total_views_games:
             await message.reply("Database analysis complete. Insufficient cross-platform engagement data available.")
             return
@@ -1496,7 +1496,7 @@ async def handle_platform_comparison_query(message: discord.Message) -> None:
 
         # Get platform statistics
         stats = db.get_platform_comparison_stats()
-        
+
         if not stats:
             await message.reply("Database analysis complete. Insufficient platform data for comparison.")
             return
@@ -1522,10 +1522,12 @@ async def handle_platform_comparison_query(message: discord.Message) -> None:
 
         # Add comparison insight
         if yt_stats.get('total_views', 0) > tw_stats.get('total_views', 0):
-            diff_percent = ((yt_stats.get('total_views', 0) - tw_stats.get('total_views', 0)) / tw_stats.get('total_views', 1)) * 100
+            diff_percent = ((yt_stats.get('total_views', 0) - tw_stats.get('total_views', 0)) /
+                            tw_stats.get('total_views', 1)) * 100
             response += f"\nPrimary Platform Analysis: YouTube shows stronger engagement with {diff_percent:.1f}% more total views."
         elif tw_stats.get('total_views', 0) > yt_stats.get('total_views', 0):
-            diff_percent = ((tw_stats.get('total_views', 0) - yt_stats.get('total_views', 0)) / yt_stats.get('total_views', 1)) * 100
+            diff_percent = ((tw_stats.get('total_views', 0) - yt_stats.get('total_views', 0)) /
+                            yt_stats.get('total_views', 1)) * 100
             response += f"\nPrimary Platform Analysis: Twitch shows stronger engagement with {diff_percent:.1f}% more total views."
         else:
             response += f"\nPrimary Platform Analysis: Balanced engagement across both platforms."
@@ -1546,13 +1548,13 @@ async def handle_engagement_rate_query(message: discord.Message) -> None:
 
         # Get top games by engagement rate
         engagement_data = db.get_engagement_metrics(limit=10)
-        
+
         if not engagement_data:
             await message.reply("Database analysis complete. Insufficient data for engagement rate calculation.")
             return
 
         top_game = engagement_data[0]
-        
+
         response = (
             f"⚡ Engagement Efficiency Analysis: '{top_game['canonical_name']}' demonstrates optimal engagement rate.\n\n"
             f"📊 Efficiency Metrics:\n"
@@ -1560,8 +1562,7 @@ async def handle_engagement_rate_query(message: discord.Message) -> None:
             f"• Views per Hour: {top_game.get('views_per_hour', 0):,.1f} views/hour\n"
             f"• Total Content: {top_game.get('total_playtime_minutes', 0) // 60}h across {top_game.get('total_episodes', 0)} episodes\n"
             f"• Combined Views: {top_game.get('total_views', 0):,}\n\n"
-            f"This represents exceptional audience engagement relative to content volume."
-        )
+            f"This represents exceptional audience engagement relative to content volume.")
 
         await message.reply(apply_pops_arcade_sarcasm(response, message.author.id))
 
@@ -1930,45 +1931,45 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
 async def handle_trivia_reply(message: discord.Message) -> bool:
     """
     ✅ FIX #2: Handle replies to trivia questions for answer submission.
-    
+
     Detects when users reply to active trivia question messages and:
     - Records their answer in the database
     - Adds acknowledgment reaction (📝)
     - Prevents duplicate submissions
-    
+
     Returns True if this was a trivia reply, False otherwise.
     """
     try:
         # Check if this is a reply to another message
         if not message.reference or not message.reference.message_id:
             return False
-        
+
         # Check if database is available
         if db is None:
             return False
-        
+
         # Check if there's an active trivia session
         try:
             active_session = db.get_active_trivia_session()
             if not active_session:
                 return False
-                
+
             session_id = active_session['id']
             question_message_id = active_session.get('question_message_id')
             confirmation_message_id = active_session.get('confirmation_message_id')
-            
+
             # Check if user replied to the trivia question or confirmation message
             replied_to_id = message.reference.message_id
-            
+
             if replied_to_id not in [question_message_id, confirmation_message_id]:
                 # Not replying to a trivia message
                 return False
-            
+
             print(f"✅ TRIVIA REPLY: Detected reply to trivia message from user {message.author.id}")
-            
+
             # Extract the user's answer
             user_answer = message.content.strip()
-            
+
             # Submit answer to database
             try:
                 result = db.submit_trivia_answer(
@@ -1976,17 +1977,18 @@ async def handle_trivia_reply(message: discord.Message) -> bool:
                     user_id=message.author.id,
                     answer_text=user_answer
                 )
-                
+
                 # Handle result - ensure it's a dict
                 if result and isinstance(result, dict):
                     if result.get('success'):
                         # Add acknowledgment reaction
                         try:
                             await message.add_reaction('📝')
-                            print(f"✅ TRIVIA REPLY: Answer recorded for user {message.author.id} - '{user_answer[:50]}...'")
+                            print(
+                                f"✅ TRIVIA REPLY: Answer recorded for user {message.author.id} - '{user_answer[:50]}...'")
                         except Exception as reaction_error:
                             print(f"⚠️ TRIVIA REPLY: Could not add reaction: {reaction_error}")
-                        
+
                         return True
                     elif result.get('error') == 'duplicate':
                         # User already answered - silently acknowledge
@@ -2004,15 +2006,15 @@ async def handle_trivia_reply(message: discord.Message) -> bool:
                     # Invalid return type
                     print(f"❌ TRIVIA REPLY: Invalid result type from submit_trivia_answer: {type(result)}")
                     return True
-                    
+
             except Exception as submit_error:
                 print(f"❌ TRIVIA REPLY: Error submitting answer: {submit_error}")
                 return True  # Return True to prevent other processing
-                
+
         except Exception as session_error:
             print(f"❌ TRIVIA REPLY: Error checking active session: {session_error}")
             return False
-            
+
     except Exception as e:
         print(f"❌ TRIVIA REPLY: Unexpected error in trivia reply handler: {e}")
         import traceback
@@ -2115,7 +2117,7 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
         if follow_up_intent and follow_up_intent['intent'] == 'ranking_followup':
             if await _handle_ranking_follow_up(message, context):
                 return True
-        
+
         # ✅ FIX: Pylance error - cleanup expired aliases synchronously (not async in this context)
         cleanup_expired_aliases_sync()
 
