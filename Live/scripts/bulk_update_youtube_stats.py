@@ -4,14 +4,15 @@ Date: 2025-12-26
 Purpose: Update view counts for all games with YouTube playlists
 """
 
-from bot.integrations.youtube import get_playlist_videos_with_views
-from bot.database_module import get_database
-import aiohttp
 import asyncio
 import os
 import sys
 from datetime import datetime
 from typing import Any, Dict, Optional
+
+import aiohttp
+from bot.database_module import get_database
+from bot.integrations.youtube import get_playlist_videos_with_views
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
