@@ -5,19 +5,19 @@ Purpose: Manually map 25 Twitch VODs to database games for bulk stats update
 """
 
 import asyncio
+import json
 import os
 import sys
-import json
-from datetime import datetime
-from typing import Optional, Dict, Any, List
 from collections import defaultdict
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+import aiohttp
 from bot.database_module import get_database
 from bot.integrations.twitch import parse_twitch_duration
-import aiohttp
 
 
 async def fetch_all_vods(username: str, session: aiohttp.ClientSession, headers: dict) -> List[Dict[str, Any]]:

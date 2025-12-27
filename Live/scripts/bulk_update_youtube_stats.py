@@ -8,14 +8,14 @@ import asyncio
 import os
 import sys
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+import aiohttp
 from bot.database_module import get_database
 from bot.integrations.youtube import get_playlist_videos_with_views
-import aiohttp
 
 
 async def fetch_youtube_playlist_stats(playlist_id: str, youtube_api_key: str, session: aiohttp.ClientSession) -> Optional[Dict[str, Any]]:

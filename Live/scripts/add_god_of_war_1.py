@@ -14,10 +14,10 @@ from datetime import datetime
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 try:
-    from bot.database_module import get_database
-    from bot.integrations.youtube import parse_youtube_duration, get_playlist_videos_with_views
-    from bot.integrations import igdb
     import aiohttp
+    from bot.database_module import get_database
+    from bot.integrations import igdb
+    from bot.integrations.youtube import get_playlist_videos_with_views, parse_youtube_duration
 except ImportError as e:
     print(f"❌ Import Error: {e}")
     sys.exit(1)
