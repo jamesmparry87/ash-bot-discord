@@ -12,7 +12,7 @@ def apply_sql():
         return
 
     # 2. Check for the SQL file
-    sql_file = 'update_names.sql'
+    sql_file = 'migration_remove_unused_columns.sql'
     if not os.path.exists(sql_file):
         print(f"❌ Error: '{sql_file}' not found in the current folder.")
         print("   Did you run generate_json_names.py yet?")

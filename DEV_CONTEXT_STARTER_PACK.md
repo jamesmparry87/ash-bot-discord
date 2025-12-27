@@ -116,6 +116,401 @@
 * **5.1 Voice Synthesis:** Integration with ElevenLabs/OpenAI for VC announcements.
 * **5.2 Entry/Exit Protocols:** "Captain on deck" audio cues when Jonesy joins a voice channel.
 
+---
+
+### 🔴 Priority 6: Sustainable Twitch Title Parsing (CRITICAL)
+
+**Status:** Needs Implementation  
+**Target Date:** Q1 2026  
+**Priority:** HIGH
+
+**Background:**
+Current Twitch VOD processing has no game metadata from API (`game_id` and `game_name` fields are missing). We're forced to parse titles manually, which is unreliable and unsustainable.
+
+**Current Problems:**
+1. **Twitch API Limitation:** VODs return NO game metadata whatsoever
+2. **Slow Title Parsing:** `smart_extract_with_validation()` makes 3+ IGDB API calls per VOD
+3. **Designed for Live Monitoring:** Not optimized for bulk processing
+4. **Inconsistent Title Formats:** Can't handle variations in streamer's title styles
+
+**Short-Term Solution (Completed):**
+- ✅ `manual_twitch_mapping.py` - Interactive mapping for current VODs
+- ✅ Allows manual assignment of VODs to database games
+- ⚠️ **Not sustainable** - requires manual intervention for every sync
+
+**Long-Term Solution Design:**
+
+#### **Phase 1: Lightweight Title Extraction**
+Replace slow IGDB-based extraction with database-first matching:
+
+* **6.1.1 Pattern Library** (`bot/utils/title_patterns.py`):
+    * **Task:** Catalog common title patterns used by JonesySpaceCat
+    * **Example patterns:**
+        - `"{Game Name} - {Description} (day X)"` (most common)
+        - `"{Description} - {Game Name}"`
+        - `"{Badge} {Game Name} - {Description}"`
+    * **Objective:** Extract candidate game name without IGDB calls
+
+* **6.1.2 Fuzzy Database Matching** (`bot/database/fuzzy_match.py`):
+    * **Task:** Compare extracted name against existing database games
+    * **Method:** Use Levenshtein distance or similar algorithm
+    * **Scope:** Check canonical names + alternative names
+    * **Output:** Return confidence score based on string similarity
+
+* **6.1.3 IGDB Reduction Strategy:**
+    * **Rule:** IGDB only used for NEW games (not in database)
+    * **Rule:** Bulk sync uses database-only matching (fast!)
+    * **Target:** Reduce API calls by 90%+
+
+#### **Phase 2: Learning System**
+Build intelligence from successful mappings:
+
+* **6.2.1 Title-to-Game History** (new database table):
+    ```sql
+    CREATE TABLE title_game_mappings (
+      id SERIAL PRIMARY KEY,
+      title_pattern TEXT,
+      game_id INT REFERENCES played_games(id),
+      confidence FLOAT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    ```
+
+* **6.2.2 Pattern Recognition:**
+    * **Task:** Track which title fragments consistently map to which games
+    * **Example:** "Certified Zombie Pest Control" → Zombie Army 4
+    * **Objective:** Build confidence over time
+
+* **6.2.3 Auto-Suggestion System:**
+    * **Task:** When bulk sync finds ambiguous title, suggest most likely match
+    * **Flow:** User confirms or corrects → System learns from corrections
+    * **Benefit:** Accuracy improves with each sync
+
+#### **Phase 3: Improved Extraction Algorithm**
+
+* **6.3.1 New Function:** `lightweight_extract_from_title()`
+    * **Strategy:**
+        1. Apply known patterns to extract candidate name
+        2. Fuzzy match against database games
+        3. Return best match with confidence
+        4. Falls back to IGDB only if confidence < 0.6
+    * **Benefits:**
+        - 10x faster than current approach
+        - No rate limiting issues
+        - Works offline
+        - Learns from your specific title patterns
+
+#### **Phase 4: Bulk Processing Optimization**
+
+* **6.4.1 New Script:** `bulk_sync_twitch_smart.py`
+    * **Features:**
+        - Batch processing (process all VODs together)
+        - Database query optimization (load all games once)
+        - Parallel title parsing (async)
+        - Progress saving (resume if interrupted)
+        - Automatic grouping by detected game
+        - Review interface before committing
+    * **Performance Target:**
+        - Current: ~30 seconds per VOD (IGDB calls)
+        - Target: < 1 second per VOD (database matching)
+        - **30x speed improvement** for bulk operations
+
+**Success Metrics:**
+- Processing time: < 1 second per VOD average
+- API calls: < 5 IGDB calls per bulk sync (only for new games)
+- Accuracy: 95%+ correct matches for existing games
+- Manual intervention: Only needed for new/ambiguous games
+
+---
+
+### 📊 Priority 7: Real-Time Engagement Stats with Smart Caching
+
+**Status:** Not Implemented  
+**Target Date:** Q1 2026  
+**Priority:** MEDIUM-HIGH
+
+**Background:**
+Users want to query game engagement stats (views, watch time, performance metrics), but API calls are expensive. We should leverage these queries to keep database fresh.
+
+**The Problem:**
+- Users ask "How many views does [Game] have?"
+- Bot makes API call to answer
+- Data is used once and discarded
+- Next query makes another API call
+- Database gets stale while we waste API quota
+
+**The Solution: Query-Driven Database Updates**
+
+#### **Phase 1: Intelligent Query Detection**
+
+* **7.1.1 Natural Language Understanding:**
+    * **Task:** Expand `is_view_query()` in `twitch_view_response.py`
+    * **Patterns to detect:**
+        - "How many views does [game] have?"
+        - "What are the stats for [game]?"
+        - "How's [game] performing?"
+        - "Show me [game] engagement"
+    * **Objective:** Catch all variations of stats queries
+
+* **7.1.2 Game Name Extraction:**
+    * **Task:** Extract game name from natural language query
+    * **Method:** Use existing `extract_game_name_from_title()` logic
+    * **Validation:** Fuzzy match against database to confirm game exists
+
+#### **Phase 2: Multi-Platform Stats Fetching**
+
+* **7.2.1 YouTube Stats Fetcher:**
+    * **Task:** Create `fetch_youtube_stats_on_demand(game_name)` function
+    * **API:** Use YouTube Data API v3
+    * **Data:** Views, watch time, episode count
+    * **Location:** `bot/integrations/youtube.py`
+
+* **7.2.2 Twitch Stats Fetcher:**
+    * **Task:** Create `fetch_twitch_stats_on_demand(game_name)` function
+    * **API:** Use Twitch Helix API
+    * **Data:** Watch time, VOD count (views unreliable)
+    * **Location:** `bot/integrations/twitch.py`
+
+* **7.2.3 Unified Stats Aggregator:**
+    * **Task:** Create `fetch_comprehensive_game_stats(game_name)`
+    * **Flow:**
+        1. Check which platforms game is on (YouTube/Twitch/both)
+        2. Fetch stats from relevant APIs
+        3. Aggregate into unified format
+        4. Calculate cross-platform metrics
+    * **Output:**
+        ```python
+        {
+            'game_name': 'God of War',
+            'youtube': {'views': 150000, 'watch_time_mins': 8000, 'episodes': 50},
+            'twitch': {'watch_time_mins': 2000, 'episodes': 15},
+            'total_watch_time_mins': 10000,
+            'total_episodes': 65,
+            'primary_platform': 'youtube'
+        }
+        ```
+
+#### **Phase 3: Smart Database Sync**
+
+* **7.3.1 Write-Through Cache Pattern:**
+    * **Task:** When stats are fetched for a query, immediately update database
+    * **Function:** `update_game_stats_from_query(game_id, stats_dict)`
+    * **Logic:**
+        ```python
+        async def handle_stats_query(game_name, user_query):
+            # 1. Fetch fresh stats from APIs
+            stats = await fetch_comprehensive_game_stats(game_name)
+            
+            # 2. Update database (cache write)
+            await update_game_stats_from_query(game_id, stats)
+            
+            # 3. Generate response for user
+            response = format_stats_response(stats)
+            
+            # 4. Log the dual-purpose operation
+            log(f"Stats query served user AND updated database for {game_name}")
+            
+            return response
+        ```
+
+* **7.3.2 Timestamp Tracking:**
+    * **Task:** Add `last_stats_query` timestamp to `played_games` table
+    * **Purpose:** Track when each game was last queried/updated
+    * **Usage:** Prioritize older games for background refresh
+
+* **7.3.3 Query-Based Scheduling:**
+    * **Task:** Use query patterns to inform Monday sync priority
+    * **Logic:** Games that users query frequently get refreshed first
+    * **Benefit:** API quota spent on games people actually care about
+
+#### **Phase 4: Response Enhancement**
+
+* **7.4.1 Ash-Styled Stats Reports:**
+    * **Task:** Format stats responses in Ash's analytical voice
+    * **Example:**
+        ```
+        📊 **Performance Analysis - God of War (2018)**
+        
+        Captain, I've compiled the engagement metrics for this operation:
+        
+        **YouTube Operations:**
+        • Visual Engagement: 150,243 views
+        • Mission Duration: 133 hours, 20 minutes
+        • Episode Count: 50 operations
+        
+        **Twitch Operations:**
+        • Watch Time: 33 hours, 45 minutes  
+        • VOD Count: 15 archives
+        
+        **Cross-Platform Analysis:**
+        • Total Engagement: 167 hours
+        • Primary Platform: YouTube (79.8% of content)
+        • Performance Rating: Exceptional
+        
+        *Data retrieved from live APIs and synchronized to database at 12:42 GMT*
+        ```
+
+* **7.4.2 Comparative Analysis:**
+    * **Task:** When showing stats, compare to other games
+    * **Metrics:**
+        - "This ranks #3 in total watch time"
+        - "15% higher engagement than average"
+        - "Most-watched horror game"
+
+* **7.4.3 Trend Detection:**
+    * **Task:** Compare current stats to previous query (if timestamp exists)
+    * **Output:** Show growth/decline since last check
+    * **Example:** "Views increased by 3,421 (+2.3%) since last analysis"
+
+#### **Phase 5: Background Refresh Strategy**
+
+* **7.5.1 Query Heat Map:**
+    * **Task:** Track which games are queried most frequently
+    * **Storage:** Simple counter in `played_games` table (`query_count` column)
+    * **Usage:** Inform refresh priority
+
+* **7.5.2 Smart Refresh Scheduler:**
+    * **Task:** Modify Monday sync to use query-driven priority
+    * **Algorithm:**
+        1. Games queried in last 7 days: Refresh first (high priority)
+        2. Games not queried in 30+ days: Refresh last (low priority)
+        3. New games: Always refresh (data establishment)
+    * **Benefit:** API quota spent efficiently
+
+* **7.5.3 Staleness Indicators:**
+    * **Task:** When responding to queries, indicate data freshness
+    * **Examples:**
+        - "Real-time data (retrieved 2 minutes ago)"
+        - "Cached data (last updated 3 days ago)"
+        - "Refreshing now..." (if data is stale)
+
+#### **Implementation Checklist**
+
+- [ ] Add `last_stats_query` and `query_count` columns to `played_games` table
+- [ ] Create `fetch_youtube_stats_on_demand()` in `youtube.py`
+- [ ] Create `fetch_twitch_stats_on_demand()` in `twitch.py`
+- [ ] Create `fetch_comprehensive_game_stats()` as unified aggregator
+- [ ] Implement `update_game_stats_from_query()` write-through logic
+- [ ] Expand natural language query detection
+- [ ] Create Ash-styled stats response formatter
+- [ ] Add comparative analysis logic
+- [ ] Implement trend detection
+- [ ] Modify Monday sync to use query-driven priority
+- [ ] Add staleness indicators to responses
+- [ ] Unit tests for all new functions
+- [ ] Integration tests with live APIs (Rook staging)
+
+**Success Metrics:**
+- User Satisfaction: Stats queries feel instant and comprehensive
+- API Efficiency: 50% reduction in redundant API calls
+- Database Freshness: Frequently-queried games always up-to-date
+- Engagement: More users query stats due to rich responses
+
+**Example User Flow:**
+```
+User: "Ash, how many views does God of War have?"
+
+Bot:
+1. Detects stats query
+2. Extracts "God of War"
+3. Fetches YouTube stats (150k views)
+4. Updates database with fresh data
+5. Responds with formatted stats in Ash voice
+6. Logs: "Query served + DB updated for God of War"
+
+Result: User gets answer, database stays fresh, API call serves dual purpose
+```
+
+---
+
+### 💾 Priority 8: Database & Platform Improvements
+
+**Status:** Ongoing  
+**Target Date:** Q1-Q2 2026
+
+#### **8.1 Platform Awareness**
+
+* **8.1.1 Platform Enum Column:**
+    * **Task:** Add `platform` ENUM column to `played_games` table
+    * **Values:** `'youtube'`, `'twitch'`, `'both'`
+    * **Purpose:** Quick platform identification without checking URL columns
+
+* **8.1.2 Watch Time Normalization:**
+    * **Task:** Implement unified `watch_time_minutes` column for both platforms
+    * **Benefit:** Cross-platform comparisons become trivial
+    * **Migration:** Populate from existing `total_playtime_minutes`
+
+* **8.1.3 Cross-Platform Metrics:**
+    * **Task:** Create derived metrics for multi-platform games
+    * **Examples:**
+        - Total cross-platform watch time
+        - Platform preference ratio
+        - Engagement rate (views/watch_time)
+
+#### **8.2 Bot Intelligence Enhancements**
+
+* **8.2.1 Natural Language Query Detection:**
+    * **Task:** Auto-detect view/stats queries in natural conversation
+    * **Integration:** Enhance `ai_handler.py` to recognize stats requests
+    * **Example:** "I wonder how well Batman is doing" → triggers stats query
+
+* **8.2.2 Performance Comparison Commands:**
+    * **Task:** Create `!compare <game1> <game2>` command
+    * **Output:** Side-by-side stats comparison
+    * **Metrics:** Views, watch time, engagement rate, episode count
+
+* **8.2.3 Analytics Dashboard:**
+    * **Task:** Create `!analytics` command for server-wide statistics
+    * **Output:** 
+        - Most-watched game (this month/all-time)
+        - Total watch time across all games
+        - Platform usage breakdown
+        - Trending games (biggest growth)
+
+#### **8.3 API Integration Expansion**
+
+* **8.3.1 YouTube Analytics API:**
+    * **Task:** Integrate YouTube Analytics API (requires channel authorization)
+    * **Benefit:** Get actual watch time data instead of estimates
+    * **Data:** Real-time watch time, audience retention, demographics
+
+* **8.3.2 Periodic Metric Updates:**
+    * **Task:** Background job that refreshes top 10 games weekly
+    * **Logic:** Use query heat map to determine "top 10"
+    * **Benefit:** Always-fresh data for popular games
+
+* **8.3.3 Trend Detection Algorithm:**
+    * **Task:** Detect significant changes in game performance
+    * **Triggers:** 
+        - Views spike by >20% in one week
+        - New game rapidly gaining popularity
+        - Old game experiencing resurgence
+    * **Action:** Notify mods channel with analysis
+
+#### **8.4 User Experience Features**
+
+* **8.4.1 Game Views Command:**
+    * **Task:** Create `!gameviews <name>` command
+    * **Output:** Formatted stats response (like query-driven stats)
+    * **Benefit:** Explicit command for users who prefer commands over natural language
+
+* **8.4.2 Weekly Engagement Reports:**
+    * **Task:** Automated weekly post to specific channel
+    * **Content:**
+        - Top 5 games by watch time (this week)
+        - New games added
+        - Total watch time across platform
+        - Biggest climbers (% growth)
+    * **Style:** Ash mission report format
+
+* **8.4.3 Platform Preference Insights:**
+    * **Task:** Analyze user behavior patterns
+    * **Questions to answer:**
+        - Which games perform better on which platform?
+        - Is there a genre preference per platform?
+        - Do multi-platform games get more total engagement?
+    * **Output:** Periodic insights for Jonesy's content strategy
+
 ## 6. Persona Architecture & Context System
 
 ### A. Persona Module Structure (Dec 2025)
