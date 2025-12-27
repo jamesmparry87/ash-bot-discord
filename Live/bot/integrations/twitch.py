@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 # Database import
-from ..database import db
+from ..database_module import get_database
 
 # Text processing utilities
 from ..utils.text_processing import cleanup_game_name, extract_game_name_from_title, is_generic_term
@@ -382,10 +382,14 @@ async def fetch_new_vods_since(username: str, start_timestamp: datetime) -> List
                                 if series_name == extracted_name:
                                     series_name = canonical_name
 
+                        # Capture view_count from Twitch API
+                        view_count = video.get('view_count', 0)
+
                         new_vods.append({
                             'title': title,
                             'url': video['url'],
                             'duration_seconds': parse_twitch_duration(video.get('duration', '0s')),
+                            'view_count': view_count,  # NEW: Capture Twitch views
                             'published_at': created_at,
                             'canonical_name': canonical_name,
                             'alternative_names': alternative_names,

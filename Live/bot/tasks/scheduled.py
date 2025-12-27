@@ -2095,6 +2095,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
             title = vod['title']
             vod_url = vod.get('url', '')
             duration_minutes = vod.get('duration_seconds', 0) // 60
+            view_count = vod.get('view_count', 0)  # NEW: Capture Twitch views from VOD
 
             # Phase 2.2: Check for multi-game streams
             try:
@@ -2221,7 +2222,8 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                 # Update existing game - add to totals
                 update_params = {
                     'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + duration_minutes,
-                    'total_episodes': existing_game.get('total_episodes', 0) + 1
+                    'total_episodes': existing_game.get('total_episodes', 0) + 1,
+                    'twitch_views': existing_game.get('twitch_views', 0) + view_count  # NEW: Aggregate Twitch views
                 }
 
                 # Phase 1.3: Store VOD URLs
@@ -2243,7 +2245,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                         print(f"📎 SYNC: Added VOD URL to '{game_name}' ({len(existing_vods)} total)")
 
                 db.update_played_game(existing_game['id'], **update_params)
-                print(f"✅ SYNC: Updated '{game_name}' with Twitch VOD ({duration_minutes} mins)")
+                print(f"✅ SYNC: Updated '{game_name}' with Twitch VOD ({duration_minutes} mins, {view_count:,} views)")
                 games_updated += 1
 
                 # Track low-confidence update for notification
@@ -2266,6 +2268,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                     'series_name': game_name,
                     'total_playtime_minutes': duration_minutes,
                     'total_episodes': 1,
+                    'twitch_views': view_count,  # NEW: Include Twitch views for new games
                     'first_played_date': vod['published_at'].date(),
                     'notes': f"Auto-synced from Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
 
