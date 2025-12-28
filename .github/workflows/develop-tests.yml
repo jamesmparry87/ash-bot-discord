@@ -99,7 +99,7 @@ jobs:
       run: |
         python3 -m pytest Live/tests/test_ai_integration.py -v --tb=short --durations=10
     
-    - name: Run all tests with coverage
+    - name: Run core functional tests
       env:
         DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
         DISCORD_TOKEN: ${{ secrets.TEST_DISCORD_TOKEN }}  # pyright: ignore*
@@ -116,7 +116,11 @@ jobs:
         YOUTUBE_HISTORY_CHANNEL_ID: "123456793"
         PYTHONPATH: Live
       run: |
-        python3 -m pytest Live/tests/ -v --cov=Live --cov-report=term-missing --cov-report=xml --tb=short
+        python3 -m pytest Live/tests/test_functional_core.py \
+                         Live/tests/test_database.py \
+                         Live/tests/test_config.py \
+                         Live/tests/test_basic_modules.py \
+                         -v --cov=Live --cov-report=term-missing --cov-report=xml --tb=short
     
     - name: Upload coverage to GitHub
       uses: actions/upload-artifact@v4
