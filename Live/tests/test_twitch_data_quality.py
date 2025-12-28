@@ -294,7 +294,8 @@ class TestEdgeCases:
             extracted, confidence = await smart_extract_with_validation(title)
             assert extracted is not None, f"Failed to extract from '{title}'"
             # Should extract something from the title
-            assert expected_substring.lower() in extracted.lower(), f"Expected '{expected_substring}' in extracted '{extracted}' from '{title}'"
+            assert expected_substring.lower() in extracted.lower(
+            ), f"Expected '{expected_substring}' in extracted '{extracted}' from '{title}'"
 
     def test_filter_english_handles_mixed_content(self):
         """Test English filter handles mixed language content"""
