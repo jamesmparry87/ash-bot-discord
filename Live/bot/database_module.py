@@ -326,8 +326,7 @@ class DatabaseManager:
                 cur.execute("""
                     ALTER TABLE played_games
                     ADD COLUMN IF NOT EXISTS genre VARCHAR(100),
-                    ADD COLUMN IF NOT EXISTS total_playtime_minutes INTEGER DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS twitch_views INTEGER DEFAULT 0
+                    ADD COLUMN IF NOT EXISTS total_playtime_minutes INTEGER DEFAULT 0
                 """)
 
                 # Remove franchise_name column if it exists
