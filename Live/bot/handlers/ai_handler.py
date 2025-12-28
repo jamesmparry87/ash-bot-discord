@@ -86,6 +86,25 @@ for logger_name in ["google_genai.models", "httpx"]:
 # Get database instance
 db = get_database()  # type: ignore
 
+# Import cache system
+CACHE_AVAILABLE = False
+get_cache = None  # type: ignore
+
+def _init_cache():
+    """Initialize cache system at runtime"""
+    global CACHE_AVAILABLE, get_cache
+    try:
+        from . import ai_cache as _ai_cache_module  # type: ignore
+        get_cache = _ai_cache_module.get_cache  # type: ignore
+        CACHE_AVAILABLE = True
+        print("✅ AI cache system loaded")
+    except ImportError as e:
+        print(f"⚠️ AI cache module not available: {e}")
+        CACHE_AVAILABLE = False
+
+# Initialize cache on module load
+_init_cache()
+
 # Try to import discord for role detection
 try:
     import discord
@@ -866,6 +885,20 @@ async def call_ai_with_rate_limiting(
     try:
         response_text = None
 
+        # PHASE 1: Check cache first (NEW OPTIMIZATION)
+        if CACHE_AVAILABLE and get_cache is not None:
+            cache = get_cache()
+            
+            # Try to get cached response
+            cached_response = cache.get(prompt, user_id)
+            
+            if cached_response:
+                # Cache hit! Return immediately without API call
+                print(f"💰 API call saved via cache (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
+                return cached_response, "cache_hit"
+            
+            # Cache miss - will need to call API and cache result
+
         # Reset backup active flag if we're trying primary AI again
         if ai_usage_stats.get("backup_active", False) and not ai_usage_stats.get("quota_exhausted", False):
             ai_usage_stats["backup_active"] = False
@@ -960,6 +993,12 @@ async def call_ai_with_rate_limiting(
                         response_text = response.text
                         record_ai_request()
                         print(f"✅ Gemini request successful (timeout: {timeout_duration}s)")
+                        
+                        # PHASE 1: Cache the successful response (NEW OPTIMIZATION)
+                        if CACHE_AVAILABLE and get_cache is not None and response_text:
+                            cache = get_cache()
+                            cache.set(prompt, response_text, user_id)
+                        
                         # Reset quota exhausted flag if successful
                         if ai_usage_stats.get("quota_exhausted", False):
                             ai_usage_stats["quota_exhausted"] = False
@@ -1570,15 +1609,8 @@ question_history = {
 def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
     """Get diverse question templates organized by category - IMPROVED for variety!"""
     return {
-        # CONSOLIDATED: Only ONE playtime question (was 3 redundant ones)
-        "playtime_champion": [
-            {
-                "template": "What game has Jonesy spent the most time playing?",
-                "answer_logic": "max_playtime",
-                "type": "single_answer",
-                "weight": 1.2  # Reduced from 2.0 to prevent over-representation
-            }
-        ],
+        # REMOVED: "most played" pattern (redundant and ambiguous)
+        # Users found this question uninteresting and potentially confusing
 
         # ENHANCED: More genre variety
         "genre_insights": [
@@ -2529,11 +2561,204 @@ async def safe_initialize_ai_async():
         return False
 
 
+async def generate_trivia_batch(batch_size: int = 10, context: str = "batch_generation") -> Dict[str, Any]:
+    """
+    PHASE 2: Generate multiple trivia questions in a single API call.
+    
+    This is the key optimization - instead of 10 API calls for 10 questions,
+    we make 1 API call that generates all 10 at once.
+    
+    Args:
+        batch_size: Number of questions to generate (default 10)
+        context: Context string for logging
+        
+    Returns:
+        Dict with generation results and statistics
+    """
+    if not ai_enabled:
+        print("❌ AI not enabled for trivia batch generation")
+        return {"success": False, "generated": 0, "error": "AI not enabled"}
+    
+    if db is None:
+        print("❌ Database not available for trivia batch generation")
+        return {"success": False, "generated": 0, "error": "Database not available"}
+    
+    try:
+        print(f"🎲 PHASE 2: Generating batch of {batch_size} trivia questions in single API call...")
+        
+        # Get game statistics for context
+        stats = db.get_played_games_stats()
+        sample_games = db.get_all_played_games()[:10]
+        
+        # Build game context
+        game_context = ""
+        if sample_games:
+            game_details = []
+            for game in sample_games[:5]:
+                name = game['canonical_name']
+                episodes = game.get('total_episodes', 0)
+                status = game.get('completion_status', 'unknown')
+                game_details.append(f"{name} ({episodes} eps, {status})")
+            game_context = f"Sample games: {'; '.join(game_details)}"
+        
+        # Create batch generation prompt
+        batch_prompt = f"""Generate exactly {batch_size} diverse trivia questions about Captain Jonesy's gaming experiences.
+
+CRITICAL REQUIREMENTS:
+1. Generate EXACTLY {batch_size} questions
+2. Use DIVERSE question types and categories
+3. Each question must be UNIQUE and different from others
+4. Be CONCISE - minimal preamble
+
+TERMINOLOGY RULES:
+⚠️ "most played" = HIGHEST total_playtime_minutes (time)
+⚠️ "most episodes" = MOST episode count (episodes)
+⚠️ These are DIFFERENT metrics!
+
+DIVERSITY GUIDELINES:
+- Mix genres, series, platforms, temporal questions
+- Vary between completion status, playtime, episodes
+- Include both easy and challenging questions
+- Focus on engaging, interesting facts
+
+AVAILABLE DATA:
+{game_context}
+Total games: {stats.get('total_games', 0)}
+
+RETURN ONLY JSON ARRAY:
+[
+  {{
+    "question_text": "Concise question here?",
+    "question_type": "single_answer",
+    "correct_answer": "Answer here",
+    "category": "category_name",
+    "difficulty_level": 1
+  }},
+  ... ({batch_size} total questions)
+]
+
+Generate diverse, engaging questions about Jonesy's gaming journey."""
+
+        # Call AI with rate limiting
+        print(f"📞 Making single API call for {batch_size} questions...")
+        response_text, status_message = await call_ai_with_rate_limiting(batch_prompt, JONESY_USER_ID, context)
+        
+        if not response_text:
+            print(f"❌ Batch generation failed: {status_message}")
+            return {"success": False, "generated": 0, "error": status_message}
+        
+        print(f"✅ Received batch response: {len(response_text)} characters")
+        
+        # Parse the JSON array
+        parsed_response = robust_json_parse(response_text)
+        
+        # Type check: must be a list
+        if not parsed_response or not isinstance(parsed_response, list):
+            print(f"❌ Failed to parse batch response as JSON array")
+            return {"success": False, "generated": 0, "error": "Invalid JSON response"}
+        
+        # Now we know it's a list, type hint for Pylance
+        questions_array: List[Any] = parsed_response
+        
+        print(f"📊 Parsed {len(questions_array)} questions from batch")
+        
+        # Store each question in the database
+        stored_count = 0
+        duplicate_count = 0
+        error_count = 0
+        
+        for idx, question_data in enumerate(questions_array):
+            try:
+                # Type check: must be a dict
+                if not isinstance(question_data, dict):
+                    print(f"⚠️ Question {idx+1} is not a dict, skipping")
+                    error_count += 1
+                    continue
+                
+                # Type cast for Pylance after type check
+                question_dict: Dict[str, Any] = question_data
+                
+                # Validate question structure
+                if not all(key in question_dict for key in ["question_text", "question_type", "correct_answer"]):
+                    print(f"⚠️ Question {idx+1} missing required fields, skipping")
+                    error_count += 1
+                    continue
+                
+                # Extract fields using .get() for Pylance compatibility
+                question_text = question_dict.get("question_text", "")
+                correct_answer = question_dict.get("correct_answer", "")
+                
+                if not question_text or not correct_answer:
+                    print(f"⚠️ Question {idx+1} has empty required fields, skipping")
+                    error_count += 1
+                    continue
+                
+                # Check for duplicates
+                duplicate_info = db.check_question_duplicate(
+                    question_text,
+                    similarity_threshold=0.8
+                )
+                
+                if duplicate_info:
+                    print(f"🔍 Question {idx+1} is duplicate (similarity: {duplicate_info['similarity_score']:.2f}), skipping")
+                    duplicate_count += 1
+                    continue
+                
+                # Store question in database with 'available' status
+                question_id = db.safe_add_trivia_question(
+                    question_text=question_text,
+                    question_type=question_dict.get("question_type", "single_answer"),
+                    correct_answer=correct_answer,
+                    multiple_choice_options=question_dict.get("multiple_choice_options"),
+                    is_dynamic=False,
+                    category=question_dict.get("category", "batch_generated"),
+                    difficulty_level=question_dict.get("difficulty_level", 1),
+                    submitted_by_user_id=None  # AI-generated
+                )
+                
+                if question_id:
+                    stored_count += 1
+                    print(f"✅ Stored question {idx+1}/{len(questions_array)}: ID {question_id}")
+                else:
+                    error_count += 1
+                    print(f"❌ Failed to store question {idx+1}")
+                    
+            except Exception as e:
+                print(f"❌ Error storing question {idx+1}: {e}")
+                error_count += 1
+        
+        # Calculate efficiency
+        efficiency = f"{stored_count}x" if stored_count > 0 else "0x"
+        api_calls_saved = stored_count - 1 if stored_count > 1 else 0
+        
+        result = {
+            "success": stored_count > 0,
+            "generated": stored_count,
+            "duplicates": duplicate_count,
+            "errors": error_count,
+            "total_attempted": len(questions_array),
+            "api_calls_used": 1,
+            "api_calls_saved": api_calls_saved,
+            "efficiency": efficiency
+        }
+        
+        print(f"🎉 PHASE 2 COMPLETE: Generated {stored_count} questions in 1 API call (saved {api_calls_saved} calls, {efficiency} efficiency)")
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ Error in batch trivia generation: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "generated": 0, "error": str(e)}
+
+
 # Export list for proper module interface
 __all__ = [
     'call_ai_with_rate_limiting',
     'filter_ai_response',
     'generate_ai_trivia_question',
+    'generate_trivia_batch',  # NEW: Phase 2 batch generation
     'create_ai_announcement_content',
     'initialize_ai',
     'initialize_ai_async',
