@@ -5,8 +5,8 @@ PHASE 3: Enhanced validation system for batch-generated trivia questions.
 Provides answer verification, confidence scoring, and quality assurance.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
 import logging
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
