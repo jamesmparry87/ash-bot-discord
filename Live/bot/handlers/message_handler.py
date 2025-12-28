@@ -815,14 +815,14 @@ async def handle_statistical_query(
                 response += f"▶️ **By Episodes:** '{top_episode_game['canonical_name']}' has the most episodes with **{episodes} parts**."
 
             response += "\n\nPlease specify which metric you require for further analysis."
-            
+
             # NEW: Store clarification state in context (Issue #1 Fix)
             context = get_or_create_context(message.author.id, message.channel.id)
             context.set_pending_clarification("playtime_vs_episodes", {
                 'playtime_stats': db.get_games_by_playtime('DESC', limit=5),
                 'episode_stats': db.get_games_by_episode_count('DESC', limit=5)
             })
-            
+
             await message.reply(response)
 
     except Exception as e:
@@ -1739,7 +1739,7 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
         # FIRST: Check if this is a pending clarification response (Issue #1 Fix)
         if context.pending_clarification == "playtime_vs_episodes":
             content_lower = message.content.lower()
-            
+
             if any(word in content_lower for word in ["playtime", "hours", "time", "longest"]):
                 # User wants playtime metric
                 playtime_stats = context.clarification_data.get('playtime_stats', [])
@@ -1747,31 +1747,31 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
                     top_game = playtime_stats[0]
                     hours = round(top_game['total_playtime_minutes'] / 60, 1)
                     response = f"Playtime analysis confirmed. '{top_game['canonical_name']}' has the most playtime with **{hours} hours**."
-                    
+
                     # Add follow-up suggestion
                     if len(playtime_stats) > 1:
                         second_game = playtime_stats[1]
                         second_hours = round(second_game['total_playtime_minutes'] / 60, 1)
                         response += f" Secondary analysis: '{second_game['canonical_name']}' follows with {second_hours} hours. Would you like me to analyze the complete playtime rankings or compare completion efficiency patterns?"
-                    
+
                     await message.reply(apply_pops_arcade_sarcasm(response, message.author.id))
                     context.clear_pending_clarification()
                     context.add_message(message.content, "user")
                     context.add_message("clarification_resolved_playtime", "bot")
                     return True
-            
+
             elif any(word in content_lower for word in ["episode", "episodes", "parts", "series"]):
                 # User wants episodes metric
                 episode_stats = context.clarification_data.get('episode_stats', [])
                 if episode_stats:
                     top_game = episode_stats[0]
                     response = f"Episode analysis confirmed. '{top_game['canonical_name']}' has the most episodes with **{top_game['total_episodes']} parts**."
-                    
+
                     # Add follow-up suggestion
                     if len(episode_stats) > 1:
                         second_game = episode_stats[1]
                         response += f" Secondary analysis: '{second_game['canonical_name']}' follows with {second_game['total_episodes']} episodes. Would you like me to examine episode pacing patterns or analyze completion timelines?"
-                    
+
                     await message.reply(apply_pops_arcade_sarcasm(response, message.author.id))
                     context.clear_pending_clarification()
                     context.add_message(message.content, "user")
@@ -1784,48 +1784,71 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
 
         # SECOND: Check for "comprehensive list" follow-up (Issue #2 Fix)
         content_lower = message.content.lower()
-        if any(phrase in content_lower for phrase in ["comprehensive list", "full list", "show all", "complete list", "show me all", "see all", "list all"]):
-            
+        if any(
+            phrase in content_lower for phrase in [
+                "comprehensive list",
+                "full list",
+                "show all",
+                "complete list",
+                "show me all",
+                "see all",
+                "list all"]):
+
             if context.last_query_results and len(context.last_query_results) > 8:
                 # User wants the full list
                 games = context.last_query_results
                 query_type = context.last_query_type or "query"
                 query_param = context.last_query_parameter or "requested"
-                
+
                 # Format comprehensive list (with pagination for very long lists)
                 if len(games) <= 20:
                     # Show all at once
                     game_list = []
                     for game in games:
-                        episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get("total_episodes", 0) > 0 else ""
+                        episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get(
+                            "total_episodes", 0) > 0 else ""
                         status = game.get("completion_status", "unknown")
-                        status_emoji = {"completed": "✅", "ongoing": "🔄", "dropped": "❌", "unknown": "❓"}.get(status, "❓")
+                        status_emoji = {
+                            "completed": "✅",
+                            "ongoing": "🔄",
+                            "dropped": "❌",
+                            "unknown": "❓"}.get(
+                            status,
+                            "❓")
                         game_list.append(f"{status_emoji} {game['canonical_name']}{episodes}")
-                    
-                    response = f"Comprehensive {query_param} analysis - {len(games)} games total:\n\n" + "\n".join(game_list)
+
+                    response = f"Comprehensive {query_param} analysis - {len(games)} games total:\n\n" + "\n".join(
+                        game_list)
                 else:
                     # Paginate for very long lists
                     page_size = 20
                     game_list = []
                     for i, game in enumerate(games[:page_size]):
-                        episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get("total_episodes", 0) > 0 else ""
+                        episodes = f" ({game.get('total_episodes', 0)} eps)" if game.get(
+                            "total_episodes", 0) > 0 else ""
                         status = game.get("completion_status", "unknown")
-                        status_emoji = {"completed": "✅", "ongoing": "🔄", "dropped": "❌", "unknown": "❓"}.get(status, "❓")
+                        status_emoji = {
+                            "completed": "✅",
+                            "ongoing": "🔄",
+                            "dropped": "❌",
+                            "unknown": "❓"}.get(
+                            status,
+                            "❓")
                         game_list.append(f"{status_emoji} {game['canonical_name']}{episodes}")
-                    
+
                     remaining = len(games) - page_size
                     response = f"Comprehensive {query_param} analysis - Displaying first {page_size} of {len(games)} total games:\n\n"
                     response += "\n".join(game_list)
-                    
+
                     if remaining > 0:
                         response += f"\n\n*{remaining} additional entries available. Request 'next page' for continuation.*"
-                
+
                 response = smart_truncate_response(response)
                 await message.reply(apply_pops_arcade_sarcasm(response, message.author.id))
                 context.add_message(message.content, "user")
                 context.add_message("comprehensive_list_provided", "bot")
                 return True
-            
+
             elif context.last_query_results and len(context.last_query_results) <= 8:
                 await message.reply("Analysis complete. The previous query already displayed all available results. No additional data to present.")
                 context.add_message(message.content, "user")

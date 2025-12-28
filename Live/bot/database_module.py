@@ -877,7 +877,7 @@ class DatabaseManager:
                     AND alternative_names != ''
                 """)
                 all_games_with_alt_names = cur.fetchall()
-                
+
                 # Search alternative names in Python for better format compatibility
                 for game_row in all_games_with_alt_names:
                     game_dict = dict(game_row)
