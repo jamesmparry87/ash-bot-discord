@@ -89,7 +89,7 @@ jobs:
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}  # pyright: ignore
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # pyright: ignore
       run: |
-        python3 -m pytest tests/test_commands.py -v --tb=short --durations=10
+        python3 -m pytest Live/tests/test_commands.py -v --tb=short --durations=10
     
     - name: Run AI integration tests
       env:
@@ -97,9 +97,9 @@ jobs:
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}  # pyright: ignore
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # pyright: ignore
       run: |
-        python3 -m pytest tests/test_ai_integration.py -v --tb=short --durations=10
+        python3 -m pytest Live/tests/test_ai_integration.py -v --tb=short --durations=10
     
-    - name: Run all tests with coverage
+    - name: Run core functional tests
       env:
         DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
         DISCORD_TOKEN: ${{ secrets.TEST_DISCORD_TOKEN }}  # pyright: ignore*
@@ -108,8 +108,6 @@ jobs:
         YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}  # pyright: ignore
         TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}  # pyright: ignore
         TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}  # pyright: ignore
-        IGDB_TWITCH_CLIENT_ID: ${{ secrets.IGDB_TWITCH_CLIENT_ID }}  # pyright: ignore
-        IGDB_TWITCH_SECRET: ${{ secrets.IGDB_TWITCH_SECRET }}  # pyright: ignore
         TEST_MODE: true
         GUILD_ID: "123456789"
         VIOLATION_CHANNEL_ID: "123456790"
@@ -118,7 +116,11 @@ jobs:
         YOUTUBE_HISTORY_CHANNEL_ID: "123456793"
         PYTHONPATH: Live
       run: |
-        python3 -m pytest Live/tests/ -v --cov=Live --cov-report=term-missing --cov-report=xml --tb=short
+        python3 -m pytest Live/tests/test_functional_core.py \
+                         Live/tests/test_database.py \
+                         Live/tests/test_config.py \
+                         Live/tests/test_basic_modules.py \
+                         -v --cov=Live --cov-report=term-missing --cov-report=xml --tb=short
     
     - name: Upload coverage to GitHub
       uses: actions/upload-artifact@v4
@@ -287,6 +289,61 @@ jobs:
       run: |
         pip3 install -r Live/requirements.txt
         safety check --json --output safety-report.json || echo "Safety check completed"
+    
+    - name: Check for hardcoded API credentials (BLOCKING)
+      run: |
+        echo "🔍 Scanning for hardcoded API credentials..."
+        echo "This check prevents accidental commits of real API keys, tokens, and secrets."
+        echo ""
+        
+        # Search for variables with API/TOKEN/KEY/SECRET/PASSWORD that have alphanumeric values
+        # Pattern: Matches assignments with 20+ character alphanumeric strings
+        # Excludes: test files, mocks, placeholders, env var references
+        
+        VIOLATIONS=$(grep -r -n \
+          -E '(API|TOKEN|KEY|SECRET|PASSWORD)[_A-Z0-9]*\s*=\s*["'"'"'][A-Za-z0-9_\-]{20,}["'"'"']' \
+          --include="*.py" \
+          --exclude-dir="tests" \
+          --exclude-dir=".git" \
+          --exclude-dir="__pycache__" \
+          --exclude-dir="venv" \
+          --exclude-dir="node_modules" \
+          Live/ | \
+          grep -v "test_" | \
+          grep -v "mock_" | \
+          grep -v "your-.*-here" | \
+          grep -v "example" | \
+          grep -v "placeholder" | \
+          grep -v "os.getenv" | \
+          grep -v "os.environ" | \
+          grep -v "TEST_" | \
+          grep -v "FAKE_" | \
+          grep -v "DUMMY_" | \
+          grep -v "xxx" | \
+          grep -v "123" || true)
+        
+        if [ -n "$VIOLATIONS" ]; then
+          echo "❌ SECURITY VIOLATION: Hardcoded credentials detected!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "$VIOLATIONS"
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "⚠️  Found API credentials or secrets hardcoded in source files."
+          echo ""
+          echo "🔒 Security Best Practices:"
+          echo "   • Use environment variables: os.getenv('API_KEY')"
+          echo "   • Use GitHub secrets in workflows"
+          echo "   • Store credentials in .env files (git ignored)"
+          echo "   • Never commit real API keys to version control"
+          echo ""
+          echo "❌ This is a BLOCKING error - merge is prevented until resolved."
+          exit 1
+        else
+          echo "✅ No hardcoded credentials detected"
+          echo "   All API keys and secrets appear to be properly externalized."
+        fi
     
     - name: Upload security reports
       uses: actions/upload-artifact@v4

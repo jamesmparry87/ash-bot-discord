@@ -36,6 +36,7 @@ from ..persona.faq_handler import check_faq_match, get_role_aware_faq_response
 from ..persona.faqs import ASH_FAQ_RESPONSES
 from ..utils.permissions import (
     cleanup_expired_aliases,
+    cleanup_expired_aliases_sync,
     get_member_conversation_count,
     get_user_communication_tier,
     increment_member_conversation_count,
@@ -358,8 +359,7 @@ async def handle_pineapple_pizza_enforcement(message: discord.Message) -> bool:
     for pattern in pineapple_negative_patterns:
         if re.search(pattern, message_lower):
             # Check for captain alias - different response when testing as
-            # captain
-            cleanup_expired_aliases()
+            cleanup_expired_aliases_sync()
             user_tier = await get_user_communication_tier(message)
 
             if user_tier == "captain":
@@ -527,6 +527,64 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"what.*jonesy.*most\s+viewed",
             r"which.*jonesy.*most\s+viewed",
             r"what.*game.*most\s+viewed"
+        ],
+        "twitch_views": [
+            r"what.*game.*most.*twitch\s+views",
+            r"which.*game.*most.*twitch\s+views",
+            r"what.*twitch.*most\s+views",
+            r"which.*twitch.*most\s+views",
+            r"most.*twitch\s+views",
+            r"highest.*twitch\s+views",
+            r"what.*game.*highest.*twitch",
+            r"which.*game.*highest.*twitch",
+            r"twitch.*most\s+viewed",
+            r"most\s+viewed.*twitch",
+            r"what.*most\s+viewed.*twitch",
+            r"which.*most\s+viewed.*twitch"
+        ],
+        "total_views": [
+            r"what.*game.*most.*total\s+views",
+            r"which.*game.*most.*total\s+views",
+            r"what.*game.*combined\s+views",
+            r"which.*game.*combined\s+views",
+            r"total.*views.*ranking",
+            r"combined.*views.*ranking",
+            r"most.*total\s+views",
+            r"highest.*total\s+views",
+            r"youtube.*and.*twitch.*views",
+            r"twitch.*and.*youtube.*views",
+            r"cross[- ]?platform.*views",
+            r"what.*most\s+views.*overall",
+            r"which.*most\s+views.*overall"
+        ],
+        "platform_comparison": [
+            r"compare.*youtube.*twitch",
+            r"compare.*twitch.*youtube",
+            r"youtube\s+vs\s+twitch",
+            r"twitch\s+vs\s+youtube",
+            r"platform.*comparison",
+            r"platform.*analytics",
+            r"compare.*platforms",
+            r"youtube.*or.*twitch",
+            r"twitch.*or.*youtube",
+            r"which\s+platform.*better",
+            r"what.*platform.*most",
+            r"cross[- ]?platform.*stats",
+            r"cross[- ]?platform.*comparison"
+        ],
+        "engagement_rate": [
+            r"what.*best.*engagement\s+rate",
+            r"which.*best.*engagement\s+rate",
+            r"what.*highest.*engagement",
+            r"which.*highest.*engagement",
+            r"engagement.*efficiency",
+            r"views\s+per\s+episode",
+            r"views\s+per\s+hour",
+            r"most\s+efficient.*game",
+            r"best.*engagement.*metrics",
+            r"optimal.*engagement",
+            r"engagement.*analysis",
+            r"what.*game.*most\s+engaging"
         ]
     }
 
@@ -1350,6 +1408,169 @@ async def _handle_ranking_follow_up(message: discord.Message, context: 'Conversa
     return True
 
 
+async def handle_twitch_views_query(message: discord.Message) -> None:
+    """Handle Twitch view count queries."""
+    try:
+        if db is None:
+            await message.reply("Database analysis systems offline. Twitch view analytics unavailable.")
+            return
+
+        # Get games ranked by Twitch views
+        twitch_games = db.get_games_by_twitch_views(limit=10)
+
+        if not twitch_games:
+            await message.reply("Database analysis complete. Insufficient Twitch engagement data available for ranking.")
+            return
+
+        top_game = twitch_games[0]
+        runner_up = twitch_games[1] if len(twitch_games) > 1 else None
+
+        # Calculate VOD count
+        vod_count = top_game.get('total_episodes', 0)
+
+        response = (
+            f"🎮 Twitch Analytics: '{top_game['canonical_name']}' demonstrates maximum Twitch engagement "
+            f"with {top_game.get('twitch_views', 0):,} total views across {vod_count} VODs. "
+        )
+
+        if runner_up:
+            response += f"Secondary analysis indicates '{runner_up['canonical_name']}' follows with {runner_up.get('twitch_views', 0):,} views."
+
+        await message.reply(apply_pops_arcade_sarcasm(response, message.author.id))
+
+    except Exception as e:
+        print(f"❌ Error in Twitch views query: {e}")
+        await message.reply("Database analysis encountered an anomaly during Twitch engagement assessment.")
+
+
+async def handle_total_views_query(message: discord.Message) -> None:
+    """Handle combined YouTube + Twitch view queries."""
+    try:
+        if db is None:
+            await message.reply("Database analysis systems offline. Cross-platform analytics unavailable.")
+            return
+
+        # Get games ranked by total views
+        total_views_games = db.get_games_by_total_views(limit=10)
+
+        if not total_views_games:
+            await message.reply("Database analysis complete. Insufficient cross-platform engagement data available.")
+            return
+
+        top_game = total_views_games[0]
+        youtube_views = top_game.get('youtube_views', 0)
+        twitch_views = top_game.get('twitch_views', 0)
+        total_views = top_game.get('total_views', 0)
+
+        # Calculate percentages
+        yt_percent = (youtube_views / total_views * 100) if total_views > 0 else 0
+        tw_percent = (twitch_views / total_views * 100) if total_views > 0 else 0
+
+        # Determine primary platform
+        primary_platform = "YouTube" if youtube_views > twitch_views else "Twitch" if twitch_views > youtube_views else "Balanced"
+
+        response = (
+            f"📈 Cross-Platform Analytics: '{top_game['canonical_name']}' demonstrates maximum total engagement "
+            f"with {total_views:,} combined views.\n\n"
+            f"📊 Platform Breakdown:\n"
+            f"• YouTube: {youtube_views:,} views ({yt_percent:.1f}%)\n"
+            f"• Twitch: {twitch_views:,} views ({tw_percent:.1f}%)\n"
+            f"• Primary Platform: {primary_platform}\n"
+            f"• Total Content: {top_game.get('total_episodes', 0)} episodes/VODs\n\n"
+            f"This represents comprehensive audience reach across both platforms."
+        )
+
+        await message.reply(apply_pops_arcade_sarcasm(response, message.author.id))
+
+    except Exception as e:
+        print(f"❌ Error in total views query: {e}")
+        await message.reply("Database analysis encountered an anomaly during cross-platform assessment.")
+
+
+async def handle_platform_comparison_query(message: discord.Message) -> None:
+    """Handle platform comparison queries."""
+    try:
+        if db is None:
+            await message.reply("Database analysis systems offline. Platform comparison unavailable.")
+            return
+
+        # Get platform statistics
+        stats = db.get_platform_comparison_stats()
+
+        if not stats:
+            await message.reply("Database analysis complete. Insufficient platform data for comparison.")
+            return
+
+        yt_stats = stats.get('youtube', {})
+        tw_stats = stats.get('twitch', {})
+        cross_platform = stats.get('cross_platform_count', 0)
+
+        response = (
+            f"🔍 Platform Engagement Analysis:\n\n"
+            f"📺 YouTube Metrics:\n"
+            f"• Total Games: {yt_stats.get('game_count', 0)}\n"
+            f"• Total Views: {yt_stats.get('total_views', 0):,}\n"
+            f"• Avg Views/Game: {yt_stats.get('avg_views_per_game', 0):,.1f}\n"
+            f"• Total Episodes: {yt_stats.get('total_content', 0):,}\n\n"
+            f"🎮 Twitch Metrics:\n"
+            f"• Total Games: {tw_stats.get('game_count', 0)}\n"
+            f"• Total Views: {tw_stats.get('total_views', 0):,}\n"
+            f"• Avg Views/Game: {tw_stats.get('avg_views_per_game', 0):,.1f}\n"
+            f"• Total VODs: {tw_stats.get('total_content', 0):,}\n\n"
+            f"📊 Cross-Platform Games: {cross_platform} titles appear on both platforms\n"
+        )
+
+        # Add comparison insight
+        if yt_stats.get('total_views', 0) > tw_stats.get('total_views', 0):
+            diff_percent = ((yt_stats.get('total_views', 0) - tw_stats.get('total_views', 0)) /
+                            tw_stats.get('total_views', 1)) * 100
+            response += f"\nPrimary Platform Analysis: YouTube shows stronger engagement with {diff_percent:.1f}% more total views."
+        elif tw_stats.get('total_views', 0) > yt_stats.get('total_views', 0):
+            diff_percent = ((tw_stats.get('total_views', 0) - yt_stats.get('total_views', 0)) /
+                            yt_stats.get('total_views', 1)) * 100
+            response += f"\nPrimary Platform Analysis: Twitch shows stronger engagement with {diff_percent:.1f}% more total views."
+        else:
+            response += f"\nPrimary Platform Analysis: Balanced engagement across both platforms."
+
+        await message.reply(apply_pops_arcade_sarcasm(response, message.author.id))
+
+    except Exception as e:
+        print(f"❌ Error in platform comparison query: {e}")
+        await message.reply("Database analysis encountered an anomaly during platform comparison.")
+
+
+async def handle_engagement_rate_query(message: discord.Message) -> None:
+    """Handle engagement rate/efficiency queries."""
+    try:
+        if db is None:
+            await message.reply("Database analysis systems offline. Engagement efficiency analytics unavailable.")
+            return
+
+        # Get top games by engagement rate
+        engagement_data = db.get_engagement_metrics(limit=10)
+
+        if not engagement_data:
+            await message.reply("Database analysis complete. Insufficient data for engagement rate calculation.")
+            return
+
+        top_game = engagement_data[0]
+
+        response = (
+            f"⚡ Engagement Efficiency Analysis: '{top_game['canonical_name']}' demonstrates optimal engagement rate.\n\n"
+            f"📊 Efficiency Metrics:\n"
+            f"• Views per Episode: {top_game.get('views_per_episode', 0):,.1f} views/ep\n"
+            f"• Views per Hour: {top_game.get('views_per_hour', 0):,.1f} views/hour\n"
+            f"• Total Content: {top_game.get('total_playtime_minutes', 0) // 60}h across {top_game.get('total_episodes', 0)} episodes\n"
+            f"• Combined Views: {top_game.get('total_views', 0):,}\n\n"
+            f"This represents exceptional audience engagement relative to content volume.")
+
+        await message.reply(apply_pops_arcade_sarcasm(response, message.author.id))
+
+    except Exception as e:
+        print(f"❌ Error in engagement rate query: {e}")
+        await message.reply("Database analysis encountered an anomaly during efficiency assessment.")
+
+
 async def attempt_youtube_api_analysis(
         game_name: Optional[str] = None, query_type: str = "general") -> Optional[Dict[str, Any]]:
     """Attempt to use YouTube API for real view count data with intelligent context awareness."""
@@ -1707,6 +1928,100 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
         return False
 
 
+async def handle_trivia_reply(message: discord.Message) -> bool:
+    """
+    ✅ FIX #2: Handle replies to trivia questions for answer submission.
+
+    Detects when users reply to active trivia question messages and:
+    - Records their answer in the database
+    - Adds acknowledgment reaction (📝)
+    - Prevents duplicate submissions
+
+    Returns True if this was a trivia reply, False otherwise.
+    """
+    try:
+        # Check if this is a reply to another message
+        if not message.reference or not message.reference.message_id:
+            return False
+
+        # Check if database is available
+        if db is None:
+            return False
+
+        # Check if there's an active trivia session
+        try:
+            active_session = db.get_active_trivia_session()
+            if not active_session:
+                return False
+
+            session_id = active_session['id']
+            question_message_id = active_session.get('question_message_id')
+            confirmation_message_id = active_session.get('confirmation_message_id')
+
+            # Check if user replied to the trivia question or confirmation message
+            replied_to_id = message.reference.message_id
+
+            if replied_to_id not in [question_message_id, confirmation_message_id]:
+                # Not replying to a trivia message
+                return False
+
+            print(f"✅ TRIVIA REPLY: Detected reply to trivia message from user {message.author.id}")
+
+            # Extract the user's answer
+            user_answer = message.content.strip()
+
+            # Submit answer to database
+            try:
+                result = db.submit_trivia_answer(
+                    session_id=session_id,
+                    user_id=message.author.id,
+                    answer_text=user_answer
+                )
+
+                # Handle result - ensure it's a dict
+                if result and isinstance(result, dict):
+                    if result.get('success'):
+                        # Add acknowledgment reaction
+                        try:
+                            await message.add_reaction('📝')
+                            print(
+                                f"✅ TRIVIA REPLY: Answer recorded for user {message.author.id} - '{user_answer[:50]}...'")
+                        except Exception as reaction_error:
+                            print(f"⚠️ TRIVIA REPLY: Could not add reaction: {reaction_error}")
+
+                        return True
+                    elif result.get('error') == 'duplicate':
+                        # User already answered - silently acknowledge
+                        try:
+                            await message.add_reaction('⚠️')
+                            print(f"⚠️ TRIVIA REPLY: Duplicate answer from user {message.author.id}")
+                        except Exception:
+                            pass
+                        return True
+                    else:
+                        # Some other error occurred
+                        print(f"❌ TRIVIA REPLY: Answer submission failed: {result.get('error', 'unknown')}")
+                        return True  # Still return True to prevent other processing
+                else:
+                    # Invalid return type
+                    print(f"❌ TRIVIA REPLY: Invalid result type from submit_trivia_answer: {type(result)}")
+                    return True
+
+            except Exception as submit_error:
+                print(f"❌ TRIVIA REPLY: Error submitting answer: {submit_error}")
+                return True  # Return True to prevent other processing
+
+        except Exception as session_error:
+            print(f"❌ TRIVIA REPLY: Error checking active session: {session_error}")
+            return False
+
+    except Exception as e:
+        print(f"❌ TRIVIA REPLY: Unexpected error in trivia reply handler: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 async def handle_dm_conversations(message: discord.Message) -> bool:
     """
     Handle DM conversation flows including JAM approval conversations.
@@ -1803,6 +2118,9 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
             if await _handle_ranking_follow_up(message, context):
                 return True
 
+        # ✅ FIX: Pylance error - cleanup expired aliases synchronously (not async in this context)
+        cleanup_expired_aliases_sync()
+
         # Then, try context-aware processing for gaming queries
         if await handle_context_aware_query(message):
             return True
@@ -1841,6 +2159,14 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
                 context.update_game_context(game_name, "recommendation")
             elif query_type == "youtube_views":
                 await handle_youtube_views_query(message)
+            elif query_type == "twitch_views":
+                await handle_twitch_views_query(message)
+            elif query_type == "total_views":
+                await handle_total_views_query(message)
+            elif query_type == "platform_comparison":
+                await handle_platform_comparison_query(message)
+            elif query_type == "engagement_rate":
+                await handle_engagement_rate_query(message)
 
             context.add_message("query_processed", "bot")
             return True

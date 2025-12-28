@@ -27,7 +27,7 @@ _request_interval = 0.25  # 250ms between requests = 4 req/sec
 
 async def get_igdb_access_token() -> Optional[str]:
     """Get OAuth access token for IGDB API using Twitch credentials"""
-    client_id = os.getenv('IGDB_CLIENT_ID') or os.getenv('IGDB_TWITCH_CLIENT_ID') or os.getenv('TWITCH_CLIENT_ID')
+    client_id = os.getenv('IGDB_CLIENT_ID') or os.getenv('TWITCH_CLIENT_ID')
     client_secret = os.getenv('IGDB_CLIENT_SECRET') or os.getenv(
         'IGDB_TWITCH_SECRET') or os.getenv('TWITCH_CLIENT_SECRET')
 
@@ -72,7 +72,7 @@ async def search_igdb(game_name: str, access_token: str) -> List[Dict[str, Any]]
     """Search IGDB for a game by name"""
     await _rate_limit()
 
-    client_id = os.getenv('IGDB_CLIENT_ID') or os.getenv('IGDB_TWITCH_CLIENT_ID') or os.getenv('TWITCH_CLIENT_ID')
+    client_id = os.getenv('IGDB_CLIENT_ID') or os.getenv('TWITCH_CLIENT_ID')
 
     if not client_id:
         print("⚠️ IGDB Client ID not configured")

@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import commands
 
-from ..database import get_database
+from ..database_module import get_database
 
 # Get database instance
 db = get_database()  # type: ignore

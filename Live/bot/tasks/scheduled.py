@@ -89,6 +89,61 @@ except ImportError:
         print("⚠️ notify_jam_weekly_message_failure not available - handler not loaded")
         return False
 
+# === PRIORITY 2: API RESILIENCE UTILITIES ===
+
+
+async def retry_with_timeout(
+    func,
+    *args,
+    max_retries: int = 3,
+    timeout_seconds: int = 30,
+    backoff_base: float = 2.0,
+    **kwargs
+):
+    """
+    Retry an async function with exponential backoff and timeout.
+
+    Args:
+        func: Async function to retry
+        max_retries: Maximum number of retry attempts
+        timeout_seconds: Timeout for each attempt
+        backoff_base: Base multiplier for exponential backoff (seconds)
+
+    Returns:
+        Result from func, or None if all retries failed
+    """
+    for attempt in range(max_retries):
+        try:
+            # Apply timeout to the function call
+            result = await asyncio.wait_for(
+                func(*args, **kwargs),
+                timeout=timeout_seconds
+            )
+            return result
+
+        except asyncio.TimeoutError:
+            print(f"⏱️ RETRY: Timeout on attempt {attempt + 1}/{max_retries} for {func.__name__}")
+            if attempt < max_retries - 1:
+                wait_time = backoff_base ** attempt
+                print(f"⏳ RETRY: Waiting {wait_time:.1f}s before retry...")
+                await asyncio.sleep(wait_time)
+            else:
+                print(f"❌ RETRY: All attempts timed out for {func.__name__}")
+                return None
+
+        except Exception as e:
+            print(f"❌ RETRY: Error on attempt {attempt + 1}/{max_retries} for {func.__name__}: {e}")
+            if attempt < max_retries - 1:
+                wait_time = backoff_base ** attempt
+                print(f"⏳ RETRY: Waiting {wait_time:.1f}s before retry...")
+                await asyncio.sleep(wait_time)
+            else:
+                print(f"❌ RETRY: All attempts failed for {func.__name__}")
+                return None
+
+    return None
+
+
 # Global state for trivia and bot instance
 _bot_instance = None  # Store the bot instance globally
 _bot_ready = False  # Track if bot is fully ready
@@ -1980,21 +2035,24 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                     print(
                         f"🎯 SYNC: Detected completion for '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes")
 
-                # Update existing game with aggregated data
+                # FIXED: Only update dynamic stats, protect metadata fields
                 update_params = {
-                    'series_name': series_name,
                     'total_playtime_minutes': game_data.get('total_playtime_minutes', 0),
                     'total_episodes': game_data.get('total_episodes', 0),
                     'youtube_views': game_data.get('youtube_views', 0),
                     'youtube_playlist_url': game_data.get('youtube_playlist_url'),
-                    'completion_status': completion_status,
-                    'alternative_names': game_data.get('alternative_names', []),
-                    'notes': game_data.get('notes', '')
+                    'completion_status': completion_status
                 }
+
+                # PROTECTED FIELDS (never overwritten by sync):
+                # ❌ alternative_names - Manually curated JSON data
+                # ❌ series_name - Doesn't change over time
+                # ❌ notes - Manually added annotations
+                # ❌ first_played_date - Historical record
 
                 db.update_played_game(existing_game['id'], **update_params)
                 print(
-                    f"✅ SYNC: Updated '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, status: {completion_status}")
+                    f"✅ SYNC: Updated '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, status: {completion_status} (metadata protected)")
                 games_updated += 1
 
             else:
@@ -2037,6 +2095,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
             title = vod['title']
             vod_url = vod.get('url', '')
             duration_minutes = vod.get('duration_seconds', 0) // 60
+            view_count = vod.get('view_count', 0)  # NEW: Capture Twitch views from VOD
 
             # Phase 2.2: Check for multi-game streams
             try:
@@ -2163,7 +2222,8 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                 # Update existing game - add to totals
                 update_params = {
                     'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + duration_minutes,
-                    'total_episodes': existing_game.get('total_episodes', 0) + 1
+                    'total_episodes': existing_game.get('total_episodes', 0) + 1,
+                    'twitch_views': existing_game.get('twitch_views', 0) + view_count  # NEW: Aggregate Twitch views
                 }
 
                 # Phase 1.3: Store VOD URLs
@@ -2185,7 +2245,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                         print(f"📎 SYNC: Added VOD URL to '{game_name}' ({len(existing_vods)} total)")
 
                 db.update_played_game(existing_game['id'], **update_params)
-                print(f"✅ SYNC: Updated '{game_name}' with Twitch VOD ({duration_minutes} mins)")
+                print(f"✅ SYNC: Updated '{game_name}' with Twitch VOD ({duration_minutes} mins, {view_count:,} views)")
                 games_updated += 1
 
                 # Track low-confidence update for notification
@@ -2208,6 +2268,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                     'series_name': game_name,
                     'total_playtime_minutes': duration_minutes,
                     'total_episodes': 1,
+                    'twitch_views': view_count,  # NEW: Include Twitch views for new games
                     'first_played_date': vod['published_at'].date(),
                     'notes': f"Auto-synced from Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
 

@@ -25,7 +25,7 @@ from ..config import (
     RATE_LIMIT_COOLDOWN,
     RATE_LIMIT_COOLDOWNS,
 )
-from ..database import get_database
+from ..database_module import get_database
 from ..persona.context_builder import build_ash_context
 from ..persona.examples import ASH_FEW_SHOT_EXAMPLES
 from ..persona.prompts import ASH_SYSTEM_INSTRUCTION
@@ -1241,6 +1241,99 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
             # Build dynamic context using new structured format
             dynamic_context = build_ash_context(user_context)
 
+            # === ENHANCEMENT: Add gaming timeline context for temporal questions ===
+            if db and hasattr(db, 'get_gaming_timeline'):
+                try:
+                    # Get first 3 and last 3 games chronologically for temporal awareness
+                    timeline_asc = db.get_gaming_timeline(order='ASC')[:3]
+                    timeline_desc = db.get_gaming_timeline(order='DESC')[:3]
+
+                    if timeline_asc or timeline_desc:
+                        timeline_text = "\n\n--- GAMING TIMELINE DATA ---\n"
+
+                        if timeline_asc:
+                            timeline_text += "First games played chronologically:\n"
+                            for game in timeline_asc:
+                                played_date = game.get('first_played_date', 'Unknown')
+                                release_year = game.get('release_year', 'Unknown')
+                                timeline_text += f"  • {game['canonical_name']} (played: {played_date}, released: {release_year})\n"
+
+                        if timeline_desc:
+                            timeline_text += "\nMost recently played games:\n"
+                            for game in timeline_desc:
+                                played_date = game.get('first_played_date', 'Unknown')
+                                release_year = game.get('release_year', 'Unknown')
+                                timeline_text += f"  • {game['canonical_name']} (played: {played_date}, released: {release_year})\n"
+
+                        timeline_text += "\nYou can answer temporal questions like 'what game did Jonesy play first' or 'oldest game by release year'.\n"
+                        timeline_text += "--- END TIMELINE DATA ---\n"
+
+                        # Append timeline data to operational context
+                        dynamic_context += timeline_text
+                except Exception as timeline_error:
+                    # Silently fail if timeline data unavailable - not critical
+                    pass
+
+            # === ENHANCEMENT: Add engagement metrics context for view queries ===
+            if db:
+                try:
+                    engagement_context = "\n\n--- ENGAGEMENT METRICS AVAILABLE ---\n"
+                    engagement_context += "The database tracks cross-platform engagement analytics:\n\n"
+
+                    # Get platform statistics
+                    if hasattr(db, 'get_platform_comparison_stats'):
+                        platform_stats = db.get_platform_comparison_stats()
+                        if platform_stats:
+                            yt_stats = platform_stats.get('youtube', {})
+                            tw_stats = platform_stats.get('twitch', {})
+
+                            engagement_context += "📊 Platform Metrics:\n"
+                            engagement_context += f"  • YouTube: {yt_stats.get('game_count', 0)} games, {yt_stats.get('total_views', 0):,} total views\n"
+                            engagement_context += f"  • Twitch: {tw_stats.get('game_count', 0)} games, {tw_stats.get('total_views', 0):,} total views\n"
+                            engagement_context += f"  • Cross-platform titles: {platform_stats.get('cross_platform_count', 0)}\n\n"
+
+                    # Get top games by different metrics
+                    engagement_context += "🎮 Top Performers by Metric:\n"
+
+                    if hasattr(db, 'get_games_by_twitch_views'):
+                        top_twitch = db.get_games_by_twitch_views(limit=3)
+                        if top_twitch:
+                            engagement_context += "  • Twitch Leaders: "
+                            engagement_context += ", ".join(
+                                [f"{g['canonical_name']} ({g.get('twitch_views', 0):,} views)" for g in top_twitch])
+                            engagement_context += "\n"
+
+                    if hasattr(db, 'get_games_by_total_views'):
+                        top_total = db.get_games_by_total_views(limit=3)
+                        if top_total:
+                            engagement_context += "  • Combined Leaders: "
+                            engagement_context += ", ".join(
+                                [f"{g['canonical_name']} ({g.get('total_views', 0):,} views)" for g in top_total])
+                            engagement_context += "\n"
+
+                    if hasattr(db, 'get_engagement_metrics'):
+                        top_efficiency = db.get_engagement_metrics(limit=3)
+                        if top_efficiency:
+                            engagement_context += "  • Engagement Efficiency: "
+                            engagement_context += ", ".join(
+                                [f"{g['canonical_name']} ({g.get('views_per_hour', 0):,.0f} views/hr)" for g in top_efficiency])
+                            engagement_context += "\n"
+
+                    engagement_context += "\n📌 Query Capabilities:\n"
+                    engagement_context += "  • Twitch-specific analytics (views, VOD counts)\n"
+                    engagement_context += "  • Cross-platform comparisons (YouTube vs Twitch)\n"
+                    engagement_context += "  • Engagement efficiency (views per episode/hour)\n"
+                    engagement_context += "  • Platform performance analysis\n"
+                    engagement_context += "\nUse this data to answer engagement and popularity questions naturally.\n"
+                    engagement_context += "--- END ENGAGEMENT METRICS ---\n"
+
+                    # Append engagement data to operational context
+                    dynamic_context += engagement_context
+                except Exception as engagement_error:
+                    # Silently fail if engagement data unavailable - not critical
+                    print(f"⚠️ Could not load engagement metrics context: {engagement_error}")
+                    pass
+
         # Return as tuple: (base_instruction, operational_context)
         # This allows the calling code to order them properly (context first for better addressing)
         return ASH_SYSTEM_INSTRUCTION, dynamic_context
@@ -1935,6 +2028,69 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
                 "question_type": "multiple_choice",
                 "multiple_choice_options": choice_names
             }
+
+    # === TEMPORAL GAMING TIMELINE LOGIC ===
+    elif logic == "oldest_game_by_release":
+        # Find oldest game by release year
+        games_with_release = [g for g in games_data if g.get("release_year")]
+        if games_with_release:
+            oldest = min(games_with_release, key=lambda x: x.get("release_year", 9999))
+            return {
+                "question_text": template["template"],
+                "correct_answer": oldest["canonical_name"],
+                "question_type": "single_answer",
+                "context_data": {
+                    "release_year": oldest.get("release_year"),
+                    "first_played_date": oldest.get("first_played_date")
+                }
+            }
+
+    elif logic == "newest_game_by_release":
+        # Find newest game by release year
+        games_with_release = [g for g in games_data if g.get("release_year")]
+        if games_with_release:
+            newest = max(games_with_release, key=lambda x: x.get("release_year", 0))
+            return {
+                "question_text": template["template"],
+                "correct_answer": newest["canonical_name"],
+                "question_type": "single_answer",
+                "context_data": {
+                    "release_year": newest.get("release_year"),
+                    "first_played_date": newest.get("first_played_date")
+                }
+            }
+
+    elif logic == "first_played_game":
+        # Find first game by first_played_date using get_gaming_timeline
+        if db and hasattr(db, 'get_gaming_timeline'):
+            timeline = db.get_gaming_timeline(order='ASC')
+            if timeline:
+                first_game = timeline[0]
+                return {
+                    "question_text": template["template"],
+                    "correct_answer": first_game["canonical_name"],
+                    "question_type": "single_answer",
+                    "context_data": {
+                        "first_played_date": first_game.get("first_played_date"),
+                        "release_year": first_game.get("release_year")
+                    }
+                }
+
+    elif logic == "last_played_game":
+        # Find most recently played game using get_gaming_timeline
+        if db and hasattr(db, 'get_gaming_timeline'):
+            timeline = db.get_gaming_timeline(order='DESC')
+            if timeline:
+                last_game = timeline[0]
+                return {
+                    "question_text": template["template"],
+                    "correct_answer": last_game["canonical_name"],
+                    "question_type": "single_answer",
+                    "context_data": {
+                        "first_played_date": last_game.get("first_played_date"),
+                        "release_year": last_game.get("release_year")
+                    }
+                }
 
     # Fallback - return empty dict if logic couldn't execute
     return {}

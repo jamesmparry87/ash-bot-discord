@@ -43,6 +43,11 @@ class ConversationContext:
         self.last_stats_context: Optional[Dict[str, Any]] = None
         self.last_series_mentioned: Optional[str] = None
 
+        # Engagement metrics context
+        self.last_platform_mentioned: Optional[str] = None  # 'youtube', 'twitch', 'both'
+        self.last_metric_type: Optional[str] = None  # 'views', 'engagement_rate', 'comparison'
+        self.last_engagement_context: Optional[Dict[str, Any]] = None
+
         # Disambiguation state tracking
         self.awaiting_disambiguation: bool = False
         self.disambiguation_series: Optional[str] = None
@@ -87,6 +92,28 @@ class ConversationContext:
     def update_series_context(self, series_name: str):
         """Update series context"""
         self.last_series_mentioned = series_name
+
+    def update_engagement_context(
+            self,
+            platform: Optional[str] = None,
+            metric_type: Optional[str] = None,
+            engagement_data: Optional[Dict[str, Any]] = None):
+        """Update engagement metrics context"""
+        if platform:
+            self.last_platform_mentioned = platform
+        if metric_type:
+            self.last_metric_type = metric_type
+        if engagement_data:
+            self.last_engagement_context = engagement_data
+        self.last_activity = datetime.now(ZoneInfo("Europe/London"))
+
+    def get_engagement_context(self) -> Dict[str, Any]:
+        """Get current engagement metrics context"""
+        return {
+            'platform': self.last_platform_mentioned,
+            'metric_type': self.last_metric_type,
+            'data': self.last_engagement_context
+        }
 
     def set_disambiguation_state(self, series_name: str, query_type: str, available_games: Optional[List[str]] = None):
         """Set the context to awaiting disambiguation for a game series"""
