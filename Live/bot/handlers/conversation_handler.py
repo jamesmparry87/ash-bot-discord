@@ -1969,6 +1969,11 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
             await message.reply("🔄 **Question Rejected.** Searching for alternative question...")
 
+            # ✅ FIX: Delete old conversation BEFORE starting new approval
+            if user_id in jam_approval_conversations:
+                del jam_approval_conversations[user_id]
+                print(f"✅ Cleared old conversation state before replacement")
+
             # Automatically fetch next available question
             try:
                 next_question = db.get_next_trivia_question(exclude_user_id=JAM_USER_ID)
@@ -1993,8 +1998,6 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                             "⚠️ **Could not start approval for replacement.** "
                             "Please use `!starttrivia` manually at 11:00 AM."
                         )
-                        # Only delete conversation if replacement approval failed
-                        del jam_approval_conversations[user_id]
                 else:
                     await message.reply(
                         "⚠️ **No Alternative Questions Available**\n\n"
@@ -2002,17 +2005,11 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                         "• Generate a new question with `!generatequestions 1`\n"
                         "• Start trivia manually with `!starttrivia` at 11:00 AM"
                     )
-                    # Delete conversation when no alternatives exist
-                    del jam_approval_conversations[user_id]
             except Exception as e:
                 print(f"❌ Error fetching replacement question: {e}")
                 await message.reply(
                     "❌ **Error finding replacement.** Please start trivia manually at 11:00 AM."
                 )
-                # Delete conversation on error
-                del jam_approval_conversations[user_id]
-
-            # Don't delete conversation here - the new approval workflow takes over
         else:
             await message.reply("⚠️ Invalid input. Please respond with **1** (Approve) or **2** (Reject).")
         return
