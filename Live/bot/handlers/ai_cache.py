@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 class AIResponseCache:
     """
     Intelligent caching system for AI responses.
-    
+
     Features:
     - Hash-based cache with similarity matching
     - TTL (time-to-live) for different query types
@@ -32,7 +32,7 @@ class AIResponseCache:
             "saves": 0,  # API calls saved
             "total_queries": 0
         }
-        
+
         # TTL configuration (in seconds)
         self.ttl_config = {
             "faq": 86400,           # 24 hours - FAQs rarely change
@@ -46,21 +46,21 @@ class AIResponseCache:
         """Normalize query for better matching"""
         # Convert to lowercase
         normalized = query.lower()
-        
+
         # Remove extra whitespace
         normalized = " ".join(normalized.split())
-        
+
         # Remove common punctuation at end
         normalized = normalized.rstrip('?.!,')
-        
+
         # Remove common filler words for better matching
         filler_words = ['please', 'can you', 'could you', 'would you', 'um', 'uh']
         for filler in filler_words:
             normalized = normalized.replace(filler, '')
-        
+
         # Clean up again after removals
         normalized = " ".join(normalized.split())
-        
+
         return normalized
 
     def _generate_cache_key(self, query: str) -> str:
@@ -72,7 +72,7 @@ class AIResponseCache:
     def _detect_query_type(self, query: str) -> str:
         """Detect the type of query for appropriate TTL"""
         query_lower = query.lower()
-        
+
         # FAQ patterns
         faq_patterns = [
             r'who (is|are|am)',
@@ -83,7 +83,7 @@ class AIResponseCache:
         ]
         if any(re.search(pattern, query_lower) is not None for pattern in faq_patterns):
             return "faq"
-        
+
         # Gaming query patterns
         gaming_patterns = [
             r'(game|play|episode|hour|complete|finish)',
@@ -93,7 +93,7 @@ class AIResponseCache:
         ]
         if any(re.search(pattern, query_lower) is not None for pattern in gaming_patterns):
             return "gaming_query"
-        
+
         # Personality/greeting patterns
         personality_patterns = [
             r'^(hello|hi|hey|greetings)',
@@ -103,7 +103,7 @@ class AIResponseCache:
         ]
         if any(re.search(pattern, query_lower) is not None for pattern in personality_patterns):
             return "personality"
-        
+
         # Default to general
         return "general"
 
@@ -114,105 +114,105 @@ class AIResponseCache:
         return now >= expiry_time
 
     def _find_similar_cached_query(
-        self, 
-        query: str, 
+        self,
+        query: str,
         similarity_threshold: float = 0.85
     ) -> Optional[Tuple[str, Dict[str, Any]]]:
         """Find similar cached query using fuzzy matching"""
         normalized_query = self._normalize_query(query)
-        
+
         best_match = None
         best_similarity = 0.0
-        
+
         for cache_key, entry in self.cache.items():
             if self._is_expired(entry):
                 continue
-            
+
             cached_normalized = self._normalize_query(entry["original_query"])
             similarity = SequenceMatcher(
-                None, 
-                normalized_query, 
+                None,
+                normalized_query,
                 cached_normalized
             ).ratio()
-            
+
             if similarity > best_similarity and similarity >= similarity_threshold:
                 best_similarity = similarity
                 best_match = (cache_key, entry)
-        
+
         return best_match
 
     def get(
-        self, 
-        query: str, 
+        self,
+        query: str,
         user_id: int,
         similarity_threshold: float = 0.85
     ) -> Optional[str]:
         """
         Get cached response for query.
-        
+
         Args:
             query: The query string
             user_id: User ID making the query
             similarity_threshold: Minimum similarity for fuzzy matching
-            
+
         Returns:
             Cached response text or None if not found/expired
         """
         self.stats["total_queries"] += 1
-        
+
         # Try exact match first
         cache_key = self._generate_cache_key(query)
-        
+
         if cache_key in self.cache:
             entry = self.cache[cache_key]
-            
+
             # Check if expired
             if self._is_expired(entry):
                 del self.cache[cache_key]
                 self.stats["misses"] += 1
                 return None
-            
+
             # Update hit stats
             entry["hits"] += 1
             entry["last_accessed"] = datetime.now(ZoneInfo("Europe/London"))
-            
+
             self.stats["hits"] += 1
             self.stats["saves"] += 1
-            
+
             print(f"✅ CACHE HIT: {query[:50]}... (exact match, {entry['hits']} total hits)")
             return entry["response"]
-        
+
         # Try similarity matching
         similar_match = self._find_similar_cached_query(query, similarity_threshold)
-        
+
         if similar_match:
             cache_key, entry = similar_match
-            
+
             # Update hit stats
             entry["hits"] += 1
             entry["last_accessed"] = datetime.now(ZoneInfo("Europe/London"))
-            
+
             self.stats["hits"] += 1
             self.stats["saves"] += 1
-            
+
             print(f"✅ CACHE HIT: {query[:50]}... (fuzzy match, {entry['hits']} total hits)")
             return entry["response"]
-        
+
         # Cache miss
         self.stats["misses"] += 1
         print(f"❌ CACHE MISS: {query[:50]}...")
         return None
 
     def set(
-        self, 
-        query: str, 
-        response: str, 
+        self,
+        query: str,
+        response: str,
         user_id: int,
         query_type: Optional[str] = None
     ):
         """
         Cache a response.
-        
+
         Args:
             query: The query string
             response: The AI response to cache
@@ -220,16 +220,16 @@ class AIResponseCache:
             query_type: Optional type override, auto-detected if None
         """
         cache_key = self._generate_cache_key(query)
-        
+
         # Detect query type if not provided
         if query_type is None:
             query_type = self._detect_query_type(query)
-        
+
         # Calculate expiry time
         ttl_seconds = self.ttl_config.get(query_type, self.ttl_config["general"])
         now = datetime.now(ZoneInfo("Europe/London"))
         expires_at = now + timedelta(seconds=ttl_seconds)
-        
+
         # Store in cache
         self.cache[cache_key] = {
             "original_query": query,
@@ -241,33 +241,33 @@ class AIResponseCache:
             "last_accessed": now,
             "hits": 0
         }
-        
+
         ttl_hours = ttl_seconds / 3600
         print(f"💾 CACHE SET: {query[:50]}... (type: {query_type}, TTL: {ttl_hours:.1f}h)")
 
     def cleanup_expired(self) -> int:
         """Remove expired cache entries. Returns number of entries removed."""
         expired_keys = [
-            key for key, entry in self.cache.items() 
+            key for key, entry in self.cache.items()
             if self._is_expired(entry)
         ]
-        
+
         for key in expired_keys:
             del self.cache[key]
-        
+
         if expired_keys:
             print(f"🧹 Cache cleanup: Removed {len(expired_keys)} expired entries")
-        
+
         return len(expired_keys)
 
     def get_stats(self) -> Dict[str, Any]:
         """Get cache statistics"""
         hit_rate = (
             (self.stats["hits"] / self.stats["total_queries"] * 100)
-            if self.stats["total_queries"] > 0 
+            if self.stats["total_queries"] > 0
             else 0.0
         )
-        
+
         return {
             **self.stats,
             "hit_rate": hit_rate,
@@ -284,11 +284,11 @@ class AIResponseCache:
     def get_cache_info(self) -> List[Dict[str, Any]]:
         """Get information about cached entries for debugging"""
         info = []
-        
+
         for key, entry in self.cache.items():
             now = datetime.now(ZoneInfo("Europe/London"))
             time_remaining = (entry["expires_at"] - now).total_seconds()
-            
+
             info.append({
                 "query": entry["original_query"][:50] + "...",
                 "type": entry["query_type"],
@@ -297,10 +297,10 @@ class AIResponseCache:
                 "expires_in_hours": round(time_remaining / 3600, 1),
                 "is_expired": self._is_expired(entry)
             })
-        
+
         # Sort by hits descending
         info.sort(key=lambda x: x["hits"], reverse=True)
-        
+
         return info
 
 
