@@ -870,21 +870,30 @@ class DatabaseManager:
                         f"Found game by exact canonical name match: {name}")
                     return result_dict
 
-                # Search alternative names (now stored as comma-separated TEXT)
+                # Search alternative names (handles JSON, PostgreSQL array, and comma-separated formats)
+                # Pre-filter in the database using LIKE to avoid fetching all rows, then do precise matching in Python.
+                like_pattern = f'%{name_lower}%'
                 cur.execute("""
                     SELECT * FROM played_games
                     WHERE alternative_names IS NOT NULL
                     AND alternative_names != ''
-                    AND %s = ANY(string_to_array(LOWER(alternative_names), ','))
-                """, (name_lower,))
-                result = cur.fetchone()
+                    AND LOWER(alternative_names) LIKE %s
+                """, (like_pattern,))
+                all_games_with_alt_names = cur.fetchall()
 
-                if result:
-                    result_dict = dict(result)
-                    result_dict = self._convert_text_to_arrays(result_dict)
-                    logger.debug(
-                        f"Found game by alternative name match: {name}")
-                    return result_dict
+                # Search alternative names in Python for better format compatibility
+                for game_row in all_games_with_alt_names:
+                    game_dict = dict(game_row)
+                    alt_names_text = game_dict.get('alternative_names', '')
+                    if alt_names_text:
+                        alt_names = self._parse_comma_separated_list(alt_names_text)
+                        # Check each alternative name (case-insensitive)
+                        for alt_name in alt_names:
+                            if alt_name.lower().strip() == name_lower:
+                                result_dict = game_dict
+                                result_dict = self._convert_text_to_arrays(result_dict)
+                                logger.debug(f"Found game by alternative name match: {name} -> {alt_name}")
+                                return result_dict
 
                 # Fuzzy search on canonical names with better matching
                 cur.execute(

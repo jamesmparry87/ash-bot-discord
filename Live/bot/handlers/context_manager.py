@@ -54,6 +54,14 @@ class ConversationContext:
         self.disambiguation_type: Optional[str] = None  # 'game_status', 'game_details', etc.
         self.available_options: List[str] = []  # Games available for selection
 
+        # NEW: Pending clarification tracking for ambiguous queries
+        self.pending_clarification: Optional[str] = None  # Type of clarification needed
+        self.clarification_data: Dict[str, Any] = {}  # Data for clarification resolution
+
+        # NEW: Full query results storage for follow-up "show all" requests
+        self.last_query_results: List[Dict[str, Any]] = []  # Complete query results
+        self.last_query_parameter: Optional[str] = None  # Parameter used in query (genre, series, etc.)
+
     def add_message(self, content: str, message_type: str = "user"):
         """Add a message to the conversation history"""
         self.last_activity = datetime.now(ZoneInfo("Europe/London"))
@@ -156,6 +164,27 @@ class ConversationContext:
                 return True, game_option
 
         return False, None
+
+    def set_pending_clarification(self, clarification_type: str, data: Dict[str, Any]):
+        """Store a pending clarification request"""
+        self.pending_clarification = clarification_type
+        self.clarification_data = data
+        self.last_activity = datetime.now(ZoneInfo("Europe/London"))
+        print(f"Context: Set pending clarification '{clarification_type}' for user {self.user_id}")
+
+    def clear_pending_clarification(self):
+        """Clear the pending clarification state"""
+        self.pending_clarification = None
+        self.clarification_data = {}
+        print(f"Context: Cleared pending clarification for user {self.user_id}")
+
+    def store_full_query_results(self, results: List[Dict[str, Any]], query_type: str, parameter: Optional[str] = None):
+        """Store full query results for follow-up 'show all' requests"""
+        self.last_query_results = results
+        self.last_query_type = query_type
+        self.last_query_parameter = parameter
+        self.last_activity = datetime.now(ZoneInfo("Europe/London"))
+        print(f"Context: Stored {len(results)} query results for type '{query_type}'")
 
     def update_jonesy_context(self, content: str):
         """Update Jonesy context based on conversation content"""
