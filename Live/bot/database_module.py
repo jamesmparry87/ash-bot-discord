@@ -871,11 +871,14 @@ class DatabaseManager:
                     return result_dict
 
                 # Search alternative names (handles JSON, PostgreSQL array, and comma-separated formats)
+                # Pre-filter in the database using LIKE to avoid fetching all rows, then do precise matching in Python.
+                like_pattern = f'%{name_lower}%'
                 cur.execute("""
                     SELECT * FROM played_games
                     WHERE alternative_names IS NOT NULL
                     AND alternative_names != ''
-                """)
+                    AND LOWER(alternative_names) LIKE %s
+                """, (like_pattern,))
                 all_games_with_alt_names = cur.fetchall()
 
                 # Search alternative names in Python for better format compatibility

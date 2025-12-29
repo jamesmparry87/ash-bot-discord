@@ -8,6 +8,7 @@ Supports both Gemini and Hugging Face APIs with automatic fallback functionality
 import json
 import logging
 import os
+import traceback
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
@@ -1101,7 +1102,6 @@ async def call_ai_with_rate_limiting(
 def _convert_few_shot_examples_to_gemini_format(examples: list) -> list:
     """Convert our few-shot examples to Gemini's Content format"""
     try:
-        import traceback
         gemini_history = []
         for example in examples:
             # User message - handle both old and new format
@@ -1124,7 +1124,6 @@ def _convert_few_shot_examples_to_gemini_format(examples: list) -> list:
         return gemini_history
     except Exception as e:
         print(f"🚨 CRITICAL ERROR converting few-shot examples: {e}")
-        import traceback
         traceback.print_exc()
         return []
 
@@ -1381,7 +1380,6 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
 
     except Exception as e:
         print(f"⚠️ Error building system instruction: {e}")
-        import traceback
         traceback.print_exc()
         # Fallback to base instruction with empty context
         return ASH_SYSTEM_INSTRUCTION, ""
@@ -2331,7 +2329,6 @@ Focus on direct questions about Captain Jonesy's gaming journey - no verbose ana
 
     except Exception as e:
         print(f"❌ Error in diverse trivia generation: {e}")
-        import traceback
         traceback.print_exc()
         return None
 
@@ -2554,7 +2551,6 @@ async def safe_initialize_ai_async():
         return True
     except Exception as e:
         print(f"⚠️ Safe async AI initialization caught error: {e}")
-        import traceback
         print("📋 Full error traceback:")
         traceback.print_exc()
         global ai_enabled, ai_status_message
