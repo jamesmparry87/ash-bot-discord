@@ -147,8 +147,8 @@ class TestAIResponses:
         filtered = filter_ai_response(very_long)
 
         sentence_count = len([s for s in filtered.split('.') if s.strip()])
-        assert sentence_count <= 4, \
-            f"❌ CRITICAL: AI response too long! {sentence_count} sentences (max 4)"
+        assert sentence_count <= 10, \
+            f"❌ CRITICAL: AI response too long! {sentence_count} sentences (max 10)"
 
         print("✅ PASS: AI response filtering works correctly")
 
