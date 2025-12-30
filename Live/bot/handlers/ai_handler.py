@@ -817,16 +817,16 @@ async def switch_to_backup_gemini_model() -> bool:
 async def lazy_test_models_if_needed() -> bool:
     """
     Test models on first actual use (lazy initialization - Phase 3)
-    
+
     This function only runs once, when the first AI request is made.
     It tests all models in the cascade to verify which ones actually work.
     """
     global models_tested, model_test_in_progress, working_gemini_models, current_gemini_model
-    
+
     # Already tested? Skip
     if models_tested:
         return True
-    
+
     # Another call already testing? Wait for it
     if model_test_in_progress:
         # Wait up to 10 seconds for other test to complete
@@ -836,10 +836,10 @@ async def lazy_test_models_if_needed() -> bool:
                 return True
         print("⚠️ LAZY INIT: Timeout waiting for concurrent test")
         return False  # Timeout waiting
-    
+
     model_test_in_progress = True
     print("🧪 LAZY INIT: Testing models on first use (saves startup API calls)...")
-    
+
     try:
         # Test models now
         tested_models = []
@@ -847,7 +847,7 @@ async def lazy_test_models_if_needed() -> bool:
             print(f"   Testing {model_name}...")
             if await test_gemini_model(model_name, timeout=10.0):
                 tested_models.append(model_name)
-        
+
         if tested_models:
             working_gemini_models = tested_models
             current_gemini_model = tested_models[0]
@@ -2489,7 +2489,7 @@ async def initialize_ai_async():
             # Set up model cascade WITHOUT testing - assume all models work initially
             working_gemini_models = GEMINI_MODEL_CASCADE.copy()  # Copy the full cascade
             current_gemini_model = working_gemini_models[0]  # Use first model as default
-            
+
             primary_ai = "gemini"
             ai_enabled = True
             ai_status_message = f"Configured (lazy init, {len(working_gemini_models)} models untested)"
