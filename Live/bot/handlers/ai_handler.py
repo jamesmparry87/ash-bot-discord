@@ -914,7 +914,7 @@ async def call_ai_with_rate_limiting(
                 print(
                     f"Making Gemini request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
                 generation_config = {
-                    "max_output_tokens": 1000,  # Increased to allow complete responses (~750 words)
+                    "max_output_tokens": 3000,  # Increased to allow complete responses (~750 words)
                     "temperature": 0.7}
 
                 # Determine timeout based on context priority
@@ -1431,8 +1431,8 @@ def filter_ai_response(response_text: str) -> str:
         if should_keep:
             final_sentences.append(sentence)
 
-    # Limit to maximum 4 sentences for conciseness
-    final_sentences = final_sentences[:4]
+    # Limit to maximum 10 sentences for conciseness
+    final_sentences = final_sentences[:10]
 
     # Reconstruct response
     result = '. '.join(final_sentences)
