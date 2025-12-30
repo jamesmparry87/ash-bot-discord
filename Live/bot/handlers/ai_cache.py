@@ -127,7 +127,7 @@ class AIResponseCache:
     ) -> Optional[Tuple[str, Dict[str, Any]]]:
         """
         Find similar cached query using fuzzy matching.
-        
+
         Optimized to search a random sample for large caches to avoid O(N) complexity.
         """
         normalized_query = self._normalize_query(query)
@@ -138,7 +138,7 @@ class AIResponseCache:
         # Optimize for large caches: search random sample instead of entire cache
         cache_items = list(self.cache.items())
         sample_size = min(len(cache_items), 1000)  # Search max 1000 entries
-        
+
         if len(cache_items) > 1000:
             cache_items = random.sample(cache_items, sample_size)
 
@@ -242,7 +242,7 @@ class AIResponseCache:
             # Periodically clean up expired entries to prevent unbounded growth
             if len(self.cache) > 500 and len(self.cache) % 50 == 0:
                 self.cleanup_expired()
-            
+
             cache_key = self._generate_cache_key(query)
 
             # Detect query type if not provided
