@@ -5,6 +5,7 @@ Handles AI integration, rate limiting, and response processing for the Discord b
 Supports both Gemini and Hugging Face APIs with automatic fallback functionality.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -132,7 +133,8 @@ GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
 # These models are tested on startup and used with automatic fallback
 GEMINI_MODEL_CASCADE = [
     'gemini-2.5-flash',       # Primary: Latest, fastest
-    'gemini-2.0-flash-001',   # Backup: Stable version
+    'gemini-2.0-flash',       # Secondary: Stable version
+    'gemini-2.0-flash-lite'   # Backup: Stable version
 ]
 
 # AI instances (google-genai v1.56+ API)
@@ -147,6 +149,10 @@ current_gemini_model: Optional[str] = None  # Currently active Gemini model
 working_gemini_models: List[str] = []   # List of working models in priority order
 model_failure_counts: Dict[str, int] = {}    # Track failures per model
 last_model_switch: Optional[datetime] = None     # Timestamp of last model switch
+
+# Model testing state (lazy initialization - Phase 3)
+models_tested = False  # Track if we've tested models yet
+model_test_in_progress = False  # Prevent concurrent testing
 
 # AI Usage Tracking and Rate Limiting
 try:
@@ -808,6 +814,58 @@ async def switch_to_backup_gemini_model() -> bool:
     return False
 
 
+async def lazy_test_models_if_needed() -> bool:
+    """
+    Test models on first actual use (lazy initialization - Phase 3)
+    
+    This function only runs once, when the first AI request is made.
+    It tests all models in the cascade to verify which ones actually work.
+    """
+    global models_tested, model_test_in_progress, working_gemini_models, current_gemini_model
+    
+    # Already tested? Skip
+    if models_tested:
+        return True
+    
+    # Another call already testing? Wait for it
+    if model_test_in_progress:
+        # Wait up to 10 seconds for other test to complete
+        for _ in range(20):
+            await asyncio.sleep(0.5)
+            if models_tested:
+                return True
+        print("⚠️ LAZY INIT: Timeout waiting for concurrent test")
+        return False  # Timeout waiting
+    
+    model_test_in_progress = True
+    print("🧪 LAZY INIT: Testing models on first use (saves startup API calls)...")
+    
+    try:
+        # Test models now
+        tested_models = []
+        for model_name in GEMINI_MODEL_CASCADE:
+            print(f"   Testing {model_name}...")
+            if await test_gemini_model(model_name, timeout=10.0):
+                tested_models.append(model_name)
+        
+        if tested_models:
+            working_gemini_models = tested_models
+            current_gemini_model = tested_models[0]
+            models_tested = True
+            print(f"✅ LAZY INIT: Confirmed {len(tested_models)} working model(s): {', '.join(tested_models)}")
+            return True
+        else:
+            print("❌ LAZY INIT: No working models found")
+            models_tested = True  # Mark as tested even if failed, to avoid repeated attempts
+            return False
+    except Exception as e:
+        print(f"❌ LAZY INIT: Error during model testing: {e}")
+        models_tested = True  # Mark as tested to avoid repeated failures
+        return False
+    finally:
+        model_test_in_progress = False
+
+
 async def call_ai_with_rate_limiting(
         prompt: str, user_id: int, context: str = "", member_obj=None, bot=None) -> Tuple[Optional[str], str]:
     """
@@ -886,6 +944,14 @@ async def call_ai_with_rate_limiting(
 
     try:
         response_text = None
+
+        # PHASE 3: LAZY INIT - Test models on first use if not tested yet
+        if not models_tested and ai_enabled:
+            print("🔄 First AI call detected - triggering lazy model initialization...")
+            test_success = await lazy_test_models_if_needed()
+            if not test_success:
+                print("❌ Lazy model testing failed - AI may be unavailable")
+                # Continue anyway and let error handling deal with it
 
         # PHASE 1: Check cache first (NEW OPTIMIZATION)
         if CACHE_AVAILABLE and get_cache is not None:
@@ -2412,41 +2478,32 @@ Write 2-4 sentences maximum. Make it engaging and user-focused."""
 
 
 async def initialize_ai_async():
-    """Async initialize AI providers with model cascade (Phase 2)"""
-    global ai_enabled, ai_status_message, primary_ai, backup_ai
+    """Async initialize AI providers WITHOUT testing (lazy initialization - Phase 3)"""
+    global ai_enabled, ai_status_message, primary_ai, current_gemini_model, working_gemini_models
 
-    print("🤖 Starting async AI initialization with model cascade...")
+    print("🤖 Starting async AI initialization (lazy mode - no startup tests)...")
 
     try:
-        # Initialize Gemini with model cascade testing
-        if GEMINI_API_KEY and GENAI_AVAILABLE and genai:
-            # New SDK doesn't need configure() - models are created with API key directly
-            gemini_ok = await initialize_gemini_models()
-
-            if gemini_ok:
-                primary_ai = "gemini"
-                model_info = f"{current_gemini_model}"
-                if len(working_gemini_models) > 1:
-                    model_info += f" (+ {len(working_gemini_models)-1} backup)"
-                print(f"✅ Gemini AI initialized: {model_info}")
-            else:
-                print("❌ No working Gemini models found")
-        else:
-            gemini_ok = False
-            print("⚠️ Gemini AI not available - missing API key or module")
-
-        # Set AI status
-        if gemini_ok:
+        # Initialize Gemini WITHOUT testing - just set up model list
+        if GEMINI_API_KEY and GENAI_AVAILABLE and genai and gemini_client:
+            # Set up model cascade WITHOUT testing - assume all models work initially
+            working_gemini_models = GEMINI_MODEL_CASCADE.copy()  # Copy the full cascade
+            current_gemini_model = working_gemini_models[0]  # Use first model as default
+            
             primary_ai = "gemini"
             ai_enabled = True
-            if backup_ai:
-                ai_status_message = f"Online ({primary_ai.title()} + {backup_ai.title()} backup)"
-            else:
-                model_count = f" ({len(working_gemini_models)} models)" if working_gemini_models else ""
-                ai_status_message = f"Online ({primary_ai.title()}{model_count})"
-            print(f"✅ AI initialization complete: {ai_status_message}")
+            ai_status_message = f"Configured (lazy init, {len(working_gemini_models)} models untested)"
+            print(f"✅ Gemini AI configured: {current_gemini_model} (will test on first use)")
+            print(f"   Available models: {', '.join(working_gemini_models)}")
         else:
+            ai_enabled = False
             ai_status_message = "No AI available"
+            print("⚠️ Gemini AI not available - missing API key or module")
+
+        if ai_enabled:
+            print(f"✅ AI initialization complete (lazy mode): {ai_status_message}")
+            print(f"💡 Models will be tested on first actual AI request")
+        else:
             print("❌ No AI systems available - all AI features disabled")
 
     except Exception as e:
