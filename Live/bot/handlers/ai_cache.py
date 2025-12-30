@@ -5,14 +5,14 @@ PHASE 1: Intelligent caching system for AI responses to maximize Gemini free-tie
 Implements hash-based caching with fuzzy matching and intelligent TTL management.
 """
 
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
 import hashlib
 import logging
 import random
 import re
 import threading
+from datetime import datetime, timedelta
 from difflib import SequenceMatcher
+from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 # Configure logging
