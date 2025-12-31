@@ -94,7 +94,7 @@ class AIResponseCache:
         context_parts = [
             normalized,
             str(user_id),
-            "dm" if is_dm else f"channel_{channel_id}" if channel_id else "unknown"
+            "dm" if is_dm else (f"channel_{channel_id}" if channel_id is not None else "unknown")
         ]
         context_string = "|".join(context_parts)
 
@@ -176,10 +176,13 @@ class AIResponseCache:
                 continue
 
             # CRITICAL: Only match within same conversation context
+            entry_user_id = entry.get("user_id")
             entry_is_dm = entry.get("is_dm", False)
             entry_channel_id = entry.get("channel_id")
 
             # Skip if conversation context doesn't match
+            if entry_user_id != user_id:
+                continue
             if entry_is_dm != is_dm:
                 continue
             if not is_dm and entry_channel_id != channel_id:
