@@ -70,21 +70,26 @@ class AIResponseCache:
 
         return normalized
 
-    def _generate_cache_key(self, query: str, user_id: int, channel_id: Optional[int] = None, is_dm: bool = False) -> str:
+    def _generate_cache_key(
+            self,
+            query: str,
+            user_id: int,
+            channel_id: Optional[int] = None,
+            is_dm: bool = False) -> str:
         """
         Generate cache key from normalized query with conversation context.
-        
+
         Args:
             query: The query text
             user_id: User ID making the query
             channel_id: Channel ID (None for DMs)
             is_dm: Whether this is a DM conversation
-            
+
         Returns:
             MD5 hash incorporating query, user, and conversation location
         """
         normalized = self._normalize_query(query)
-        
+
         # Build context string to ensure conversation isolation
         context_parts = [
             normalized,
@@ -92,7 +97,7 @@ class AIResponseCache:
             "dm" if is_dm else f"channel_{channel_id}" if channel_id else "unknown"
         ]
         context_string = "|".join(context_parts)
-        
+
         # Use MD5 hash for consistent key generation
         return hashlib.md5(context_string.encode()).hexdigest()
 
@@ -173,7 +178,7 @@ class AIResponseCache:
             # CRITICAL: Only match within same conversation context
             entry_is_dm = entry.get("is_dm", False)
             entry_channel_id = entry.get("channel_id")
-            
+
             # Skip if conversation context doesn't match
             if entry_is_dm != is_dm:
                 continue
@@ -316,7 +321,8 @@ class AIResponseCache:
 
             ttl_hours = ttl_seconds / 3600
             context_type = "DM" if is_dm else f"channel_{channel_id}"
-            logger.info(f"CACHE SET: {query[:50]}... (type: {query_type}, context: {context_type}, TTL: {ttl_hours:.1f}h)")
+            logger.info(
+                f"CACHE SET: {query[:50]}... (type: {query_type}, context: {context_type}, TTL: {ttl_hours:.1f}h)")
 
     def cleanup_expired(self) -> int:
         """Remove expired cache entries. Returns number of entries removed."""

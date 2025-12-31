@@ -867,8 +867,14 @@ async def lazy_test_models_if_needed() -> bool:
         model_test_in_progress = False
 
 
-async def call_ai_with_rate_limiting(
-        prompt: str, user_id: int, context: str = "", member_obj=None, bot=None, channel_id=None, is_dm: bool = False) -> Tuple[Optional[str], str]:
+async def call_ai_with_rate_limiting(prompt: str,
+                                     user_id: int,
+                                     context: str = "",
+                                     member_obj=None,
+                                     bot=None,
+                                     channel_id=None,
+                                     is_dm: bool = False) -> Tuple[Optional[str],
+                                                                   str]:
     """
     Make an AI call with proper rate limiting and error handling.
 
@@ -966,7 +972,8 @@ async def call_ai_with_rate_limiting(
             if cached_response:
                 # Cache hit! Return immediately without API call
                 context_type = "DM" if is_dm else f"channel_{channel_id}"
-                print(f"💰 API call saved via cache in {context_type} (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
+                print(
+                    f"💰 API call saved via cache in {context_type} (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
                 return cached_response, "cache_hit"
 
             # Cache miss - will need to call API and cache result
