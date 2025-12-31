@@ -868,7 +868,7 @@ async def lazy_test_models_if_needed() -> bool:
 
 
 async def call_ai_with_rate_limiting(
-        prompt: str, user_id: int, context: str = "", member_obj=None, bot=None) -> Tuple[Optional[str], str]:
+        prompt: str, user_id: int, context: str = "", member_obj=None, bot=None, channel_id=None, is_dm: bool = False) -> Tuple[Optional[str], str]:
     """
     Make an AI call with proper rate limiting and error handling.
 
@@ -878,6 +878,8 @@ async def call_ai_with_rate_limiting(
         context: Context string for priority/logging
         member_obj: Discord Member object (for role detection)
         bot: Bot instance (for DM member lookup)
+        channel_id: Channel ID for conversation context isolation (None for DMs)
+        is_dm: Whether this is a DM conversation
 
     Returns:
         Tuple of (response_text, status_message)
@@ -954,16 +956,17 @@ async def call_ai_with_rate_limiting(
                 print("❌ Lazy model testing failed - AI may be unavailable")
                 # Continue anyway and let error handling deal with it
 
-        # PHASE 1: Check cache first (NEW OPTIMIZATION)
+        # PHASE 1: Check cache first (NEW OPTIMIZATION) with conversation context
         if CACHE_AVAILABLE and get_cache is not None:
             cache = get_cache()
 
-            # Try to get cached response
-            cached_response = cache.get(prompt, user_id)
+            # Try to get cached response with conversation context isolation
+            cached_response = cache.get(prompt, user_id, channel_id=channel_id, is_dm=is_dm)
 
             if cached_response:
                 # Cache hit! Return immediately without API call
-                print(f"💰 API call saved via cache (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
+                context_type = "DM" if is_dm else f"channel_{channel_id}"
+                print(f"💰 API call saved via cache in {context_type} (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
                 return cached_response, "cache_hit"
 
             # Cache miss - will need to call API and cache result
@@ -1063,10 +1066,10 @@ async def call_ai_with_rate_limiting(
                         record_ai_request()
                         print(f"✅ Gemini request successful (timeout: {timeout_duration}s)")
 
-                        # PHASE 1: Cache the successful response (NEW OPTIMIZATION)
+                        # PHASE 1: Cache the successful response (NEW OPTIMIZATION) with conversation context
                         if CACHE_AVAILABLE and get_cache is not None and response_text:
                             cache = get_cache()
-                            cache.set(prompt, response_text, user_id)
+                            cache.set(prompt, response_text, user_id, channel_id=channel_id, is_dm=is_dm)
 
                         # Reset quota exhausted flag if successful
                         if ai_usage_stats.get("quota_exhausted", False):
