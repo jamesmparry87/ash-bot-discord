@@ -5,14 +5,14 @@ PHASE 1: Intelligent caching system for AI responses to maximize Gemini free-tie
 Implements hash-based caching with fuzzy matching and intelligent TTL management.
 """
 
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
 import hashlib
 import logging
 import random
 import re
 import threading
+from datetime import datetime, timedelta
 from difflib import SequenceMatcher
+from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 # Configure logging
@@ -70,11 +70,36 @@ class AIResponseCache:
 
         return normalized
 
-    def _generate_cache_key(self, query: str) -> str:
-        """Generate cache key from normalized query"""
+    def _generate_cache_key(
+            self,
+            query: str,
+            user_id: int,
+            channel_id: Optional[int] = None,
+            is_dm: bool = False) -> str:
+        """
+        Generate cache key from normalized query with conversation context.
+
+        Args:
+            query: The query text
+            user_id: User ID making the query
+            channel_id: Channel ID (None for DMs)
+            is_dm: Whether this is a DM conversation
+
+        Returns:
+            MD5 hash incorporating query, user, and conversation location
+        """
         normalized = self._normalize_query(query)
+
+        # Build context string to ensure conversation isolation
+        context_parts = [
+            normalized,
+            str(user_id),
+            "dm" if is_dm else (f"channel_{channel_id}" if channel_id is not None else "unknown")
+        ]
+        context_string = "|".join(context_parts)
+
         # Use MD5 hash for consistent key generation
-        return hashlib.md5(normalized.encode()).hexdigest()
+        return hashlib.md5(context_string.encode()).hexdigest()
 
     def _detect_query_type(self, query: str) -> str:
         """Detect the type of query for appropriate TTL"""
@@ -123,12 +148,16 @@ class AIResponseCache:
     def _find_similar_cached_query(
         self,
         query: str,
+        user_id: int,
+        channel_id: Optional[int],
+        is_dm: bool,
         similarity_threshold: float = 0.85
     ) -> Optional[Tuple[str, Dict[str, Any]]]:
         """
-        Find similar cached query using fuzzy matching.
-        
+        Find similar cached query using fuzzy matching within the same conversation context.
+
         Optimized to search a random sample for large caches to avoid O(N) complexity.
+        CRITICAL: Only searches within the same conversation location (DM/channel isolation).
         """
         normalized_query = self._normalize_query(query)
 
@@ -138,12 +167,25 @@ class AIResponseCache:
         # Optimize for large caches: search random sample instead of entire cache
         cache_items = list(self.cache.items())
         sample_size = min(len(cache_items), 1000)  # Search max 1000 entries
-        
+
         if len(cache_items) > 1000:
             cache_items = random.sample(cache_items, sample_size)
 
         for cache_key, entry in cache_items:
             if self._is_expired(entry):
+                continue
+
+            # CRITICAL: Only match within same conversation context
+            entry_user_id = entry.get("user_id")
+            entry_is_dm = entry.get("is_dm", False)
+            entry_channel_id = entry.get("channel_id")
+
+            # Skip if conversation context doesn't match
+            if entry_user_id != user_id:
+                continue
+            if entry_is_dm != is_dm:
+                continue
+            if not is_dm and entry_channel_id != channel_id:
                 continue
 
             cached_normalized = self._normalize_query(entry["original_query"])
@@ -163,14 +205,18 @@ class AIResponseCache:
         self,
         query: str,
         user_id: int,
+        channel_id: Optional[int] = None,
+        is_dm: bool = False,
         similarity_threshold: float = 0.85
     ) -> Optional[str]:
         """
-        Get cached response for query.
+        Get cached response for query with conversation context isolation.
 
         Args:
             query: The query string
             user_id: User ID making the query
+            channel_id: Channel ID (None for DMs)
+            is_dm: Whether this is a DM conversation
             similarity_threshold: Minimum similarity for fuzzy matching
 
         Returns:
@@ -179,8 +225,8 @@ class AIResponseCache:
         with self._lock:
             self.stats["total_queries"] += 1
 
-            # Try exact match first
-            cache_key = self._generate_cache_key(query)
+            # Try exact match first with conversation context
+            cache_key = self._generate_cache_key(query, user_id, channel_id, is_dm)
 
             if cache_key in self.cache:
                 entry = self.cache[cache_key]
@@ -198,11 +244,12 @@ class AIResponseCache:
                 self.stats["hits"] += 1
                 self.stats["saves"] += 1
 
-                logger.info(f"CACHE HIT: {query[:50]}... (exact match, {entry['hits']} total hits)")
+                context_type = "DM" if is_dm else f"channel_{channel_id}"
+                logger.info(f"CACHE HIT: {query[:50]}... (exact match in {context_type}, {entry['hits']} total hits)")
                 return entry["response"]
 
-            # Try similarity matching
-            similar_match = self._find_similar_cached_query(query, similarity_threshold)
+            # Try similarity matching within same conversation context
+            similar_match = self._find_similar_cached_query(query, user_id, channel_id, is_dm, similarity_threshold)
 
             if similar_match:
                 cache_key, entry = similar_match
@@ -214,12 +261,14 @@ class AIResponseCache:
                 self.stats["hits"] += 1
                 self.stats["saves"] += 1
 
-                logger.info(f"CACHE HIT: {query[:50]}... (fuzzy match, {entry['hits']} total hits)")
+                context_type = "DM" if is_dm else f"channel_{channel_id}"
+                logger.info(f"CACHE HIT: {query[:50]}... (fuzzy match in {context_type}, {entry['hits']} total hits)")
                 return entry["response"]
 
             # Cache miss
             self.stats["misses"] += 1
-            logger.debug(f"CACHE MISS: {query[:50]}...")
+            context_type = "DM" if is_dm else f"channel_{channel_id}"
+            logger.debug(f"CACHE MISS: {query[:50]}... (context: {context_type})")
             return None
 
     def set(
@@ -227,23 +276,28 @@ class AIResponseCache:
         query: str,
         response: str,
         user_id: int,
+        channel_id: Optional[int] = None,
+        is_dm: bool = False,
         query_type: Optional[str] = None
     ):
         """
-        Cache a response.
+        Cache a response with conversation context.
 
         Args:
             query: The query string
             response: The AI response to cache
             user_id: User ID who made the query
+            channel_id: Channel ID (None for DMs)
+            is_dm: Whether this is a DM conversation
             query_type: Optional type override, auto-detected if None
         """
         with self._lock:
             # Periodically clean up expired entries to prevent unbounded growth
             if len(self.cache) > 500 and len(self.cache) % 50 == 0:
                 self.cleanup_expired()
-            
-            cache_key = self._generate_cache_key(query)
+
+            # Generate cache key with conversation context
+            cache_key = self._generate_cache_key(query, user_id, channel_id, is_dm)
 
             # Detect query type if not provided
             if query_type is None:
@@ -254,11 +308,13 @@ class AIResponseCache:
             now = datetime.now(ZoneInfo("Europe/London"))
             expires_at = now + timedelta(seconds=ttl_seconds)
 
-            # Store in cache
+            # Store in cache with conversation context
             self.cache[cache_key] = {
                 "original_query": query,
                 "response": response,
                 "user_id": user_id,
+                "channel_id": channel_id,
+                "is_dm": is_dm,
                 "query_type": query_type,
                 "created_at": now,
                 "expires_at": expires_at,
@@ -267,7 +323,9 @@ class AIResponseCache:
             }
 
             ttl_hours = ttl_seconds / 3600
-            logger.info(f"CACHE SET: {query[:50]}... (type: {query_type}, TTL: {ttl_hours:.1f}h)")
+            context_type = "DM" if is_dm else f"channel_{channel_id}"
+            logger.info(
+                f"CACHE SET: {query[:50]}... (type: {query_type}, context: {context_type}, TTL: {ttl_hours:.1f}h)")
 
     def cleanup_expired(self) -> int:
         """Remove expired cache entries. Returns number of entries removed."""
