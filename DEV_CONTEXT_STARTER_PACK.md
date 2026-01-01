@@ -16,7 +16,7 @@
 * **Language:** Python 3.x
 * **Library:** `discord.py`
 * **Database:** PostgreSQL (Railway.app).
-* **AI Backend:** Google Gemini (Primary), Hugging Face (Fallback - currently broken).
+* **AI Backend:** Google Gemini (Primary, model cascade).
 * **Game Data:** IGDB API (via Twitch OAuth) for validation and enrichment.
 * **Hosting:** Railway.app.
 * **Testing:** `pytest`.
@@ -58,6 +58,10 @@
 * **`PROJECT_MAP.md`**: **MASTER REFERENCE.** Detailed map of all modules, commands, and handlers.
 * **`README.md`**: **DEPLOYMENT & FEATURES.** Overview of features, deployment steps, and configuration.
 * **`Live/bot/`**: **MODULAR CODEBASE.** The active development directory (see `PROJECT_MAP.md` for details).
+* **`Live/documentation/`**: **TECHNICAL DOCUMENTATION.** Schema, refactoring guides, and specifications.
+  * **`SCHEMA.md`**: Comprehensive database schema documentation
+  * **`REFACTORING_GUIDE.md`**: Database module refactoring instructions
+  * **`RAID_BRIEFING_SPEC.md`**: Discord Raid Briefing system specification
 * **`ash_bot_fallback.py`**: **LEGACY.** Do not edit unless specifically instructed.
 * **`requirements.txt`**: Python dependencies.
 * **`tests/`**: Pytest scripts.
@@ -80,6 +84,8 @@
 
 ### Strategic Development Roadmap (2025-2026)
 
+> **Note:** See `Live/documentation/SCHEMA.md` for comprehensive database schema details and `Live/documentation/REFACTORING_GUIDE.md` for implementation guidance.
+
 ### 🧠 Priority 1: The "Server Cortex" (Memory & Lore)
 
 **Goal:** Create a persistent memory of "Jonesy Lore" to make Ash feel like a long-term crew member, not just a chatbot.
@@ -92,6 +98,50 @@
     * **Example:** `!remember quote "I don't need a map, I have instincts" - Jonesy, Subnautica Stream.`
 * **1.3 Context Injection**
     * **Task:** When Ash generates text (Greetings or Trivia), he queries this DB to reference past events, making the content feel specific to this server.
+
+### 🔧 Priority 1.5: Database Module Refactoring (CRITICAL - MOVED UP)
+
+**Status:** Planned  
+**Target Date:** Q1 2026 (2 weeks)  
+**Priority:** HIGH (Moved from Priority 9 to Priority 1.5)
+
+> **Full Implementation Guide:** See `Live/documentation/REFACTORING_GUIDE.md`
+
+**Why This Was Moved Up:**
+
+The `database_module.py` file is 3000+ lines and becoming a critical blocker. **Priorities 2, 6, 7, and 8 ALL require heavy database modifications.** If we build those features into the existing monolith, we'll cement technical debt and make future changes exponentially harder.
+
+**Strategic Decision:** Refactor NOW before adding new features.
+
+**The Plan:**
+
+* **Phase 1:** Split `database_module.py` into focused modules:
+    * `database/core.py` - Connection management
+    * `database/games.py` - All played_games operations
+    * `database/trivia.py` - Trivia system
+    * `database/users.py` - Users, strikes, reminders
+    * `database/stats.py` - Analytics & metrics
+    * `database/config.py` - Bot configuration
+
+* **Phase 2:** Create backward compatibility facade
+    * Existing code continues to work unchanged
+    * Zero breaking changes
+    * Gradual migration to new structure
+
+* **Phase 3:** Test on Rook (staging) for 48 hours
+    * Run full pytest suite
+    * Monitor for errors
+    * Verify all commands work
+
+**Success Metrics:**
+- ✅ No module > 800 lines (vs. 3000+)
+- ✅ 100% pytest compatibility maintained
+- ✅ Zero production incidents
+- ✅ Foundation ready for Priorities 2, 6, 7, 8
+
+**Timeline:** 2 weeks (1 week dev, 1 week testing on Rook)
+
+---
 
 ### 🧹 Priority 2: Data Integrity & Game Knowledge (The DB Overhaul)
 **Goal:** Fix the "Played Games" database once and for all. Bad data = bad trivia = low engagement.
@@ -117,14 +167,28 @@
     * **Solution:** Feed the raw stats (Subs, Views, Watch time) into Gemini with the prompt: *"Analyze these performance metrics as a Science Officer reporting to the Captain. Highlight anomalies. Be precise but complimentary where warranted."*
     * **Result:** Instead of "Views: 500", Ash says: *"Captain, visual engagement has increased by 15% efficiency. The crew responded well to the Subnautica operations."*
 
-### 👾 Priority 4: Cross-Platform Operations (Twitch Integration)
-**Goal:** Expand Ash's territory beyond Discord.
+### 👾 Priority 4: Discord Raid Briefing System (REVISED)
+**Goal:** Mobilize community for Twitch streams via Discord (safer than Twitch chat integration).
 
-* **4.1 "Ash Raid" Capability (Experimental)**
-    * **Task:** Investigate `TwitchIO` (Python library).
-    * **Concept:** Ash connects to the Twitch chat as a bot user.
-    * **Feature:** Periodic "Status Checks." Once per stream, Ash joins chat, drops a specialized greeting or lore-based comment (e.g., *"Scanners indicate high stress levels, Captain. Recommend hydration."*), and then leaves or lurks.
-    * **Constraint:** Must be strictly rate-limited to avoid spamming.
+> **Full Specification:** See `Live/documentation/RAID_BRIEFING_SPEC.md`
+
+**Concept:** Instead of Ash connecting to Twitch chat (spam bot risk), implement a Discord-based "Raid Briefing" system where Ash posts military-style mission briefings when Jonesy goes live on Twitch.
+
+* **4.1 Discord Raid Briefings**
+    * **Task:** Implement Twitch EventSub webhooks to detect stream.online events
+    * **Feature:** When Jonesy goes live, Ash posts tactical "Raid Briefing" in dedicated Discord channel
+    * **Content:** Stream link, game info, previous playthrough stats, mission parameters
+    * **Notification:** Pings @Raiders role to mobilize community
+    * **Benefits:** Zero spam risk, rich Discord embeds, stays within Ash's jurisdiction
+    * **Lore Justification:** *"My protocols restrict direct Twitch chat interference. However, coordinating tactical deployments via Discord command channels is within authorized parameters."*
+
+* **4.2 Milestone Updates (Optional)**
+    * **Task:** Monitor active streams and post milestone achievements (50, 100, 200 viewers)
+    * **Style:** Analytical progress reports in Ash's voice
+
+* **4.3 Post-Stream Debriefing**
+    * **Task:** When stream ends, post mission summary with duration, peak viewers, and assessment
+    * **Style:** Military-style after-action report
 
 ### 🔊 Priority 5: The "Voice" of Ash (Long Term)
 * **5.1 Voice Synthesis:** Integration with ElevenLabs/OpenAI for VC announcements.
@@ -525,67 +589,9 @@ Result: User gets answer, database stays fresh, API call serves dual purpose
         - Do multi-platform games get more total engagement?
     * **Output:** Periodic insights for Jonesy's content strategy
 
-### 🔧 Priority 9: Database Module Refactoring
+---
 
-**Status:** Planned  
-**Target Date:** Q2 2026  
-**Priority:** MEDIUM
-
-**Background:**
-The `database_module.py` file has grown to over 3000+ lines and contains numerous responsibilities, making it difficult to maintain and extend.
-
-**Current Problems:**
-1. **Single File Monolith:** All database operations in one massive file
-2. **Mixed Concerns:** Trivia, games, user management, stats all intermingled
-3. **Difficult Navigation:** Hard to find specific functions
-4. **Testing Challenges:** Complex to mock and test specific subsystems
-5. **Merge Conflicts:** Multiple developers working in same large file
-
-**Proposed Refactoring:**
-
-#### **Phase 1: Module Separation**
-
-Split `database_module.py` into focused modules:
-
-* **`database/core.py`**: Connection management, base DatabaseManager class
-* **`database/games.py`**: All played_games CRUD operations
-* **`database/trivia.py`**: Trivia questions, sessions, answers
-* **`database/users.py`**: Strike system, user preferences, permissions
-* **`database/stats.py`**: Analytics, view counts, engagement metrics
-* **`database/recommendations.py`**: Game recommendations system
-* **`database/config.py`**: Bot configuration storage
-
-#### **Phase 2: Interface Layer**
-
-Create unified interface that maintains backward compatibility:
-
-```python
-# database_module.py becomes a facade
-from .database.core import DatabaseManager
-from .database.games import GameDatabase
-from .database.trivia import TriviaDatabase
-# ... etc
-
-class UnifiedDatabase(DatabaseManager):
-    """Unified interface maintaining backward compatibility"""
-    def __init__(self):
-        self.games = GameDatabase(self)
-        self.trivia = TriviaDatabase(self)
-        # ...
-```
-
-#### **Phase 3: Gradual Migration**
-
-* Refactor without breaking existing code
-* Each module can be tested independently
-* Migration happens incrementally, not all at once
-* Old functions proxy to new modules during transition
-
-**Success Metrics:**
-- No module exceeds 500 lines
-- 100% test coverage maintained
-- Zero breaking changes to existing code
-- Improved developer velocity (easier to find/modify functions)
+**Note:** Priority 9 (Database Module Refactoring) has been moved to **Priority 1.5** due to strategic importance. See Priority 1.5 section above for details.
 
 ---
 
@@ -715,6 +721,7 @@ POPS_ARCADE_USER_ID = 371536135580549122
 ```
 
 **Moderator Role IDs:**
+
 ```python
 DISCORD_MOD_ROLE_ID = 1188135626185396376
 TWITCH_MOD_ROLE_ID = 1280124521008857151
@@ -726,14 +733,15 @@ TWITCH_MOD_ROLE_ID = 1280124521008857151
 
 **Test Trigger:** Use `"simulate_pops"` in any message to test the Pops Arcade antagonistic persona without logging in as Pops:
 
-```
+```text
 User: "Hey Ash, simulate_pops what do you think?"
 Logs: 🧪 TEST MODE: Simulating Pops Arcade persona
 Response: [Dismissive, questioning tone]
 ```
 
 **Debug Logs to Watch For:**
-```
+
+```text
 🔍 CONTEXT DEBUG: Name='Sir Decent Jam', Roles=['Creator', 'Admin', 'Moderator'], ID=337833732901961729, Pops=False
 📊 Context Built: Clearance='CREATOR/MODERATOR (Authorized for Operational Data)', Relationship='CREATOR (Technical Deference)'
 ```

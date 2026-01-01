@@ -44,7 +44,6 @@ coverage.xml
 .pytest_cache/
 tests/__pycache__/
 Live/tests/__pycache__/
-documentation/
 
 # Virtual environments
 .env
