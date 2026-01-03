@@ -1,0 +1,39 @@
+# Project Context & Ways of Working
+
+## 1. Team & Persona
+- **User:** James (Mod for JonesySpaceCat). 
+- **Role:** Maintainer of the community Discord bot.
+- **Skill Level:** Novice/Intermediate Python programmer.
+  - **Requirement:** I need clear explanations of *why* changes are made.
+  - **Requirement:** When providing code, favors large, copy-pasteable snippets over small diffs to avoid context errors.
+
+## 2. Development Philosophy
+- **"Baby Steps":** We prioritize getting a simple version working first, then iterating. Do not over-engineer the first pass.
+- **Iterative Refinement:** Get it running, verify it works, then improve (refactor/optimize).
+
+## 3. Tech Stack
+- **Language:** Python
+- **Framework:** discord.py
+- **Editor:** VS Code (using Cline with Claude Sonnet 4.5)
+- **Testing:** pytest
+
+## 4. Git & Release Workflow
+We follow a strict branching strategy:
+- **`develop`**: The working branch. All new features and tests are written here. Automated pytest runs happen here.
+- **`stable`**: Release candidate branch. Merged from `develop` when features are stable.
+- **`main`**: Production branch. Only `stable` or `hotfix` branches merge here.
+- **`hotfix/*`**: Emergency fixes that can be merged directly to `main` if necessary.
+
+## 5. Testing Protocol
+- **Rule:** Every new feature must have a basic pytest case.
+- **Rule:** Run tests locally on `develop` before asking to merge or switch branches.
+
+## 6. Communication Style
+- Be empathetic and clear.
+- If a request seems too complex for a single step, propose breaking it down into smaller tasks.
+- Always check what branch we are on before starting work.
+
+## 7. Documentation Policy
+- **Rule:** Do NOT automatically create markdown documentation summaries (e.g., `FIX_SUMMARY.md` files) after completing fixes or features.
+- **Exception:** Only create documentation when explicitly requested by James.
+- **Rationale:** Keep the repository clean and avoid unnecessary file clutter.
