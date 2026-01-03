@@ -20,3 +20,10 @@ When working on this Discord bot project, ALWAYS read PROJECT_MAP.md FIRST befor
 ## Context Optimization
 
 The modular architecture reduces context window usage by 90%+ compared to the original monolithic file. Always use the specific module files rather than loading the entire codebase.
+
+## Documentation Preferences
+
+- **DO NOT create .md documentation files** after completing tasks
+- Code changes and inline comments should be sufficient documentation
+- Only create documentation if explicitly requested by the user
+- Focus on completing the task without generating summary documents
