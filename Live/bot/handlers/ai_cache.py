@@ -50,7 +50,7 @@ class AIResponseCache:
         }
 
     def _normalize_query(self, query: str) -> str:
-        """Normalize query for better matching"""
+        """Normalize query for better matching while preserving conversational context"""
         # Convert to lowercase
         normalized = query.lower()
 
@@ -60,8 +60,10 @@ class AIResponseCache:
         # Remove common punctuation at end
         normalized = normalized.rstrip('?.!,')
 
-        # Remove common filler words for better matching
-        filler_words = ['please', 'can you', 'could you', 'would you', 'um', 'uh']
+        # IMPROVED: Only remove truly filler words, preserve conversational markers
+        # Keep: question words (what, where, when, how, why), negations (no, not, don't),
+        # conversational markers (hi, hello, thanks, easy, grouchy, etc.)
+        filler_words = ['um', 'uh', 'like']  # Reduced list - only remove obvious fillers
         for filler in filler_words:
             normalized = normalized.replace(filler, '')
 
@@ -102,7 +104,52 @@ class AIResponseCache:
         return hashlib.md5(context_string.encode()).hexdigest()
 
     def _detect_query_type(self, query: str) -> str:
-        """Detect the type of query for appropriate TTL"""
+        """
+        Detect query type to prevent matching incompatible message types.
+        
+        Returns:
+            - 'question': Questions requiring informational responses
+            - 'conversational': Casual responses, greetings, acknowledgments
+            - 'statement': Declarative statements
+        """
+        query_lower = query.lower().strip()
+        
+        # Question detection (most specific first)
+        question_indicators = ['what', 'where', 'when', 'how', 'why', 'who', 'which', 'did', 'has', 'have', 'is', 'are', 'does', 'do', 'can', 'could', 'would', 'should']
+        if any(query_lower.startswith(indicator) for indicator in question_indicators):
+            return 'question'
+        if query_lower.endswith('?'):
+            return 'question'
+        
+        # Conversational responses (greetings, acknowledgments, casual chat)
+        conversational_indicators = [
+            'hi', 'hello', 'hey', 'thanks', 'thank you', 'ok', 'okay', 'cool', 'nice', 'great',
+            'lol', 'haha', 'sure', 'alright', 'yeah', 'yep', 'nope', 'no worries',
+            'take it easy', 'calm down', 'grouchy', 'chill', 'relax'
+        ]
+        if any(indicator in query_lower for indicator in conversational_indicators):
+            return 'conversational'
+        
+        # Default to statement
+        return 'statement'
+    
+    def _calculate_word_overlap(self, words1: set, words2: set) -> float:
+        """
+        Calculate word overlap ratio between two sets of words.
+        
+        Returns:
+            Overlap ratio from 0.0 to 1.0
+        """
+        if not words1 or not words2:
+            return 0.0
+        
+        overlap = len(words1 & words2)
+        total = len(words1 | words2)
+        
+        return overlap / total if total > 0 else 0.0
+
+    def _detect_query_category(self, query: str) -> str:
+        """Detect the query category for appropriate TTL (different from query type)"""
         query_lower = query.lower()
 
         # FAQ patterns
@@ -156,10 +203,31 @@ class AIResponseCache:
         """
         Find similar cached query using fuzzy matching within the same conversation context.
 
+        IMPROVED: Prevents false matches between different query types (questions vs casual responses).
         Optimized to search a random sample for large caches to avoid O(N) complexity.
         CRITICAL: Only searches within the same conversation location (DM/channel isolation).
         """
         normalized_query = self._normalize_query(query)
+        
+        # NEW: Detect query type to prevent mismatches
+        query_type = self._detect_query_type(query)
+        
+        # NEW: Calculate query characteristics
+        query_words = set(normalized_query.split())
+        query_length = len(query_words)
+        
+        # NEW: Adjust similarity threshold based on query length and type
+        # Short messages need stricter matching to avoid false positives
+        adjusted_threshold = similarity_threshold
+        if query_length < 5:
+            adjusted_threshold = 0.95  # Very strict for short messages
+        elif query_length < 10:
+            adjusted_threshold = 0.90  # Stricter for medium messages
+        
+        # CRITICAL: Conversational responses should NEVER match against questions
+        if query_type == 'conversational':
+            # Only match other conversational responses, with very strict similarity
+            adjusted_threshold = 0.98
 
         best_match = None
         best_similarity = 0.0
@@ -189,16 +257,45 @@ class AIResponseCache:
                 continue
 
             cached_normalized = self._normalize_query(entry["original_query"])
+            
+            # NEW: Detect cached query type
+            cached_type = self._detect_query_type(entry["original_query"])
+            
+            # NEW: Don't match different query types (prevents "take it easy" matching "what are your plans")
+            if query_type != cached_type:
+                logger.debug(f"Cache: Skipping - type mismatch ({query_type} vs {cached_type})")
+                continue
+            
+            # NEW: Check word overlap for additional validation
+            cached_words = set(cached_normalized.split())
+            word_overlap = self._calculate_word_overlap(query_words, cached_words)
+            
+            # Require meaningful word overlap (at least 30% shared words)
+            if word_overlap < 0.3:
+                logger.debug(f"Cache: Skipping - insufficient word overlap ({word_overlap:.2f})")
+                continue
+            
+            # NEW: Check length similarity (messages of very different lengths rarely mean the same thing)
+            length_ratio = min(query_length, len(cached_words)) / max(query_length, len(cached_words)) if max(query_length, len(cached_words)) > 0 else 0
+            if length_ratio < 0.6:  # Lengths must be within 60% of each other
+                logger.debug(f"Cache: Skipping - length mismatch ({length_ratio:.2f})")
+                continue
+            
+            # Calculate sequence similarity
             similarity = SequenceMatcher(
                 None,
                 normalized_query,
                 cached_normalized
             ).ratio()
 
-            if similarity > best_similarity and similarity >= similarity_threshold:
+            if similarity > best_similarity and similarity >= adjusted_threshold:
                 best_similarity = similarity
                 best_match = (cache_key, entry)
+                logger.debug(f"Cache: Potential match - similarity {similarity:.2f}, overlap {word_overlap:.2f}, type {query_type}")
 
+        if best_match:
+            logger.info(f"Cache: Found similar query (similarity: {best_similarity:.2f}, type: {query_type})")
+        
         return best_match
 
     def get(
@@ -299,9 +396,9 @@ class AIResponseCache:
             # Generate cache key with conversation context
             cache_key = self._generate_cache_key(query, user_id, channel_id, is_dm)
 
-            # Detect query type if not provided
+            # Detect query category if not provided (for TTL determination)
             if query_type is None:
-                query_type = self._detect_query_type(query)
+                query_type = self._detect_query_category(query)
 
             # Calculate expiry time
             ttl_seconds = self.ttl_config.get(query_type, self.ttl_config["general"])
