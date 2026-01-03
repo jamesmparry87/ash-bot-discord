@@ -17,7 +17,15 @@
 - **Editor:** VS Code (using Cline with Claude Sonnet 4.5)
 - **Testing:** pytest
 
-## 4. Git & Release Workflow
+## 4. Project Structure & Architecture
+- **Modular Discord bot** with separated concerns
+- Main bot logic in `Live/bot/` directory with organized modules
+- **Always read `PROJECT_MAP.md` FIRST** before making any code changes - it maps tasks to specific files
+- Avoid editing legacy files (e.g., `Live/ash_bot_fallback.py`)
+- Use the specific module files rather than loading the entire codebase
+- The modular architecture reduces context window usage by 90%+
+
+## 5. Git & Release Workflow
 We follow a strict branching strategy:
 - **`develop`**: The working branch. All new features and tests are written here. Automated pytest runs happen here.
 - **`stable`**: Release candidate branch. Merged from `develop` when features are stable.
