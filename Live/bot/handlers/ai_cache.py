@@ -210,24 +210,31 @@ class AIResponseCache:
         """
         normalized_query = self._normalize_query(query)
 
-        # NEW: Detect query type to prevent mismatches
+        # Detect query type and category
         query_type = self._detect_query_type(query)
+        query_category = self._detect_query_category(query)
 
-        # NEW: Calculate query characteristics
+        # Calculate query characteristics
         query_words = set(normalized_query.split())
         query_length = len(query_words)
 
-        # NEW: Adjust similarity threshold based on query length and type
-        # Short messages need stricter matching to avoid false positives
-        adjusted_threshold = similarity_threshold
-        if query_length < 5:
-            adjusted_threshold = 0.95  # Very strict for short messages
-        elif query_length < 10:
-            adjusted_threshold = 0.90  # Stricter for medium messages
+        # AGGRESSIVE RESTRICTION: Disable fuzzy matching for most query types
+        # Only enable for FAQ and gaming data queries with very high thresholds
+        adjusted_threshold = 0.99  # Default: essentially exact match only
 
-        # CRITICAL: Conversational responses should NEVER match against questions
-        if query_type == 'conversational':
-            # Only match other conversational responses, with very strict similarity
+        # Whitelist: Only enable fuzzy matching for safe categories
+        if query_category == 'faq':
+            # FAQ responses can have moderate fuzzy matching
+            adjusted_threshold = 0.92
+        elif query_category == 'gaming_query':
+            # Gaming data queries can have strict fuzzy matching
+            adjusted_threshold = 0.95
+        elif query_type == 'conversational':
+            # NEVER fuzzy match conversational responses
+            logger.debug(f"Cache: Skipping fuzzy match for conversational query")
+            return None  # Skip fuzzy matching entirely
+        elif query_type == 'question' and query_category == 'general':
+            # General questions require near-exact match
             adjusted_threshold = 0.98
 
         best_match = None
