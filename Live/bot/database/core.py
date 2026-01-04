@@ -23,12 +23,12 @@ logger = logging.getLogger(__name__)
 class DatabaseManager:
     """
     Base database manager with connection handling and security utilities.
-    
+
     This class provides the core functionality for database connections,
     SQL injection prevention, and schema initialization. Domain-specific
     database classes inherit from or compose with this class.
     """
-    
+
     # SQL Injection Prevention: Whitelisted columns for ORDER BY clauses
     PLAYED_GAMES_COLUMNS = [
         'id', 'canonical_name', 'series_name', 'genre', 'release_year',
@@ -40,7 +40,7 @@ class DatabaseManager:
     def __init__(self):
         """
         Initialize database manager.
-        
+
         Reads DATABASE_URL from environment and establishes connection.
         If DATABASE_URL is not set, database features will be disabled.
         """
@@ -91,10 +91,10 @@ class DatabaseManager:
     def get_connection(self):
         """
         Get database connection with retry logic.
-        
+
         Always creates a fresh connection for each operation to avoid stale connections.
         This is more reliable than trying to reuse connections.
-        
+
         Returns:
             psycopg2 connection object or None if connection fails
         """
@@ -113,7 +113,7 @@ class DatabaseManager:
     def init_database(self):
         """
         Initialize database tables and schema.
-        
+
         Creates all necessary tables if they don't exist. This method is called
         automatically during __init__ if DATABASE_URL is set.
         """
@@ -183,12 +183,12 @@ class DatabaseManager:
 
                 # Create indexes for played_games
                 cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_played_games_canonical_name 
+                    CREATE INDEX IF NOT EXISTS idx_played_games_canonical_name
                     ON played_games(canonical_name)
                 """)
-                
+
                 cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_played_games_series_name 
+                    CREATE INDEX IF NOT EXISTS idx_played_games_series_name
                     ON played_games(series_name)
                 """)
 
@@ -285,12 +285,12 @@ class DatabaseManager:
                 """)
 
                 cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_trivia_approval_user_status 
+                    CREATE INDEX IF NOT EXISTS idx_trivia_approval_user_status
                     ON trivia_approval_sessions(user_id, status)
                 """)
-                
+
                 cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_trivia_approval_expires 
+                    CREATE INDEX IF NOT EXISTS idx_trivia_approval_expires
                     ON trivia_approval_sessions(expires_at)
                 """)
 
@@ -319,12 +319,12 @@ class DatabaseManager:
                 """)
 
                 cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_game_review_user_status 
+                    CREATE INDEX IF NOT EXISTS idx_game_review_user_status
                     ON game_review_sessions(user_id, status)
                 """)
-                
+
                 cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_game_review_expires 
+                    CREATE INDEX IF NOT EXISTS idx_game_review_expires
                     ON game_review_sessions(expires_at)
                 """)
 
@@ -372,12 +372,12 @@ class DatabaseManager:
                 """)
 
                 cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_ai_alert_log_created 
+                    CREATE INDEX IF NOT EXISTS idx_ai_alert_log_created
                     ON ai_alert_log(created_at)
                 """)
-                
+
                 cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_ai_alert_log_type_severity 
+                    CREATE INDEX IF NOT EXISTS idx_ai_alert_log_type_severity
                     ON ai_alert_log(alert_type, severity)
                 """)
 
@@ -395,7 +395,7 @@ class DatabaseManager:
     def close(self):
         """
         Close database connection.
-        
+
         Should be called when shutting down the bot or during cleanup.
         """
         if self.connection:

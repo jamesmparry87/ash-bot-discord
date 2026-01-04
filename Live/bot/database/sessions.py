@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class SessionDatabase:
     """
     Handles approval sessions and game review workflows.
-    
+
     This class manages persistent conversation sessions that survive
     bot restarts, allowing moderators to continue approval flows.
     """
@@ -27,7 +27,7 @@ class SessionDatabase:
     def __init__(self, db_manager):
         """
         Initialize session database handler.
-        
+
         Args:
             db_manager: DatabaseManager instance for connection access
         """
@@ -80,10 +80,10 @@ class SessionDatabase:
     ) -> Optional[int]:
         """
         Create a new persistent approval session.
-        
+
         Approval sessions survive bot restarts and allow moderators to
         continue approval workflows across disconnections.
-        
+
         Args:
             user_id: Discord user ID
             session_type: Type of session (e.g., 'question_approval')
@@ -91,7 +91,7 @@ class SessionDatabase:
             question_data: Data being approved (question details)
             conversation_data: Additional conversation state
             timeout_minutes: Session expiration timeout (default: 180 minutes)
-            
+
         Returns:
             Session ID if successful, None otherwise
         """
@@ -165,11 +165,11 @@ class SessionDatabase:
     def get_approval_session(self, user_id: int, session_type: str = 'question_approval') -> Optional[Dict[str, Any]]:
         """
         Get active approval session for user.
-        
+
         Args:
             user_id: Discord user ID
             session_type: Session type to retrieve
-            
+
         Returns:
             Session data dict with parsed JSON fields, or None if not found
         """
@@ -216,14 +216,14 @@ class SessionDatabase:
     ) -> bool:
         """
         Update approval session data and activity.
-        
+
         Args:
             session_id: Session ID to update
             conversation_step: New conversation step
             question_data: Updated question data
             conversation_data: Updated conversation data
             increment_restart_count: Whether to increment restart counter
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -281,11 +281,11 @@ class SessionDatabase:
     def complete_approval_session(self, session_id: int, status: str = 'completed') -> bool:
         """
         Mark approval session as completed or cancelled.
-        
+
         Args:
             session_id: Session ID to complete
             status: Final status ('completed', 'cancelled', 'expired')
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -318,9 +318,9 @@ class SessionDatabase:
     def get_all_active_approval_sessions(self) -> List[Dict[str, Any]]:
         """
         Get all active approval sessions (for restoration on startup).
-        
+
         Used when bot restarts to restore in-progress approval workflows.
-        
+
         Returns:
             List of session dicts with parsed JSON fields
         """
@@ -358,9 +358,9 @@ class SessionDatabase:
     def cleanup_expired_approval_sessions(self) -> int:
         """
         Clean up expired approval sessions.
-        
+
         Marks expired sessions as 'expired' status for tracking purposes.
-        
+
         Returns:
             Number of sessions cleaned up
         """
@@ -407,10 +407,10 @@ class SessionDatabase:
     ) -> Optional[int]:
         """
         Create a new game review session for low-confidence matches.
-        
+
         When automatic game matching has low confidence, this creates
         a review session for moderators to approve/reject the match.
-        
+
         Args:
             user_id: Discord user ID (moderator)
             original_title: Original video/VOD title
@@ -421,7 +421,7 @@ class SessionDatabase:
             igdb_data: IGDB API data for the match
             video_url: Optional URL to video/VOD
             timeout_hours: Session expiration (default: 24 hours)
-            
+
         Returns:
             Session ID if successful, None otherwise
         """
@@ -458,7 +458,7 @@ class SessionDatabase:
                     logger.info(f"Created game review session {session_id} for user {user_id}")
                     return session_id
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error creating game review session: {e}")
             conn.rollback()
@@ -470,10 +470,10 @@ class SessionDatabase:
     def get_game_review_session(self, user_id: int) -> Optional[Dict[str, Any]]:
         """
         Get active game review session for user.
-        
+
         Args:
             user_id: Discord user ID
-            
+
         Returns:
             Session data dict with parsed JSON and list fields, or None
         """
@@ -499,10 +499,11 @@ class SessionDatabase:
                     session_dict['igdb_data'] = json.loads(session_dict.get('igdb_data', '{}'))
                     session_dict['conversation_data'] = json.loads(session_dict.get('conversation_data', '{}'))
                     alt_names = session_dict.get('alternative_names', '')
-                    session_dict['alternative_names'] = self.db._parse_comma_separated_list(alt_names) if alt_names else []
+                    session_dict['alternative_names'] = self.db._parse_comma_separated_list(
+                        alt_names) if alt_names else []
                     return session_dict
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error getting game review session for user {user_id}: {e}")
             return None
@@ -520,14 +521,14 @@ class SessionDatabase:
     ) -> bool:
         """
         Update game review session.
-        
+
         Args:
             session_id: Session ID to update
             conversation_step: New conversation step
             conversation_data: Updated conversation data
             approved_name: Approved game name (if review complete)
             approved_data: Approved game data (if review complete)
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -570,7 +571,7 @@ class SessionDatabase:
                 conn.commit()
 
                 return cur.rowcount > 0
-                
+
         except Exception as e:
             logger.error(f"Error updating game review session {session_id}: {e}")
             conn.rollback()
@@ -582,11 +583,11 @@ class SessionDatabase:
     def complete_game_review_session(self, session_id: int, status: str = 'approved') -> bool:
         """
         Complete game review session with final status.
-        
+
         Args:
             session_id: Session ID to complete
             status: Final status ('approved', 'rejected', 'cancelled')
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -607,7 +608,7 @@ class SessionDatabase:
                 if success:
                     logger.info(f"Completed game review session {session_id} with status: {status}")
                 return success
-                
+
         except Exception as e:
             logger.error(f"Error completing game review session {session_id}: {e}")
             conn.rollback()
@@ -619,10 +620,10 @@ class SessionDatabase:
     def get_pending_game_reviews(self, user_id: int) -> List[Dict[str, Any]]:
         """
         Get all pending game review sessions for a user.
-        
+
         Args:
             user_id: Discord user ID
-            
+
         Returns:
             List of pending review session dicts
         """
@@ -647,10 +648,11 @@ class SessionDatabase:
                     session_dict['igdb_data'] = json.loads(session_dict.get('igdb_data', '{}'))
                     session_dict['conversation_data'] = json.loads(session_dict.get('conversation_data', '{}'))
                     alt_names = session_dict.get('alternative_names', '')
-                    session_dict['alternative_names'] = self.db._parse_comma_separated_list(alt_names) if alt_names else []
+                    session_dict['alternative_names'] = self.db._parse_comma_separated_list(
+                        alt_names) if alt_names else []
                     sessions.append(session_dict)
                 return sessions
-                
+
         except Exception as e:
             logger.error(f"Error getting pending game reviews for user {user_id}: {e}")
             return []
@@ -661,7 +663,7 @@ class SessionDatabase:
     def cleanup_expired_game_review_sessions(self) -> int:
         """
         Clean up expired game review sessions.
-        
+
         Returns:
             Number of sessions cleaned up
         """

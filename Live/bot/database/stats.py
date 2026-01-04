@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class StatsDatabase:
     """
     Handles analytics, statistics, and AI usage tracking.
-    
+
     This class manages platform comparisons, engagement metrics,
     AI quota tracking, and alert logging for the bot.
     """
@@ -29,7 +29,7 @@ class StatsDatabase:
     def __init__(self, db_manager):
         """
         Initialize stats database handler.
-        
+
         Args:
             db_manager: DatabaseManager instance for connection access
         """
@@ -40,10 +40,10 @@ class StatsDatabase:
     def get_platform_comparison_stats(self) -> Dict[str, Any]:
         """
         Get comprehensive platform comparison statistics.
-        
+
         Compares YouTube vs Twitch content performance including
         game counts, views, and engagement metrics.
-        
+
         Returns:
             Dict with youtube, twitch, and cross_platform stats
         """
@@ -121,11 +121,11 @@ class StatsDatabase:
     def get_engagement_metrics(self, game_name: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
         """
         Calculate engagement efficiency metrics (views per episode/hour).
-        
+
         Args:
             game_name: Optional specific game to get metrics for
             limit: Number of top games to return if game_name is None
-            
+
         Returns:
             List of game engagement metric dicts
         """
@@ -213,11 +213,11 @@ class StatsDatabase:
     ) -> Dict[str, Any]:
         """
         Get ranking context for a game (where it stands compared to others).
-        
+
         Args:
             game_name: Game to get ranking for
             metric: Metric to rank by ('total_views', 'youtube_views', 'twitch_views', etc.)
-            
+
         Returns:
             Dict with rank, total games, and percentile info
         """
@@ -228,7 +228,7 @@ class StatsDatabase:
         try:
             with conn.cursor() as cur:
                 # Validate metric to prevent SQL injection
-                allowed_metrics = ['total_views', 'youtube_views', 'twitch_views', 
+                allowed_metrics = ['total_views', 'youtube_views', 'twitch_views',
                                    'total_playtime_minutes', 'total_episodes']
                 if metric not in allowed_metrics:
                     metric = 'total_views'
@@ -241,14 +241,14 @@ class StatsDatabase:
 
                 query = f"""
                     WITH ranked_games AS (
-                        SELECT 
+                        SELECT
                             canonical_name,
                             {metric_query} as metric_value,
                             ROW_NUMBER() OVER (ORDER BY {metric_query} DESC) as rank
                         FROM played_games
                         WHERE {metric_query} > 0
                     )
-                    SELECT 
+                    SELECT
                         rank,
                         metric_value,
                         (SELECT COUNT(*) FROM ranked_games) as total_games
@@ -286,9 +286,9 @@ class StatsDatabase:
     def load_ai_usage_stats(self) -> Optional[Dict[str, Any]]:
         """
         Load AI usage statistics from database for today.
-        
+
         Creates a new record if one doesn't exist for today.
-        
+
         Returns:
             Dict with AI usage stats, or None if error
         """
@@ -339,10 +339,10 @@ class StatsDatabase:
     def save_ai_usage_stats(self, stats: Dict[str, Any]) -> bool:
         """
         Save AI usage statistics to database.
-        
+
         Args:
             stats: Dict containing AI usage statistics
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -399,7 +399,7 @@ class StatsDatabase:
     def increment_ai_request(self) -> bool:
         """
         Atomically increment AI request counters in database.
-        
+
         Returns:
             True if successful, False otherwise
         """
@@ -438,7 +438,7 @@ class StatsDatabase:
     def increment_ai_error(self) -> bool:
         """
         Atomically increment AI error counter in database.
-        
+
         Returns:
             True if successful, False otherwise
         """
@@ -482,14 +482,14 @@ class StatsDatabase:
     ) -> Optional[int]:
         """
         Log an AI alert to the database.
-        
+
         Args:
             alert_type: Type of alert (e.g., 'quota_exhausted', 'model_switch')
             severity: Alert severity ('low', 'medium', 'high', 'critical')
             message: Alert message
             error_details: Optional structured error data
             dm_sent: Whether moderator was notified via DM
-            
+
         Returns:
             Alert ID if successful, None otherwise
         """
@@ -540,13 +540,13 @@ class StatsDatabase:
     ) -> List[Dict[str, Any]]:
         """
         Get recent AI alerts for aggregation logic.
-        
+
         Used to prevent alert spam by checking if similar alerts were recently sent.
-        
+
         Args:
             alert_type: Optional filter by alert type
             minutes: How far back to look (default: 5 minutes)
-            
+
         Returns:
             List of recent alert dicts
         """
@@ -586,10 +586,10 @@ class StatsDatabase:
     def get_ai_usage_summary(self, days: int = 7) -> Dict[str, Any]:
         """
         Get AI usage summary for the last N days.
-        
+
         Args:
             days: Number of days to summarize (default: 7)
-            
+
         Returns:
             Dict with summary statistics
         """
