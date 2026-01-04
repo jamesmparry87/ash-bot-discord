@@ -69,16 +69,7 @@ This document provides an at-a-glance reference for understanding which files to
 - Game commands and interactions
 - Game state management
 - Game statistics and tracking
-
-### `Live/bot/commands/played_games.py`
-
-**Purpose**: Played games tracking system
-**Edit for**:
-
-- Adding games to played list
-- Game completion tracking
-- Played games statistics
-- User game history
+- Played games tracking and history
 
 ### `Live/bot/commands/reminders.py`
 
@@ -99,16 +90,6 @@ This document provides an at-a-glance reference for understanding which files to
 - Trivia game logic
 - Scoring and leaderboards
 - Trivia categories
-
-### `Live/bot/commands/moderation.py`
-
-**Purpose**: Server moderation tools
-**Edit for**:
-
-- Moderation commands
-- Auto-moderation rules
-- User warnings and actions
-- Content filtering
 
 ### `Live/bot/commands/utility.py`
 
@@ -147,9 +128,29 @@ This document provides an at-a-glance reference for understanding which files to
 **Edit for**:
 
 - AI response generation
-- OpenAI/Claude integration
+- Gemini/Claude integration
 - Response formatting and filtering
 - AI conversation context
+
+### `Live/bot/handlers/ai_cache.py`
+
+**Purpose**: AI response caching system
+**Edit for**:
+
+- Cache matching logic and similarity thresholds
+- TTL (time-to-live) configuration
+- Cache statistics and optimization
+- Query type detection and categorization
+
+### `Live/bot/handlers/ai_validation.py`
+
+**Purpose**: AI response validation
+**Edit for**:
+
+- Response quality checks
+- Content filtering
+- Validation rules
+- Response safety checks
 
 ### `Live/bot/handlers/message_handler.py`
 
@@ -180,6 +181,66 @@ This document provides an at-a-glance reference for understanding which files to
 - Follow-up question handling
 - Jonesy disambiguation (User vs Cat)
 - Conversation context tracking
+
+### `Live/bot/handlers/twitch_view_response.py`
+
+**Purpose**: Twitch view count response handling
+**Edit for**:
+
+- Twitch view statistics formatting
+- View count responses
+- Twitch data presentation
+
+## Persona System (Phase 3)
+
+### `Live/bot/persona/prompts.py`
+
+**Purpose**: AI system prompts and personality definition
+**Edit for**:
+
+- Ash character personality traits
+- System prompt configuration
+- Behavioral instructions
+- Character consistency rules
+
+### `Live/bot/persona/context_builder.py`
+
+**Purpose**: Context building for AI interactions
+**Edit for**:
+
+- User relationship context
+- Clearance level context
+- Operational context generation
+- Dynamic context assembly
+
+### `Live/bot/persona/examples.py`
+
+**Purpose**: Few-shot examples for AI learning
+**Edit for**:
+
+- Example conversations
+- Response patterns
+- Personality demonstrations
+- Training examples
+
+### `Live/bot/persona/faq_handler.py`
+
+**Purpose**: FAQ routing and handling
+**Edit for**:
+
+- FAQ detection logic
+- FAQ response routing
+- FAQ category management
+
+### `Live/bot/persona/faqs.py`
+
+**Purpose**: FAQ content and responses
+**Edit for**:
+
+- FAQ question/answer pairs
+- FAQ categories
+- Static FAQ responses
+- FAQ metadata
 
 ## Integration Modules (Phase 3)
 
@@ -312,14 +373,18 @@ This document provides an at-a-glance reference for understanding which files to
 
 | Task Type | Primary File | Secondary Files |
 |-----------|-------------|----------------|
-| Add FAQ response | `bot/config.py` | - |
+| Add FAQ response | `bot/persona/faqs.py` | `bot/persona/faq_handler.py` |
 | Fix permissions | `bot/utils/permissions.py` | - |
 | Add slash command | Relevant `bot/commands/*.py` | `bot/main.py` (register) |
 | Database issue | `bot/database/__init__.py` | `database.py` |
-| AI responses | `bot/handlers/ai_handler.py` | `bot/config.py` |
+| AI responses | `bot/handlers/ai_handler.py` | `bot/persona/prompts.py` |
+| AI cache issues | `bot/handlers/ai_cache.py` | - |
+| AI validation | `bot/handlers/ai_validation.py` | - |
+| Persona/character | `bot/persona/prompts.py` | `bot/persona/context_builder.py` |
+| Few-shot examples | `bot/persona/examples.py` | - |
 | Message processing | `bot/handlers/message_handler.py` | - |
 | YouTube features | `bot/integrations/youtube.py` | - |
-| Twitch features | `bot/integrations/twitch.py` | - |
+| Twitch features | `bot/integrations/twitch.py` | `bot/handlers/twitch_view_response.py` |
 | Scheduled tasks | `bot/tasks/scheduled.py` | - |
 | Reminders | `bot/commands/reminders.py` | `bot/tasks/reminders.py` |
 | Text formatting | `bot/utils/formatters.py` | - |
