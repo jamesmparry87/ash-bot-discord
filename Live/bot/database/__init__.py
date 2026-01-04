@@ -19,16 +19,16 @@ Backward Compatibility:
     All existing DatabaseManager methods are still available for gradual migration.
 """
 
-# Import core database manager
-from .core import DatabaseManager
-
 # Import domain modules
 from .config import ConfigDatabase
+
+# Import core database manager
+from .core import DatabaseManager
+from .games import GamesDatabase
 from .sessions import SessionDatabase
-from .users import UserDatabase
 from .stats import StatsDatabase
 from .trivia import TriviaDatabase
-from .games import GamesDatabase
+from .users import UserDatabase
 
 # Singleton instance
 _db_instance = None

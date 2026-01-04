@@ -16,6 +16,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, cast
 from zoneinfo import ZoneInfo
+
 from psycopg2.extras import RealDictRow
 
 logger = logging.getLogger(__name__)
