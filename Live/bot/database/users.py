@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class UserDatabase:
     """
     Handles user management: strikes, reminders, and game recommendations.
-    
+
     This class manages user-related data including moderation strikes,
     scheduled reminders with optional auto-actions, and community game
     recommendation submissions.
@@ -27,7 +27,7 @@ class UserDatabase:
     def __init__(self, db_manager):
         """
         Initialize user database handler.
-        
+
         Args:
             db_manager: DatabaseManager instance for connection access
         """
@@ -38,10 +38,10 @@ class UserDatabase:
     def get_user_strikes(self, user_id: int) -> int:
         """
         Get strike count for a user.
-        
+
         Args:
             user_id: Discord user ID
-            
+
         Returns:
             Strike count (0 if user has no strikes)
         """
@@ -71,9 +71,9 @@ class UserDatabase:
     def set_user_strikes(self, user_id: int, count: int):
         """
         Set strike count for a user.
-        
+
         Uses INSERT ... ON CONFLICT to update existing records or create new ones.
-        
+
         Args:
             user_id: Discord user ID
             count: New strike count
@@ -101,10 +101,10 @@ class UserDatabase:
     def add_user_strike(self, user_id: int) -> int:
         """
         Add a strike to a user and return new count.
-        
+
         Args:
             user_id: Discord user ID
-            
+
         Returns:
             New strike count after addition
         """
@@ -116,7 +116,7 @@ class UserDatabase:
     def get_all_strikes(self) -> Dict[int, int]:
         """
         Get all users with strikes.
-        
+
         Returns:
             Dict mapping user_id to strike_count for all users with strikes > 0
         """
@@ -150,10 +150,10 @@ class UserDatabase:
     def bulk_import_strikes(self, strikes_data: Dict[int, int]) -> int:
         """
         Bulk import strike data.
-        
+
         Args:
             strikes_data: Dict mapping user_id to strike_count
-            
+
         Returns:
             Number of records imported
         """
@@ -219,7 +219,7 @@ class UserDatabase:
     ) -> Optional[int]:
         """
         Add a reminder to the database.
-        
+
         Args:
             user_id: Discord user ID
             reminder_text: Reminder message
@@ -229,7 +229,7 @@ class UserDatabase:
             auto_action_enabled: Whether to execute auto-action after delivery
             auto_action_type: Type of auto-action (e.g., 'start_trivia')
             auto_action_data: Additional data for auto-action
-            
+
         Returns:
             Reminder ID if successful, None otherwise
         """
@@ -278,11 +278,11 @@ class UserDatabase:
     def get_user_reminders(self, user_id: int, status: str = "pending") -> List[Dict[str, Any]]:
         """
         Get all reminders for a user.
-        
+
         Args:
             user_id: Discord user ID
             status: Reminder status filter ('pending', 'delivered', etc.)
-            
+
         Returns:
             List of reminder dicts
         """
@@ -312,10 +312,10 @@ class UserDatabase:
     def get_due_reminders(self, current_time) -> List[Dict[str, Any]]:
         """
         Get all reminders that are due for delivery.
-        
+
         Args:
             current_time: Current datetime to compare against
-            
+
         Returns:
             List of due reminder dicts
         """
@@ -352,13 +352,13 @@ class UserDatabase:
     ) -> bool:
         """
         Update reminder status.
-        
+
         Args:
             reminder_id: Reminder ID to update
             status: New status ('delivered', 'cancelled', 'auto_completed', etc.)
             delivered_at: Optional delivery timestamp
             auto_executed_at: Optional auto-action execution timestamp
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -397,11 +397,11 @@ class UserDatabase:
     def cancel_user_reminder(self, reminder_id: int, user_id: int) -> Optional[Dict[str, Any]]:
         """
         Cancel a reminder (only if it belongs to the user).
-        
+
         Args:
             reminder_id: Reminder ID to cancel
             user_id: Discord user ID (must match reminder owner)
-            
+
         Returns:
             Cancelled reminder dict if successful, None otherwise
         """
@@ -440,12 +440,12 @@ class UserDatabase:
     def get_reminders_awaiting_auto_action(self, current_time) -> List[Dict[str, Any]]:
         """
         Get reminders that are past delivery time and waiting for auto-action.
-        
+
         Auto-actions execute 5 minutes after reminder delivery.
-        
+
         Args:
             current_time: Current datetime
-            
+
         Returns:
             List of reminders ready for auto-action
         """
@@ -480,7 +480,7 @@ class UserDatabase:
     def get_all_pending_reminders(self) -> List[Dict[str, Any]]:
         """
         Get all pending reminders for moderator management.
-        
+
         Returns:
             List of all pending reminder dicts
         """
@@ -509,10 +509,10 @@ class UserDatabase:
     def get_pending_reminders_for_user(self, user_id: int) -> List[Dict[str, Any]]:
         """
         Get pending reminders for a specific user.
-        
+
         Args:
             user_id: Discord user ID
-            
+
         Returns:
             List of pending reminder dicts for the user
         """
@@ -542,10 +542,10 @@ class UserDatabase:
     def get_reminder_by_id(self, reminder_id: int) -> Optional[Dict[str, Any]]:
         """
         Get a specific reminder by ID.
-        
+
         Args:
             reminder_id: Reminder ID
-            
+
         Returns:
             Reminder dict if found, None otherwise
         """
@@ -574,10 +574,10 @@ class UserDatabase:
     async def cancel_reminder(self, reminder_id: int) -> bool:
         """
         Cancel a reminder by ID (admin version - no user restriction).
-        
+
         Args:
             reminder_id: Reminder ID to cancel
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -613,12 +613,12 @@ class UserDatabase:
     def add_game_recommendation(self, name: str, reason: str, added_by: str) -> bool:
         """
         Add a game recommendation.
-        
+
         Args:
             name: Game name
             reason: Why user recommends it
             added_by: Discord username who recommended
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -645,7 +645,7 @@ class UserDatabase:
     def get_all_games(self) -> List[Dict[str, Any]]:
         """
         Get all game recommendations.
-        
+
         Returns:
             List of game recommendation dicts
         """
@@ -672,10 +672,10 @@ class UserDatabase:
     def remove_game_by_index(self, index: int) -> Optional[Dict[str, Any]]:
         """
         Remove game by index (1-based).
-        
+
         Args:
             index: 1-based index in the list
-            
+
         Returns:
             Removed game dict if successful, None otherwise
         """
@@ -689,10 +689,10 @@ class UserDatabase:
     def remove_game_by_name(self, name: str) -> Optional[Dict[str, Any]]:
         """
         Remove game by name (fuzzy match).
-        
+
         Args:
             name: Game name (will try fuzzy matching)
-            
+
         Returns:
             Removed game dict if successful, None otherwise
         """
@@ -719,10 +719,10 @@ class UserDatabase:
     def remove_game_by_id(self, game_id: int) -> Optional[Dict[str, Any]]:
         """
         Remove game by database ID.
-        
+
         Args:
             game_id: Game recommendation ID
-            
+
         Returns:
             Removed game dict if successful, None otherwise
         """
@@ -752,10 +752,10 @@ class UserDatabase:
     def game_exists(self, name: str) -> bool:
         """
         Check if a game recommendation already exists (fuzzy match).
-        
+
         Args:
             name: Game name to check
-            
+
         Returns:
             True if exists, False otherwise
         """
@@ -774,10 +774,10 @@ class UserDatabase:
     def bulk_import_games(self, games_data: List[Dict[str, str]]) -> int:
         """
         Bulk import game recommendations.
-        
+
         Args:
             games_data: List of dicts with 'name', 'reason', 'added_by'
-            
+
         Returns:
             Number of games imported
         """
@@ -789,7 +789,7 @@ class UserDatabase:
             with conn.cursor() as cur:
                 # Prepare data for batch insert
                 data_tuples = [
-                    (game["name"], game["reason"], game["added_by"]) 
+                    (game["name"], game["reason"], game["added_by"])
                     for game in games_data
                 ]
 
