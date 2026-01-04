@@ -16,6 +16,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, cast
 from zoneinfo import ZoneInfo
+
 from psycopg2.extras import RealDictRow
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 class GamesDatabase:
     """
     Handles all played games database operations.
-    
+
     This class manages the complete played_games table including
     CRUD operations, enrichment, analytics, and data quality.
     """
@@ -32,7 +33,7 @@ class GamesDatabase:
     def __init__(self, db_manager):
         """
         Initialize games database handler.
-        
+
         Args:
             db_manager: DatabaseManager instance for connection access
         """
@@ -2656,7 +2657,6 @@ class GamesDatabase:
 
     # --- Trivia System Methods ---
 
-    
 
 # Export
 __all__ = ['GamesDatabase']
