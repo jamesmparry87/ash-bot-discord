@@ -6,15 +6,15 @@ organized by domain: core, config, sessions, users, stats, trivia, and games.
 
 Usage:
     from bot.database import get_database
-    
+
     db = get_database()
-    
+
     # Access domain modules:
     db.config.get_config_value('key')
     db.users.get_user_strikes(user_id)
     db.trivia.add_trivia_question(...)
     db.games.add_played_game(...)
-    
+
 Backward Compatibility:
     All existing DatabaseManager methods are still available for gradual migration.
 """
@@ -37,7 +37,7 @@ _db_instance = None
 def get_database() -> DatabaseManager:
     """
     Get the singleton database manager instance.
-    
+
     Returns:
         DatabaseManager: Fully initialized database manager with all domain modules
     """
@@ -54,7 +54,7 @@ db = get_database()
 __all__ = [
     'DatabaseManager',
     'ConfigDatabase',
-    'SessionDatabase', 
+    'SessionDatabase',
     'UserDatabase',
     'StatsDatabase',
     'TriviaDatabase',

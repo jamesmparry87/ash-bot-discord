@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class TriviaDatabase:
     """
     Handles all trivia-related database operations.
-    
+
     This class manages the complete trivia system including questions,
     sessions, answers, evaluation logic, and statistics tracking.
     """
@@ -35,7 +35,7 @@ class TriviaDatabase:
     def __init__(self, db_manager):
         """
         Initialize trivia database handler.
-        
+
         Args:
             db_manager: DatabaseManager instance for connection access
         """
@@ -1602,6 +1602,7 @@ class TriviaDatabase:
             return {"error": str(e), "cleaned_sessions": 0}
 
     # --- M
+
 
 # Export
 __all__ = ['TriviaDatabase']
