@@ -1,5 +1,5 @@
 # Ignore archive folder
-archive/
+# archive/
 
 # Python cache files
 __pycache__/
