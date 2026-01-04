@@ -39,7 +39,7 @@ class DatabaseManager:
 
     def __init__(self):
         """
-        Initialize database manager.
+        Initialize database manager with all domain modules.
         
         Reads DATABASE_URL from environment and establishes connection.
         If DATABASE_URL is not set, database features will be disabled.
@@ -52,6 +52,62 @@ class DatabaseManager:
         else:
             self.connection = None
             self.init_database()
+        
+        # Initialize domain modules (lazy loaded when first accessed)
+        self._config = None
+        self._sessions = None
+        self._users = None
+        self._stats = None
+        self._trivia = None
+        self._games = None
+    
+    @property
+    def config(self):
+        """Lazy-load config database module."""
+        if self._config is None:
+            from .config import ConfigDatabase
+            self._config = ConfigDatabase(self)
+        return self._config
+    
+    @property
+    def sessions(self):
+        """Lazy-load sessions database module."""
+        if self._sessions is None:
+            from .sessions import SessionDatabase
+            self._sessions = SessionDatabase(self)
+        return self._sessions
+    
+    @property
+    def users(self):
+        """Lazy-load users database module."""
+        if self._users is None:
+            from .users import UserDatabase
+            self._users = UserDatabase(self)
+        return self._users
+    
+    @property
+    def stats(self):
+        """Lazy-load stats database module."""
+        if self._stats is None:
+            from .stats import StatsDatabase
+            self._stats = StatsDatabase(self)
+        return self._stats
+    
+    @property
+    def trivia(self):
+        """Lazy-load trivia database module."""
+        if self._trivia is None:
+            from .trivia import TriviaDatabase
+            self._trivia = TriviaDatabase(self)
+        return self._trivia
+    
+    @property
+    def games(self):
+        """Lazy-load games database module."""
+        if self._games is None:
+            from .games import GamesDatabase
+            self._games = GamesDatabase(self)
+        return self._games
 
     def _validate_column_name(self, column: str, allowed_columns: List[str]) -> str:
         """
