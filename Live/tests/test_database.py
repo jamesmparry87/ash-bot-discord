@@ -14,7 +14,7 @@ if live_path not in sys.path:
     sys.path.insert(0, live_path)
 
 try:
-    from bot.database_module import DatabaseManager  # type: ignore
+    from bot.database import DatabaseManager  # type: ignore
 except ImportError:
     # Create a proper mock DatabaseManager class for type checking
     class DatabaseManager:  # type: ignore

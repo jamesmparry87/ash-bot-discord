@@ -64,14 +64,22 @@ except Exception as e:
 
 db: Any = None
 
-# Import the enhanced database manager with trivia methods
+# Import the NEW modular database system
 try:
-    from bot.database_module import DatabaseManager as EnhancedDatabaseManager
-    from bot.database_module import get_database
+    from bot.database import DatabaseManager
+    from bot.database import get_database
     db = get_database()
-    print("✅ Database manager loaded successfully")
+    print("✅ Database manager loaded successfully (MODULAR)")
 except ImportError as e:
-    print(f"❌ Failed to import enhanced database manager: {e}")
+    print(f"❌ Failed to import modular database manager: {e}")
+    # Fallback to old structure if new one fails
+    try:
+        from bot.database_module import DatabaseManager
+        from bot.database_module import get_database
+        db = get_database()
+        print("⚠️ Using legacy database_module (fallback)")
+    except ImportError as e2:
+        print(f"❌ Both database imports failed: {e2}")
 
 # Import ModeratorFAQHandler system
 try:

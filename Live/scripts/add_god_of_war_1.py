@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 try:
     import aiohttp
-    from bot.database_module import get_database
+    from bot.database import get_database
     from bot.integrations import igdb
     from bot.integrations.youtube import get_playlist_videos_with_views, parse_youtube_duration
 except ImportError as e:

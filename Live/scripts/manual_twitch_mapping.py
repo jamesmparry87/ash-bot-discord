@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import aiohttp
-from bot.database_module import get_database
+from bot.database import get_database
 from bot.integrations.twitch import parse_twitch_duration
 
 # Add parent directory to path

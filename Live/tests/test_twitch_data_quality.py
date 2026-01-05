@@ -169,7 +169,7 @@ class TestDatabaseIntegration:
 
     def test_series_organization_query(self):
         """Test get_games_by_series_organized returns proper structure"""
-        from bot.database_module import get_database
+        from bot.database import get_database
 
         db = get_database()
         if not db or not db.database_url:
