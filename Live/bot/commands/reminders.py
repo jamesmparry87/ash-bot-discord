@@ -12,6 +12,7 @@ import discord
 from discord.ext import commands
 
 from ..database_module import get_database
+from ..utils.dm_permissions import is_moderator_or_authorized
 
 # Get database instance
 db = get_database()  # type: ignore
@@ -347,9 +348,9 @@ class RemindersCommands(commands.Cog):
             await ctx.send("❌ System error occurred while canceling reminder.")
 
     @commands.command(name="testreminder")
-    @commands.has_permissions(manage_messages=True)
+    @is_moderator_or_authorized()
     async def test_reminder(self, ctx, delay: str = "2m"):
-        """Test scheduled message delivery system (moderators only)"""
+        """Test scheduled message delivery system (moderators and authorized users in DMs)"""
         try:
             import asyncio
             from datetime import datetime, timedelta

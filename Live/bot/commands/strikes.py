@@ -10,6 +10,7 @@ from discord.ext import commands
 
 from ..config import JONESY_USER_ID
 from ..database_module import get_database
+from ..utils.dm_permissions import is_moderator_or_authorized
 
 # Get database instance
 db = get_database()  # type: ignore
@@ -26,9 +27,9 @@ class StrikesCommands(commands.Cog):
         return db
 
     @commands.command(name="strikes")
-    @commands.has_permissions(manage_messages=True)
+    @is_moderator_or_authorized()
     async def get_strikes(self, ctx, member: discord.Member):
-        """Get strike count for a specific user (moderators only)"""
+        """Get strike count for a specific user (moderators and authorized users in DMs)"""
         try:
             database = self._get_db()
             count = database.get_user_strikes(member.id)
