@@ -66,16 +66,14 @@ db: Any = None
 
 # Import the NEW modular database system
 try:
-    from bot.database import DatabaseManager
-    from bot.database import get_database
+    from bot.database import DatabaseManager, get_database
     db = get_database()
     print("✅ Database manager loaded successfully (MODULAR)")
 except ImportError as e:
     print(f"❌ Failed to import modular database manager: {e}")
     # Fallback to old structure if new one fails
     try:
-        from bot.database_module import DatabaseManager
-        from bot.database_module import get_database
+        from bot.database_module import DatabaseManager, get_database
         db = get_database()
         print("⚠️ Using legacy database_module (fallback)")
     except ImportError as e2:
