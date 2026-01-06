@@ -2,9 +2,11 @@
 DM-aware permission checks for commands that need to work in both guild and DM contexts
 """
 
-from discord.ext import commands
-import discord
 from typing import Callable
+
+import discord
+from discord.ext import commands
+
 from ..config import JAM_USER_ID, JONESY_USER_ID
 
 
