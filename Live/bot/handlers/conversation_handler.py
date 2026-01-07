@@ -1643,59 +1643,6 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
 
             await message.reply(preview_msg)
 
-        elif step == 'category_selection':
-            if content in ['1', 'statistics', 'stats']:
-                data['category'] = 'statistics'
-            elif content in ['2', 'games', 'game']:
-                data['category'] = 'games'
-            elif content in ['3', 'series', 'franchise']:
-                data['category'] = 'series'
-            else:
-                await message.reply(
-                    f"⚠️ **Invalid category.** Please respond with **1** (Statistics), **2** (Games), or **3** (Series).\n\n"
-                    f"*Precise categorization required for accurate answer calculation.*"
-                )
-                return
-
-            conversation['step'] = 'preview'
-
-            question_text = data['question_text']
-            category = data['category']
-
-            # --- NEW: Infer query type and calculate preview answer ---
-            inferred_query_type, parameter = _infer_dynamic_query_type(question_text)
-            calculated_answer = "Could not be determined. The question may be too ambiguous."
-            if inferred_query_type:
-                data['dynamic_query_type'] = inferred_query_type
-                data['dynamic_parameter'] = parameter
-                if db:
-                    answer = db.calculate_dynamic_answer(inferred_query_type, parameter)
-                    if answer:
-                        calculated_answer = answer
-                    else:
-                        calculated_answer = "Could not be determined. No data found for this query."
-            else:
-                data['dynamic_query_type'] = category  # Fallback to broad category
-
-            # --- UPDATED: Show preview for database question with answer preview ---
-            preview_msg = (
-                f"📋 **Trivia Question Preview**\n\n"
-                f"**Question:** {question_text}\n\n"
-                f"**Current Answer (calculated now):** {calculated_answer}\n"
-                f"**Note:** *This answer is dynamic and will be recalculated when the question is used.*\n\n"
-                f"**Category:** {category.title()}\n"
-                f"**Type:** Database-Calculated\n"
-                f"**Source:** Moderator Submission\n\n"
-                f"📚 **Available Actions:**\n"
-                f"**1.** ✅ **Submit Question** - Add to trivia database with priority scheduling\n"
-                f"**2.** ✏️ **Edit Question** - Revise the question text\n"
-                f"**3.** 🔧 **Change Category** - Select different category\n"
-                f"**4.** ❌ **Cancel** - Abort question submission\n\n"
-                f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
-                f"*Review question parameters carefully before submission.*")
-
-            await message.reply(preview_msg)
-
         elif step == 'preview':
             if content in ['1', 'submit', 'confirm', 'yes']:
                 # Check if database is available
