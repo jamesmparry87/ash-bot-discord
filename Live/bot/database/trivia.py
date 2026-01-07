@@ -888,6 +888,17 @@ class TriviaDatabase:
                 elif dynamic_query_type == "most_episodes":
                     where_clauses.append("total_episodes > 0")
                     order_by = "ORDER BY total_episodes DESC"
+                
+                # Date-based queries (newest/most recent)
+                elif dynamic_query_type == "newest_game":
+                    where_clauses.append("release_year IS NOT NULL")
+                    order_by = "ORDER BY release_year DESC"
+                elif dynamic_query_type == "most_recent_game":
+                    where_clauses.append("first_played_date IS NOT NULL")
+                    order_by = "ORDER BY first_played_date DESC"
+                elif dynamic_query_type == "oldest_game":
+                    where_clauses.append("release_year IS NOT NULL")
+                    order_by = "ORDER BY release_year ASC"
                 else:
                     return None  # Unknown query type
 
