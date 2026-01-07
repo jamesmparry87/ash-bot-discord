@@ -66,7 +66,6 @@ class GamesCommands(commands.Cog):
 
             if added:
                 RECOMMEND_CHANNEL_ID = 1271568447108550687
-                recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
                 confirm_msg = f"🧾 Recommendation(s) logged: {', '.join(added)}. Efficiency noted."
 
                 # Send confirmation privately to the user via DM
@@ -76,9 +75,11 @@ class GamesCommands(commands.Cog):
                     # If DM fails, send an ephemeral-style message in channel
                     await ctx.send(f"{ctx.author.mention} {confirm_msg}", delete_after=10)
 
-                # Always update the persistent recommendations list
-                if recommend_channel:
-                    await self.post_or_update_recommend_list(ctx, recommend_channel)
+                # Update the persistent recommendations list (only if in a guild)
+                if ctx.guild:
+                    recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
+                    if recommend_channel:
+                        await self.post_or_update_recommend_list(ctx, recommend_channel)
 
             if duplicate:
                 await ctx.send(f"⚠️ Submission rejected: {', '.join(duplicate)} already exist(s) in the database. Redundancy is inefficient. Please submit only unique recommendations.")
