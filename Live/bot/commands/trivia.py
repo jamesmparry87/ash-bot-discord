@@ -1354,7 +1354,7 @@ class TriviaCommands(commands.Cog):
                     try:
                         user = await self.bot.fetch_user(participant['user_id'])
                         name = user.display_name if user else f"User {participant['user_id']}"
-                    except:
+                    except BaseException:
                         name = f"User {participant['user_id']}"
 
                     correct = participant.get('correct_answers', 0)
