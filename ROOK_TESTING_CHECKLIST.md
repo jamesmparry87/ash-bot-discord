@@ -63,11 +63,6 @@ INFO:discord.client:Logged in as: Rook#1234
   - Command: `!strikes @user`
   - Expected: Shows user strike count
   - Module: `db.users.get_user_strikes()`
-  
-- [ ] **Add Strike:**
-  - Command: `!addstrike @user reason`
-  - Expected: Adds strike, updates database
-  - Module: `db.users.add_user_strike()`
 
 - [ ] **Reminder System:**
   - Command: `!testreminder 1m Test reminder`
@@ -99,23 +94,23 @@ INFO:discord.client:Logged in as: Rook#1234
 #### 2.3 Games Database Commands
 
 - [ ] **Add Played Game:**
-  - Command: `!addgame "Game Name" 2024-01-01`
+  - Command: `!addplayedgame "Game Name" | status:completed | episodes:15`
   - Expected: Adds to played_games table
   - Module: `db.games.add_played_game()`
 
 - [ ] **List Games:**
-  - Command: `!games` or `!listgames`
+  - Command: `!listgames` or `!listplayedgames`
   - Expected: Shows all played games
   - Module: `db.games.get_all_played_games()`
 
 - [ ] **Game Search:**
   - Command: `!game "God of War"`
-  - Expected: Finds and displays game details
+  - Expected: Finds and displays game details with stats
   - Module: `db.games.get_played_game()`
 
 - [ ] **Update Game:**
-  - Command: `!updategame <id> views=50000`
-  - Expected: Updates game statistics
+  - Command: `!updateplayedgame <name> status:completed | episodes:20`
+  - Expected: Updates game metadata
   - Module: `db.games.update_played_game()`
 
 #### 2.4 Statistics Commands
@@ -125,31 +120,21 @@ INFO:discord.client:Logged in as: Rook#1234
   - Expected: Shows YouTube vs Twitch comparison
   - Module: `db.stats.get_platform_comparison_stats()`
 
-- [ ] **Engagement Stats:**
-  - Command: `!engagementstats`
-  - Expected: Shows weekly engagement metrics
-  - Module: `db.stats.get_engagement_timeline()`
-
 - [ ] **AI Usage Tracking:**
   - Method: Trigger AI response (ask Ash a question)
   - Expected: AI usage gets logged
   - Module: `db.stats.increment_ai_request()`
 
-#### 2.5 Config & Session Commands
+#### 2.5 Announcement Commands
 
-- [ ] **Get Config:**
-  - Command: `!getconfig <key>`
-  - Expected: Retrieves config value
-  - Module: `db.config.get_config_value()`
+- [ ] **Weekly Announcement (Monday):**
+  - Command: `!generatemonday`
+  - Expected: Creates Monday announcement for approval
+  - Module: `db.config.create_weekly_announcement()`
 
-- [ ] **Set Config:**
-  - Command: `!setconfig <key> <value>` (mod only)
-  - Expected: Updates config
-  - Module: `db.config.set_config_value()`
-
-- [ ] **Weekly Announcement:**
-  - Command: `!generateannouncement monday`
-  - Expected: Creates announcement for approval
+- [ ] **Weekly Announcement (Friday):**
+  - Command: `!generatefriday`
+  - Expected: Creates Friday announcement for approval
   - Module: `db.config.create_weekly_announcement()`
 
 ---
