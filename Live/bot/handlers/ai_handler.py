@@ -120,11 +120,9 @@ except ImportError:
 # Try to import AI modules
 try:
     from google import genai
-    from google.genai import types
     GENAI_AVAILABLE = True
 except ImportError:
     genai = None
-    types = None
     GENAI_AVAILABLE = False
 
 # AI Configuration
