@@ -676,7 +676,7 @@ async def on_error(event, *args, **kwargs):
 @bot.event
 async def on_command_error(ctx, error):
     """Global error handler for command errors with user-friendly messages"""
-    
+
     # Handle commands that can't be used in DMs
     if isinstance(error, commands.NoPrivateMessage):
         await ctx.send(
@@ -685,7 +685,7 @@ async def on_command_error(ctx, error):
             f"*Please use this command in a test channel or the appropriate server channel.*"
         )
         return
-    
+
     # Handle permission errors - check if in DM first
     if isinstance(error, commands.MissingPermissions):
         # If in DM, permissions don't exist - suggest using in server
@@ -708,14 +708,14 @@ async def on_command_error(ctx, error):
                 f"*This command is restricted to moderators with appropriate server permissions.*"
             )
         return
-    
+
     # Handle command not found - suggest alternatives
     if isinstance(error, commands.CommandNotFound):
         # Extract the attempted command
         content = ctx.message.content.strip()
         if content.startswith('!'):
             attempted_command = content.split()[0][1:]  # Remove the ! prefix
-            
+
             # Common command typos and suggestions
             suggestions = {
                 'strike': '!strikes',
@@ -727,7 +727,7 @@ async def on_command_error(ctx, error):
                 'status': '!ashstatus',
                 'trivia': '!starttrivia',
             }
-            
+
             suggestion = suggestions.get(attempted_command.lower())
             if suggestion:
                 await ctx.send(
@@ -741,7 +741,7 @@ async def on_command_error(ctx, error):
                     f"*Use `!help` to see all available commands.*"
                 )
         return
-    
+
     # Handle missing required arguments
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(
@@ -751,7 +751,7 @@ async def on_command_error(ctx, error):
             f"*Tip: Use `!help {ctx.command.name}` for more details.*"
         )
         return
-    
+
     # Handle bad arguments (wrong type, format, etc.)
     if isinstance(error, commands.BadArgument):
         await ctx.send(
@@ -761,7 +761,7 @@ async def on_command_error(ctx, error):
             f"*Tip: Use `!help {ctx.command.name}` for more details.*"
         )
         return
-    
+
     # Handle user not found errors
     if isinstance(error, commands.UserNotFound):
         await ctx.send(
@@ -770,7 +770,7 @@ async def on_command_error(ctx, error):
             f"*Make sure to mention the user correctly or use their exact username.*"
         )
         return
-    
+
     # Handle member not found errors
     if isinstance(error, commands.MemberNotFound):
         await ctx.send(
@@ -779,7 +779,7 @@ async def on_command_error(ctx, error):
             f"*Make sure they are in this server and you've mentioned them correctly.*"
         )
         return
-    
+
     # Handle command on cooldown
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.send(
@@ -788,7 +788,7 @@ async def on_command_error(ctx, error):
             f"*This helps prevent spam and ensures fair usage for everyone.*"
         )
         return
-    
+
     # Handle bot missing permissions
     if isinstance(error, commands.BotMissingPermissions):
         missing_perms = ", ".join(error.missing_permissions)
@@ -799,7 +799,7 @@ async def on_command_error(ctx, error):
             f"*Please contact a server administrator to grant me these permissions.*"
         )
         return
-    
+
     # Handle command disabled
     if isinstance(error, commands.DisabledCommand):
         await ctx.send(
@@ -808,7 +808,7 @@ async def on_command_error(ctx, error):
             f"*This may be temporary. Contact moderators for more information.*"
         )
         return
-    
+
     # Handle check failures (custom permission checks)
     if isinstance(error, commands.CheckFailure):
         await ctx.send(
@@ -817,12 +817,12 @@ async def on_command_error(ctx, error):
             f"*This command may require special authorization or specific roles.*"
         )
         return
-    
+
     # For any other errors, log them and send a generic message
     print(f"❌ Unhandled command error in {ctx.command}: {error}")
     import traceback
     traceback.print_exception(type(error), error, error.__traceback__)
-    
+
     await ctx.send(
         f"❌ **Something Went Wrong**\n\n"
         f"An unexpected error occurred while executing this command.\n\n"

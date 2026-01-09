@@ -412,11 +412,11 @@ class RemindersCommands(commands.Cog):
                 # In DM - need to fetch the guild by ID
                 from ..config import GUILD_ID
                 guild = self.bot.get_guild(GUILD_ID)
-            
+
             if not guild:
                 await ctx.send("❌ **Cannot access server for testing.** Bot may not be in the target server.")
                 return
-            
+
             bot_member = guild.get_member(self.bot.user.id) if self.bot.user else None
             if bot_member:
                 permissions = target_channel.permissions_for(bot_member)
