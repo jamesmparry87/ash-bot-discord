@@ -677,15 +677,36 @@ async def on_error(event, *args, **kwargs):
 async def on_command_error(ctx, error):
     """Global error handler for command errors with user-friendly messages"""
     
-    # Handle permission errors
-    if isinstance(error, commands.MissingPermissions):
-        missing_perms = ", ".join(error.missing_permissions)
+    # Handle commands that can't be used in DMs
+    if isinstance(error, commands.NoPrivateMessage):
         await ctx.send(
-            f"❌ **Permission Denied**\n\n"
-            f"You need the following permission(s) to use this command:\n"
-            f"• {missing_perms}\n\n"
-            f"*This command is restricted to moderators with appropriate server permissions.*"
+            f"❌ **Cannot Use in DM**\n\n"
+            f"The command `{ctx.command.name}` can only be used in a server channel, not in direct messages.\n\n"
+            f"*Please use this command in a test channel or the appropriate server channel.*"
         )
+        return
+    
+    # Handle permission errors - check if in DM first
+    if isinstance(error, commands.MissingPermissions):
+        # If in DM, permissions don't exist - suggest using in server
+        if isinstance(ctx.channel, discord.DMChannel):
+            missing_perms = ", ".join(error.missing_permissions)
+            await ctx.send(
+                f"❌ **Cannot Use in DM**\n\n"
+                f"The command `{ctx.command.name}` requires server permissions (`{missing_perms}`) and cannot be used in direct messages.\n\n"
+                f"**To test this command:**\n"
+                f"• Use it in a test channel in the server\n"
+                f"• Make sure you have moderator permissions\n\n"
+                f"*Server permissions don't exist in DMs - this is a Discord limitation.*"
+            )
+        else:
+            missing_perms = ", ".join(error.missing_permissions)
+            await ctx.send(
+                f"❌ **Permission Denied**\n\n"
+                f"You need the following permission(s) to use this command:\n"
+                f"• {missing_perms}\n\n"
+                f"*This command is restricted to moderators with appropriate server permissions.*"
+            )
         return
     
     # Handle command not found - suggest alternatives
