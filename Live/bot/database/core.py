@@ -527,6 +527,22 @@ class DatabaseManager:
             if conn:
                 conn.close()
 
+    # Delegation methods for backward compatibility
+    # These delegate to the appropriate sub-modules while maintaining
+    # the original DatabaseManager API
+
+    def get_all_played_games(self, series_name: Optional[str] = None):
+        """Delegate to games module - get all played games"""
+        return self.games.get_all_played_games(series_name)
+
+    def get_games_by_playtime(self, order: str = 'DESC', limit: int = 15):
+        """Delegate to games module - get games ranked by playtime"""
+        return self.games.get_games_by_playtime(order, limit)
+
+    def get_active_trivia_session(self):
+        """Delegate to trivia module - get active trivia session"""
+        return self.trivia.get_active_trivia_session()
+
     def close(self):
         """
         Close database connection.
