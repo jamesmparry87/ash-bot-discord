@@ -68,9 +68,34 @@
 
 ## 5. Current Development State
 
+### Known Issues
+
+- Trivia and Monday and Friday message approvals can overlap, causing confusion for the bot when you try to respond to one or other approval questions and it doesn't know which you are referring to.
+- Consistently Monday messages show 0 for the engagement stats at the end and need to be manually or AI amended each time.
+- Trivia approvals are not working as expected. The first question will be generated, the session will time out before the hour or 24 hour time limit and then immediately a summary message will be sent as follows:
+
+///
+🧠 Sequential Question Approval Complete
+
+Final Status:
+• Questions generated: 2
+• Questions sent for approval: 1
+• Approval sending failures: 1
+• Generation failures: 2
+
+Each question was sent individually with time for review between them.
+This sequential approach prevents overwhelming you with multiple simultaneous approvals.
+
+All questions above are now ready for your individual review and approval.
+///
+
+This message is often sent at the same time as the trivial approval message and also shows we have generation and approval sending failures which need to be addressed. The approval process should now be able to share multiple questions at a time if needed and I can reply directly to each message to work through approvals and changes, but this hasn't really happened in practice.
+- We are still not getting particularly insightful content for Friday community wrap-up messages. This will be addressed by Priority 3.
+
 ### Recent Structural Changes (Dec 2025)
 
 **Trivia System Overhaul (Dec 27, 2025):**
+
 - Implemented reply-based answer submission system for improved UX
 - Added comprehensive question quality validation and duplicate detection
 - Enhanced transaction management with SAVEPOINT-based atomicity and retry logic

@@ -1026,29 +1026,28 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             twitch = stats.get('twitch', {})
             cross_platform = stats.get('cross_platform_count', 0)
 
-            # Build response
-            response = "📊 **Platform Comparison Statistics**\n\n"
-            response += "**YouTube Analytics:**\n"
-            response += f"• Games: {youtube.get('game_count', 0)}\n"
-            response += f"• Total Views: {youtube.get('total_views', 0):,}\n"
-            response += f"• Avg Views/Game: {youtube.get('avg_views_per_game', 0):,.1f}\n"
-            response += f"• Total Episodes: {youtube.get('total_content', 0)}\n\n"
-
-            response += "**Twitch Analytics:**\n"
-            response += f"• Games: {twitch.get('game_count', 0)}\n"
-            response += f"• Total Views: {twitch.get('total_views', 0):,}\n"
-            response += f"• Avg Views/Game: {twitch.get('avg_views_per_game', 0):,.1f}\n"
-            response += f"• Total VODs: {twitch.get('total_content', 0)}\n\n"
-
-            response += f"**Cross-Platform:** {cross_platform} games available on both platforms\n\n"
-
             # Calculate totals
             total_games = youtube.get('game_count', 0) + twitch.get('game_count', 0) - cross_platform
             total_views = youtube.get('total_views', 0) + twitch.get('total_views', 0)
 
-            response += f"**Overall:** {total_games} unique games, {total_views:,} total views across all platforms"
+            # Build response efficiently using list joining
+            response_parts = [
+                "📊 **Platform Comparison Statistics**\n\n",
+                "**YouTube Analytics:**\n",
+                f"• Games: {youtube.get('game_count', 0)}\n",
+                f"• Total Views: {youtube.get('total_views', 0):,}\n",
+                f"• Avg Views/Game: {youtube.get('avg_views_per_game', 0):,.1f}\n",
+                f"• Total Episodes: {youtube.get('total_content', 0)}\n\n",
+                "**Twitch Analytics:**\n",
+                f"• Games: {twitch.get('game_count', 0)}\n",
+                f"• Total Views: {twitch.get('total_views', 0):,}\n",
+                f"• Avg Views/Game: {twitch.get('avg_views_per_game', 0):,.1f}\n",
+                f"• Total VODs: {twitch.get('total_content', 0)}\n\n",
+                f"**Cross-Platform:** {cross_platform} games available on both platforms\n\n",
+                f"**Overall:** {total_games} unique games, {total_views:,} total views across all platforms"
+            ]
 
-            await ctx.send(response)
+            await ctx.send("".join(response_parts))
 
         except RuntimeError:
             await ctx.send("❌ Database unavailable")
@@ -1078,62 +1077,68 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             # Get ranking context
             ranking = database.get_ranking_context(game_data['canonical_name'], 'total_views')
 
-            # Build comprehensive response
-            response = f"📊 **{game_data['canonical_name']} - Statistics**\n\n"
-
-            # Basic info
-            if game_data.get('series_name'):
-                response += f"**Series:** {game_data['series_name']}\n"
-            if game_data.get('genre'):
-                response += f"**Genre:** {game_data['genre']}\n"
-            if game_data.get('release_year'):
-                response += f"**Release Year:** {game_data['release_year']}\n"
-            response += f"**Status:** {game_data.get('completion_status', 'unknown').title()}\n\n"
-
             # Platform distribution
             youtube_views = game_data.get('youtube_views', 0)
             twitch_views = game_data.get('twitch_views', 0)
             total_views = youtube_views + twitch_views
 
-            response += "**Platform Distribution:**\n"
-            if youtube_views > 0:
-                response += f"• YouTube: {youtube_views:,} views\n"
-            if twitch_views > 0:
-                response += f"• Twitch: {twitch_views:,} views\n"
-            response += f"• **Total Views:** {total_views:,}\n\n"
-
             # Content stats
             episodes = game_data.get('total_episodes', 0)
             playtime = game_data.get('total_playtime_minutes', 0)
 
-            response += "**Content Statistics:**\n"
-            response += f"• Episodes: {episodes}\n"
+            # Build comprehensive response efficiently using list joining
+            response_parts = [f"📊 **{game_data['canonical_name']} - Statistics**\n\n"]
+
+            # Basic info
+            if game_data.get('series_name'):
+                response_parts.append(f"**Series:** {game_data['series_name']}\n")
+            if game_data.get('genre'):
+                response_parts.append(f"**Genre:** {game_data['genre']}\n")
+            if game_data.get('release_year'):
+                response_parts.append(f"**Release Year:** {game_data['release_year']}\n")
+            response_parts.append(f"**Status:** {game_data.get('completion_status', 'unknown').title()}\n\n")
+
+            # Platform distribution
+            response_parts.append("**Platform Distribution:**\n")
+            if youtube_views > 0:
+                response_parts.append(f"• YouTube: {youtube_views:,} views\n")
+            if twitch_views > 0:
+                response_parts.append(f"• Twitch: {twitch_views:,} views\n")
+            response_parts.append(f"• **Total Views:** {total_views:,}\n\n")
+
+            # Content stats
+            response_parts.append("**Content Statistics:**\n")
+            response_parts.append(f"• Episodes: {episodes}\n")
             if playtime > 0:
                 hours = playtime // 60
                 minutes = playtime % 60
-                response += f"• Total Playtime: {hours}h {minutes}m\n"
+                response_parts.append(f"• Total Playtime: {hours}h {minutes}m\n")
                 if episodes > 0:
                     avg_per_ep = round(playtime / episodes, 1)
-                    response += f"• Avg per Episode: {avg_per_ep} min\n"
+                    response_parts.append(f"• Avg per Episode: {avg_per_ep} min\n")
 
             # Engagement metrics
             if engagement_data:
-                response += "\n**Engagement Metrics:**\n"
                 views_per_ep = engagement_data.get('views_per_episode', 0)
                 views_per_hour = engagement_data.get('views_per_hour', 0)
-                response += f"• Views per Episode: {views_per_ep:,.1f}\n"
-                response += f"• Views per Hour: {views_per_hour:,.1f}\n"
+                response_parts.extend([
+                    "\n**Engagement Metrics:**\n",
+                    f"• Views per Episode: {views_per_ep:,.1f}\n",
+                    f"• Views per Hour: {views_per_hour:,.1f}\n"
+                ])
 
             # Ranking
             if ranking:
                 rank = ranking.get('rank', 0)
                 total = ranking.get('total_games', 0)
                 percentile = ranking.get('percentile', 0)
-                response += f"\n**Popularity Ranking:**\n"
-                response += f"• Ranked #{rank} out of {total} games\n"
-                response += f"• Top {percentile}% by total views\n"
+                response_parts.extend([
+                    "\n**Popularity Ranking:**\n",
+                    f"• Ranked #{rank} out of {total} games\n",
+                    f"• Top {percentile}% by total views\n"
+                ])
 
-            await ctx.send(response[:2000])  # Discord limit
+            await ctx.send("".join(response_parts)[:2000])  # Discord limit
 
         except RuntimeError:
             await ctx.send("❌ Database unavailable")

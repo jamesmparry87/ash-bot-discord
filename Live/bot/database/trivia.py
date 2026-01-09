@@ -114,7 +114,7 @@ class TriviaDatabase:
         difficulty_level: int = 1,
     ) -> Optional[int]:
         """Add a new trivia question to the database"""
-        conn = self.get_connection()
+        conn = self.db.get_connection()
         if not conn:
             return None
 
@@ -157,7 +157,7 @@ class TriviaDatabase:
     def get_next_trivia_question(
             self, exclude_user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """Get the next trivia question based on priority system (excluding answered questions)"""
-        conn = self.get_connection()
+        conn = self.db.get_connection()
         if not conn:
             return None
 
@@ -233,7 +233,7 @@ class TriviaDatabase:
             session_type: str = "weekly",
             calculated_answer: Optional[str] = None) -> Optional[int]:
         """Create a new trivia session"""
-        conn = self.get_connection()
+        conn = self.db.get_connection()
         if not conn:
             return None
 

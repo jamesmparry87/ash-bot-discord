@@ -144,6 +144,85 @@ class DatabaseManager:
             return 'DESC'  # Safe default
         return order_upper
 
+    def _parse_comma_separated_list(self, text: str) -> List[str]:
+        """
+        Parse comma-separated string into list of strings.
+
+        Used for converting stored alternative_names from TEXT to List[str].
+
+        Args:
+            text: Comma-separated string
+
+        Returns:
+            List of strings (empty list if text is empty)
+        """
+        if not text or not text.strip():
+            return []
+        return [item.strip() for item in text.split(',') if item.strip()]
+
+    def repair_database_sequences(self) -> dict:
+        """
+        Repair database sequences that are out of sync with table data.
+
+        This can happen when IDs are manually inserted or during migrations.
+        The method finds the maximum ID in each table and updates the sequence
+        to continue from that point.
+
+        Returns:
+            Dict with repair results: {'repaired': List[str], 'total_repaired': int}
+        """
+        conn = self.get_connection()
+        if not conn:
+            logger.error("Cannot repair sequences: No database connection")
+            return {'repaired': [], 'total_repaired': 0}
+
+        repaired = []
+        try:
+            with conn.cursor() as cur:
+                # List of tables with SERIAL primary keys
+                tables_to_check = [
+                    ('trivia_questions', 'id'),
+                    ('trivia_sessions', 'id'),
+                    ('trivia_answers', 'id'),
+                    ('trivia_approval_sessions', 'id'),
+                    ('game_review_sessions', 'id'),
+                    ('played_games', 'id'),
+                    ('game_recommendations', 'id'),
+                    ('reminders', 'id'),
+                    ('weekly_announcements', 'id'),
+                    ('ai_alert_log', 'id')
+                ]
+
+                for table_name, id_column in tables_to_check:
+                    try:
+                        # Get the maximum ID currently in the table
+                        cur.execute(f"SELECT MAX({id_column}) FROM {table_name}")
+                        result = cur.fetchone()
+                        max_id = result[0] if result and result[0] is not None else 0
+
+                        # Set the sequence to max_id + 1
+                        sequence_name = f"{table_name}_{id_column}_seq"
+                        cur.execute(f"SELECT setval('{sequence_name}', %s, true)", (max(max_id, 1),))
+                        
+                        repaired.append(f"{table_name} (set to {max_id + 1})")
+                        logger.info(f"✅ Repaired sequence for {table_name}: set to {max_id + 1}")
+
+                    except Exception as table_error:
+                        logger.warning(f"Could not repair {table_name}: {table_error}")
+                        # Continue with other tables
+
+                conn.commit()
+                logger.info(f"🔧 Sequence repair complete: {len(repaired)} sequences repaired")
+                return {'repaired': repaired, 'total_repaired': len(repaired)}
+
+        except Exception as e:
+            logger.error(f"Error during sequence repair: {e}")
+            conn.rollback()
+            return {'repaired': [], 'total_repaired': 0}
+        finally:
+            if conn:
+                conn.close()
+
     def get_connection(self):
         """
         Get database connection with retry logic.
