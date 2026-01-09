@@ -1311,6 +1311,88 @@ class TriviaCommands(commands.Cog):
             print(f"❌ Error in trivialeaderboard command: {e}")
             await ctx.send("❌ System error occurred while retrieving leaderboard.")
 
+    @commands.command(name="triviastats")
+    async def trivia_stats(self, ctx, timeframe: str = "all"):
+        """Show trivia participation statistics (public command)"""
+        try:
+            if db is None:
+                await ctx.send("❌ **Database offline.** Cannot show stats without database connection.")
+                return
+
+            # Check if method exists
+            if not hasattr(db, 'get_trivia_leaderboard'):
+                await ctx.send("❌ **Trivia stats not available.** Database method needs implementation.")
+                return
+
+            # Validate timeframe
+            valid_timeframes = ['all', 'month', 'week']
+            if timeframe.lower() not in valid_timeframes:
+                await ctx.send(f"❌ **Invalid timeframe.** Use: {', '.join(valid_timeframes)}")
+                return
+
+            try:
+                leaderboard_data = db.get_trivia_leaderboard(timeframe.lower())
+
+                if not leaderboard_data or not leaderboard_data.get('participants'):
+                    await ctx.send(f"📊 **No trivia participation data found** for timeframe: {timeframe}")
+                    return
+
+                # Create stats embed (public-friendly version)
+                timeframe_text = timeframe.title() if timeframe != 'all' else 'All Time'
+                embed = discord.Embed(
+                    title=f"🧠 **Trivia Tuesday Stats - {timeframe_text}**",
+                    description="Community participation and performance",
+                    color=0x00ff00,
+                    timestamp=datetime.now(ZoneInfo("Europe/London"))
+                )
+
+                # Top 5 participants (public view)
+                participants = leaderboard_data['participants'][:5]
+                leaderboard_text = ""
+
+                for i, participant in enumerate(participants, 1):
+                    try:
+                        user = await self.bot.fetch_user(participant['user_id'])
+                        name = user.display_name if user else f"User {participant['user_id']}"
+                    except BaseException:
+                        name = f"User {participant['user_id']}"
+
+                    correct = participant.get('correct_answers', 0)
+                    total = participant.get('total_answers', 0)
+                    accuracy = round((correct / total) * 100, 1) if total > 0 else 0
+
+                    medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"**{i}.**"
+                    leaderboard_text += f"{medal} {name} • {correct}/{total} ({accuracy}%)\n"
+
+                embed.add_field(
+                    name="🏆 **Top Participants:**",
+                    value=leaderboard_text or "No participants yet",
+                    inline=False
+                )
+
+                # Overall stats
+                total_sessions = leaderboard_data.get('total_sessions', 0)
+                avg_participation = leaderboard_data.get('avg_participation_per_session', 0)
+
+                stats_text = f"**Total Sessions:** {total_sessions}\n**Avg Participants:** {round(avg_participation, 1)}"
+                embed.add_field(
+                    name="📊 **Community Stats:**",
+                    value=stats_text,
+                    inline=False
+                )
+
+                embed.set_footer(text="Trivia Tuesday • Every Tuesday at 11:00 UK time")
+
+                await ctx.send(embed=embed)
+
+            except Exception as e:
+                logger.error(f"Error getting trivia stats: {e}")
+                await ctx.send("❌ **Error retrieving trivia stats.** Please try again later.")
+
+        except Exception as e:
+            logger.error(f"Error in triviastats command: {e}")
+            await ctx.send("❌ System error occurred while retrieving stats.")
+
     @commands.command(name="listpendingquestions")
     async def list_pending_questions(self, ctx):
         """View submitted trivia questions awaiting use (moderators only)"""

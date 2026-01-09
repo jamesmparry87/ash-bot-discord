@@ -1,0 +1,200 @@
+﻿    def cleanup_hanging_trivia_sessions(self) -> Dict[str, Any]:
+        """Clean up any hanging trivia sessions from previous bot runs"""
+        conn = self.get_connection()
+        if not conn:
+            return {"error": "No database connection", "cleaned_sessions": 0}
+
+        try:
+            with conn.cursor() as cur:
+                # Find active sessions that have been running for more than 2 hours
+                cur.execute("""
+                    SELECT ts.*, tq.question_text
+                    FROM trivia_sessions ts
+                    JOIN trivia_questions tq ON ts.question_id = tq.id
+                    WHERE ts.status = 'active'
+                    AND ts.started_at < NOW() - INTERVAL '2 hours'
+                """)
+                hanging_sessions = cur.fetchall()
+
+                cleaned_count = 0
+                session_details = []
+
+                for session in hanging_sessions:
+                    session_dict = dict(session)
+                    session_id = session_dict['id']
+
+                    try:
+                        # Mark session as expired
+                        cur.execute("""
+                            UPDATE trivia_sessions
+                            SET status = 'expired', ended_at = NOW()
+                            WHERE id = %s
+                        """, (session_id,))
+
+                        # Don't mark the question as 'answered' for expired sessions
+                        # so they can be used again
+
+                        cleaned_count += 1
+                        session_details.append({
+                            "session_id": session_id,
+                            "question_text": session_dict.get("question_text", "Unknown"),
+                            "started_at": session_dict.get("started_at"),
+                            "question_id": session_dict.get("question_id")
+                        })
+
+                        logger.info(f"Cleaned up hanging trivia session {session_id}")
+
+                    except Exception as e:
+                        logger.error(f"Error cleaning up session {session_id}: {e}")
+                        continue
+
+                conn.commit()
+
+                return {
+                    "cleaned_sessions": cleaned_count,
+                    "sessions": session_details,
+                    "total_found": len(hanging_sessions)
+                }
+
+        except Exception as e:
+            logger.error(f"Error during trivia session cleanup: {e}")
+            conn.rollback()
+            return {"error": str(e), "cleaned_sessions": 0}
+
+    # --- Missing Announcement System ---
+
+    def log_announcement(
+            self,
+            user_id: int,
+            message: str,
+            announcement_type: str = "general") -> bool:
+        """Log announcement to database"""
+        try:
+            self.set_config_value(
+                f"last_announcement_{announcement_type}",
+                f"{user_id}|{message}|{datetime.now().isoformat()}")
+            return True
+        except Exception as e:
+            logger.error(f"Error logging announcement: {e}")
+            return False
+
+    # --- Persistent Trivia Approval System ---
+
+    def _insert_approval_session(
+            self,
+            cur,
+            user_id: int,
+            session_type: str,
+            conversation_step: str,
+            question_data: Dict[str, Any],
+            conversation_data: Optional[Dict[str, Any]],
+            uk_now,
+            expires_at
+    ) -> Optional[int]:
+        """Helper method to insert approval session (reduces duplication)"""
+        cur.execute("""
+            INSERT INTO trivia_approval_sessions (
+                user_id, session_type, conversation_step, question_data,
+                conversation_data, created_at, last_activity, expires_at, status
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'active')
+            RETURNING id
+        """, (
+            user_id, session_type, conversation_step,
+            json.dumps(question_data),
+            json.dumps(conversation_data or {}),
+            uk_now, uk_now, expires_at
+        ))
+
+        result = cur.fetchone()
+        if result:
+            # Use column name access for RealDictCursor compatibility
+            try:
+                return int(result['id'])  # type: ignore
+            except (TypeError, KeyError):
+                return int(result[0])  # Fallback to index access
+        return None
+
+    def create_approval_session(
+            self,
+            user_id: int,
+            session_type: str,
+            conversation_step: str,
+            question_data: Dict[str, Any],
+            conversation_data: Optional[Dict[str, Any]] = None,
+            timeout_minutes: int = 180  # 3 hours default
+    ) -> Optional[int]:
+        """Create a new persistent approval session"""
+        conn = self.get_connection()
+        if not conn:
+            logger.error("Failed to create approval session: No database connection")
+            return None
+
+        # Define variables outside try block to avoid scoping issues
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        expires_at = uk_now + timedelta(minutes=timeout_minutes)
+
+        try:
+            with conn.cursor() as cur:
+                # Enhanced logging for debugging
+                logger.info(f"Creating approval session for user {user_id}, type: {session_type}")
+
+                session_id = self._insert_approval_session(
+                    cur, user_id, session_type, conversation_step,
+                    question_data, conversation_data, uk_now, expires_at
+                )
+
+                if session_id:
+                    conn.commit()
+                    logger.info(f"âœ… Successfully created persistent approval session {session_id} for user {user_id}")
+                    return session_id
+                else:
+                    logger.error(f"âŒ Failed to create approval session: INSERT returned no result")
+                    return None
+
+        except Exception as e:
+            logger.error(f"âŒ Error creating approval session - Exception type: {type(e).__name__}")
+            logger.error(f"âŒ Error creating approval session - Message: {str(e)}")
+            logger.error(f"âŒ Error creating approval session - User ID: {user_id}, Session type: {session_type}")
+
+            # Check if this is a sequence synchronization issue
+            error_str = str(e).lower()
+            if "duplicate key value violates unique constraint" in error_str and "pkey" in error_str:
+                logger.error("ðŸ”§ DETECTED: Primary key constraint violation - likely sequence synchronization issue")
+                logger.info("ðŸ”„ Attempting automatic sequence repair...")
+
+                # Attempt sequence repair
+                repair_result = self.repair_database_sequences()
+                if repair_result.get("total_repaired", 0) > 0:
+                    logger.info(f"âœ… Repaired {repair_result['total_repaired']} sequences, retrying session creation...")
+
+                    # Retry using the helper method
+                    try:
+                        with conn.cursor() as retry_cur:
+                            session_id = self._insert_approval_session(
+                                retry_cur, user_id, session_type, conversation_step,
+                                question_data, conversation_data, uk_now, expires_at
+                            )
+
+                            if session_id:
+                                conn.commit()
+                                logger.info(
+                                    f"âœ… Successfully created approval session {session_id} after sequence repair")
+                                return session_id
+                            else:
+                                logger.error("âŒ Retry after sequence repair also failed")
+                    except Exception as retry_error:
+                        logger.error(f"âŒ Retry after sequence repair failed: {retry_error}")
+                else:
+                    logger.error("âŒ Sequence repair found no issues to fix")
+
+            conn.rollback()
+            return None
+
+    def get_approval_session(self, user_id: int, session_type: str = 'question_approval') -> Optional[Dict[str, Any]]:
+        """Get active approval session for user"""
+        conn = self.get_connection()
+        if not conn:
+            return None

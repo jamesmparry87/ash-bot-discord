@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 import aiohttp
-from bot.database_module import get_database
+from bot.database import get_database
 from bot.integrations.youtube import get_playlist_videos_with_views
 
 # Add parent directory to path

@@ -66,7 +66,6 @@ class GamesCommands(commands.Cog):
 
             if added:
                 RECOMMEND_CHANNEL_ID = 1271568447108550687
-                recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
                 confirm_msg = f"🧾 Recommendation(s) logged: {', '.join(added)}. Efficiency noted."
 
                 # Send confirmation privately to the user via DM
@@ -76,9 +75,11 @@ class GamesCommands(commands.Cog):
                     # If DM fails, send an ephemeral-style message in channel
                     await ctx.send(f"{ctx.author.mention} {confirm_msg}", delete_after=10)
 
-                # Always update the persistent recommendations list
-                if recommend_channel:
-                    await self.post_or_update_recommend_list(ctx, recommend_channel)
+                # Update the persistent recommendations list (only if in a guild)
+                if ctx.guild:
+                    recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
+                    if recommend_channel:
+                        await self.post_or_update_recommend_list(ctx, recommend_channel)
 
             if duplicate:
                 await ctx.send(f"⚠️ Submission rejected: {', '.join(duplicate)} already exist(s) in the database. Redundancy is inefficient. Please submit only unique recommendations.")
@@ -1007,6 +1008,143 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             await ctx.send("❌ Database unavailable")
         except Exception as e:
             await ctx.send(f"❌ **Deduplication failed:** {str(e)}\n\n*Check bot logs for details.*")
+
+    @commands.command(name="platformstats")
+    async def platform_stats(self, ctx):
+        """Show YouTube vs Twitch platform comparison statistics"""
+        try:
+            database = self._get_db()
+
+            # Get platform comparison stats from database
+            stats = database.get_platform_comparison_stats()
+
+            if not stats:
+                await ctx.send("❌ **Platform statistics unavailable.** Database may be empty or error occurred.")
+                return
+
+            youtube = stats.get('youtube', {})
+            twitch = stats.get('twitch', {})
+            cross_platform = stats.get('cross_platform_count', 0)
+
+            # Calculate totals
+            total_games = youtube.get('game_count', 0) + twitch.get('game_count', 0) - cross_platform
+            total_views = youtube.get('total_views', 0) + twitch.get('total_views', 0)
+
+            # Build response efficiently using list joining
+            response_parts = [
+                "📊 **Platform Comparison Statistics**\n\n",
+                "**YouTube Analytics:**\n",
+                f"• Games: {youtube.get('game_count', 0)}\n",
+                f"• Total Views: {youtube.get('total_views', 0):,}\n",
+                f"• Avg Views/Game: {youtube.get('avg_views_per_game', 0):,.1f}\n",
+                f"• Total Episodes: {youtube.get('total_content', 0)}\n\n",
+                "**Twitch Analytics:**\n",
+                f"• Games: {twitch.get('game_count', 0)}\n",
+                f"• Total Views: {twitch.get('total_views', 0):,}\n",
+                f"• Avg Views/Game: {twitch.get('avg_views_per_game', 0):,.1f}\n",
+                f"• Total VODs: {twitch.get('total_content', 0)}\n\n",
+                f"**Cross-Platform:** {cross_platform} games available on both platforms\n\n",
+                f"**Overall:** {total_games} unique games, {total_views:,} total views across all platforms"
+            ]
+
+            await ctx.send("".join(response_parts))
+
+        except RuntimeError:
+            await ctx.send("❌ Database unavailable")
+        except Exception as e:
+            await ctx.send(f"❌ Error retrieving platform stats: {str(e)}")
+
+    @commands.command(name="game")
+    async def game_stats(self, ctx, *, game_name: str | None = None):
+        """Show detailed statistics for a specific game"""
+        try:
+            if not game_name:
+                await ctx.send("❌ **Game name required.** Usage: `!game <game name>`\n\n**Example:** `!game Hollow Knight`")
+                return
+
+            database = self._get_db()
+
+            # Get basic game info
+            game_data = database.get_played_game(game_name)
+            if not game_data:
+                await ctx.send(f"❌ **'{game_name}' not found** in played games database.\n\n*Use `!listplayedgames` to see all games.*")
+                return
+
+            # Get engagement metrics for this game
+            engagement = database.get_engagement_metrics(game_name, limit=1)
+            engagement_data = engagement[0] if engagement else {}
+
+            # Get ranking context
+            ranking = database.get_ranking_context(game_data['canonical_name'], 'total_views')
+
+            # Platform distribution
+            youtube_views = game_data.get('youtube_views', 0)
+            twitch_views = game_data.get('twitch_views', 0)
+            total_views = youtube_views + twitch_views
+
+            # Content stats
+            episodes = game_data.get('total_episodes', 0)
+            playtime = game_data.get('total_playtime_minutes', 0)
+
+            # Build comprehensive response efficiently using list joining
+            response_parts = [f"📊 **{game_data['canonical_name']} - Statistics**\n\n"]
+
+            # Basic info
+            if game_data.get('series_name'):
+                response_parts.append(f"**Series:** {game_data['series_name']}\n")
+            if game_data.get('genre'):
+                response_parts.append(f"**Genre:** {game_data['genre']}\n")
+            if game_data.get('release_year'):
+                response_parts.append(f"**Release Year:** {game_data['release_year']}\n")
+            response_parts.append(f"**Status:** {game_data.get('completion_status', 'unknown').title()}\n\n")
+
+            # Platform distribution
+            response_parts.append("**Platform Distribution:**\n")
+            if youtube_views > 0:
+                response_parts.append(f"• YouTube: {youtube_views:,} views\n")
+            if twitch_views > 0:
+                response_parts.append(f"• Twitch: {twitch_views:,} views\n")
+            response_parts.append(f"• **Total Views:** {total_views:,}\n\n")
+
+            # Content stats
+            response_parts.append("**Content Statistics:**\n")
+            response_parts.append(f"• Episodes: {episodes}\n")
+            if playtime > 0:
+                hours = playtime // 60
+                minutes = playtime % 60
+                response_parts.append(f"• Total Playtime: {hours}h {minutes}m\n")
+                if episodes > 0:
+                    avg_per_ep = round(playtime / episodes, 1)
+                    response_parts.append(f"• Avg per Episode: {avg_per_ep} min\n")
+
+            # Engagement metrics
+            if engagement_data:
+                views_per_ep = engagement_data.get('views_per_episode', 0)
+                views_per_hour = engagement_data.get('views_per_hour', 0)
+                response_parts.extend([
+                    "\n**Engagement Metrics:**\n",
+                    f"• Views per Episode: {views_per_ep:,.1f}\n",
+                    f"• Views per Hour: {views_per_hour:,.1f}\n"
+                ])
+
+            # Ranking
+            if ranking:
+                rank = ranking.get('rank', 0)
+                total = ranking.get('total_games', 0)
+                percentile = ranking.get('percentile', 0)
+                response_parts.extend([
+                    "\n**Popularity Ranking:**\n",
+                    f"• Ranked #{rank} out of {total} games\n",
+                    f"• Top {percentile}% by total views\n"
+                ])
+
+            await ctx.send("".join(response_parts)[:2000])  # Discord limit
+
+        except RuntimeError:
+            await ctx.send("❌ Database unavailable")
+        except Exception as e:
+            print(f"❌ Error in game stats command: {e}")
+            await ctx.send(f"❌ Error retrieving game statistics: {str(e)}")
 
     @commands.command(name="enrichallgames")
     async def enrich_all_games(self, ctx):

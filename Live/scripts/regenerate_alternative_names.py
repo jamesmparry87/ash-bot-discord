@@ -15,7 +15,7 @@ import os
 import sys
 from typing import Any, Dict
 
-from bot.database_module import get_database
+from bot.database import get_database
 from bot.integrations import igdb
 
 # Add parent directory to path for imports

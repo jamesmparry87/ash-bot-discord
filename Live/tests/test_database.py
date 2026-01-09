@@ -14,72 +14,62 @@ if live_path not in sys.path:
     sys.path.insert(0, live_path)
 
 try:
-    from bot.database_module import DatabaseManager  # type: ignore
+    from bot.database import DatabaseManager  # type: ignore
 except ImportError:
-    # Create a proper mock DatabaseManager class for type checking
-    class DatabaseManager:  # type: ignore
-        def __init__(self):
-            self.database_url = None
-
-        def get_connection(self):
-            return None
-
+    # Create a proper mock DatabaseManager class for type checking with modular structure
+    class MockUserDatabase:  # type: ignore
         def get_user_strikes(self, user_id):
             return 0
-
         def set_user_strikes(self, user_id, count):
             pass
-
         def add_user_strike(self, user_id):
             return 1
-
         def get_all_strikes(self):
             return {}
-
         def add_game_recommendation(self, name, reason, added_by):
             return True
-
         def get_all_games(self):
             return []
-
         def game_exists(self, name):
             return False
-
+        def bulk_import_strikes(self, strike_data):
+            return len(strike_data)
+        def bulk_import_games(self, game_data):
+            return len(game_data)
+    
+    class MockGamesDatabase:  # type: ignore
         def get_played_game(self, name):
             return None
-
         def add_played_game(self, **kwargs):
             return True
-
         def update_played_game(self, game_id, **kwargs):
             return True
-
         def _convert_text_to_arrays(self, game_dict):
             return game_dict
-
+        def bulk_import_played_games(self, game_data):
+            return len(game_data)
+        def get_played_games_stats(self):
+            return {}
+        def get_series_by_total_playtime(self):
+            return []
+        def get_games_by_genre_flexible(self, genre):
+            return []
+    
+    class MockConfigDatabase:  # type: ignore
         def get_config_value(self, key):
             return None
-
         def set_config_value(self, key, value):
             pass
 
-        def bulk_import_strikes(self, strike_data):
-            return len(strike_data)
+    class DatabaseManager:  # type: ignore
+        def __init__(self):
+            self.database_url = None
+            self.users = MockUserDatabase()
+            self.games = MockGamesDatabase()
+            self.config = MockConfigDatabase()
 
-        def bulk_import_games(self, game_data):
-            return len(game_data)
-
-        def bulk_import_played_games(self, game_data):
-            return len(game_data)
-
-        def get_played_games_stats(self):
-            return {}
-
-        def get_series_by_total_playtime(self):
-            return []
-
-        def get_games_by_genre_flexible(self, genre):
-            return []
+        def get_connection(self):
+            return None
 
 
 class TestDatabaseManager:
@@ -144,7 +134,7 @@ class TestStrikesOperations:
         db, mock_cursor = db_with_mock_connection
         mock_cursor.fetchone.return_value = {'strike_count': 3}
 
-        result = db.get_user_strikes(123456789)
+        result = db.users.get_user_strikes(123456789)
         assert result == 3
         mock_cursor.execute.assert_called_once()
 
@@ -153,14 +143,14 @@ class TestStrikesOperations:
         db, mock_cursor = db_with_mock_connection
         mock_cursor.fetchone.return_value = None
 
-        result = db.get_user_strikes(123456789)
+        result = db.users.get_user_strikes(123456789)
         assert result == 0
 
     def test_set_user_strikes(self, db_with_mock_connection):
         """Test setting user strikes."""
         db, mock_cursor = db_with_mock_connection
 
-        db.set_user_strikes(123456789, 2)
+        db.users.set_user_strikes(123456789, 2)
         mock_cursor.execute.assert_called_once()
         # Verify the SQL contains INSERT and ON CONFLICT
         sql_call = mock_cursor.execute.call_args[0][0]
@@ -172,9 +162,9 @@ class TestStrikesOperations:
         db, mock_cursor = db_with_mock_connection
 
         # Mock get_user_strikes to return current count
-        with patch.object(db, 'get_user_strikes', return_value=2):
-            with patch.object(db, 'set_user_strikes') as mock_set:
-                result = db.add_user_strike(123456789)
+        with patch.object(db.users, 'get_user_strikes', return_value=2):
+            with patch.object(db.users, 'set_user_strikes') as mock_set:
+                result = db.users.add_user_strike(123456789)
                 assert result == 3
                 mock_set.assert_called_once_with(123456789, 3)
 
@@ -184,7 +174,7 @@ class TestStrikesOperations:
         mock_cursor.fetchall.return_value = [
             {"user_id": 123, "strike_count": 1}, {"user_id": 456, "strike_count": 2}]
 
-        result = db.get_all_strikes()
+        result = db.users.get_all_strikes()
         expected = {123: 1, 456: 2}
         assert result == expected
 
@@ -209,7 +199,7 @@ class TestGameRecommendations:
         """Test adding a game recommendation."""
         db, mock_cursor = db_with_mock_connection
 
-        result = db.add_game_recommendation(
+        result = db.users.add_game_recommendation(
             "Test Game", "Great game", "TestUser")
         assert result is True
         mock_cursor.execute.assert_called_once()
@@ -224,7 +214,7 @@ class TestGameRecommendations:
             {'id': 2, 'name': 'Game 2', 'reason': 'Reason 2', 'added_by': 'User2'}
         ]
 
-        result = db.get_all_games()
+        result = db.users.get_all_games()
         assert len(result) == 2
         assert result[0]['name'] == 'Game 1'
         assert result[1]['name'] == 'Game 2'
@@ -235,9 +225,9 @@ class TestGameRecommendations:
 
         # Mock get_all_games
         with patch.object(
-            db, "get_all_games", return_value=[{"name": "Test Game", "reason": "Great", "added_by": "User"}]
+            db.users, "get_all_games", return_value=[{"name": "Test Game", "reason": "Great", "added_by": "User"}]
         ):
-            result = db.game_exists("Test Game")
+            result = db.users.game_exists("Test Game")
             assert result is True
 
     def test_game_exists_fuzzy_match(self, db_with_mock_connection):
@@ -246,11 +236,11 @@ class TestGameRecommendations:
 
         # Mock get_all_games
         with patch.object(
-            db,
+            db.users,
             "get_all_games",
             return_value=[{"name": "The Elder Scrolls V: Skyrim", "reason": "Great", "added_by": "User"}],
         ):
-            result = db.game_exists("Elder Scrolls Skyrim")
+            result = db.users.game_exists("Elder Scrolls Skyrim")
             assert result is True
 
     def test_game_exists_no_match(self, db_with_mock_connection):
@@ -259,9 +249,9 @@ class TestGameRecommendations:
 
         # Mock get_all_games
         with patch.object(
-            db, "get_all_games", return_value=[{"name": "Different Game", "reason": "Great", "added_by": "User"}]
+            db.users, "get_all_games", return_value=[{"name": "Different Game", "reason": "Great", "added_by": "User"}]
         ):
-            result = db.game_exists("Test Game")
+            result = db.users.game_exists("Test Game")
             assert result is False
 
 
@@ -285,7 +275,7 @@ class TestPlayedGames:
         """Test successfully adding a played game."""
         db, mock_cursor = db_with_mock_connection
 
-        result = db.add_played_game(
+        result = db.games.add_played_game(
             canonical_name="Test Game",
             alternative_names=["TG", "Test"],
             series_name="Test Series",
@@ -313,7 +303,7 @@ class TestPlayedGames:
             None   # Fuzzy match query (not reached)
         ]
 
-        with patch.object(db, "_convert_text_to_arrays") as mock_convert:
+        with patch.object(db.games, "_convert_text_to_arrays") as mock_convert:
             mock_convert.return_value = {
                 "id": 1,
                 "canonical_name": "Test Game",
@@ -321,7 +311,7 @@ class TestPlayedGames:
                     "TG",
                     "Test"]}
 
-            result = db.get_played_game("Test Game")
+            result = db.games.get_played_game("Test Game")
             assert result is not None
             assert result['canonical_name'] == 'Test Game'
 
@@ -333,7 +323,7 @@ class TestPlayedGames:
         mock_cursor.fetchone.return_value = None
         mock_cursor.fetchall.return_value = []
 
-        result = db.get_played_game("Nonexistent Game")
+        result = db.games.get_played_game("Nonexistent Game")
         assert result is None
 
     def test_update_played_game(self, db_with_mock_connection):
@@ -341,7 +331,7 @@ class TestPlayedGames:
         db, mock_cursor = db_with_mock_connection
         mock_cursor.rowcount = 1  # Simulate successful update
 
-        result = db.update_played_game(1, genre="RPG", total_episodes=15)
+        result = db.games.update_played_game(1, genre="RPG", total_episodes=15)
         assert result is True
         mock_cursor.execute.assert_called_once()
         sql_call = mock_cursor.execute.call_args[0][0]
@@ -357,7 +347,7 @@ class TestPlayedGames:
             'other_field': 'unchanged'
         }
 
-        result = db._convert_text_to_arrays(game_dict)  # type: ignore
+        result = db.games._convert_text_to_arrays(game_dict)  # type: ignore
 
         assert result['alternative_names'] == ['Name1', 'Name2', 'Name3']
         assert result['twitch_vod_urls'] == ['url1', 'url2', 'url3']
@@ -369,7 +359,7 @@ class TestPlayedGames:
 
         game_dict = {"alternative_names": "", "twitch_vod_urls": None}
 
-        result = db._convert_text_to_arrays(game_dict)  # type: ignore
+        result = db.games._convert_text_to_arrays(game_dict)  # type: ignore
 
         assert result['alternative_names'] == []
         assert result['twitch_vod_urls'] == []
@@ -396,7 +386,7 @@ class TestConfigOperations:
         db, mock_cursor = db_with_mock_connection
         mock_cursor.fetchone.return_value = {'value': 'test_value'}
 
-        result = db.get_config_value('test_key')
+        result = db.config.get_config_value('test_key')
         assert result == 'test_value'
 
     def test_get_config_value_not_exists(self, db_with_mock_connection):
@@ -404,14 +394,14 @@ class TestConfigOperations:
         db, mock_cursor = db_with_mock_connection
         mock_cursor.fetchone.return_value = None
 
-        result = db.get_config_value('nonexistent_key')
+        result = db.config.get_config_value('nonexistent_key')
         assert result is None
 
     def test_set_config_value(self, db_with_mock_connection):
         """Test setting config value."""
         db, mock_cursor = db_with_mock_connection
 
-        db.set_config_value('test_key', 'test_value')
+        db.config.set_config_value('test_key', 'test_value')
         mock_cursor.execute.assert_called_once()
         sql_call = mock_cursor.execute.call_args[0][0]
         assert 'INSERT INTO bot_config' in sql_call
@@ -439,7 +429,7 @@ class TestBulkOperations:
         db, mock_cursor = db_with_mock_connection
 
         strike_data = {123: 1, 456: 2, 789: 3}
-        result = db.bulk_import_strikes(strike_data)
+        result = db.users.bulk_import_strikes(strike_data)
 
         assert result == 3
         mock_cursor.executemany.assert_called_once()
@@ -452,7 +442,7 @@ class TestBulkOperations:
             {'name': 'Game 1', 'reason': 'Reason 1', 'added_by': 'User1'},
             {'name': 'Game 2', 'reason': 'Reason 2', 'added_by': 'User2'}
         ]
-        result = db.bulk_import_games(game_data)
+        result = db.users.bulk_import_games(game_data)
 
         assert result == 2
         mock_cursor.executemany.assert_called_once()
@@ -462,7 +452,7 @@ class TestBulkOperations:
         db, mock_cursor = db_with_mock_connection
 
         # Mock get_played_game to simulate no existing games
-        with patch.object(db, 'get_played_game', return_value=None):
+        with patch.object(db.games, 'get_played_game', return_value=None):
             game_data = [
                 {
                     'canonical_name': 'Game 1',
@@ -471,7 +461,7 @@ class TestBulkOperations:
                     'completion_status': 'completed'
                 }
             ]
-            result = db.bulk_import_played_games(game_data)
+            result = db.games.bulk_import_played_games(game_data)
 
             assert result == 1
             mock_cursor.execute.assert_called()  # Should be called for insert
@@ -512,7 +502,7 @@ class TestStatisticsAndQueries:
             [{"series_name": "Series A", "count": 5}],  # Top series
         ]
 
-        result = db.get_played_games_stats()
+        result = db.games.get_played_games_stats()
 
         assert result['total_games'] == 50
         assert result['total_episodes'] == 500
@@ -536,7 +526,7 @@ class TestStatisticsAndQueries:
             }
         ]
 
-        result = db.get_series_by_total_playtime()
+        result = db.games.get_series_by_total_playtime()
 
         assert len(result) == 1
         assert result[0]['series_name'] == 'Series A'
@@ -552,14 +542,14 @@ class TestStatisticsAndQueries:
                 "genre": "Survival-Horror",
                 "alternative_names": "HG,Horror"}]
 
-        with patch.object(db, '_convert_text_to_arrays') as mock_convert:
+        with patch.object(db.games, '_convert_text_to_arrays') as mock_convert:
             mock_convert.return_value = {
                 'canonical_name': 'Horror Game',
                 'genre': 'Survival-Horror',
                 'alternative_names': ['HG', 'Horror']
             }
 
-            result = db.get_games_by_genre_flexible('horror')
+            result = db.games.get_games_by_genre_flexible('horror')
 
             assert len(result) == 1
             assert result[0]['canonical_name'] == 'Horror Game'

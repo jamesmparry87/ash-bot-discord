@@ -12,7 +12,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 try:
-    from bot.database_module import get_database
+    from bot.database import get_database
 except ImportError:
     print("❌ Error: Could not import database_module.")
     sys.exit(1)

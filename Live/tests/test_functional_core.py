@@ -39,7 +39,7 @@ class TestGamingDatabase:
 
         User Impact: Missing fields cause incomplete responses to users
         """
-        from bot.database_module import get_database
+        from bot.database import get_database
 
         db = get_database()
         if not db or not db.database_url:
@@ -71,7 +71,7 @@ class TestGamingDatabase:
 
         User Impact: Broken stats mean users get wrong answers
         """
-        from bot.database_module import get_database
+        from bot.database import get_database
 
         db = get_database()
         if not db or not db.database_url:
@@ -101,7 +101,7 @@ class TestGamingDatabase:
 
         User Impact: Multiple concurrent sessions would confuse users
         """
-        from bot.database_module import get_database
+        from bot.database import get_database
 
         db = get_database()
         if not db or not db.database_url:
@@ -247,7 +247,7 @@ class TestDeploymentReadiness:
 
         User Impact: No database = no bot functionality
         """
-        from bot.database_module import get_database
+        from bot.database import get_database
 
         db = get_database()
 
