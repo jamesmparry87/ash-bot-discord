@@ -39,6 +39,18 @@ class GamesDatabase:
         """
         self.db = db_manager
 
+    def get_connection(self):
+        """Get database connection from the database manager"""
+        return self.db.get_connection()
+
+    def get_config_value(self, key: str) -> Optional[str]:
+        """Get a configuration value (delegates to config database)"""
+        return self.db.config.get_config_value(key)
+
+    def set_config_value(self, key: str, value: str):
+        """Set a configuration value (delegates to config database)"""
+        self.db.config.set_config_value(key, value)
+
     def add_played_game(self,
                         canonical_name: str,
                         alternative_names: Optional[List[str]] = None,
