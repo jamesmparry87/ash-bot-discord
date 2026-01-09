@@ -20,44 +20,60 @@ except ImportError:
     class MockUserDatabase:  # type: ignore
         def get_user_strikes(self, user_id):
             return 0
+
         def set_user_strikes(self, user_id, count):
             pass
+
         def add_user_strike(self, user_id):
             return 1
+
         def get_all_strikes(self):
             return {}
+
         def add_game_recommendation(self, name, reason, added_by):
             return True
+
         def get_all_games(self):
             return []
+
         def game_exists(self, name):
             return False
+
         def bulk_import_strikes(self, strike_data):
             return len(strike_data)
+
         def bulk_import_games(self, game_data):
             return len(game_data)
-    
+
     class MockGamesDatabase:  # type: ignore
         def get_played_game(self, name):
             return None
+
         def add_played_game(self, **kwargs):
             return True
+
         def update_played_game(self, game_id, **kwargs):
             return True
+
         def _convert_text_to_arrays(self, game_dict):
             return game_dict
+
         def bulk_import_played_games(self, game_data):
             return len(game_data)
+
         def get_played_games_stats(self):
             return {}
+
         def get_series_by_total_playtime(self):
             return []
+
         def get_games_by_genre_flexible(self, genre):
             return []
-    
+
     class MockConfigDatabase:  # type: ignore
         def get_config_value(self, key):
             return None
+
         def set_config_value(self, key, value):
             pass
 

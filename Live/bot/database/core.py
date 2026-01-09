@@ -203,7 +203,7 @@ class DatabaseManager:
                         # Set the sequence to max_id + 1
                         sequence_name = f"{table_name}_{id_column}_seq"
                         cur.execute(f"SELECT setval('{sequence_name}', %s, true)", (max(max_id, 1),))
-                        
+
                         repaired.append(f"{table_name} (set to {max_id + 1})")
                         logger.info(f"✅ Repaired sequence for {table_name}: set to {max_id + 1}")
 
