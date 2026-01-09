@@ -1767,11 +1767,11 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
             del mod_trivia_conversations[user_id]
 
 
-async def start_announcement_conversation(ctx):
+async def start_announcement_conversation(message):
     """Start interactive DM conversation for announcement creation"""
     # Check if command is used in DM
-    if ctx.guild is not None:
-        await ctx.send(
+    if message.guild is not None:
+        await message.reply(
             f"⚠️ **Security protocol engaged.** Announcement creation must be initiated via direct message. "
             f"Please DM me with `!announceupdate` to begin the secure briefing process.\n\n"
             f"*Confidential mission parameters require private channel authorization.*"
@@ -1779,8 +1779,8 @@ async def start_announcement_conversation(ctx):
         return
 
     # Check user permissions - only James and Captain Jonesy
-    if ctx.author.id not in [JAM_USER_ID, JONESY_USER_ID]:
-        await ctx.send(
+    if message.author.id not in [JAM_USER_ID, JONESY_USER_ID]:
+        await message.reply(
             f"❌ **Access denied.** Announcement protocols are restricted to authorized command personnel only. "
             f"Your clearance level is insufficient for update broadcast capabilities.\n\n"
             f"*Security protocols maintained. Unauthorized access logged.*"
@@ -1792,7 +1792,7 @@ async def start_announcement_conversation(ctx):
 
     # Initialize conversation state
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    announcement_conversations[ctx.author.id] = {
+    announcement_conversations[message.author.id] = {
         'step': 'channel_selection',
         'data': {},
         'last_activity': uk_now,
@@ -1800,7 +1800,7 @@ async def start_announcement_conversation(ctx):
     }
 
     # Start the interactive process
-    if ctx.author.id == JONESY_USER_ID:
+    if message.author.id == JONESY_USER_ID:
         greeting = "Captain Jonesy. Authorization confirmed."
     else:
         greeting = "Sir Decent Jam. Creator protocols activated."
@@ -1814,7 +1814,7 @@ async def start_announcement_conversation(ctx):
         f"Please respond with **1** for mod team updates or **2** for community announcements.\n\n"
         f"*Mission parameters await your tactical decision.*")
 
-    await ctx.send(channel_msg)
+    await message.reply(channel_msg)
 
 
 async def start_trivia_conversation(ctx):
