@@ -28,7 +28,7 @@ class RemindersCommands(commands.Cog):
             raise RuntimeError("Database not available")
         return db
 
-    @commands.command(name="remind")
+    @commands.command(name="remind", aliases=["reminder"])
     async def set_reminder(self, ctx, *, content: str | None = None):
         """Enhanced reminder command with traditional Discord format, auto-actions, and natural language support"""
         try:
@@ -404,8 +404,20 @@ class RemindersCommands(commands.Cog):
                 await ctx.send("❌ **Target channel not found.** Cannot access Newt Mods channel for testing.")
                 return
 
-            # Check bot permissions in target channel
-            bot_member = ctx.guild.get_member(self.bot.user.id) if self.bot.user else None
+            # Check bot permissions in target channel (handle both DM and server contexts)
+            # Get guild reference - works in both DM and server contexts
+            if ctx.guild:
+                guild = ctx.guild
+            else:
+                # In DM - need to fetch the guild by ID
+                from ..config import GUILD_ID
+                guild = self.bot.get_guild(GUILD_ID)
+            
+            if not guild:
+                await ctx.send("❌ **Cannot access server for testing.** Bot may not be in the target server.")
+                return
+            
+            bot_member = guild.get_member(self.bot.user.id) if self.bot.user else None
             if bot_member:
                 permissions = target_channel.permissions_for(bot_member)
                 if not permissions.send_messages:
