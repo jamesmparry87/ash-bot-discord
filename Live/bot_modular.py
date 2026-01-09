@@ -673,6 +673,142 @@ async def on_error(event, *args, **kwargs):
     print(f"❌ Bot error in {event}: {args}")
 
 
+@bot.event
+async def on_command_error(ctx, error):
+    """Global error handler for command errors with user-friendly messages"""
+    
+    # Handle permission errors
+    if isinstance(error, commands.MissingPermissions):
+        missing_perms = ", ".join(error.missing_permissions)
+        await ctx.send(
+            f"❌ **Permission Denied**\n\n"
+            f"You need the following permission(s) to use this command:\n"
+            f"• {missing_perms}\n\n"
+            f"*This command is restricted to moderators with appropriate server permissions.*"
+        )
+        return
+    
+    # Handle command not found - suggest alternatives
+    if isinstance(error, commands.CommandNotFound):
+        # Extract the attempted command
+        content = ctx.message.content.strip()
+        if content.startswith('!'):
+            attempted_command = content.split()[0][1:]  # Remove the ! prefix
+            
+            # Common command typos and suggestions
+            suggestions = {
+                'strike': '!strikes',
+                'allstrike': '!allstrikes',
+                'resetstrike': '!resetstrikes',
+                'reminder': '!reminders',
+                'setreminder': '!remind',
+                'game': '!games',
+                'status': '!ashstatus',
+                'trivia': '!starttrivia',
+            }
+            
+            suggestion = suggestions.get(attempted_command.lower())
+            if suggestion:
+                await ctx.send(
+                    f"⚠️ **Command Not Found:** `!{attempted_command}`\n\n"
+                    f"Did you mean `{suggestion}`?\n\n"
+                    f"*Use `!help` to see all available commands.*"
+                )
+            else:
+                await ctx.send(
+                    f"⚠️ **Command Not Found:** `!{attempted_command}`\n\n"
+                    f"*Use `!help` to see all available commands.*"
+                )
+        return
+    
+    # Handle missing required arguments
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(
+            f"❌ **Missing Argument**\n\n"
+            f"The command is missing a required argument: `{error.param.name}`\n\n"
+            f"**Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`\n\n"
+            f"*Tip: Use `!help {ctx.command.name}` for more details.*"
+        )
+        return
+    
+    # Handle bad arguments (wrong type, format, etc.)
+    if isinstance(error, commands.BadArgument):
+        await ctx.send(
+            f"❌ **Invalid Argument**\n\n"
+            f"{str(error)}\n\n"
+            f"**Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`\n\n"
+            f"*Tip: Use `!help {ctx.command.name}` for more details.*"
+        )
+        return
+    
+    # Handle user not found errors
+    if isinstance(error, commands.UserNotFound):
+        await ctx.send(
+            f"❌ **User Not Found**\n\n"
+            f"Could not find the user: `{error.argument}`\n\n"
+            f"*Make sure to mention the user correctly or use their exact username.*"
+        )
+        return
+    
+    # Handle member not found errors
+    if isinstance(error, commands.MemberNotFound):
+        await ctx.send(
+            f"❌ **Member Not Found**\n\n"
+            f"Could not find the member: `{error.argument}`\n\n"
+            f"*Make sure they are in this server and you've mentioned them correctly.*"
+        )
+        return
+    
+    # Handle command on cooldown
+    if isinstance(error, commands.CommandOnCooldown):
+        await ctx.send(
+            f"⏰ **Command On Cooldown**\n\n"
+            f"Please wait {error.retry_after:.1f} seconds before using this command again.\n\n"
+            f"*This helps prevent spam and ensures fair usage for everyone.*"
+        )
+        return
+    
+    # Handle bot missing permissions
+    if isinstance(error, commands.BotMissingPermissions):
+        missing_perms = ", ".join(error.missing_permissions)
+        await ctx.send(
+            f"❌ **Bot Missing Permissions**\n\n"
+            f"I don't have the following permission(s) needed to execute this command:\n"
+            f"• {missing_perms}\n\n"
+            f"*Please contact a server administrator to grant me these permissions.*"
+        )
+        return
+    
+    # Handle command disabled
+    if isinstance(error, commands.DisabledCommand):
+        await ctx.send(
+            f"⚠️ **Command Disabled**\n\n"
+            f"The command `{ctx.command.name}` is currently disabled.\n\n"
+            f"*This may be temporary. Contact moderators for more information.*"
+        )
+        return
+    
+    # Handle check failures (custom permission checks)
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send(
+            f"❌ **Access Denied**\n\n"
+            f"You don't have permission to use this command.\n\n"
+            f"*This command may require special authorization or specific roles.*"
+        )
+        return
+    
+    # For any other errors, log them and send a generic message
+    print(f"❌ Unhandled command error in {ctx.command}: {error}")
+    import traceback
+    traceback.print_exception(type(error), error, error.__traceback__)
+    
+    await ctx.send(
+        f"❌ **Something Went Wrong**\n\n"
+        f"An unexpected error occurred while executing this command.\n\n"
+        f"*The error has been logged. If this persists, please contact the moderators.*"
+    )
+
+
 # FAQ Responses and Conversation System
 FAQ_RESPONSES = {
     "hello": "Science Officer Ash reporting. State your requirements.",
