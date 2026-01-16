@@ -3805,7 +3805,7 @@ class DatabaseManager:
                 # Check for duplicate submission from same user
                 cur.execute(
                     """
-                    SELECT id FROM trivia_answers 
+                    SELECT id FROM trivia_answers
                     WHERE session_id = %s AND user_id = %s
                     LIMIT 1
                     """,
@@ -3850,7 +3850,7 @@ class DatabaseManager:
                     logger.info(
                         f"✅ Submitted trivia answer ID {answer_id} for session {session_id}")
                     return {'success': True, 'answer_id': answer_id}
-                
+
                 return {'success': False, 'error': 'insert_failed'}
         except Exception as e:
             logger.error(f"Error submitting trivia answer: {e}")
