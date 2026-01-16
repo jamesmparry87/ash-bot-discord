@@ -413,23 +413,43 @@ class TriviaDatabase:
             session_id: int,
             user_id: int,
             answer_text: str,
-            normalized_answer: Optional[str] = None) -> Optional[int]:
+            normalized_answer: Optional[str] = None) -> Dict[str, Any]:
         """
         Submit an answer to a trivia session
 
         ✅ FIX #6: Optimized for concurrent answer submissions
+        ✅ FIX #7: Returns Dict format for proper error handling and duplicate detection
 
         Performance notes:
         - Uses simple INSERT for fast write performance
         - Conflict detection done via single query
+        - Duplicate detection prevents multiple submissions
         - Minimal transaction scope for high concurrency
+        
+        Returns:
+            Dict with 'success' (bool), 'answer_id' (int), or 'error' (str)
         """
         conn = self.get_connection()
         if not conn:
-            return None
+            return {'success': False, 'error': 'no_connection'}
 
         try:
             with conn.cursor() as cur:
+                # Check for duplicate submission
+                cur.execute(
+                    """
+                    SELECT id FROM trivia_answers
+                    WHERE session_id = %s AND user_id = %s
+                    LIMIT 1
+                """,
+                    (session_id, user_id),
+                )
+                
+                existing = cur.fetchone()
+                if existing:
+                    logger.info(f"Duplicate answer submission detected for user {user_id} in session {session_id}")
+                    return {'success': False, 'error': 'duplicate'}
+                
                 # Check for conflict (mod answering their own question)
                 cur.execute(
                     """
@@ -461,12 +481,12 @@ class TriviaDatabase:
                     answer_id = int(result["id"])  # type: ignore
                     logger.info(
                         f"Submitted trivia answer ID {answer_id} for session {session_id}")
-                    return answer_id
-                return None
+                    return {'success': True, 'answer_id': answer_id}
+                return {'success': False, 'error': 'insert_failed'}
         except Exception as e:
             logger.error(f"Error submitting trivia answer: {e}")
             conn.rollback()
-            return None
+            return {'success': False, 'error': str(e)}
 
     def complete_trivia_session(
         self,
