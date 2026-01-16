@@ -3648,7 +3648,7 @@ class DatabaseManager:
 
                 conn.commit()
                 logger.info(
-                    f"✅ FIX #3: Marked question {question_id} as 'answered' during session creation (early commit)")
+                    f"Marked question {question_id} as 'answered' during session creation")
 
                 if result:
                     session_id = int(result["id"])  # type: ignore
@@ -3665,11 +3665,9 @@ class DatabaseManager:
         """
         Get the current active trivia session
 
-        ✅ FIX #6: Optimized with caching for frequent access during reply detection
-
         Performance notes:
-        - Called on EVERY message during reply detection
-        - Cached result to avoid repeated database queries
+        - Called on every message during reply detection
+        - Optimized with caching to avoid repeated database queries
         - Cache invalidated when session starts/ends
         """
         conn = self.get_connection()
@@ -3778,23 +3776,45 @@ class DatabaseManager:
             session_id: int,
             user_id: int,
             answer_text: str,
-            normalized_answer: Optional[str] = None) -> Optional[int]:
+            normalized_answer: Optional[str] = None) -> Dict[str, Any]:
         """
         Submit an answer to a trivia session
 
-        ✅ FIX #6: Optimized for concurrent answer submissions
+        Returns:
+            Dict with keys:
+            - success: bool
+            - answer_id: int (if success)
+            - error: str (if not success)
 
         Performance notes:
+        - Optimized for concurrent answer submissions
         - Uses simple INSERT for fast write performance
         - Conflict detection done via single query
         - Minimal transaction scope for high concurrency
+        - Duplicate detection prevents multiple answers from same user
         """
         conn = self.get_connection()
         if not conn:
-            return None
+            return {'success': False, 'error': 'no_connection'}
 
         try:
             with conn.cursor() as cur:
+                # Check for duplicate submission from same user
+                cur.execute(
+                    """
+                    SELECT id FROM trivia_answers 
+                    WHERE session_id = %s AND user_id = %s
+                    LIMIT 1
+                    """,
+                    (session_id, user_id),
+                )
+                existing_answer = cur.fetchone()
+
+                if existing_answer:
+                    logger.info(
+                        f"Duplicate answer detected: User {user_id} already answered session {session_id}")
+                    return {'success': False, 'error': 'duplicate'}
+
                 # Check for conflict (mod answering their own question)
                 cur.execute(
                     """
@@ -3826,12 +3846,13 @@ class DatabaseManager:
                     answer_id = int(result["id"])  # type: ignore
                     logger.info(
                         f"Submitted trivia answer ID {answer_id} for session {session_id}")
-                    return answer_id
-                return None
+                    return {'success': True, 'answer_id': answer_id}
+                
+                return {'success': False, 'error': 'insert_failed'}
         except Exception as e:
             logger.error(f"Error submitting trivia answer: {e}")
             conn.rollback()
-            return None
+            return {'success': False, 'error': 'database_error'}
 
     def complete_trivia_session(
         self,
@@ -3841,7 +3862,7 @@ class DatabaseManager:
         correct_count: Optional[int] = None,
     ) -> bool:
         """
-        ✅ FIX #5: Complete trivia session with enhanced transaction management
+        Complete trivia session with enhanced transaction management
 
         Improvements:
         - SAVEPOINT transactions for atomic operations
@@ -3851,16 +3872,16 @@ class DatabaseManager:
         """
         conn = self.get_connection()
         if not conn:
-            logger.error("❌ FIX #5: No database connection for complete_trivia_session")
+            logger.error("No database connection for complete_trivia_session")
             return False
 
-        # ✅ FIX #5: Exponential backoff configuration
+        # Exponential backoff configuration
         max_retries = 3
         base_delay = 0.5  # seconds
 
         for attempt in range(max_retries):
             try:
-                # ✅ FIX #5: Start SAVEPOINT transaction for atomicity
+                # Start SAVEPOINT transaction for atomicity
                 with conn.cursor() as cur:
                     cur.execute("SAVEPOINT trivia_completion")
 
@@ -3874,7 +3895,7 @@ class DatabaseManager:
 
                         session = cur.fetchone()
                         if not session:
-                            logger.error(f"❌ FIX #5: Trivia session {session_id} not found")
+                            logger.error(f"Trivia session {session_id} not found")
                             cur.execute("ROLLBACK TO SAVEPOINT trivia_completion")
                             return False
 
@@ -3882,11 +3903,11 @@ class DatabaseManager:
                         correct_answer = session_dict.get("calculated_answer") or session_dict.get("correct_answer")
 
                         if not correct_answer:
-                            logger.error(f"❌ FIX #5: No correct answer for session {session_id}")
+                            logger.error(f"No correct answer for session {session_id}")
                             cur.execute("ROLLBACK TO SAVEPOINT trivia_completion")
                             return False
 
-                        logger.info(f"🧠 FIX #5: Processing session {session_id}, attempt {attempt + 1}/{max_retries}")
+                        logger.info(f"Processing session {session_id}, attempt {attempt + 1}/{max_retries}")
 
                         # Get all answers
                         cur.execute("""
@@ -3897,7 +3918,7 @@ class DatabaseManager:
                         """, (session_id,))
 
                         all_answers = cur.fetchall()
-                        logger.info(f"🧠 FIX #5: Found {len(all_answers)} answers for session {session_id}")
+                        logger.info(f"Found {len(all_answers)} answers for session {session_id}")
 
                         correct_answer_ids = []
                         close_answer_ids = []
@@ -3994,7 +4015,7 @@ class DatabaseManager:
                             WHERE id = %s
                         """, (first_correct_user_id, total_participants, correct_count, session_id))
 
-                        # ✅ FIX #5: Mark question as 'answered' within same transaction
+                        # Mark question as 'answered' within same transaction
                         question_id = session_dict.get("question_id")
                         if question_id:
                             cur.execute("""
@@ -4004,35 +4025,35 @@ class DatabaseManager:
                             """, (question_id,))
 
                             if cur.rowcount == 0:
-                                logger.warning(f"⚠️ FIX #5: Question {question_id} status update affected 0 rows")
+                                logger.warning(f"Question {question_id} status update affected 0 rows")
                             else:
-                                logger.info(f"✅ FIX #5: Marked question {question_id} as 'answered'")
+                                logger.info(f"Marked question {question_id} as 'answered'")
 
-                        # ✅ FIX #5: Release savepoint and commit entire transaction atomically
+                        # Release savepoint and commit entire transaction atomically
                         cur.execute("RELEASE SAVEPOINT trivia_completion")
                         conn.commit()
 
                         logger.info(
-                            f"✅ FIX #5: Session {session_id} completed successfully - {correct_count}/{total_participants} correct")
+                            f"Session {session_id} completed successfully - {correct_count}/{total_participants} correct")
                         return True
 
                     except Exception as inner_error:
-                        # ✅ FIX #5: Rollback to savepoint on any error
-                        logger.error(f"❌ FIX #5: Error in transaction (attempt {attempt + 1}): {inner_error}")
+                        # Rollback to savepoint on any error
+                        logger.error(f"Error in transaction (attempt {attempt + 1}): {inner_error}")
                         cur.execute("ROLLBACK TO SAVEPOINT trivia_completion")
                         raise inner_error
 
             except Exception as e:
-                logger.error(f"❌ FIX #5: Transaction attempt {attempt + 1}/{max_retries} failed: {e}")
+                logger.error(f"Transaction attempt {attempt + 1}/{max_retries} failed: {e}")
                 conn.rollback()
 
-                # ✅ FIX #5: Exponential backoff before retry
+                # Exponential backoff before retry
                 if attempt < max_retries - 1:
                     delay = base_delay * (2 ** attempt)  # 0.5s, 1s, 2s
-                    logger.info(f"🔄 FIX #5: Retrying in {delay}s...")
+                    logger.info(f"Retrying in {delay}s...")
                     time.sleep(delay)
                 else:
-                    logger.error(f"❌ FIX #5: All {max_retries} attempts failed for session {session_id}")
+                    logger.error(f"All {max_retries} attempts failed for session {session_id}")
                     return False
 
         return False
@@ -6051,3 +6072,4 @@ db = get_database()
 
 # Export list for proper module interface
 __all__ = ['DatabaseManager', 'get_database', 'db']
+
