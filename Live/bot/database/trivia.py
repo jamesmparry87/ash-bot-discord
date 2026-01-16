@@ -425,7 +425,7 @@ class TriviaDatabase:
         - Conflict detection done via single query
         - Duplicate detection prevents multiple submissions
         - Minimal transaction scope for high concurrency
-        
+
         Returns:
             Dict with 'success' (bool), 'answer_id' (int), or 'error' (str)
         """
@@ -444,12 +444,12 @@ class TriviaDatabase:
                 """,
                     (session_id, user_id),
                 )
-                
+
                 existing = cur.fetchone()
                 if existing:
                     logger.info(f"Duplicate answer submission detected for user {user_id} in session {session_id}")
                     return {'success': False, 'error': 'duplicate'}
-                
+
                 # Check for conflict (mod answering their own question)
                 cur.execute(
                     """
