@@ -10,8 +10,11 @@ from zoneinfo import ZoneInfo
 import psycopg2
 from psycopg2.extras import RealDictCursor, RealDictRow
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+# Set up logging with clean format (no module prefix)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(message)s'  # Clean format: just the message with emoji
+)
 logger = logging.getLogger(__name__)
 
 
@@ -3511,7 +3514,7 @@ class DatabaseManager:
 
                 if result:
                     question_id = int(result["id"])  # type: ignore
-                    logger.info(f"Added trivia question ID {question_id}")
+                    logger.info(f"✅ Added trivia question ID {question_id}")
                     return question_id
                 return None
         except Exception as e:
@@ -3648,12 +3651,12 @@ class DatabaseManager:
 
                 conn.commit()
                 logger.info(
-                    f"Marked question {question_id} as 'answered' during session creation")
+                    f"✅ Marked question {question_id} as 'answered' during session creation")
 
                 if result:
                     session_id = int(result["id"])  # type: ignore
                     logger.info(
-                        f"Created trivia session ID {session_id} for question {question_id}")
+                        f"✅ Created trivia session ID {session_id} for question {question_id}")
                     return session_id
                 return None
         except Exception as e:
@@ -3761,9 +3764,9 @@ class DatabaseManager:
 
                 if success:
                     logger.info(
-                        f"Updated trivia session {session_id} with message tracking: Q:{question_message_id}, C:{confirmation_message_id}, Ch:{channel_id}")
+                        f"✅ Updated trivia session {session_id} with message tracking: Q:{question_message_id}, C:{confirmation_message_id}, Ch:{channel_id}")
                 else:
-                    logger.warning(f"Failed to update trivia session {session_id} - session not found")
+                    logger.warning(f"⚠️ Failed to update trivia session {session_id} - session not found")
 
                 return success
         except Exception as e:
@@ -3845,7 +3848,7 @@ class DatabaseManager:
                 if result:
                     answer_id = int(result["id"])  # type: ignore
                     logger.info(
-                        f"Submitted trivia answer ID {answer_id} for session {session_id}")
+                        f"✅ Submitted trivia answer ID {answer_id} for session {session_id}")
                     return {'success': True, 'answer_id': answer_id}
                 
                 return {'success': False, 'error': 'insert_failed'}
@@ -3907,7 +3910,7 @@ class DatabaseManager:
                             cur.execute("ROLLBACK TO SAVEPOINT trivia_completion")
                             return False
 
-                        logger.info(f"Processing session {session_id}, attempt {attempt + 1}/{max_retries}")
+                        logger.info(f"🔄 Processing session {session_id}, attempt {attempt + 1}/{max_retries}")
 
                         # Get all answers
                         cur.execute("""
@@ -3918,7 +3921,7 @@ class DatabaseManager:
                         """, (session_id,))
 
                         all_answers = cur.fetchall()
-                        logger.info(f"Found {len(all_answers)} answers for session {session_id}")
+                        logger.info(f"📝 Found {len(all_answers)} answers for session {session_id}")
 
                         correct_answer_ids = []
                         close_answer_ids = []
@@ -4025,16 +4028,16 @@ class DatabaseManager:
                             """, (question_id,))
 
                             if cur.rowcount == 0:
-                                logger.warning(f"Question {question_id} status update affected 0 rows")
+                                logger.warning(f"⚠️ Question {question_id} status update affected 0 rows")
                             else:
-                                logger.info(f"Marked question {question_id} as 'answered'")
+                                logger.info(f"✅ Marked question {question_id} as 'answered'")
 
                         # Release savepoint and commit entire transaction atomically
                         cur.execute("RELEASE SAVEPOINT trivia_completion")
                         conn.commit()
 
                         logger.info(
-                            f"Session {session_id} completed successfully - {correct_count}/{total_participants} correct")
+                            f"✅ Session {session_id} completed successfully - {correct_count}/{total_participants} correct")
                         return True
 
                     except Exception as inner_error:
@@ -4653,7 +4656,7 @@ class DatabaseManager:
                 result = cur.fetchone()
                 current_available = int(cast(RealDictRow, result)['available_count']) if result else 0
 
-                logger.info(f"Current available questions: {current_available}/{minimum_count}")
+                logger.info(f"📊 Current available questions: {current_available}/{minimum_count}")
 
                 if current_available >= minimum_count:
                     return {
@@ -4690,7 +4693,7 @@ class DatabaseManager:
 
                     recycled_count = cur.rowcount
                     conn.commit()
-                    logger.info(f"Recycled {recycled_count} old questions back to available status")
+                    logger.info(f"♻️ Recycled {recycled_count} old questions back to available status")
 
                 # Check if we have enough now
                 remaining_needed = needed_count - recycled_count
@@ -4968,7 +4971,7 @@ class DatabaseManager:
                             "question_id": session_dict.get("question_id")
                         })
 
-                        logger.info(f"Cleaned up hanging trivia session {session_id}")
+                        logger.info(f"🧹 Cleaned up hanging trivia session {session_id}")
 
                     except Exception as e:
                         logger.error(f"Error cleaning up session {session_id}: {e}")
@@ -5094,7 +5097,7 @@ class DatabaseManager:
                 # Attempt sequence repair
                 repair_result = self.repair_database_sequences()
                 if repair_result.get("total_repaired", 0) > 0:
-                    logger.info(f"✅ Repaired {repair_result['total_repaired']} sequences, retrying session creation...")
+                    logger.info(f"🔧 Repaired {repair_result['total_repaired']} sequences, retrying session creation...")
 
                     # Retry using the helper method
                     try:
@@ -5538,7 +5541,7 @@ class DatabaseManager:
                 repair_result = self.repair_database_sequences()
 
                 if repair_result.get("total_repaired", 0) > 0:
-                    logger.info("Sequence repair completed, retrying trivia question insertion...")
+                    logger.info("🔧 Sequence repair completed, retrying trivia question insertion...")
 
                     # Retry the insertion after repair
                     try:
@@ -6072,4 +6075,3 @@ db = get_database()
 
 # Export list for proper module interface
 __all__ = ['DatabaseManager', 'get_database', 'db']
-
