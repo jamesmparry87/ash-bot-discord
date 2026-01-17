@@ -1974,7 +1974,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                     # Clean up conversation
                     if user_id in mod_trivia_conversations:
                         del mod_trivia_conversations[user_id]
-                    
+
                     await message.reply(
                         f"❌ **Question Submission Cancelled**\n\n"
                         f"Trivia question submission has been terminated. No data has been added to the database. "
