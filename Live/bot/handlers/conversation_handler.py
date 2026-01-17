@@ -70,20 +70,20 @@ jam_approval_active: bool = False
 def add_to_approval_queue(item_type: str, data: Dict[str, Any], priority: int = 0, source: str = 'unknown') -> int:
     """
     Add an approval item to JAM's queue.
-    
+
     Args:
         item_type: Type of approval ('trivia_question', 'weekly_announcement', 'game_review')
         data: The data payload for the approval
         priority: Priority level (0-10, higher = more urgent)
         source: Source of the request (for tracking)
-    
+
     Returns:
         Queue position (0-indexed)
     """
     global jam_approval_queue
-    
+
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    
+
     queue_item = {
         'type': item_type,
         'data': data,
@@ -91,7 +91,7 @@ def add_to_approval_queue(item_type: str, data: Dict[str, Any], priority: int = 
         'added_at': uk_now,
         'source': source
     }
-    
+
     # Insert based on priority (higher priority first)
     inserted = False
     for i, existing_item in enumerate(jam_approval_queue):
@@ -100,29 +100,29 @@ def add_to_approval_queue(item_type: str, data: Dict[str, Any], priority: int = 
             inserted = True
             print(f"📋 Added {item_type} to approval queue at position {i} (priority {priority})")
             break
-    
+
     if not inserted:
         jam_approval_queue.append(queue_item)
         position = len(jam_approval_queue) - 1
         print(f"📋 Added {item_type} to approval queue at position {position} (priority {priority})")
-    
+
     return len(jam_approval_queue) - 1 if not inserted else i
 
 
 def is_jam_approval_active() -> bool:
     """Check if JAM currently has an active approval conversation."""
     global jam_approval_active
-    
+
     # Check both the flag and actual conversation states
     has_active_conversation = (
         JAM_USER_ID in jam_approval_conversations or
         JAM_USER_ID in weekly_announcement_approvals or
         JAM_USER_ID in game_review_conversations
     )
-    
+
     # Sync the flag with actual state
     jam_approval_active = has_active_conversation
-    
+
     return has_active_conversation
 
 
@@ -135,12 +135,12 @@ def get_queue_length() -> int:
 def get_queue_status() -> Dict[str, Any]:
     """
     Get detailed status of the approval queue.
-    
+
     Returns:
         Dictionary with queue statistics and item details
     """
     global jam_approval_queue
-    
+
     return {
         'queue_length': len(jam_approval_queue),
         'active_approval': is_jam_approval_active(),
@@ -159,50 +159,51 @@ def get_queue_status() -> Dict[str, Any]:
 def clear_approval_queue() -> int:
     """
     Clear all items from the approval queue (admin function).
-    
+
     Returns:
         Number of items that were cleared
     """
     global jam_approval_queue
-    
+
     count = len(jam_approval_queue)
     jam_approval_queue = []
     print(f"🧹 Cleared approval queue ({count} items removed)")
-    
+
     return count
 
 
 async def process_next_approval() -> bool:
     """
     Process the next item in the approval queue if JAM is free.
-    
+
     Returns:
         True if an item was sent, False otherwise
     """
     global jam_approval_queue, jam_approval_active
-    
+
     # Check if JAM is busy
     if is_jam_approval_active():
         print(f"⏸️ JAM is busy with active approval. Queue has {len(jam_approval_queue)} pending items.")
         return False
-    
+
     # Check if queue is empty
     if len(jam_approval_queue) == 0:
         print(f"✅ Approval queue is empty. JAM is free.")
         return False
-    
+
     # Get the next item (highest priority first)
     next_item = jam_approval_queue.pop(0)
-    
+
     item_type = next_item['type']
     data = next_item['data']
     priority = next_item['priority']
     source = next_item['source']
-    
+
     remaining = len(jam_approval_queue)
-    
-    print(f"📤 Processing approval: {item_type} (priority {priority}, source: {source}). {remaining} items remaining in queue.")
-    
+
+    print(
+        f"📤 Processing approval: {item_type} (priority {priority}, source: {source}). {remaining} items remaining in queue.")
+
     # Route to appropriate approval handler
     try:
         if item_type == 'trivia_question':
@@ -211,38 +212,38 @@ async def process_next_approval() -> bool:
                 success = await start_pre_trivia_approval(data)
             else:
                 success = await start_jam_question_approval(data)
-            
+
             if success:
                 jam_approval_active = True
                 return True
             else:
                 print(f"❌ Failed to start {item_type} approval")
                 return False
-        
+
         elif item_type == 'weekly_announcement':
             announcement_id = data.get('announcement_id')
             content = data.get('content')
             day = data.get('day')
-            
+
             # Call internal sender (not the queue function)
             await _send_weekly_announcement_approval(announcement_id, content, day)
             jam_approval_active = True
             return True
-        
+
         elif item_type == 'game_review':
             success = await start_game_review_approval(data)
-            
+
             if success:
                 jam_approval_active = True
                 return True
             else:
                 print(f"❌ Failed to start {item_type} approval")
                 return False
-        
+
         else:
             print(f"⚠️ Unknown approval type: {item_type}")
             return False
-    
+
     except Exception as e:
         print(f"❌ Error processing approval from queue: {e}")
         import traceback
@@ -685,11 +686,11 @@ async def start_weekly_announcement_approval(announcement_id: int, content: str,
     try:
         # ✅ FIX #4: Use queue system to prevent conversation overlaps
         print(f"📋 Queueing {day.title()} announcement approval (ID: {announcement_id})")
-        
+
         # Determine priority based on day
         priority = 5  # Default priority for weekly announcements
         source = f"{day}_announcement"
-        
+
         # Add to queue with announcement data
         add_to_approval_queue(
             item_type='weekly_announcement',
@@ -701,10 +702,10 @@ async def start_weekly_announcement_approval(announcement_id: int, content: str,
             priority=priority,
             source=source
         )
-        
+
         # Process the queue (will send if JAM is free)
         await process_next_approval()
-        
+
     except Exception as e:
         print(f"❌ Error queueing weekly announcement approval: {e}")
 
@@ -721,11 +722,11 @@ async def _send_weekly_announcement_approval(announcement_id: int, content: str,
             return
 
         uk_now = datetime.now(ZoneInfo("Europe/London"))
-        
+
         # Show queue status
         queue_length = get_queue_length()
         queue_status = f" ({queue_length + 1} of {queue_length + 1})" if queue_length > 0 else ""
-        
+
         weekly_announcement_approvals[JAM_USER_ID] = {
             'step': 'approval', 'announcement_id': announcement_id, 'day': day,
             'original_content': content, 'last_activity': uk_now
@@ -743,10 +744,10 @@ async def _send_weekly_announcement_approval(announcement_id: int, content: str,
             f"**5.** ❌ **Cancel** - Do not send a greeting today\n\n"
             f"Please respond with **1, 2, 3, 4, or 5**."
         )
-        
+
         if queue_length > 0:
             approval_msg += f"\n\n⏳ **Queue Status:** {queue_length} more approvals pending after this one"
-        
+
         await jam_user.send(approval_msg)
         print(f"✅ Sent {day.title()} announcement to JAM for approval.")
     except Exception as e:
@@ -800,16 +801,16 @@ async def handle_weekly_announcement_approval(message: discord.Message):
 
         if content == '1':
             db.update_announcement_status(announcement_id, 'approved')
-            
+
             # ✅ FIX #4: Process next approval from queue
             queue_length = get_queue_length()
             if queue_length > 0:
                 await message.reply(f"✅ **Approved.** The message will be posted at 9:00 AM.\n\n📬 Processing next approval ({queue_length} remaining)...")
             else:
                 await message.reply("✅ **Approved.** The message will be posted at 9:00 AM.")
-            
+
             del weekly_announcement_approvals[user_id]
-            
+
             # Process next item in queue
             await process_next_approval()
         elif content == '2':
