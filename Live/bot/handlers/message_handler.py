@@ -2228,6 +2228,12 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
     Returns True if query was handled, False otherwise.
     """
     try:
+        # ✅ FIX #1 CRITICAL: Check for trivia replies FIRST before anything else
+        # This must run before gaming query processing to capture answer submissions
+        if await handle_trivia_reply(message):
+            print(f"✅ TRIVIA: Reply processed successfully for user {message.author.id}")
+            return True
+
         # DEFENSIVE CHECK: Skip gaming queries if trivia session is active
         # This prevents interference with trivia answers
         if db is not None:

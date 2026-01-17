@@ -560,12 +560,13 @@ async def tuesday_trivia_greeting():
     except Exception as e:
         print(f"❌ Error in tuesday_trivia_greeting: {e}")
 
-# Run at 10:00 AM UK time every Tuesday - Trivia question pre-approval
+# Run at 9:00 AM UK time every Tuesday - Trivia question pre-approval
+# ✅ FIX #2: Moved from 10:00 to 9:00 to give JAM 2 hours for approval instead of 1
 
 
-@tasks.loop(time=time(10, 0, tzinfo=ZoneInfo("Europe/London")))
+@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
 async def pre_trivia_approval():
-    """Send selected trivia question to JAM for approval 1 hour before posting"""
+    """Send selected trivia question to JAM for approval 2 hours before posting"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
 
     # Only run on Tuesdays (weekday 1)

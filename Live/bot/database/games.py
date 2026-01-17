@@ -13,7 +13,7 @@ This module handles:
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple, cast
 from zoneinfo import ZoneInfo
 
@@ -2531,9 +2531,7 @@ class GamesDatabase:
         try:
             with conn.cursor() as cur:
                 # Calculate 5 minutes ago from current time
-                import datetime
-
-                five_minutes_ago = current_time - datetime.timedelta(minutes=5)
+                five_minutes_ago = current_time - timedelta(minutes=5)
                 cur.execute(
                     """
                     SELECT * FROM reminders
