@@ -203,7 +203,6 @@ class TriviaCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-
     def _is_natural_multiple_choice_format(self, content: str) -> bool:
         """
         Check if content is in natural multiple choice format for user-friendly question submission
