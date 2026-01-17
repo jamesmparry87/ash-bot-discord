@@ -2611,6 +2611,8 @@ def safe_initialize_ai():
 
 async def safe_initialize_ai_async():
     """Safe async AI initialization that won't crash on missing dependencies"""
+    global ai_enabled, ai_status_message
+    
     try:
         await initialize_ai_async()
         # Return the actual AI status, not just whether the function completed
@@ -2624,7 +2626,6 @@ async def safe_initialize_ai_async():
         print(f"⚠️ Safe async AI initialization caught error: {e}")
         print("📋 Full error traceback:")
         traceback.print_exc()
-        global ai_enabled, ai_status_message
         ai_enabled = False
         ai_status_message = "Async AI initialization failed (safe mode)"
         return False
