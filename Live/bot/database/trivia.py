@@ -41,6 +41,10 @@ class TriviaDatabase:
         """
         self.db = db_manager
 
+    def get_connection(self):
+        """Get database connection from the database manager"""
+        return self.db.get_connection()
+
     def normalize_trivia_answer(self, answer_text: str) -> str:
         """Enhanced normalization for trivia answers with fuzzy matching support"""
         import re
@@ -486,7 +490,7 @@ class TriviaDatabase:
         except Exception as e:
             logger.error(f"Error submitting trivia answer: {e}")
             conn.rollback()
-            return {'success': False, 'error': str(e)}
+            return {'success': False, 'error': 'database_error'}
 
     def complete_trivia_session(
         self,

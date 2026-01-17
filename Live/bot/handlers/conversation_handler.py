@@ -7,6 +7,7 @@ Manages conversation state and user flows for complex multi-step interactions.
 
 import asyncio
 import re
+import traceback
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 from zoneinfo import ZoneInfo
@@ -246,7 +247,6 @@ async def process_next_approval() -> bool:
 
     except Exception as e:
         print(f"❌ Error processing approval from queue: {e}")
-        import traceback
         traceback.print_exc()
         return False
 
@@ -2800,7 +2800,6 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
 
     except Exception as e:
         print(f"❌ Critical error in JAM approval workflow: {e}")
-        import traceback
         traceback.print_exc()
 
         # Clean up conversation state on critical error
@@ -3098,7 +3097,6 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
 
     except Exception as e:
         print(f"❌ Critical error during session restoration: {e}")
-        import traceback
         traceback.print_exc()
         return {
             "error": str(e),
