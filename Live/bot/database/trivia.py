@@ -923,14 +923,14 @@ class TriviaDatabase:
                 elif dynamic_query_type == "oldest_game":
                     where_clauses.append("release_year IS NOT NULL")
                     order_by = "ORDER BY release_year ASC"
-                
+
                 # ===== PHASE 1: SERIES BATTLES =====
                 elif dynamic_query_type == "series_playtime_comparison":
                     # Parameter format: "Series A vs Series B"
                     if not parameter or " vs " not in parameter.lower():
                         return None
                     series_a, series_b = [s.strip() for s in parameter.split(" vs ", 1)]
-                    
+
                     # Query total playtime for each series
                     cur.execute("""
                         SELECT series_name, SUM(total_playtime_minutes) as total_playtime
@@ -943,13 +943,13 @@ class TriviaDatabase:
                     """, (series_a.lower(), series_b.lower()))
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['series_name'] if result else None
-                
+
                 elif dynamic_query_type == "series_episode_comparison":
                     # Parameter format: "Series A vs Series B"
                     if not parameter or " vs " not in parameter.lower():
                         return None
                     series_a, series_b = [s.strip() for s in parameter.split(" vs ", 1)]
-                    
+
                     # Query total episodes for each series
                     cur.execute("""
                         SELECT series_name, SUM(total_episodes) as total_episodes
@@ -962,13 +962,13 @@ class TriviaDatabase:
                     """, (series_a.lower(), series_b.lower()))
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['series_name'] if result else None
-                
+
                 elif dynamic_query_type == "series_completion_comparison":
                     # Parameter format: "Series A vs Series B"
                     if not parameter or " vs " not in parameter.lower():
                         return None
                     series_a, series_b = [s.strip() for s in parameter.split(" vs ", 1)]
-                    
+
                     # Query completed games count for each series
                     cur.execute("""
                         SELECT series_name, COUNT(*) as completed_count
@@ -981,13 +981,13 @@ class TriviaDatabase:
                     """, (series_a.lower(), series_b.lower()))
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['series_name'] if result else None
-                
+
                 elif dynamic_query_type == "series_views_comparison":
                     # Parameter format: "Series A vs Series B"
                     if not parameter or " vs " not in parameter.lower():
                         return None
                     series_a, series_b = [s.strip() for s in parameter.split(" vs ", 1)]
-                    
+
                     # Query total YouTube views for each series
                     cur.execute("""
                         SELECT series_name, SUM(youtube_views) as total_views
@@ -1000,7 +1000,7 @@ class TriviaDatabase:
                     """, (series_a.lower(), series_b.lower()))
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['series_name'] if result else None
-                
+
                 # ===== PHASE 1: GENRE INSIGHTS =====
                 elif dynamic_query_type == "most_played_genre":
                     # Which genre has the most games
@@ -1014,7 +1014,7 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['genre'] if result else None
-                
+
                 elif dynamic_query_type == "longest_genre_playtime":
                     # Which genre has the most total playtime
                     cur.execute("""
@@ -1028,7 +1028,7 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['genre'] if result else None
-                
+
                 elif dynamic_query_type == "most_popular_genre_by_views":
                     # Which genre has the most total YouTube views
                     cur.execute("""
@@ -1042,7 +1042,7 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['genre'] if result else None
-                
+
                 elif dynamic_query_type == "genre_with_most_completed_games":
                     # Which genre has the most completed games
                     cur.execute("""
@@ -1056,7 +1056,7 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['genre'] if result else None
-                
+
                 # ===== PHASE 2: MEMORABLE MILESTONES =====
                 elif dynamic_query_type == "longest_completed_game":
                     # Longest game Jonesy has completed (by playtime)
@@ -1070,7 +1070,7 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['canonical_name'] if result else None
-                
+
                 elif dynamic_query_type == "shortest_completed_game":
                     # Shortest completed game (by playtime)
                     cur.execute("""
@@ -1083,7 +1083,7 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['canonical_name'] if result else None
-                
+
                 elif dynamic_query_type == "first_game_ever_played":
                     # First game on the channel (earliest first_played_date)
                     cur.execute("""
@@ -1095,7 +1095,7 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['canonical_name'] if result else None
-                
+
                 elif dynamic_query_type == "most_recent_completed_game":
                     # Most recently completed game
                     cur.execute("""
@@ -1108,7 +1108,7 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['canonical_name'] if result else None
-                
+
                 elif dynamic_query_type == "oldest_completed_game_by_release":
                     # Oldest game (by release year) that Jonesy has completed
                     cur.execute("""
@@ -1121,7 +1121,7 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['canonical_name'] if result else None
-                
+
                 elif dynamic_query_type == "newest_completed_game_by_release":
                     # Newest game (by release year) that Jonesy has completed
                     cur.execute("""
@@ -1134,7 +1134,7 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['canonical_name'] if result else None
-                
+
                 # ===== PHASE 3: SERIES KNOWLEDGE & ENGAGEMENT =====
                 elif dynamic_query_type == "series_with_most_games":
                     # Which series has the most games played
@@ -1148,12 +1148,12 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['series_name'] if result else None
-                
+
                 elif dynamic_query_type == "series_total_playtime":
                     # Total playtime for a specific series (requires parameter)
                     if not parameter:
                         return None
-                    
+
                     cur.execute("""
                         SELECT series_name, SUM(total_playtime_minutes) as total_playtime
                         FROM played_games
@@ -1162,13 +1162,13 @@ class TriviaDatabase:
                         GROUP BY series_name
                     """, (parameter.lower(),))
                     result = cur.fetchone()
-                    
+
                     if result:
                         total_minutes = cast(RealDictRow, result)['total_playtime']
                         total_hours = int(total_minutes / 60)
                         return f"{total_hours} hours"
                     return None
-                
+
                 elif dynamic_query_type == "series_with_most_completed_games":
                     # Series with the most completed games
                     cur.execute("""
@@ -1182,7 +1182,7 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['series_name'] if result else None
-                
+
                 elif dynamic_query_type == "most_incomplete_series":
                     # Series with the most incomplete games
                     cur.execute("""
@@ -1196,7 +1196,7 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['series_name'] if result else None
-                
+
                 elif dynamic_query_type == "longest_average_series_length":
                     # Series with the longest average playtime per game
                     cur.execute("""
@@ -1211,15 +1211,15 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['series_name'] if result else None
-                
+
                 # ===== PHASE 4: ADVANCED PATTERNS =====
                 elif dynamic_query_type == "best_views_per_episode":
                     # Game with the best engagement rate (views per episode)
                     cur.execute("""
-                        SELECT canonical_name, 
+                        SELECT canonical_name,
                                (youtube_views::float / NULLIF(total_episodes, 0)) as engagement_rate
                         FROM played_games
-                        WHERE youtube_views > 0 
+                        WHERE youtube_views > 0
                         AND total_episodes > 0
                         AND youtube_playlist_url IS NOT NULL
                         ORDER BY engagement_rate DESC
@@ -1227,20 +1227,20 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['canonical_name'] if result else None
-                
+
                 elif dynamic_query_type == "youtube_only_count":
                     # Count of YouTube-exclusive games
                     cur.execute("""
                         SELECT COUNT(*) as count
                         FROM played_games
-                        WHERE youtube_playlist_url IS NOT NULL 
+                        WHERE youtube_playlist_url IS NOT NULL
                         AND youtube_playlist_url != ''
                         AND (twitch_vod_urls IS NULL OR twitch_vod_urls = '' OR twitch_vod_urls = '{}')
                     """)
                     result = cur.fetchone()
                     count = cast(RealDictRow, result)['count'] if result else 0
                     return str(count)
-                
+
                 elif dynamic_query_type == "twitch_only_count":
                     # Count of Twitch-exclusive games
                     cur.execute("""
@@ -1252,7 +1252,7 @@ class TriviaDatabase:
                     result = cur.fetchone()
                     count = cast(RealDictRow, result)['count'] if result else 0
                     return str(count)
-                
+
                 elif dynamic_query_type == "most_cross_platform_series":
                     # Series played on both YouTube and Twitch
                     cur.execute("""
@@ -1267,7 +1267,7 @@ class TriviaDatabase:
                     """)
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['series_name'] if result else None
-                
+
                 elif dynamic_query_type == "total_completed_count":
                     # Total number of completed games
                     cur.execute("""
@@ -1278,12 +1278,12 @@ class TriviaDatabase:
                     result = cur.fetchone()
                     count = cast(RealDictRow, result)['count'] if result else 0
                     return str(count)
-                
+
                 elif dynamic_query_type == "completion_rate_percentage":
                     # Overall completion rate as a percentage
                     cur.execute("""
-                        SELECT 
-                            COUNT(CASE WHEN completion_status = 'completed' THEN 1 END)::float / 
+                        SELECT
+                            COUNT(CASE WHEN completion_status = 'completed' THEN 1 END)::float /
                             NULLIF(COUNT(*), 0) * 100 as completion_rate
                         FROM played_games
                     """)
@@ -1292,7 +1292,7 @@ class TriviaDatabase:
                         rate = cast(RealDictRow, result)['completion_rate']
                         return f"{int(rate)}%"
                     return None
-                
+
                 else:
                     return None  # Unknown query type
 
@@ -1302,7 +1302,7 @@ class TriviaDatabase:
                     cur.execute(full_query, tuple(params))
                     result = cur.fetchone()
                     return cast(RealDictRow, result)['canonical_name'] if result else None
-                
+
                 return None
         except Exception as e:
             logger.error(f"Error calculating dynamic answer for {dynamic_query_type}: {e}")
