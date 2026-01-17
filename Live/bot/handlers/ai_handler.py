@@ -2612,7 +2612,7 @@ def safe_initialize_ai():
 async def safe_initialize_ai_async():
     """Safe async AI initialization that won't crash on missing dependencies"""
     global ai_enabled, ai_status_message
-    
+
     try:
         await initialize_ai_async()
         # Return the actual AI status, not just whether the function completed
