@@ -721,6 +721,22 @@ async def _send_weekly_announcement_approval(announcement_id: int, content: str,
         if not jam_user:
             return
 
+        # ✅ FIX: Defensive cleanup - clear ANY conflicting conversation states before starting
+        try:
+            if JAM_USER_ID in jam_approval_conversations:
+                del jam_approval_conversations[JAM_USER_ID]
+                print(f"✅ FIX: Cleared conflicting approval conversation for JAM before weekly announcement")
+            
+            if JAM_USER_ID in mod_trivia_conversations:
+                del mod_trivia_conversations[JAM_USER_ID]
+                print(f"✅ FIX: Cleared conflicting trivia conversation for JAM before weekly announcement")
+            
+            if JAM_USER_ID in announcement_conversations:
+                del announcement_conversations[JAM_USER_ID]
+                print(f"✅ FIX: Cleared conflicting announcement conversation for JAM before weekly announcement")
+        except Exception as cleanup_e:
+            print(f"⚠️ Error during weekly announcement defensive cleanup: {cleanup_e}")
+
         uk_now = datetime.now(ZoneInfo("Europe/London"))
 
         # Show queue status
@@ -1941,6 +1957,11 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                         f"**Priority:** Moderator Submission (High Priority)\n\n"
                         f"*Efficiency maintained. Mission intelligence enhanced. Thank you for your contribution.*"
                     )
+                    
+                    # ✅ FIX: Clean up conversation immediately after successful submission
+                    if user_id in mod_trivia_conversations:
+                        del mod_trivia_conversations[user_id]
+                        print(f"✅ Cleaned up trivia conversation for user {user_id} after successful submission")
                 else:
                     await message.reply(
                         f"❌ **Submission Failed**\n\n"
@@ -1948,10 +1969,10 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                         f"Please retry or contact system administrator.\n\n"
                         f"*Database error logged for technical review.*"
                     )
-
-                # Clean up conversation
-                if user_id in mod_trivia_conversations:
-                    del mod_trivia_conversations[user_id]
+                    
+                    # Clean up conversation on failure too
+                    if user_id in mod_trivia_conversations:
+                        del mod_trivia_conversations[user_id]
 
             elif content in ['2', 'edit question', 'edit']:
                 conversation['step'] = 'question_input'
@@ -2668,8 +2689,22 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
             print("❌ Could not find bot instance for JAM approval")
             return False
 
-        # Clean up existing sessions (both memory and database)
+        # ✅ FIX: Defensive cleanup - clear ANY conflicting conversation states before starting
         try:
+            # Clear ALL conversation types for JAM to prevent conflicts
+            if JAM_USER_ID in jam_approval_conversations:
+                del jam_approval_conversations[JAM_USER_ID]
+                print(f"✅ FIX: Cleared existing approval conversation for JAM")
+            
+            if JAM_USER_ID in mod_trivia_conversations:
+                del mod_trivia_conversations[JAM_USER_ID]
+                print(f"✅ FIX: Cleared conflicting trivia conversation for JAM")
+            
+            if JAM_USER_ID in announcement_conversations:
+                del announcement_conversations[JAM_USER_ID]
+                print(f"✅ FIX: Cleared conflicting announcement conversation for JAM")
+            
+            # Clean up expired sessions
             cleanup_jam_approval_conversations()
             db.cleanup_expired_approval_sessions()
             print("✅ Cleaned up existing approval conversations and sessions")
@@ -2828,6 +2863,22 @@ async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
         if not bot_instance:
             print("❌ Could not find bot instance for pre-trivia approval")
             return False
+
+        # ✅ FIX: Defensive cleanup - clear ANY conflicting conversation states before starting
+        try:
+            if JAM_USER_ID in jam_approval_conversations:
+                del jam_approval_conversations[JAM_USER_ID]
+                print(f"✅ FIX: Cleared conflicting approval conversation for JAM before pre-trivia")
+            
+            if JAM_USER_ID in mod_trivia_conversations:
+                del mod_trivia_conversations[JAM_USER_ID]
+                print(f"✅ FIX: Cleared conflicting trivia conversation for JAM before pre-trivia")
+            
+            if JAM_USER_ID in announcement_conversations:
+                del announcement_conversations[JAM_USER_ID]
+                print(f"✅ FIX: Cleared conflicting announcement conversation for JAM before pre-trivia")
+        except Exception as cleanup_e:
+            print(f"⚠️ Error during pre-trivia defensive cleanup: {cleanup_e}")
 
         # Get current UK time
         uk_now = datetime.now(ZoneInfo("Europe/London"))
@@ -3119,6 +3170,22 @@ async def start_game_review_approval(game_data: Dict[str, Any]) -> bool:
         if not jam_user:
             print(f"❌ Cannot reach JAM for game review")
             return False
+
+        # ✅ FIX: Defensive cleanup - clear ANY conflicting conversation states before starting
+        try:
+            if JAM_USER_ID in jam_approval_conversations:
+                del jam_approval_conversations[JAM_USER_ID]
+                print(f"✅ FIX: Cleared conflicting approval conversation for JAM before game review")
+            
+            if JAM_USER_ID in mod_trivia_conversations:
+                del mod_trivia_conversations[JAM_USER_ID]
+                print(f"✅ FIX: Cleared conflicting trivia conversation for JAM before game review")
+            
+            if JAM_USER_ID in announcement_conversations:
+                del announcement_conversations[JAM_USER_ID]
+                print(f"✅ FIX: Cleared conflicting announcement conversation for JAM before game review")
+        except Exception as cleanup_e:
+            print(f"⚠️ Error during game review defensive cleanup: {cleanup_e}")
 
         # Create session in database
         session_id = db.create_game_review_session(
