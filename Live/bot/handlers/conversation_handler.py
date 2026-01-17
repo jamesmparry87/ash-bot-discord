@@ -726,11 +726,11 @@ async def _send_weekly_announcement_approval(announcement_id: int, content: str,
             if JAM_USER_ID in jam_approval_conversations:
                 del jam_approval_conversations[JAM_USER_ID]
                 print(f"✅ FIX: Cleared conflicting approval conversation for JAM before weekly announcement")
-            
+
             if JAM_USER_ID in mod_trivia_conversations:
                 del mod_trivia_conversations[JAM_USER_ID]
                 print(f"✅ FIX: Cleared conflicting trivia conversation for JAM before weekly announcement")
-            
+
             if JAM_USER_ID in announcement_conversations:
                 del announcement_conversations[JAM_USER_ID]
                 print(f"✅ FIX: Cleared conflicting announcement conversation for JAM before weekly announcement")
@@ -1957,7 +1957,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                         f"**Priority:** Moderator Submission (High Priority)\n\n"
                         f"*Efficiency maintained. Mission intelligence enhanced. Thank you for your contribution.*"
                     )
-                    
+
                     # ✅ FIX: Clean up conversation immediately after successful submission
                     if user_id in mod_trivia_conversations:
                         del mod_trivia_conversations[user_id]
@@ -1969,7 +1969,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                         f"Please retry or contact system administrator.\n\n"
                         f"*Database error logged for technical review.*"
                     )
-                    
+
                     # Clean up conversation on failure too
                     if user_id in mod_trivia_conversations:
                         del mod_trivia_conversations[user_id]
@@ -2695,15 +2695,15 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
             if JAM_USER_ID in jam_approval_conversations:
                 del jam_approval_conversations[JAM_USER_ID]
                 print(f"✅ FIX: Cleared existing approval conversation for JAM")
-            
+
             if JAM_USER_ID in mod_trivia_conversations:
                 del mod_trivia_conversations[JAM_USER_ID]
                 print(f"✅ FIX: Cleared conflicting trivia conversation for JAM")
-            
+
             if JAM_USER_ID in announcement_conversations:
                 del announcement_conversations[JAM_USER_ID]
                 print(f"✅ FIX: Cleared conflicting announcement conversation for JAM")
-            
+
             # Clean up expired sessions
             cleanup_jam_approval_conversations()
             db.cleanup_expired_approval_sessions()
@@ -2869,11 +2869,11 @@ async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
             if JAM_USER_ID in jam_approval_conversations:
                 del jam_approval_conversations[JAM_USER_ID]
                 print(f"✅ FIX: Cleared conflicting approval conversation for JAM before pre-trivia")
-            
+
             if JAM_USER_ID in mod_trivia_conversations:
                 del mod_trivia_conversations[JAM_USER_ID]
                 print(f"✅ FIX: Cleared conflicting trivia conversation for JAM before pre-trivia")
-            
+
             if JAM_USER_ID in announcement_conversations:
                 del announcement_conversations[JAM_USER_ID]
                 print(f"✅ FIX: Cleared conflicting announcement conversation for JAM before pre-trivia")
@@ -3176,11 +3176,11 @@ async def start_game_review_approval(game_data: Dict[str, Any]) -> bool:
             if JAM_USER_ID in jam_approval_conversations:
                 del jam_approval_conversations[JAM_USER_ID]
                 print(f"✅ FIX: Cleared conflicting approval conversation for JAM before game review")
-            
+
             if JAM_USER_ID in mod_trivia_conversations:
                 del mod_trivia_conversations[JAM_USER_ID]
                 print(f"✅ FIX: Cleared conflicting trivia conversation for JAM before game review")
-            
+
             if JAM_USER_ID in announcement_conversations:
                 del announcement_conversations[JAM_USER_ID]
                 print(f"✅ FIX: Cleared conflicting announcement conversation for JAM before game review")
