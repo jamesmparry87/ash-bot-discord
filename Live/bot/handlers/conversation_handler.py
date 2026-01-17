@@ -1966,20 +1966,22 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                     conversation['step'] = 'answer_input'
                     await message.reply(
                         f"✏️ **Answer Edit Mode**\n\n"
-                        f"Please provide your revised answer. The previous answer will be replaced.\n\n"
-                        f"*Ensure accuracy for optimal trivia experience.*"
+                        f"**Now provide the correct answer.**\n\n"
+                        f"**Please provide the correct answer:**"
                     )
                 else:
-                    conversation['step'] = 'category_selection'
+                    # For database-calculated questions, option 3 is "Cancel" not "Edit Answer"
+                    # Clean up conversation
+                    if user_id in mod_trivia_conversations:
+                        del mod_trivia_conversations[user_id]
+                    
                     await message.reply(
-                        f"🔧 **Category Edit Mode**\n\n"
-                        f"📊 **Select New Category:**\n"
-                        f"**1.** 📈 **Statistics** - Questions about playtime, episode counts, completion rates\n"
-                        f"**2.** 🎮 **Games** - Questions about specific games or series\n"
-                        f"**3.** 📺 **Series** - Questions about game franchises or series\n\n"
-                        f"Please respond with **1**, **2**, or **3**.\n\n"
-                        f"*Category selection affects answer calculation accuracy.*"
+                        f"❌ **Question Submission Cancelled**\n\n"
+                        f"Trivia question submission has been terminated. No data has been added to the database. "
+                        f"All temporary data has been expunged from system memory.\n\n"
+                        f"*Mission parameters reset. Standing by for new directives.*"
                     )
+                    return
 
             elif content in ['4', 'cancel', 'abort']:
                 await message.reply(
