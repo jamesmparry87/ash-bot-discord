@@ -18,9 +18,44 @@ import sys
 import pytest
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+import signal
+from functools import wraps
 
 # Add Live directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+
+# ============================================================================
+# TIMEOUT DECORATOR - Prevent Infinite Hangs
+# ============================================================================
+
+def timeout(seconds=300):
+    """
+    Timeout decorator to prevent tests from hanging indefinitely.
+    
+    Default: 5 minutes per test
+    Use: @timeout(60) for 1 minute timeout
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            def timeout_handler(signum, frame):
+                raise TimeoutError(f"Test '{func.__name__}' exceeded {seconds} second timeout")
+            
+            # Set the signal alarm (Unix-like systems)
+            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(seconds)
+            
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                # Disable the alarm and restore old handler
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
+            
+            return result
+        return wrapper
+    return decorator
 
 
 # ============================================================================
@@ -33,6 +68,7 @@ class TestGamingDatabase:
     Test Goal: Ensure queries return complete, accurate data
     """
 
+    @timeout(180)  # 3 minute timeout
     def test_game_query_returns_complete_data(self):
         """
         CRITICAL TEST: Verify game queries return all required fields
@@ -65,6 +101,7 @@ class TestGamingDatabase:
 
             print(f"✅ PASS: Game data structure is complete for '{game['canonical_name']}'")
 
+    @timeout(180)  # 3 minute timeout
     def test_statistical_queries_return_valid_data(self):
         """
         CRITICAL TEST: Verify statistical queries work correctly
@@ -95,6 +132,7 @@ class TestGamingDatabase:
 
             print(f"✅ PASS: Statistical query ordering correct")
 
+    @timeout(180)  # 3 minute timeout
     def test_trivia_session_state_management(self):
         """
         CRITICAL TEST: Verify trivia session queries work
@@ -127,6 +165,7 @@ class TestAIResponses:
     Test Goal: Ensure responses are complete, formatted correctly
     """
 
+    @timeout(60)  # 1 minute timeout
     def test_ai_response_filtering_works(self):
         """
         CRITICAL TEST: Verify AI responses are filtered for quality
@@ -163,6 +202,7 @@ class TestDataQuality:
     Test Goal: Verify data normalization works
     """
 
+    @timeout(30)  # 30 second timeout
     def test_genre_normalization_consistency(self):
         """
         CRITICAL TEST: Verify genres are normalized consistently
@@ -184,6 +224,7 @@ class TestDataQuality:
 
         print("✅ PASS: Genre normalization is consistent")
 
+    @timeout(30)  # 30 second timeout
     def test_alternative_names_parsing(self):
         """
         CRITICAL TEST: Verify alternative names are parsed correctly
@@ -213,6 +254,7 @@ class TestDeploymentReadiness:
     Test Goal: Catch deployment blockers before go-live
     """
 
+    @timeout(300)  # 5 minute timeout - imports can be slow
     def test_all_required_modules_import(self):
         """
         CRITICAL TEST: Verify all core modules can be imported
@@ -241,6 +283,7 @@ class TestDeploymentReadiness:
 
         print("✅ PASS: All critical modules import successfully")
 
+    @timeout(120)  # 2 minute timeout
     def test_database_connection_works(self):
         """
         CRITICAL TEST: Verify database connection can be established

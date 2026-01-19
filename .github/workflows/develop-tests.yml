@@ -10,6 +10,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent infinite hangs - force failure after 10 minutes
     
     # Service containers for testing
     services:
@@ -77,12 +78,14 @@ jobs:
         echo "PostgreSQL is ready!"
     
     - name: Run database tests
+      timeout-minutes: 3  # Database tests should complete quickly
       env:
         DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
       run: |
         python3 -m pytest Live/tests/test_database.py -v --tb=short --durations=10
     
     - name: Run command tests
+      timeout-minutes: 3  # Command tests should complete quickly
       env:
         DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
         DISCORD_TOKEN: ${{ secrets.TEST_DISCORD_TOKEN }}  # pyright: ignore
@@ -92,6 +95,7 @@ jobs:
         python3 -m pytest Live/tests/test_commands.py -v --tb=short --durations=10
     
     - name: Run AI integration tests
+      timeout-minutes: 3  # AI tests may involve network calls but should complete quickly
       env:
         DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}  # pyright: ignore
@@ -100,6 +104,7 @@ jobs:
         python3 -m pytest Live/tests/test_ai_integration.py -v --tb=short --durations=10
     
     - name: Run core functional tests
+      timeout-minutes: 8  # Main functional tests - allow more time but prevent infinite hangs
       env:
         DATABASE_URL: postgresql://test:test@localhost:5432/test_discord_bot
         DISCORD_TOKEN: ${{ secrets.TEST_DISCORD_TOKEN }}  # pyright: ignore*
@@ -148,6 +153,7 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent infinite hangs in linting
     permissions:
       contents: write  # Allow pushing auto-fix commits back to the repository
       pull-requests: write  # Allow updating PRs
@@ -267,6 +273,7 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent infinite hangs in security checks
     
     steps:
     - uses: actions/checkout@v4
@@ -355,6 +362,7 @@ jobs:
 
   deployment-readiness:
     runs-on: ubuntu-latest
+    timeout-minutes: 5  # Quick validation checks
     needs: [test, lint]
     
     steps:
@@ -412,6 +420,7 @@ jobs:
 
   notify:
     runs-on: ubuntu-latest
+    timeout-minutes: 2  # Simple notification step
     needs: [test, lint, security, deployment-readiness]
     if: always()
     
