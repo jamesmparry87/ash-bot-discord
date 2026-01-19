@@ -137,6 +137,7 @@ class StatsDatabase:
             with conn.cursor() as cur:
                 if game_name:
                     # Get metrics for specific game
+                    # ✅ FIX #3: Cast to ::numeric instead of ::float for ROUND() compatibility
                     cur.execute("""
                         SELECT
                             canonical_name,
@@ -149,12 +150,12 @@ class StatsDatabase:
                             completion_status,
                             CASE
                                 WHEN total_episodes > 0 THEN
-                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / total_episodes, 1)
+                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / total_episodes, 1)
                                 ELSE 0
                             END as views_per_episode,
                             CASE
                                 WHEN total_playtime_minutes > 0 THEN
-                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / (total_playtime_minutes::float / 60), 1)
+                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / (total_playtime_minutes::numeric / 60), 1)
                                 ELSE 0
                             END as views_per_hour
                         FROM played_games
@@ -164,6 +165,7 @@ class StatsDatabase:
                     """, (f'%{game_name}%',))
                 else:
                     # Get top games by engagement rate
+                    # ✅ FIX #3: Cast to ::numeric instead of ::float for ROUND() compatibility
                     cur.execute("""
                         SELECT
                             canonical_name,
@@ -176,12 +178,12 @@ class StatsDatabase:
                             completion_status,
                             CASE
                                 WHEN total_episodes > 0 THEN
-                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / total_episodes, 1)
+                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / total_episodes, 1)
                                 ELSE 0
                             END as views_per_episode,
                             CASE
                                 WHEN total_playtime_minutes > 0 THEN
-                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / (total_playtime_minutes::float / 60), 1)
+                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / (total_playtime_minutes::numeric / 60), 1)
                                 ELSE 0
                             END as views_per_hour
                         FROM played_games
@@ -191,7 +193,7 @@ class StatsDatabase:
                         ORDER BY
                             CASE
                                 WHEN total_playtime_minutes > 0 THEN
-                                    (COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / (total_playtime_minutes::float / 60)
+                                    (COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / (total_playtime_minutes::numeric / 60)
                                 ELSE 0
                             END DESC
                         LIMIT %s

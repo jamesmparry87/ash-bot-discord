@@ -9,11 +9,27 @@ This module handles:
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
+
+
+def _serialize_for_json(data: Any) -> Any:
+    """
+    Helper to convert non-JSON-serializable objects (dates, datetimes) to strings.
+    
+    This fixes: "Object of type date is not JSON serializable"
+    """
+    if isinstance(data, dict):
+        return {key: _serialize_for_json(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [_serialize_for_json(item) for item in data]
+    elif isinstance(data, (date, datetime)):
+        return data.isoformat()
+    else:
+        return data
 
 
 class SessionDatabase:
@@ -47,6 +63,10 @@ class SessionDatabase:
             expires_at
     ) -> Optional[int]:
         """Helper method to insert approval session (reduces duplication)"""
+        # ✅ FIX #1: Sanitize data before JSON serialization (convert dates to ISO strings)
+        sanitized_question_data = _serialize_for_json(question_data)
+        sanitized_conversation_data = _serialize_for_json(conversation_data or {})
+        
         cur.execute("""
             INSERT INTO trivia_approval_sessions (
                 user_id, session_type, conversation_step, question_data,
@@ -55,8 +75,8 @@ class SessionDatabase:
             RETURNING id
         """, (
             user_id, session_type, conversation_step,
-            json.dumps(question_data),
-            json.dumps(conversation_data or {}),
+            json.dumps(sanitized_question_data),
+            json.dumps(sanitized_conversation_data),
             uk_now, uk_now, expires_at
         ))
 
@@ -245,11 +265,13 @@ class SessionDatabase:
 
                 if question_data is not None:
                     set_clauses.append("question_data = %s")
-                    params.append(json.dumps(question_data))  # type: ignore
+                    # ✅ FIX #1: Sanitize before JSON serialization
+                    params.append(json.dumps(_serialize_for_json(question_data)))  # type: ignore
 
                 if conversation_data is not None:
                     set_clauses.append("conversation_data = %s")
-                    params.append(json.dumps(conversation_data))  # type: ignore
+                    # ✅ FIX #1: Sanitize before JSON serialization
+                    params.append(json.dumps(_serialize_for_json(conversation_data)))  # type: ignore
 
                 if increment_restart_count:
                     set_clauses.append("bot_restart_count = bot_restart_count + 1")

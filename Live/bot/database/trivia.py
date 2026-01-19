@@ -160,7 +160,11 @@ class TriviaDatabase:
 
     def get_next_trivia_question(
             self, exclude_user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
-        """Get the next trivia question based on priority system (excluding answered questions)"""
+        """
+        Get the next trivia question based on priority system (excluding answered/retired questions)
+        
+        ✅ FIX #2: Ensure retired questions are never selected
+        """
         conn = self.db.get_connection()
         if not conn:
             return None
@@ -175,6 +179,7 @@ class TriviaDatabase:
                     exclusion_condition = "AND (submitted_by_user_id != %s OR submitted_by_user_id IS NULL)"
                     query_params = [exclude_user_id]
 
+                # ✅ FIX #2: Explicitly exclude 'retired' and 'answered' statuses
                 # Priority 1: Recent mod-submitted questions (available status,
                 # unused within 4 weeks)
                 query1 = f"""
@@ -191,6 +196,7 @@ class TriviaDatabase:
                 result = cur.fetchone()
 
                 if result:
+                    logger.info(f"✅ FIX #2: Selected priority 1 question (mod-submitted, available status)")
                     return dict(result)
 
                 # Priority 2: AI-generated questions focusing on statistical
@@ -211,6 +217,7 @@ class TriviaDatabase:
                 result = cur.fetchone()
 
                 if result:
+                    logger.info(f"✅ FIX #2: Selected priority 2 question (AI statistical, available status)")
                     return dict(result)
 
                 # Priority 3: Any unused questions with available status
@@ -226,6 +233,9 @@ class TriviaDatabase:
                 cur.execute(query3, query_params)
                 result = cur.fetchone()
 
+                if result:
+                    logger.info(f"✅ FIX #2: Selected priority 3 question (any available)")
+                
                 return dict(result) if result else None
         except Exception as e:
             logger.error(f"Error getting next trivia question: {e}")
