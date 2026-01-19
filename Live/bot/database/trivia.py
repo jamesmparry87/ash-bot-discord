@@ -162,7 +162,7 @@ class TriviaDatabase:
             self, exclude_user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """
         Get the next trivia question based on priority system (excluding answered/retired questions)
-        
+
         ✅ FIX #2: Ensure retired questions are never selected
         """
         conn = self.db.get_connection()
@@ -235,7 +235,7 @@ class TriviaDatabase:
 
                 if result:
                     logger.info(f"✅ FIX #2: Selected priority 3 question (any available)")
-                
+
                 return dict(result) if result else None
         except Exception as e:
             logger.error(f"Error getting next trivia question: {e}")
