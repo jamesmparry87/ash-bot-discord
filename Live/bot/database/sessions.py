@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 def _serialize_for_json(data: Any) -> Any:
     """
     Helper to convert non-JSON-serializable objects (dates, datetimes) to strings.
-    
+
     This fixes: "Object of type date is not JSON serializable"
     """
     if isinstance(data, dict):
@@ -66,7 +66,7 @@ class SessionDatabase:
         # ✅ FIX #1: Sanitize data before JSON serialization (convert dates to ISO strings)
         sanitized_question_data = _serialize_for_json(question_data)
         sanitized_conversation_data = _serialize_for_json(conversation_data or {})
-        
+
         cur.execute("""
             INSERT INTO trivia_approval_sessions (
                 user_id, session_type, conversation_step, question_data,
