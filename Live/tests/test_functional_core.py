@@ -14,6 +14,8 @@ NO complex workflows - just core validation.
 
 NOTE: Timeouts managed at workflow level (8 minutes) and per-step level in CI.
 Individual test timeouts removed because signal.SIGALRM doesn't work on Windows.
+
+UPDATED: Tests now use modular database architecture (db.games, db.trivia, etc.)
 """
 
 import os
@@ -48,8 +50,8 @@ class TestGamingDatabase:
         if not db or not db.database_url:
             pytest.skip("Database not available")
 
-        # Get any game from the database
-        games = db.get_all_played_games()
+        # Get any game from the database - USE MODULAR API
+        games = db.games.get_all_played_games()
 
         assert games is not None, "get_all_played_games returned None"
         assert isinstance(games, list), "Games must be a list"
@@ -80,8 +82,8 @@ class TestGamingDatabase:
         if not db or not db.database_url:
             pytest.skip("Database not available")
 
-        # Test playtime ranking
-        by_playtime = db.get_games_by_playtime(order='DESC', limit=5)
+        # Test playtime ranking - USE MODULAR API
+        by_playtime = db.games.get_games_by_playtime(order='DESC', limit=5)
         assert by_playtime is not None, "get_games_by_playtime returned None"
         assert isinstance(by_playtime, list), "Playtime results must be a list"
 
@@ -110,8 +112,8 @@ class TestGamingDatabase:
         if not db or not db.database_url:
             pytest.skip("Database not available")
 
-        # Check that we can query active sessions
-        active_session = db.get_active_trivia_session()
+        # Check that we can query active sessions - USE MODULAR API
+        active_session = db.trivia.get_active_trivia_session()
 
         # Should return None or a dict, not crash
         assert active_session is None or isinstance(active_session, dict), \
@@ -231,7 +233,7 @@ class TestDeploymentReadiness:
             "bot.handlers.ai_handler",
             "bot.handlers.message_handler",
             "bot.handlers.conversation_handler",
-            "bot.database_module",
+            "bot.database",  # Test modular database import
             "bot.config",
         ]
 
@@ -257,9 +259,9 @@ class TestDeploymentReadiness:
         # In CI, database_url might be None, which is OK
         # In production, it must work
         if db and db.database_url:
-            # If we have a database, test basic query
+            # If we have a database, test basic query using modular API
             try:
-                games = db.get_all_played_games()
+                games = db.games.get_all_played_games()
                 assert games is not None, "Database query returned None"
                 print("✅ PASS: Database connection works")
             except Exception as e:
