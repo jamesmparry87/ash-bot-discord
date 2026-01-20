@@ -85,8 +85,18 @@ for logger_name in ["google_genai.models", "httpx"]:
     logger.addFilter(UserFriendlyAILogFilter())
 
 
-# Get database instance
-db = get_database()  # type: ignore
+# LAZY DATABASE INITIALIZATION - Prevent blocking during module import
+# Database connection is established on first use, not at import time
+db = None  # type: ignore
+
+
+def _get_db():
+    """Lazy database initialization - only connect when first needed"""
+    global db
+    if db is None:
+        db = get_database()  # type: ignore
+    return db
+
 
 # Import cache system
 CACHE_AVAILABLE = False
@@ -1356,11 +1366,12 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
             dynamic_context = build_ash_context(user_context)
 
             # === ENHANCEMENT: Add gaming timeline context for temporal questions ===
-            if db and hasattr(db, 'get_gaming_timeline'):
+            current_db = _get_db()
+            if current_db and hasattr(current_db, 'get_gaming_timeline'):
                 try:
                     # Get first 3 and last 3 games chronologically for temporal awareness
-                    timeline_asc = db.get_gaming_timeline(order='ASC')[:3]
-                    timeline_desc = db.get_gaming_timeline(order='DESC')[:3]
+                    timeline_asc = current_db.get_gaming_timeline(order='ASC')[:3]
+                    timeline_desc = current_db.get_gaming_timeline(order='DESC')[:3]
 
                     if timeline_asc or timeline_desc:
                         timeline_text = "\n\n--- GAMING TIMELINE DATA ---\n"
@@ -1389,14 +1400,15 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                     pass
 
             # === ENHANCEMENT: Add engagement metrics context for view queries ===
-            if db:
+            current_db = _get_db()
+            if current_db:
                 try:
                     engagement_context = "\n\n--- ENGAGEMENT METRICS AVAILABLE ---\n"
                     engagement_context += "The database tracks cross-platform engagement analytics:\n\n"
 
                     # Get platform statistics
-                    if hasattr(db, 'get_platform_comparison_stats'):
-                        platform_stats = db.get_platform_comparison_stats()
+                    if hasattr(current_db, 'get_platform_comparison_stats'):
+                        platform_stats = current_db.get_platform_comparison_stats()
                         if platform_stats:
                             yt_stats = platform_stats.get('youtube', {})
                             tw_stats = platform_stats.get('twitch', {})
@@ -1409,24 +1421,24 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                     # Get top games by different metrics
                     engagement_context += "🎮 Top Performers by Metric:\n"
 
-                    if hasattr(db, 'get_games_by_twitch_views'):
-                        top_twitch = db.get_games_by_twitch_views(limit=3)
+                    if hasattr(current_db, 'get_games_by_twitch_views'):
+                        top_twitch = current_db.get_games_by_twitch_views(limit=3)
                         if top_twitch:
                             engagement_context += "  • Twitch Leaders: "
                             engagement_context += ", ".join(
                                 [f"{g['canonical_name']} ({g.get('twitch_views', 0):,} views)" for g in top_twitch])
                             engagement_context += "\n"
 
-                    if hasattr(db, 'get_games_by_total_views'):
-                        top_total = db.get_games_by_total_views(limit=3)
+                    if hasattr(current_db, 'get_games_by_total_views'):
+                        top_total = current_db.get_games_by_total_views(limit=3)
                         if top_total:
                             engagement_context += "  • Combined Leaders: "
                             engagement_context += ", ".join(
                                 [f"{g['canonical_name']} ({g.get('total_views', 0):,} views)" for g in top_total])
                             engagement_context += "\n"
 
-                    if hasattr(db, 'get_engagement_metrics'):
-                        top_efficiency = db.get_engagement_metrics(limit=3)
+                    if hasattr(current_db, 'get_engagement_metrics'):
+                        top_efficiency = current_db.get_engagement_metrics(limit=3)
                         if top_efficiency:
                             engagement_context += "  • Engagement Efficiency: "
                             engagement_context += ", ".join(
@@ -2168,8 +2180,9 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
 
     elif logic == "first_played_game":
         # Find first game by first_played_date using get_gaming_timeline
-        if db and hasattr(db, 'get_gaming_timeline'):
-            timeline = db.get_gaming_timeline(order='ASC')
+        current_db = _get_db()
+        if current_db and hasattr(current_db, 'get_gaming_timeline'):
+            timeline = current_db.get_gaming_timeline(order='ASC')
             if timeline:
                 first_game = timeline[0]
                 return {
@@ -2184,8 +2197,9 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
 
     elif logic == "last_played_game":
         # Find most recently played game using get_gaming_timeline
-        if db and hasattr(db, 'get_gaming_timeline'):
-            timeline = db.get_gaming_timeline(order='DESC')
+        current_db = _get_db()
+        if current_db and hasattr(current_db, 'get_gaming_timeline'):
+            timeline = current_db.get_gaming_timeline(order='DESC')
             if timeline:
                 last_game = timeline[0]
                 return {
@@ -2233,8 +2247,9 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
         print("❌ AI not enabled for trivia question generation")
         return None
 
-    # Check if database is available
-    if db is None:
+    # Check if database is available (lazy init)
+    current_db = _get_db()
+    if current_db is None:
         print("❌ Database not available for AI trivia generation")
         return None
 
@@ -2242,7 +2257,7 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
         print(f"🧠 Generating diverse trivia question with context: {context}")
 
         # Get all available games data
-        all_games = db.get_all_played_games()
+        all_games = current_db.get_all_played_games()
 
         if not all_games:
             print("❌ No games data available for question generation")
@@ -2265,7 +2280,7 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
 
                     if question_data and question_data.get("question_text"):
                         # Check for duplicates before accepting this question
-                        duplicate_info = db.check_question_duplicate(
+                        duplicate_info = current_db.check_question_duplicate(
                             question_data["question_text"],
                             similarity_threshold=0.8
                         )
@@ -2295,7 +2310,7 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
                     print(f"❌ All template generation attempts failed")
 
         # Fallback to AI generation (with improved prompt)
-        stats = db.get_played_games_stats()
+        stats = current_db.get_played_games_stats()
         sample_games = all_games[:5]  # Use first 5 games for context
 
         # Create detailed game context
@@ -2380,7 +2395,7 @@ Focus on direct questions about Captain Jonesy's gaming journey - no verbose ana
                         "question_type",
                         "correct_answer"]):
                     # Check for duplicates before accepting this AI question
-                    duplicate_info = db.check_question_duplicate(
+                    duplicate_info = current_db.check_question_duplicate(
                         ai_question["question_text"],
                         similarity_threshold=0.8
                     )
@@ -2649,7 +2664,8 @@ async def generate_trivia_batch(batch_size: int = 10, context: str = "batch_gene
         print("❌ AI not enabled for trivia batch generation")
         return {"success": False, "generated": 0, "error": "AI not enabled"}
 
-    if db is None:
+    current_db = _get_db()
+    if current_db is None:
         print("❌ Database not available for trivia batch generation")
         return {"success": False, "generated": 0, "error": "Database not available"}
 
@@ -2657,8 +2673,8 @@ async def generate_trivia_batch(batch_size: int = 10, context: str = "batch_gene
         print(f"🎲 PHASE 2: Generating batch of {batch_size} trivia questions in single API call...")
 
         # Get game statistics for context
-        stats = db.get_played_games_stats()
-        sample_games = db.get_all_played_games()[:10]
+        stats = current_db.get_played_games_stats()
+        sample_games = current_db.get_all_played_games()[:10]
 
         # Build game context
         game_context = ""
@@ -2764,7 +2780,7 @@ Generate diverse, engaging questions about Jonesy's gaming journey."""
                     continue
 
                 # Check for duplicates
-                duplicate_info = db.check_question_duplicate(
+                duplicate_info = current_db.check_question_duplicate(
                     question_text,
                     similarity_threshold=0.8
                 )
@@ -2776,7 +2792,7 @@ Generate diverse, engaging questions about Jonesy's gaming journey."""
                     continue
 
                 # Store question in database with 'available' status
-                question_id = db.safe_add_trivia_question(
+                question_id = current_db.safe_add_trivia_question(
                     question_text=question_text,
                     question_type=question_dict.get("question_type", "single_answer"),
                     correct_answer=correct_answer,
