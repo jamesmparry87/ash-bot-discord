@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 def timeout(seconds=300):
     """
     Timeout decorator to prevent tests from hanging indefinitely.
-    
+
     Default: 5 minutes per test
     Use: @timeout(60) for 1 minute timeout
     """
@@ -41,18 +41,18 @@ def timeout(seconds=300):
         def wrapper(*args, **kwargs):
             def timeout_handler(signum, frame):
                 raise TimeoutError(f"Test '{func.__name__}' exceeded {seconds} second timeout")
-            
+
             # Set the signal alarm (Unix-like systems)
             old_handler = signal.signal(signal.SIGALRM, timeout_handler)
             signal.alarm(seconds)
-            
+
             try:
                 result = func(*args, **kwargs)
             finally:
                 # Disable the alarm and restore old handler
                 signal.alarm(0)
                 signal.signal(signal.SIGALRM, old_handler)
-            
+
             return result
         return wrapper
     return decorator
