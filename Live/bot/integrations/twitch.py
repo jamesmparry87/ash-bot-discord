@@ -59,22 +59,26 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
     def clean_title_part(text: str) -> str:
         """Clean a title part of common prefixes, suffixes, and markers"""
         cleaned = text.strip()
-        
+
         # Remove common prefixes
-        cleaned = re.sub(r'^(?:first\s+time\s+playing|let\'?s\s+play|playing|streaming)\s+', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(
+            r'^(?:first\s+time\s+playing|let\'?s\s+play|playing|streaming)\s+',
+            '',
+            cleaned,
+            flags=re.IGNORECASE)
         cleaned = re.sub(r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*', '', cleaned, flags=re.IGNORECASE)
-        
+
         # Remove day/episode markers
         cleaned = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]', '', cleaned, flags=re.IGNORECASE)
-        
+
         # Remove standalone "Part X" at start or end
         cleaned = re.sub(r'^(?:part|ep|episode)\s+\d+\s*[-:]?\s*', '', cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r'\s*[-:]?\s*(?:part|ep|episode)\s+\d+$', '', cleaned, flags=re.IGNORECASE)
-        
+
         # Remove common suffixes
         cleaned = re.sub(r'\s+(gameplay|playthrough|stream|let\'s play|walkthrough)$', '', cleaned, flags=re.IGNORECASE)
-        
+
         # Final cleanup
         cleaned = cleanup_game_name(cleaned)
         return cleaned
@@ -87,20 +91,20 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
         if len(parts) == 2:
             before_dash = parts[0].strip()
             after_dash = parts[1].strip()
-            
+
             # Check if after_dash is all caps commentary
             if is_all_caps_commentary(after_dash):
                 print(f"⚠️ Detected all-caps commentary after dash: '{after_dash}' - treating as non-game text")
                 # Use BEFORE dash instead
                 cleaned_before = clean_title_part(before_dash)
-                
+
                 if len(cleaned_before) >= 3 and not is_generic_term(cleaned_before):
                     best_name = cleaned_before
                     print(f"🔍 Validating '{cleaned_before}' (before dash, after-dash was commentary) with IGDB...")
                     igdb_result = await igdb.validate_and_enrich(cleaned_before)
                     confidence = igdb_result.get('confidence', 0.0)
                     print(f"  → confidence: {confidence:.2f}")
-                    
+
                     if confidence > best_confidence:
                         best_name = cleaned_before
                         best_confidence = confidence
@@ -109,7 +113,7 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
             else:
                 # Try AFTER dash first (if not all caps)
                 cleaned_after = clean_title_part(after_dash)
-                
+
                 # Reject if it's ONLY "Part X" or similar episode marker
                 if not re.match(r'^(?:part|ep|episode|day)\s+\d+$', cleaned_after, flags=re.IGNORECASE):
                     if len(cleaned_after) >= 3 and not is_generic_term(cleaned_after):
@@ -118,7 +122,7 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
                         igdb_result = await igdb.validate_and_enrich(cleaned_after)
                         confidence = igdb_result.get('confidence', 0.0)
                         print(f"  → confidence: {confidence:.2f}")
-                        
+
                         if confidence > best_confidence:
                             best_name = cleaned_after
                             best_confidence = confidence
@@ -128,13 +132,13 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
                 # Try BEFORE dash as backup
                 if best_confidence < 0.8:
                     cleaned_before = clean_title_part(before_dash)
-                    
+
                     if len(cleaned_before) >= 3 and not is_generic_term(cleaned_before):
                         print(f"🔍 Validating '{cleaned_before}' (before dash) with IGDB...")
                         igdb_result = await igdb.validate_and_enrich(cleaned_before)
                         confidence = igdb_result.get('confidence', 0.0)
                         print(f"  → confidence: {confidence:.2f}")
-                        
+
                         if confidence > best_confidence:
                             best_name = cleaned_before
                             best_confidence = confidence
