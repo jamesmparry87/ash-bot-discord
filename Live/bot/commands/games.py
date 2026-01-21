@@ -770,10 +770,11 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
     @commands.command(name="syncgames")
     async def sync_games(self, ctx, mode: str = "standard", option: str = ""):
         """
-        Triggers a content sync. Use `full` to re-scan all content, or `verify` to check episode counts.
+        Triggers a content sync. Use `full` to re-scan all content, or specify days to scan.
         Usage:
-        - `!syncgames` (syncs new content)
-        - `!syncgames full` (full rescan)
+        - `!syncgames` (syncs new content since last sync)
+        - `!syncgames 30` (syncs content from last 30 days)
+        - `!syncgames full` (full rescan - last 5 years)
         - `!syncgames verify` (check episode counts against YouTube)
         - `!syncgames verify --fix` (fix discrepancies with fresh YouTube data)
         """
@@ -788,21 +789,31 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             await self._verify_youtube_episodes(ctx, fix_discrepancies=(option.lower() == '--fix'))
             return
 
-        # Handle standard and full sync modes
-        if mode.lower() == 'full':
-            # A full rescan ignores the last sync time and goes back a long time (e.g., years)
-            start_time = datetime.now(ZoneInfo("Europe/London")) - timedelta(days=365 * 5)  # 5 years
-            await ctx.send(f"🚀 **Full Content Sync Initiated.** Re-scanning all content from the last 5 years. This may take several minutes.")
-        else:
-            # Standard sync uses the most recent update timestamp
-            start_time = database.get_latest_game_update_timestamp()
-            # Add None-check with default fallback
-            if start_time is None:
-                start_time = datetime.now(ZoneInfo("Europe/London")) - timedelta(days=7)  # Default to last week
-            # Make timezone-aware if it's naive (fix for datetime comparison)
-            elif start_time.tzinfo is None:
-                start_time = start_time.replace(tzinfo=ZoneInfo("Europe/London"))
-            await ctx.send(f"🚀 **Standard Content Sync Initiated.** Scanning for new content since {start_time.strftime('%Y-%m-%d')}.")
+        # Handle numeric days mode (e.g., !syncgames 30)
+        try:
+            days = int(mode)
+            if days <= 0:
+                await ctx.send("❌ **Invalid days value.** Please specify a positive number of days (e.g., `!syncgames 30`).")
+                return
+            
+            start_time = datetime.now(ZoneInfo("Europe/London")) - timedelta(days=days)
+            await ctx.send(f"🔍 **Time-Range Sync Initiated.** Scanning content from the last **{days} days** ({start_time.strftime('%Y-%m-%d')} to now).")
+        except ValueError:
+            # Not a number, check for other modes
+            if mode.lower() == 'full':
+                # A full rescan ignores the last sync time and goes back a long time (e.g., years)
+                start_time = datetime.now(ZoneInfo("Europe/London")) - timedelta(days=365 * 5)  # 5 years
+                await ctx.send(f"🚀 **Full Content Sync Initiated.** Re-scanning all content from the last 5 years. This may take several minutes.")
+            else:
+                # Standard sync uses the most recent update timestamp
+                start_time = database.get_latest_game_update_timestamp()
+                # Add None-check with default fallback
+                if start_time is None:
+                    start_time = datetime.now(ZoneInfo("Europe/London")) - timedelta(days=7)  # Default to last week
+                # Make timezone-aware if it's naive (fix for datetime comparison)
+                elif start_time.tzinfo is None:
+                    start_time = start_time.replace(tzinfo=ZoneInfo("Europe/London"))
+                await ctx.send(f"🚀 **Standard Content Sync Initiated.** Scanning for new content since {start_time.strftime('%Y-%m-%d')}.")
 
         try:
             results = await perform_full_content_sync(start_time)

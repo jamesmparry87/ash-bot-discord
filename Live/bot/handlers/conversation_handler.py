@@ -2234,7 +2234,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
         # Mark as expired in the database if a session ID exists
         session_id = conversation.get('session_id')
         if session_id:
-            db.complete_approval_session(session_id, 'expired')
+            db.sessions.complete_approval_session(session_id, 'expired')
 
         # Remove from memory
         del jam_approval_conversations[user_id]
@@ -2706,14 +2706,14 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
 
             # Clean up expired sessions
             cleanup_jam_approval_conversations()
-            db.cleanup_expired_approval_sessions()
+            db.sessions.cleanup_expired_approval_sessions()
             print("✅ Cleaned up existing approval conversations and sessions")
         except Exception as cleanup_e:
             print(f"⚠️ Error during cleanup: {cleanup_e}")
 
         # Create persistent approval session in database
         try:
-            session_id = db.create_approval_session(
+            session_id = db.sessions.create_approval_session(
                 user_id=JAM_USER_ID,
                 session_type='question_approval',
                 conversation_step='approval',
@@ -2953,7 +2953,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
 
         # Clean up expired sessions first
         try:
-            expired_count = db.cleanup_expired_approval_sessions()
+            expired_count = db.sessions.cleanup_expired_approval_sessions()
             if expired_count > 0:
                 print(f"🧹 Cleaned up {expired_count} expired approval sessions")
         except Exception as cleanup_e:
@@ -2961,7 +2961,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
 
         # Get all active approval sessions from database
         try:
-            active_sessions = db.get_all_active_approval_sessions()
+            active_sessions = db.sessions.get_all_active_approval_sessions()
             print(f"📊 Found {len(active_sessions)} active approval sessions to restore")
         except Exception as db_e:
             print(f"❌ Error fetching active approval sessions: {db_e}")
@@ -3009,7 +3009,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
 
                     # Increment restart count in database to track deployment impacts
                     try:
-                        db.update_approval_session(session_id, increment_restart_count=True)
+                        db.sessions.update_approval_session(session_id, increment_restart_count=True)
                         new_restart_count = bot_restart_count + 1
                         print(f"📈 Updated restart count for session {session_id}: {new_restart_count}")
                     except Exception as update_e:
@@ -3411,11 +3411,11 @@ async def force_reset_approval_session(user_id: int) -> bool:
         if db:
             try:
                 # Find active sessions
-                active_sessions = db.get_all_active_approval_sessions()
+                active_sessions = db.sessions.get_all_active_approval_sessions()
                 user_sessions = [s for s in active_sessions if s['user_id'] == user_id]
 
                 for session in user_sessions:
-                    db.complete_approval_session(session['id'], 'cancelled_manual')
+                    db.sessions.complete_approval_session(session['id'], 'cancelled_manual')
                     print(f"✅ FORCE RESET: Cancelled database session {session['id']}")
                     reset_performed = True
 
@@ -3433,7 +3433,7 @@ async def get_restoration_status() -> Dict[str, Any]:
     """Get status of current approval sessions for monitoring/debugging"""
     try:
         # Get database sessions
-        db_sessions = db.get_all_active_approval_sessions()
+        db_sessions = db.sessions.get_all_active_approval_sessions()
 
         # Get memory sessions
         memory_sessions = []

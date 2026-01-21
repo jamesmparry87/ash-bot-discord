@@ -3409,65 +3409,13 @@ class DatabaseManager:
 
     # --- Trivia System Methods ---
 
+    # REMOVED: normalize_trivia_answer() - now in database/trivia.py
+
     def normalize_trivia_answer(self, answer_text: str) -> str:
-        """Enhanced normalization for trivia answers with fuzzy matching support"""
-        import re
-
-        # Start with the original text
-        normalized = answer_text.strip()
-
-        # Remove common punctuation but preserve important chars like hyphens in compound words
-        normalized = re.sub(r'[.,!?;:"\'()[\]{}]', '', normalized)
-
-        # Handle common game/media abbreviations and variations
-        abbreviation_map = {
-            'gta': 'grand theft auto',
-            'cod': 'call of duty',
-            'gtav': 'grand theft auto v',
-            'gtaiv': 'grand theft auto iv',
-            'rdr': 'red dead redemption',
-            'rdr2': 'red dead redemption 2',
-            'gow': 'god of war',
-            'tlou': 'the last of us',
-            'botw': 'breath of the wild',
-            'totk': 'tears of the kingdom',
-            'ff': 'final fantasy',
-            'ffvii': 'final fantasy vii',
-            'ffx': 'final fantasy x',
-            'mgs': 'metal gear solid',
-            'loz': 'legend of zelda',
-            'zelda': 'legend of zelda',
-            'pokemon': 'pokémon',
-            'mario': 'super mario',
-            'doom': 'doom',
-            'halo': 'halo',
-            'fallout': 'fallout'
-        }
-
-        # Apply abbreviation expansions (case insensitive)
-        words = normalized.lower().split()
-        expanded_words = []
-        for word in words:
-            if word in abbreviation_map:
-                expanded_words.extend(abbreviation_map[word].split())
-            else:
-                expanded_words.append(word)
-        normalized = ' '.join(expanded_words)
-
-        # Remove filler words that don't change meaning
-        filler_words = ['and', 'the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by',
-                        'about', 'approximately', 'roughly', 'around', 'over', 'under', 'just',
-                        'exactly', 'precisely', 'nearly', 'almost', 'close to', 'more than', 'less than']
-
-        # Split into words and filter out filler words
-        words = normalized.split()
-        filtered_words = [word for word in words if word not in filler_words]
-
-        # Rejoin and clean up extra spaces
-        normalized = ' '.join(filtered_words)
-        normalized = re.sub(r'\s+', ' ', normalized).strip()
-
-        return normalized
+        """Normalize trivia answer - delegates to database.trivia module"""
+        from .database.trivia import TriviaManager
+        trivia_mgr = TriviaManager()
+        return trivia_mgr.normalize_trivia_answer(answer_text)
 
     def add_trivia_question(
         self,

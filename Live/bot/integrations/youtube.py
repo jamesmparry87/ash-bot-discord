@@ -500,7 +500,9 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
 
                 async with session.get(url, params=params) as response:
                     if response.status != 200:
+                        error_body = await response.text()
                         print(f"❌ YouTube API error fetching playlists: {response.status}")
+                        print(f"❌ Error details: {error_body[:500]}")  # Log first 500 chars of error
                         break
 
                     data = await response.json()
@@ -652,28 +654,67 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
 
 
 async def playlist_has_new_content(session, playlist_id: str, start_timestamp: datetime, api_key: str) -> bool:
-    """Check if a playlist has any videos published since the start timestamp."""
+    """
+    Check if a playlist has any videos published since the start timestamp.
+    
+    Uses pagination to check ALL videos until we find content newer than start_timestamp
+    or encounter a video older than it (robust approach - Option C).
+    """
     try:
-        url = f"https://www.googleapis.com/youtube/v3/playlistItems"
-        params = {
-            'part': 'snippet',
-            'playlistId': playlist_id,
-            'maxResults': 5,  # Just check the most recent videos
-            'key': api_key
-        }
+        next_page_token = None
+        pages_checked = 0
+        max_pages = 10  # Safety limit to prevent infinite loops (10 pages = 500 videos)
+        
+        print(f"🔍 Checking playlist {playlist_id[:8]}... for content since {start_timestamp.strftime('%Y-%m-%d')}")
+        
+        while pages_checked < max_pages:
+            url = f"https://www.googleapis.com/youtube/v3/playlistItems"
+            params = {
+                'part': 'snippet',
+                'playlistId': playlist_id,
+                'maxResults': 50,
+                'key': api_key
+            }
+            if next_page_token:
+                params['pageToken'] = next_page_token
 
-        async with session.get(url, params=params) as response:
-            if response.status != 200:
-                return False
+            async with session.get(url, params=params) as response:
+                if response.status != 200:
+                    print(f"⚠️ API error checking playlist: {response.status}")
+                    return False
 
-            data = await response.json()
+                data = await response.json()
+                items = data.get('items', [])
+                
+                if not items:
+                    # No more videos in playlist
+                    return False
 
-            for item in data.get('items', []):
-                published_at = datetime.fromisoformat(item['snippet']['publishedAt'].replace('Z', '+00:00'))
-                if published_at >= start_timestamp:
-                    return True
+                # Check each video in this page
+                for item in items:
+                    published_at = datetime.fromisoformat(item['snippet']['publishedAt'].replace('Z', '+00:00'))
+                    
+                    # If we find a video newer than our timestamp, this playlist has new content
+                    if published_at >= start_timestamp:
+                        print(f"✅ Found new content in playlist (published: {published_at.strftime('%Y-%m-%d')})")
+                        return True
+                    
+                    # If we encounter a video older than our timestamp, stop searching
+                    # (videos are in reverse chronological order - newest first)
+                    if published_at < start_timestamp:
+                        print(f"⏹️ Reached content older than {start_timestamp.strftime('%Y-%m-%d')}, stopping search")
+                        return False
 
-            return False
+                # Check if there are more pages
+                next_page_token = data.get('nextPageToken')
+                if not next_page_token:
+                    # No more pages, and we haven't found content newer than timestamp
+                    return False
+                
+                pages_checked += 1
+
+        print(f"⚠️ Reached max pages ({max_pages}) for playlist check")
+        return False
 
     except Exception as e:
         print(f"⚠️ Error checking playlist for new content: {e}")
