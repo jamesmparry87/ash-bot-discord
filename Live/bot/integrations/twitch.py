@@ -42,84 +42,111 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
     best_name = None
     best_confidence = 0.0
 
-    # PRIORITY Strategy 1: Try extracting from dash-separated titles FIRST
-    # This is most common format for Twitch: "Description - Game Name (dayX)"
+    # Helper function to check if text is all caps (likely commentary)
+    def is_all_caps_commentary(text: str) -> bool:
+        """Check if text is all caps and likely commentary, not a game name"""
+        if not text:
+            return False
+        # Remove punctuation and spaces for the check
+        cleaned = re.sub(r'[^\w\s]', '', text)
+        cleaned = cleaned.strip()
+        if not cleaned:
+            return False
+        # Check if it's ALL CAPS (allow some exceptions for acronyms)
+        return cleaned.isupper() and len(cleaned.split()) >= 2
+
+    # Helper function to clean common patterns
+    def clean_title_part(text: str) -> str:
+        """Clean a title part of common prefixes, suffixes, and markers"""
+        cleaned = text.strip()
+        
+        # Remove common prefixes
+        cleaned = re.sub(r'^(?:first\s+time\s+playing|let\'?s\s+play|playing|streaming)\s+', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*', '', cleaned, flags=re.IGNORECASE)
+        
+        # Remove day/episode markers
+        cleaned = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]', '', cleaned, flags=re.IGNORECASE)
+        
+        # Remove standalone "Part X" at start or end
+        cleaned = re.sub(r'^(?:part|ep|episode)\s+\d+\s*[-:]?\s*', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\s*[-:]?\s*(?:part|ep|episode)\s+\d+$', '', cleaned, flags=re.IGNORECASE)
+        
+        # Remove common suffixes
+        cleaned = re.sub(r'\s+(gameplay|playthrough|stream|let\'s play|walkthrough)$', '', cleaned, flags=re.IGNORECASE)
+        
+        # Final cleanup
+        cleaned = cleanup_game_name(cleaned)
+        return cleaned
+
+    # PRIORITY Strategy 1: Handle "First Time Playing" and dash-separated titles
     if ' - ' in title or ' | ' in title:
         separator = ' - ' if ' - ' in title else ' | '
-        parts = title.split(separator)
+        parts = title.split(separator, 1)  # Only split on first occurrence
 
-        # Try the SECOND part FIRST (after separator) - most common location for game name
-        if len(parts) > 1:
-            after_dash = parts[1].strip()
-            # Remove day/episode markers (both parentheses and standalone)
-            after_dash = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', after_dash, flags=re.IGNORECASE)
-            after_dash = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]', '', after_dash, flags=re.IGNORECASE)
-            # Remove "Part X" at start or end of string
-            after_dash = re.sub(r'^(?:part|ep|episode)\s+\d+\s*[-:]?\s*', '', after_dash, flags=re.IGNORECASE)
-            after_dash = re.sub(r'\s*[-:]?\s*(?:part|ep|episode)\s+\d+$', '', after_dash, flags=re.IGNORECASE)
-            # Remove common suffixes like "Gameplay", "Playthrough", "Stream"
-            after_dash = re.sub(
-                r'\s+(gameplay|playthrough|stream|let\'s play|walkthrough)$',
-                '',
-                after_dash,
-                flags=re.IGNORECASE)
-            after_dash = cleanup_game_name(after_dash)
-
-            # Reject if it's ONLY "Part X" or similar episode marker
-            if re.match(r'^(?:part|ep|episode|day)\s+\d+$', after_dash, flags=re.IGNORECASE):
-                after_dash = ''  # Mark as invalid
-
-            if len(after_dash) >= 3 and not is_generic_term(after_dash):
-                # Keep this extraction even if IGDB fails
-                if best_name is None:
-                    best_name = after_dash
-
-                print(f"🔍 Validating '{after_dash}' (after dash) with IGDB...")
-                igdb_result = await igdb.validate_and_enrich(after_dash)
-                confidence = igdb_result.get('confidence', 0.0)
-                print(f"  → confidence: {confidence:.2f}")
-
-                if confidence > best_confidence:
-                    best_name = after_dash
-                    best_confidence = confidence
-
-                    # High confidence threshold since this is the priority extraction
-                    if confidence >= 0.8:
-                        return best_name, best_confidence
-
-        # Try the FIRST part (before separator) as backup
-        if len(parts) > 1 and best_confidence < 0.8:
+        if len(parts) == 2:
             before_dash = parts[0].strip()
-            # Clean common prefixes
-            before_dash = re.sub(
-                r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*',
-                '',
-                before_dash,
-                flags=re.IGNORECASE)
-            before_dash = cleanup_game_name(before_dash)
+            after_dash = parts[1].strip()
+            
+            # Check if after_dash is all caps commentary
+            if is_all_caps_commentary(after_dash):
+                print(f"⚠️ Detected all-caps commentary after dash: '{after_dash}' - treating as non-game text")
+                # Use BEFORE dash instead
+                cleaned_before = clean_title_part(before_dash)
+                
+                if len(cleaned_before) >= 3 and not is_generic_term(cleaned_before):
+                    best_name = cleaned_before
+                    print(f"🔍 Validating '{cleaned_before}' (before dash, after-dash was commentary) with IGDB...")
+                    igdb_result = await igdb.validate_and_enrich(cleaned_before)
+                    confidence = igdb_result.get('confidence', 0.0)
+                    print(f"  → confidence: {confidence:.2f}")
+                    
+                    if confidence > best_confidence:
+                        best_name = cleaned_before
+                        best_confidence = confidence
+                        if confidence >= 0.8:
+                            return best_name, best_confidence
+            else:
+                # Try AFTER dash first (if not all caps)
+                cleaned_after = clean_title_part(after_dash)
+                
+                # Reject if it's ONLY "Part X" or similar episode marker
+                if not re.match(r'^(?:part|ep|episode|day)\s+\d+$', cleaned_after, flags=re.IGNORECASE):
+                    if len(cleaned_after) >= 3 and not is_generic_term(cleaned_after):
+                        best_name = cleaned_after
+                        print(f"🔍 Validating '{cleaned_after}' (after dash) with IGDB...")
+                        igdb_result = await igdb.validate_and_enrich(cleaned_after)
+                        confidence = igdb_result.get('confidence', 0.0)
+                        print(f"  → confidence: {confidence:.2f}")
+                        
+                        if confidence > best_confidence:
+                            best_name = cleaned_after
+                            best_confidence = confidence
+                            if confidence >= 0.8:
+                                return best_name, best_confidence
 
-            if len(before_dash) >= 3 and not is_generic_term(before_dash):
-                print(f"🔍 Validating '{before_dash}' (before dash) with IGDB...")
-                igdb_result = await igdb.validate_and_enrich(before_dash)
-                confidence = igdb_result.get('confidence', 0.0)
-                print(f"  → confidence: {confidence:.2f}")
-
-                if confidence > best_confidence:
-                    best_name = before_dash
-                    best_confidence = confidence
-
-                    if confidence >= 0.8:
-                        return best_name, best_confidence
+                # Try BEFORE dash as backup
+                if best_confidence < 0.8:
+                    cleaned_before = clean_title_part(before_dash)
+                    
+                    if len(cleaned_before) >= 3 and not is_generic_term(cleaned_before):
+                        print(f"🔍 Validating '{cleaned_before}' (before dash) with IGDB...")
+                        igdb_result = await igdb.validate_and_enrich(cleaned_before)
+                        confidence = igdb_result.get('confidence', 0.0)
+                        print(f"  → confidence: {confidence:.2f}")
+                        
+                        if confidence > best_confidence:
+                            best_name = cleaned_before
+                            best_confidence = confidence
+                            if confidence >= 0.8:
+                                return best_name, best_confidence
 
     # Strategy 2: Try standard extraction as fallback
     if best_confidence < 0.8:
         extracted = extract_game_name_from_title(title)
         if extracted:
-            # Clean episode markers before IGDB validation
-            cleaned_extracted = re.sub(r'\s*\((?:day|part|episode|ep)\s+\d+[^)]*\)', '', extracted, flags=re.IGNORECASE)
-            cleaned_extracted = re.sub(r'\s*\[(?:day|part|episode|ep)\s+\d+[^\]]*\]',
-                                       '', cleaned_extracted, flags=re.IGNORECASE)
-            cleaned_extracted = cleaned_extracted.strip()
+            # Apply full cleaning (including "First Time Playing" removal)
+            cleaned_extracted = clean_title_part(extracted)
 
             if cleaned_extracted != best_name:  # Avoid duplicate validation
                 # Keep this extraction even if IGDB fails
