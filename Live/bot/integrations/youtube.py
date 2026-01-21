@@ -656,7 +656,7 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
 async def playlist_has_new_content(session, playlist_id: str, start_timestamp: datetime, api_key: str) -> bool:
     """
     Check if a playlist has any videos published since the start timestamp.
-    
+
     Uses pagination to check ALL videos until we find content newer than start_timestamp
     or encounter a video older than it (robust approach - Option C).
     """
@@ -664,9 +664,9 @@ async def playlist_has_new_content(session, playlist_id: str, start_timestamp: d
         next_page_token = None
         pages_checked = 0
         max_pages = 10  # Safety limit to prevent infinite loops (10 pages = 500 videos)
-        
+
         print(f"🔍 Checking playlist {playlist_id[:8]}... for content since {start_timestamp.strftime('%Y-%m-%d')}")
-        
+
         while pages_checked < max_pages:
             url = f"https://www.googleapis.com/youtube/v3/playlistItems"
             params = {
@@ -685,7 +685,7 @@ async def playlist_has_new_content(session, playlist_id: str, start_timestamp: d
 
                 data = await response.json()
                 items = data.get('items', [])
-                
+
                 if not items:
                     # No more videos in playlist
                     return False
@@ -693,12 +693,12 @@ async def playlist_has_new_content(session, playlist_id: str, start_timestamp: d
                 # Check each video in this page
                 for item in items:
                     published_at = datetime.fromisoformat(item['snippet']['publishedAt'].replace('Z', '+00:00'))
-                    
+
                     # If we find a video newer than our timestamp, this playlist has new content
                     if published_at >= start_timestamp:
                         print(f"✅ Found new content in playlist (published: {published_at.strftime('%Y-%m-%d')})")
                         return True
-                    
+
                     # If we encounter a video older than our timestamp, stop searching
                     # (videos are in reverse chronological order - newest first)
                     if published_at < start_timestamp:
@@ -710,7 +710,7 @@ async def playlist_has_new_content(session, playlist_id: str, start_timestamp: d
                 if not next_page_token:
                     # No more pages, and we haven't found content newer than timestamp
                     return False
-                
+
                 pages_checked += 1
 
         print(f"⚠️ Reached max pages ({max_pages}) for playlist check")

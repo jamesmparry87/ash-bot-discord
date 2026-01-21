@@ -795,7 +795,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             if days <= 0:
                 await ctx.send("❌ **Invalid days value.** Please specify a positive number of days (e.g., `!syncgames 30`).")
                 return
-            
+
             start_time = datetime.now(ZoneInfo("Europe/London")) - timedelta(days=days)
             await ctx.send(f"🔍 **Time-Range Sync Initiated.** Scanning content from the last **{days} days** ({start_time.strftime('%Y-%m-%d')} to now).")
         except ValueError:
