@@ -2323,33 +2323,69 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 )
 
             elif content in ['3', 'reject', 'no', 'decline']:
-                # ✅ FIX #4: Mark rejected question as 'retired' not 'answered'
+                # ✅ FIX: Handle rejected questions properly
                 question_data = data.get('question_data', {})
                 question_id = question_data.get('id')
 
-                # Mark as retired if it has an ID (database question)
-                if question_id and db:
+                # ✅ FIX: If AI-generated question (no ID), save it as 'retired' to prevent regeneration
+                if not question_id and db:
+                    try:
+                        # Add the rejected AI question to database with 'retired' status
+                        retired_id = db.add_trivia_question(
+                            question_text=question_data.get('question_text', ''),
+                            question_type=question_data.get('question_type', 'single_answer'),
+                            correct_answer=question_data.get('correct_answer'),
+                            multiple_choice_options=question_data.get('multiple_choice_options'),
+                            is_dynamic=question_data.get('is_dynamic', False),
+                            dynamic_query_type=question_data.get('dynamic_query_type'),
+                            category=question_data.get('category', 'ai_generated_retired'),
+                            submitted_by_user_id=None,
+                        )
+                        
+                        if retired_id:
+                            # Immediately mark as retired
+                            db.update_trivia_question_status(retired_id, 'retired')
+                            print(f"✅ FIX: Saved rejected AI question {retired_id} as 'retired' to prevent regeneration")
+                        else:
+                            print(f"⚠️ FIX: Failed to save rejected AI question to database")
+                    except Exception as e:
+                        print(f"⚠️ FIX: Error saving rejected AI question as retired: {e}")
+                
+                # Mark as retired if it has an existing ID (database question)
+                elif question_id and db:
                     try:
                         db.update_trivia_question_status(question_id, 'retired')
                         print(f"✅ FIX #4: Marked rejected question {question_id} as 'retired'")
                     except Exception as e:
                         print(f"⚠️ Error marking question as retired: {e}")
 
-                # Reject the question
-                await message.reply(
-                    f"❌ **Question Rejected**\n\n"
-                    f"The trivia question has been rejected and will not be added to the database. "
-                    f"It has been marked as 'retired' and won't be shown again.\n\n"
-                    f"*Mission parameters updated. Alternative question generation initiated.*"
-                )
-
-                # Clean up conversation
+                # Clean up conversation BEFORE notifying user
                 if user_id in jam_approval_conversations:
                     del jam_approval_conversations[user_id]
 
-                # Trigger generation of a new question (this would be called by the generation system)
-                # For now, just log that a replacement is needed
-                print(f"🔄 JAM rejected question - replacement needed")
+                # Get queue status before processing
+                queue_length = get_queue_length()
+                
+                # Notify user of rejection
+                rejection_msg = (
+                    f"❌ **Question Rejected**\n\n"
+                    f"The trivia question has been rejected and marked as 'retired'. "
+                    f"It won't be shown again.\n\n"
+                )
+                
+                if queue_length > 0:
+                    rejection_msg += f"📬 **Processing next question...** ({queue_length} remaining in queue)"
+                else:
+                    rejection_msg += f"*No more questions pending approval.*"
+                
+                await message.reply(rejection_msg)
+
+                # ✅ FIX: Auto-process next question in queue
+                if queue_length > 0:
+                    print(f"🔄 FIX: Auto-processing next question in queue ({queue_length} remaining)")
+                    await process_next_approval()
+                else:
+                    print(f"✅ FIX: Queue empty after rejection")
 
             else:
                 await message.reply(
