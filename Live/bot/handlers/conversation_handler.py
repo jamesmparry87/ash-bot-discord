@@ -2341,16 +2341,17 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                             category=question_data.get('category', 'ai_generated_retired'),
                             submitted_by_user_id=None,
                         )
-                        
+
                         if retired_id:
                             # Immediately mark as retired
                             db.update_trivia_question_status(retired_id, 'retired')
-                            print(f"✅ FIX: Saved rejected AI question {retired_id} as 'retired' to prevent regeneration")
+                            print(
+                                f"✅ FIX: Saved rejected AI question {retired_id} as 'retired' to prevent regeneration")
                         else:
                             print(f"⚠️ FIX: Failed to save rejected AI question to database")
                     except Exception as e:
                         print(f"⚠️ FIX: Error saving rejected AI question as retired: {e}")
-                
+
                 # Mark as retired if it has an existing ID (database question)
                 elif question_id and db:
                     try:
@@ -2365,19 +2366,19 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
                 # Get queue status before processing
                 queue_length = get_queue_length()
-                
+
                 # Notify user of rejection
                 rejection_msg = (
                     f"❌ **Question Rejected**\n\n"
                     f"The trivia question has been rejected and marked as 'retired'. "
                     f"It won't be shown again.\n\n"
                 )
-                
+
                 if queue_length > 0:
                     rejection_msg += f"📬 **Processing next question...** ({queue_length} remaining in queue)"
                 else:
                     rejection_msg += f"*No more questions pending approval.*"
-                
+
                 await message.reply(rejection_msg)
 
                 # ✅ FIX: Auto-process next question in queue
