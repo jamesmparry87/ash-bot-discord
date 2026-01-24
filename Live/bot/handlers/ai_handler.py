@@ -1910,9 +1910,10 @@ def calculate_template_weights(templates: Dict[str, List[Dict[str, Any]]]) -> Di
     return templates
 
 
-def select_best_template(games_data: List[Dict[str, Any]], avoid_templates: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+def select_best_template(games_data: List[Dict[str, Any]],
+                         avoid_templates: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
     """Select the best template based on data availability and weights, avoiding recently used templates
-    
+
     Args:
         games_data: List of game data dictionaries
         avoid_templates: List of recently used template IDs to avoid in this batch
@@ -1932,7 +1933,7 @@ def select_best_template(games_data: List[Dict[str, Any]], avoid_templates: Opti
                 if avoid_templates and template_id in avoid_templates:
                     print(f"⏭️ Skipping recently-used template: {template_id}")
                     continue
-                    
+
                 viable_templates.append((template, category))
 
     if not viable_templates:
@@ -2229,7 +2230,10 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
         # Find most recent game in a specific genre
         genre_filter = template.get("genre_filter", "").lower()
         if genre_filter:
-            genre_games = [g for g in games_data if g.get("genre", "").lower() == genre_filter and g.get("first_played_date")]
+            genre_games = [
+                g for g in games_data if g.get(
+                    "genre",
+                    "").lower() == genre_filter and g.get("first_played_date")]
             if genre_games:
                 # Sort by first_played_date descending to get latest
                 latest = max(genre_games, key=lambda x: x.get("first_played_date", ""))
@@ -2243,7 +2247,10 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
         # Find game with most episodes in a specific genre
         genre_filter = template.get("genre_filter", "").lower()
         if genre_filter:
-            genre_games = [g for g in games_data if g.get("genre", "").lower() == genre_filter and g.get("total_episodes", 0) > 0]
+            genre_games = [
+                g for g in games_data if g.get(
+                    "genre", "").lower() == genre_filter and g.get(
+                    "total_episodes", 0) > 0]
             if genre_games:
                 longest = max(genre_games, key=lambda x: x.get("total_episodes", 0))
                 return {
@@ -2287,10 +2294,10 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
 
     elif logic == "count_both_platforms":
         # Count games on both YouTube and Twitch
-        both_platforms = [g for g in games_data 
-                         if g.get("youtube_playlist_url") 
-                         and g.get("twitch_vod_urls") 
-                         and g.get("twitch_vod_urls") not in ['', '{}', None]]
+        both_platforms = [g for g in games_data
+                          if g.get("youtube_playlist_url") and
+                          g.get("twitch_vod_urls") and
+                          g.get("twitch_vod_urls") not in ['', '{}', None]]
         return {
             "question_text": template["template"],
             "correct_answer": str(len(both_platforms)),
@@ -2299,9 +2306,9 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
 
     elif logic == "longest_dropped_game":
         # Find longest abandoned game by episode count
-        dropped_games = [g for g in games_data 
-                        if g.get("completion_status") not in ["completed", "in_progress"] 
-                        and g.get("total_episodes", 0) > 0]
+        dropped_games = [g for g in games_data
+                         if g.get("completion_status") not in ["completed", "in_progress"] and
+                         g.get("total_episodes", 0) > 0]
         if dropped_games:
             longest = max(dropped_games, key=lambda x: x.get("total_episodes", 0))
             return {
@@ -2326,7 +2333,7 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
             series = game.get("series_name")
             if series:
                 series_playtime[series] = series_playtime.get(series, 0) + game.get("total_playtime_minutes", 0)
-        
+
         if series_playtime:
             top_series = max(series_playtime.items(), key=lambda x: x[1])
             return {
@@ -2348,11 +2355,14 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
         # Compare which of two games was completed first
         # Template should have {game1} and {game2} placeholders
         # This would need specific games - for now, pick two random completed games
-        completed_games = [g for g in games_data if g.get("completion_status") == "completed" and g.get("first_played_date")]
+        completed_games = [g for g in games_data if g.get(
+            "completion_status") == "completed" and g.get("first_played_date")]
         if len(completed_games) >= 2:
             game1, game2 = random.sample(completed_games, 2)
             # Determine which was completed first (using first_played_date as proxy)
-            first_completed = game1 if game1.get("first_played_date", "") < game2.get("first_played_date", "") else game2
+            first_completed = game1 if game1.get(
+                "first_played_date", "") < game2.get(
+                "first_played_date", "") else game2
             return {
                 "question_text": template["template"].format(
                     game1=game1["canonical_name"],
@@ -2368,10 +2378,10 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
             game1, game2 = random.sample(games_with_dates, 2)
             first_played = game1 if game1.get("first_played_date", "") < game2.get("first_played_date", "") else game2
             second_played = game2 if first_played == game1 else game1
-            
+
             # Format answer: "before" or "after"
             answer = "before" if first_played == game1 else "after"
-            
+
             return {
                 "question_text": template["template"].format(
                     game1=game1["canonical_name"],
@@ -2386,16 +2396,16 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
         if genre_filter:
             genre_games = [g for g in games_data if g.get("genre", "").lower() == genre_filter]
             other_games = [g for g in games_data if g.get("genre", "").lower() != genre_filter]
-            
+
             if len(genre_games) >= 1 and len(other_games) >= 2:
                 correct_game = random.choice(genre_games)
                 wrong_games = random.sample(other_games, min(3, len(other_games)))
                 choices = [correct_game] + wrong_games
                 random.shuffle(choices)
-                
+
                 choice_names = [g["canonical_name"] for g in choices]
                 correct_letter = chr(65 + choice_names.index(correct_game["canonical_name"]))
-                
+
                 return {
                     "question_text": template["template"],
                     "correct_answer": correct_letter,
@@ -2432,8 +2442,10 @@ def update_question_history(question_data: Dict[str, Any], category: str):
         print(f"⏰ Category '{category}' on cooldown for 30 minutes due to recent usage")
 
 
-async def generate_ai_trivia_question(
-        context: str = "trivia", avoid_questions: Optional[List[str]] = None, avoid_templates: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+async def generate_ai_trivia_question(context: str = "trivia",
+                                      avoid_questions: Optional[List[str]] = None,
+                                      avoid_templates: Optional[List[str]] = None) -> Optional[Dict[str,
+                                                                                                    Any]]:
     """Generate a diverse trivia question using template-based system with AI fallback
 
     Args:
@@ -2478,8 +2490,9 @@ async def generate_ai_trivia_question(
                     # ✅ FIX: Update history IMMEDIATELY after selection (before duplicate check)
                     # This ensures weights are updated even if this attempt fails
                     template_id = selected_template.get("template", "")[:20]
-                    question_history["template_usage"][template_id] = question_history["template_usage"].get(template_id, 0) + 1
-                    
+                    question_history["template_usage"][template_id] = question_history["template_usage"].get(
+                        template_id, 0) + 1
+
                     question_data = execute_answer_logic(
                         selected_template["answer_logic"],
                         all_games,
@@ -2497,7 +2510,7 @@ async def generate_ai_trivia_question(
                             duplicate_status = duplicate_info.get('status', 'unknown')
                             duplicate_id = duplicate_info['duplicate_id']
                             similarity = duplicate_info['similarity_score']
-                            
+
                             # ✅ FIX: If duplicate is retired, it's especially problematic - track it
                             if duplicate_status == 'retired':
                                 print(
@@ -2505,7 +2518,7 @@ async def generate_ai_trivia_question(
                             else:
                                 print(
                                     f"🔍 Template question duplicate detected (attempt {attempt+1}/{max_template_attempts}): {similarity:.2f} similarity to question #{duplicate_id} (status: {duplicate_status})")
-                            
+
                             if attempt < max_template_attempts - 1:
                                 continue  # Try generating a different template question
                         else:
