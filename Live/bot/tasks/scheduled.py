@@ -2831,7 +2831,7 @@ async def _background_question_generation(current_question_count: int):
 
                 # ✅ FIX #2: Pass recently generated questions AND templates to avoid repetition
                 question_data = await generate_ai_trivia_question(
-                    unique_context, 
+                    unique_context,
                     avoid_questions=generated_question_texts,
                     avoid_templates=used_template_ids  # ✅ NEW: Prevent template reuse in batch
                 )
@@ -2860,7 +2860,7 @@ async def _background_question_generation(current_question_count: int):
 
                         # ✅ FIX #3: Add to recently-generated list for next iteration
                         generated_question_texts.append(question_text)
-                        
+
                         # ✅ FIX #4: Track template ID if this was a template-generated question
                         if question_data.get('generation_method') == 'template':
                             template_id = question_text[:20]  # Same ID format as in ai_handler
