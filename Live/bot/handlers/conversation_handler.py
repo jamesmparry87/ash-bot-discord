@@ -2291,20 +2291,19 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                         if question_id:
                             # Get queue status before replying
                             queue_length = get_queue_length()
-                            
+
                             approval_response = (
                                 f"✅ **Question Approved Successfully**\n\n"
                                 f"The trivia question has been added to the database with ID #{question_id}. "
                                 f"It is now available for use in future Trivia Tuesday sessions.\n\n"
                                 f"**Question:** {question_data['question_text'][:100]}{'...' if len(question_data['question_text']) > 100 else ''}\n"
-                                f"**Answer:** {question_data.get('correct_answer', 'Dynamic calculation')}\n\n"
-                            )
-                            
+                                f"**Answer:** {question_data.get('correct_answer', 'Dynamic calculation')}\n\n")
+
                             if queue_length > 0:
                                 approval_response += f"📬 **Processing next question...** ({queue_length} remaining in queue)\n\n"
-                            
+
                             approval_response += "*Mission intelligence database updated. Question approved for deployment.*"
-                            
+
                             await message.reply(approval_response)
                         else:
                             await message.reply("❌ **Failed to save approved question.** Database error occurred.")
@@ -2317,7 +2316,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 if user_id in jam_approval_conversations:
                     del jam_approval_conversations[user_id]
                     print(f"✅ FIX: Cleared approval conversation after approval")
-                
+
                 # ✅ FIX: Auto-process next question in queue
                 queue_length = get_queue_length()
                 if queue_length > 0:

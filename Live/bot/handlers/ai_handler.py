@@ -2241,9 +2241,10 @@ def update_question_history(question_data: Dict[str, Any], category: str):
         print(f"⏰ Category '{category}' on cooldown for 30 minutes due to recent usage")
 
 
-async def generate_ai_trivia_question(context: str = "trivia", avoid_questions: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+async def generate_ai_trivia_question(
+        context: str = "trivia", avoid_questions: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
     """Generate a diverse trivia question using template-based system with AI fallback
-    
+
     Args:
         context: Context string for rate limiting and logging
         avoid_questions: List of recently generated question texts to avoid repeating patterns

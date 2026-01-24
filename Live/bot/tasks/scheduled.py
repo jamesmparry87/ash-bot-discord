@@ -2815,7 +2815,7 @@ async def _background_question_generation(current_question_count: int):
         successful_generations = 0
         failed_generations = 0
         duplicate_count = 0
-        
+
         # ✅ FIX: Track recently generated questions to prevent repetition
         generated_question_texts = []
 
@@ -2827,7 +2827,7 @@ async def _background_question_generation(current_question_count: int):
 
                 # ✅ FIX #1: Use unique context for each generation to avoid cache hits
                 unique_context = f"startup_validation_{i+1}"
-                
+
                 # ✅ FIX #2: Pass recently generated questions to avoid repetition
                 question_data = await generate_ai_trivia_question(unique_context, avoid_questions=generated_question_texts)
 
@@ -2852,7 +2852,7 @@ async def _background_question_generation(current_question_count: int):
                                 print(f"⚠️ BACKGROUND GENERATION: Duplicate check failed: {dup_error}")
 
                         print(f"✅ BACKGROUND GENERATION: Generated question {i+1}: {question_text[:50]}...")
-                        
+
                         # ✅ FIX #3: Add to recently-generated list for next iteration
                         generated_question_texts.append(question_text)
 
