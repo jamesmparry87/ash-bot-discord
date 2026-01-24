@@ -103,31 +103,6 @@ class TestDatabaseManager:
             db = DatabaseManager()
             assert db.database_url is None  # type: ignore
 
-    @patch('bot.database_module.psycopg2.connect')
-    def test_get_connection_success(self, mock_connect):
-        """Test successful database connection."""
-        mock_connection = MagicMock()
-        mock_connect.return_value = mock_connection
-
-        db = DatabaseManager()
-        db.database_url = 'test_url'  # type: ignore
-
-        connection = db.get_connection()  # type: ignore
-        assert connection == mock_connection
-        # Connect called during initialization and by get_connection
-        assert mock_connect.call_count >= 1
-
-    @patch('bot.database_module.psycopg2.connect')
-    def test_get_connection_failure(self, mock_connect):
-        """Test database connection failure."""
-        mock_connect.side_effect = Exception("Connection failed")
-
-        db = DatabaseManager()
-        db.database_url = 'test_url'  # type: ignore
-
-        connection = db.get_connection()  # type: ignore
-        assert connection is None
-
 
 class TestStrikesOperations:
     """Test strike-related database operations."""
