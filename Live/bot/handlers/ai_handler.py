@@ -2223,6 +2223,186 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
                     }
                 }
 
+    # ✅ NEW IMPLEMENTATIONS - Previously missing answer_logic functions
+
+    elif logic == "latest_genre_game":
+        # Find most recent game in a specific genre
+        genre_filter = template.get("genre_filter", "").lower()
+        if genre_filter:
+            genre_games = [g for g in games_data if g.get("genre", "").lower() == genre_filter and g.get("first_played_date")]
+            if genre_games:
+                # Sort by first_played_date descending to get latest
+                latest = max(genre_games, key=lambda x: x.get("first_played_date", ""))
+                return {
+                    "question_text": template["template"],
+                    "correct_answer": latest["canonical_name"],
+                    "question_type": "single_answer"
+                }
+
+    elif logic == "longest_episodes_by_genre":
+        # Find game with most episodes in a specific genre
+        genre_filter = template.get("genre_filter", "").lower()
+        if genre_filter:
+            genre_games = [g for g in games_data if g.get("genre", "").lower() == genre_filter and g.get("total_episodes", 0) > 0]
+            if genre_games:
+                longest = max(genre_games, key=lambda x: x.get("total_episodes", 0))
+                return {
+                    "question_text": template["template"],
+                    "correct_answer": longest["canonical_name"],
+                    "question_type": "single_answer"
+                }
+
+    elif logic == "count_games_by_genre":
+        # Count games in a specific genre
+        genre_filter = template.get("genre_filter", "").lower()
+        if genre_filter:
+            genre_count = len([g for g in games_data if g.get("genre", "").lower() == genre_filter])
+            return {
+                "question_text": template["template"],
+                "correct_answer": str(genre_count),
+                "question_type": "single_answer"
+            }
+
+    elif logic == "most_youtube_views":
+        # Find game with most YouTube views
+        youtube_games = [g for g in games_data if g.get("youtube_views", 0) > 0]
+        if youtube_games:
+            top_game = max(youtube_games, key=lambda x: x.get("youtube_views", 0))
+            return {
+                "question_text": template["template"],
+                "correct_answer": top_game["canonical_name"],
+                "question_type": "single_answer"
+            }
+
+    elif logic == "most_youtube_episodes":
+        # Find longest YouTube playthrough by episode count
+        youtube_games = [g for g in games_data if g.get("youtube_playlist_url") and g.get("total_episodes", 0) > 0]
+        if youtube_games:
+            longest = max(youtube_games, key=lambda x: x.get("total_episodes", 0))
+            return {
+                "question_text": template["template"],
+                "correct_answer": longest["canonical_name"],
+                "question_type": "single_answer"
+            }
+
+    elif logic == "count_both_platforms":
+        # Count games on both YouTube and Twitch
+        both_platforms = [g for g in games_data 
+                         if g.get("youtube_playlist_url") 
+                         and g.get("twitch_vod_urls") 
+                         and g.get("twitch_vod_urls") not in ['', '{}', None]]
+        return {
+            "question_text": template["template"],
+            "correct_answer": str(len(both_platforms)),
+            "question_type": "single_answer"
+        }
+
+    elif logic == "longest_dropped_game":
+        # Find longest abandoned game by episode count
+        dropped_games = [g for g in games_data 
+                        if g.get("completion_status") not in ["completed", "in_progress"] 
+                        and g.get("total_episodes", 0) > 0]
+        if dropped_games:
+            longest = max(dropped_games, key=lambda x: x.get("total_episodes", 0))
+            return {
+                "question_text": template["template"],
+                "correct_answer": longest["canonical_name"],
+                "question_type": "single_answer"
+            }
+
+    elif logic == "count_ongoing_games":
+        # Count games with in_progress status
+        ongoing_count = len([g for g in games_data if g.get("completion_status") == "in_progress"])
+        return {
+            "question_text": template["template"],
+            "correct_answer": str(ongoing_count),
+            "question_type": "single_answer"
+        }
+
+    elif logic == "series_most_time":
+        # Find series with most total playtime
+        series_playtime = {}
+        for game in games_data:
+            series = game.get("series_name")
+            if series:
+                series_playtime[series] = series_playtime.get(series, 0) + game.get("total_playtime_minutes", 0)
+        
+        if series_playtime:
+            top_series = max(series_playtime.items(), key=lambda x: x[1])
+            return {
+                "question_text": template["template"],
+                "correct_answer": top_series[0],
+                "question_type": "single_answer"
+            }
+
+    elif logic == "unique_series_count":
+        # Count unique game series
+        series_set = {g.get("series_name") for g in games_data if g.get("series_name")}
+        return {
+            "question_text": template["template"],
+            "correct_answer": str(len(series_set)),
+            "question_type": "single_answer"
+        }
+
+    elif logic == "compare_completion_order":
+        # Compare which of two games was completed first
+        # Template should have {game1} and {game2} placeholders
+        # This would need specific games - for now, pick two random completed games
+        completed_games = [g for g in games_data if g.get("completion_status") == "completed" and g.get("first_played_date")]
+        if len(completed_games) >= 2:
+            game1, game2 = random.sample(completed_games, 2)
+            # Determine which was completed first (using first_played_date as proxy)
+            first_completed = game1 if game1.get("first_played_date", "") < game2.get("first_played_date", "") else game2
+            return {
+                "question_text": template["template"].format(
+                    game1=game1["canonical_name"],
+                    game2=game2["canonical_name"]),
+                "correct_answer": first_completed["canonical_name"],
+                "question_type": "single_answer"
+            }
+
+    elif logic == "compare_play_order":
+        # Compare which of two games was played first
+        games_with_dates = [g for g in games_data if g.get("first_played_date")]
+        if len(games_with_dates) >= 2:
+            game1, game2 = random.sample(games_with_dates, 2)
+            first_played = game1 if game1.get("first_played_date", "") < game2.get("first_played_date", "") else game2
+            second_played = game2 if first_played == game1 else game1
+            
+            # Format answer: "before" or "after"
+            answer = "before" if first_played == game1 else "after"
+            
+            return {
+                "question_text": template["template"].format(
+                    game1=game1["canonical_name"],
+                    game2=game2["canonical_name"]),
+                "correct_answer": answer,
+                "question_type": "single_answer"
+            }
+
+    elif logic == "mc_genre_game":
+        # Multiple choice: which game is in a specific genre
+        genre_filter = template.get("genre_filter", "").lower()
+        if genre_filter:
+            genre_games = [g for g in games_data if g.get("genre", "").lower() == genre_filter]
+            other_games = [g for g in games_data if g.get("genre", "").lower() != genre_filter]
+            
+            if len(genre_games) >= 1 and len(other_games) >= 2:
+                correct_game = random.choice(genre_games)
+                wrong_games = random.sample(other_games, min(3, len(other_games)))
+                choices = [correct_game] + wrong_games
+                random.shuffle(choices)
+                
+                choice_names = [g["canonical_name"] for g in choices]
+                correct_letter = chr(65 + choice_names.index(correct_game["canonical_name"]))
+                
+                return {
+                    "question_text": template["template"],
+                    "correct_answer": correct_letter,
+                    "question_type": "multiple_choice",
+                    "multiple_choice_options": choice_names
+                }
+
     # Fallback - return empty dict if logic couldn't execute
     return {}
 
@@ -2314,8 +2494,18 @@ async def generate_ai_trivia_question(
                         )
 
                         if duplicate_info:
-                            print(
-                                f"🔍 Template question duplicate detected (attempt {attempt+1}/{max_template_attempts}): {duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']}")
+                            duplicate_status = duplicate_info.get('status', 'unknown')
+                            duplicate_id = duplicate_info['duplicate_id']
+                            similarity = duplicate_info['similarity_score']
+                            
+                            # ✅ FIX: If duplicate is retired, it's especially problematic - track it
+                            if duplicate_status == 'retired':
+                                print(
+                                    f"🚫 Template question matches RETIRED question #{duplicate_id} ({similarity:.2f} similarity) - explicitly avoiding this pattern")
+                            else:
+                                print(
+                                    f"🔍 Template question duplicate detected (attempt {attempt+1}/{max_template_attempts}): {similarity:.2f} similarity to question #{duplicate_id} (status: {duplicate_status})")
+                            
                             if attempt < max_template_attempts - 1:
                                 continue  # Try generating a different template question
                         else:
