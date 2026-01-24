@@ -1166,12 +1166,12 @@ class DatabaseManager:
                             completion_status,
                             CASE
                                 WHEN total_episodes > 0 THEN
-                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / total_episodes, 1)
+                                    ROUND(((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / total_episodes), 1)
                                 ELSE 0
                             END as views_per_episode,
                             CASE
                                 WHEN total_playtime_minutes > 0 THEN
-                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / (total_playtime_minutes::float / 60), 1)
+                                    ROUND(((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / (total_playtime_minutes::numeric / 60)), 1)
                                 ELSE 0
                             END as views_per_hour
                         FROM played_games
@@ -1193,12 +1193,12 @@ class DatabaseManager:
                             completion_status,
                             CASE
                                 WHEN total_episodes > 0 THEN
-                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / total_episodes, 1)
+                                    ROUND(((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / total_episodes), 1)
                                 ELSE 0
                             END as views_per_episode,
                             CASE
                                 WHEN total_playtime_minutes > 0 THEN
-                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / (total_playtime_minutes::float / 60), 1)
+                                    ROUND(((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / (total_playtime_minutes::numeric / 60)), 1)
                                 ELSE 0
                             END as views_per_hour
                         FROM played_games
@@ -1208,7 +1208,7 @@ class DatabaseManager:
                         ORDER BY
                             CASE
                                 WHEN total_playtime_minutes > 0 THEN
-                                    (COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / (total_playtime_minutes::float / 60)
+                                    (COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / (total_playtime_minutes::numeric / 60)
                                 ELSE 0
                             END DESC
                         LIMIT %s
