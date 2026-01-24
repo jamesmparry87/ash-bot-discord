@@ -218,11 +218,11 @@ class TestDeploymentReadiness:
             stats = db.games.get_played_games_stats()
             assert stats is not None, "get_played_games_stats returned None"
             assert isinstance(stats, dict), "Stats must be a dictionary"
-            
+
             # If stats is empty, database connection might have failed
             if not stats:
                 pytest.skip("Database returned empty stats (connection may have failed)")
-            
+
             assert "total_games" in stats, "Stats missing total_games"
             print(f"✅ PASS: Stats query works (found {stats.get('total_games', 0)} games)")
         except Exception as e:
