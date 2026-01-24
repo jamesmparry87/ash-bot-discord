@@ -2241,8 +2241,13 @@ def update_question_history(question_data: Dict[str, Any], category: str):
         print(f"⏰ Category '{category}' on cooldown for 30 minutes due to recent usage")
 
 
-async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[str, Any]]:
-    """Generate a diverse trivia question using template-based system with AI fallback"""
+async def generate_ai_trivia_question(context: str = "trivia", avoid_questions: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+    """Generate a diverse trivia question using template-based system with AI fallback
+    
+    Args:
+        context: Context string for rate limiting and logging
+        avoid_questions: List of recently generated question texts to avoid repeating patterns
+    """
     if not ai_enabled:
         print("❌ AI not enabled for trivia question generation")
         return None
@@ -2255,6 +2260,8 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
 
     try:
         print(f"🧠 Generating diverse trivia question with context: {context}")
+        if avoid_questions:
+            print(f"   Avoiding {len(avoid_questions)} recent pattern(s)")
 
         # Get all available games data
         all_games = current_db.get_all_played_games()
@@ -2331,9 +2338,25 @@ async def generate_ai_trivia_question(context: str = "trivia") -> Optional[Dict[
         recent_categories = [q["category"] for q in question_history["last_questions"][-5:]]
         avoid_categories = list(set(recent_categories)) if recent_categories else []
 
-        content_prompt = f"""Generate a trivia question about Captain Jonesy's gaming experiences. Use your analytical voice but be CONCISE - minimal preamble, direct question delivery.
+        # Build avoid-patterns section if we have recent questions
+        avoid_patterns_text = ""
+        if avoid_questions:
+            avoid_patterns_text = f"""
 
-CRITICAL TERMINOLOGY - READ CAREFULLY:
+🚫 RECENTLY GENERATED - DO NOT REPEAT THESE PATTERNS:
+{chr(10).join([f"   ❌ {q[:80]}..." if len(q) > 80 else f"   ❌ {q}" for q in avoid_questions])}
+
+CRITICAL: Generate a DIFFERENT question with DIFFERENT phrasing and DIFFERENT focus area."""
+
+        content_prompt = f"""Generate a trivia question for the CREW about Captain Jonesy's gaming data.
+
+🎯 AUDIENCE CLARITY:
+- You are asking the CREW about Jonesy's gaming (Jonesy is the SUBJECT, not the AUDIENCE)
+- DO NOT address Jonesy directly with "Captain" or "you"
+- The crew is answering questions ABOUT Jonesy's data
+- Phrasing: "What game did Jonesy..." NOT "Captain, what game took you..."
+
+CRITICAL TERMINOLOGY:
 ⚠️ "most played" = game with HIGHEST total_playtime_minutes (time spent playing)
 ⚠️ "most episodes" = game with MOST episode count (number of episodes)
 ⚠️ These are DIFFERENT metrics! Episode count ≠ playtime!
@@ -2342,36 +2365,36 @@ DATABASE SCHEMA:
 - total_playtime_minutes: Actual time spent playing in minutes (THIS IS "MOST PLAYED")
 - total_episodes: Number of recorded episodes
 
-AVOID these overused categories: {avoid_categories}
+🚫 BANNED PATTERNS (too boring/overused):
+❌ "What percentage of..." - too statistical, not engaging
+❌ "How many X does Jonesy have?" - too generic
+❌ "Captain, analysis indicates:" - addressing wrong audience
+❌ "Which game required the most..." - use "took" or "needed" for variety
 
-PREFERRED QUESTION TYPES (pick one):
+AVOID these overused categories: {avoid_categories}{avoid_patterns_text}
+
+✅ PREFERRED QUESTION TYPES (pick one with variety):
 🎮 **Genre Adventures**: "What horror game did Jonesy play most recently?"
 🏆 **Gaming Milestones**: "Which was Jonesy's first completed RPG?"
 📚 **Series Explorer**: "How many Resident Evil games has Jonesy played?"
-🎯 **Gaming Stories**: "What game took Jonesy the most episodes to finish?" (use "episodes" not "played")
+🎯 **Gaming Stories**: "What game took Jonesy the most episodes to finish?"
 🕐 **Timeline Fun**: "Which game did Jonesy complete first - [Game A] or [Game B]?"
-⭐ **Playtime Champion**: "What game has Jonesy spent the most time playing?" (use "time" for playtime)
+⭐ **Playtime Champion**: "What game has Jonesy spent the most time playing?"
+📺 **Platform Detective**: "Which game has the most YouTube views?"
 
 AVAILABLE GAMES: {game_context}
 Total games: {stats.get('total_games', 0)}
 
-CRITICAL: Keep the question CONCISE. Use your analytical voice but avoid lengthy preambles or game lists. A brief greeting like "Personnel, analysis indicates:" followed by a direct question is ideal.
-
-GOOD EXAMPLES:
-✅ "Personnel, what game has Jonesy spent the most time playing?" (uses playtime)
-✅ "What game took Jonesy the most episodes to complete?" (uses episode count)
-❌ "What is Jonesy's most played game?" (AMBIGUOUS - specify time OR episodes)
-
 RETURN ONLY JSON:
 {{
-    "question_text": "Your concise, direct question with minimal preamble",
+    "question_text": "Direct question about Jonesy's gaming (crew is audience)",
     "question_type": "single_answer",
     "correct_answer": "The answer",
     "is_dynamic": false,
     "category": "ai_generated"
 }}
 
-Focus on direct questions about Captain Jonesy's gaming journey - no verbose analysis."""
+Generate an engaging, unique question with correct audience (crew, not Jonesy)."""
 
         # For now, use the content_prompt directly
         # TODO: Will be replaced with proper system_instruction integration
