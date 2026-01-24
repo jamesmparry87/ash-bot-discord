@@ -2831,7 +2831,7 @@ async def _background_question_generation(current_question_count: int):
                     required_fields = ['question_text', 'question_type', 'correct_answer']
                     if all(field in question_data for field in required_fields):
                         question_text = question_data.get('question_text', 'Unknown')
-                        
+
                         # Check for duplicates before adding to queue
                         if db:
                             try:
@@ -2839,12 +2839,13 @@ async def _background_question_generation(current_question_count: int):
                                 if duplicate_check:
                                     similarity = duplicate_check['similarity_score']
                                     duplicate_id = duplicate_check['duplicate_id']
-                                    print(f"⚠️ BACKGROUND GENERATION: Question {i+1} is duplicate ({similarity*100:.0f}% match to Q#{duplicate_id}), skipping")
+                                    print(
+                                        f"⚠️ BACKGROUND GENERATION: Question {i+1} is duplicate ({similarity*100:.0f}% match to Q#{duplicate_id}), skipping")
                                     duplicate_count += 1
                                     continue
                             except Exception as dup_error:
                                 print(f"⚠️ BACKGROUND GENERATION: Duplicate check failed: {dup_error}")
-                        
+
                         print(f"✅ BACKGROUND GENERATION: Generated question {i+1}: {question_text[:50]}...")
 
                         # ✅ FIX #2: Add to approval queue instead of manual sequential logic
@@ -2854,8 +2855,9 @@ async def _background_question_generation(current_question_count: int):
                             priority=5,  # Normal priority for startup questions
                             source=f'startup_generation_{i+1}'
                         )
-                        
-                        print(f"📋 BACKGROUND GENERATION: Question {i+1} added to approval queue at position {queue_position}")
+
+                        print(
+                            f"📋 BACKGROUND GENERATION: Question {i+1} added to approval queue at position {queue_position}")
                         successful_generations += 1
                     else:
                         missing_fields = [f for f in required_fields if f not in question_data]
@@ -2873,14 +2875,15 @@ async def _background_question_generation(current_question_count: int):
             await asyncio.sleep(2)
 
         print(f"🧠 BACKGROUND GENERATION: Complete - {successful_generations} questions added to approval queue")
-        print(f"📊 BACKGROUND GENERATION: Stats - Generated: {successful_generations}, Failed: {failed_generations}, Duplicates: {duplicate_count}")
+        print(
+            f"📊 BACKGROUND GENERATION: Stats - Generated: {successful_generations}, Failed: {failed_generations}, Duplicates: {duplicate_count}")
 
         # ✅ FIX #2: Trigger the approval queue processor to start sending questions
         if successful_generations > 0:
             print(f"🔄 BACKGROUND GENERATION: Triggering approval queue processor...")
             await process_next_approval()
             print(f"✅ BACKGROUND GENERATION: Approval queue processor started - JAM will receive questions sequentially")
-            
+
             # Send summary notification to JAM
             try:
                 if not _bot_instance:
@@ -2892,7 +2895,7 @@ async def _background_question_generation(current_question_count: int):
                     if user:
                         from ..handlers.conversation_handler import get_queue_length
                         remaining = get_queue_length()
-                        
+
                         summary_message = (
                             f"🧠 **Background Question Generation Complete**\n\n"
                             f"**Generation Summary:**\n"

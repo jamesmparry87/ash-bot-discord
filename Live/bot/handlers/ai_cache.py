@@ -59,10 +59,10 @@ class AIResponseCache:
         # Replace <@123456789> with generic placeholder
         import re
         normalized = re.sub(r'<@!?\d+>', '<@user>', normalized)
-        
+
         # NEW: Normalize Discord role mentions
         normalized = re.sub(r'<@&\d+>', '<@role>', normalized)
-        
+
         # NEW: Normalize Discord channel mentions
         normalized = re.sub(r'<#\d+>', '<#channel>', normalized)
 
