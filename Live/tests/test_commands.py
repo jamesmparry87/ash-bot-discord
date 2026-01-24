@@ -8,7 +8,35 @@ import os
 import sys
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, call, patch
-from zoneinfo import ZoneInfo
+
+# Try to import ZoneInfo with graceful fallback
+try:
+    from zoneinfo import ZoneInfo
+    TIMEZONE_AVAILABLE = True
+except (ImportError, ModuleNotFoundError):
+    # Fallback for systems without tzdata package
+    from datetime import timezone
+    print("⚠️ ZoneInfo not available, using UTC fallback for tests")
+    
+    class ZoneInfo:  # type: ignore
+        """Fallback ZoneInfo that uses UTC"""
+        def __init__(self, key):
+            self.key = key
+        
+        def __repr__(self):
+            return f"ZoneInfo({self.key})"
+        
+        # Make it work as a timezone
+        def utcoffset(self, dt):
+            return timezone.utc.utcoffset(dt)
+        
+        def tzname(self, dt):
+            return "UTC"
+        
+        def dst(self, dt):
+            return None
+    
+    TIMEZONE_AVAILABLE = False
 
 import discord
 import pytest
