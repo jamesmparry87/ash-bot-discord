@@ -2816,8 +2816,9 @@ async def _background_question_generation(current_question_count: int):
         failed_generations = 0
         duplicate_count = 0
 
-        # ✅ FIX: Track recently generated questions to prevent repetition
+        # ✅ FIX: Track recently generated questions AND templates to prevent repetition
         generated_question_texts = []
+        used_template_ids = []  # ✅ NEW: Track templates used in this batch
 
         print(f"🔄 BACKGROUND GENERATION: Generating {questions_needed} questions with pattern diversity...")
 
@@ -2828,8 +2829,12 @@ async def _background_question_generation(current_question_count: int):
                 # ✅ FIX #1: Use unique context for each generation to avoid cache hits
                 unique_context = f"startup_validation_{i+1}"
 
-                # ✅ FIX #2: Pass recently generated questions to avoid repetition
-                question_data = await generate_ai_trivia_question(unique_context, avoid_questions=generated_question_texts)
+                # ✅ FIX #2: Pass recently generated questions AND templates to avoid repetition
+                question_data = await generate_ai_trivia_question(
+                    unique_context, 
+                    avoid_questions=generated_question_texts,
+                    avoid_templates=used_template_ids  # ✅ NEW: Prevent template reuse in batch
+                )
 
                 if question_data and isinstance(question_data, dict):
                     # Validate the generated question
@@ -2855,6 +2860,12 @@ async def _background_question_generation(current_question_count: int):
 
                         # ✅ FIX #3: Add to recently-generated list for next iteration
                         generated_question_texts.append(question_text)
+                        
+                        # ✅ FIX #4: Track template ID if this was a template-generated question
+                        if question_data.get('generation_method') == 'template':
+                            template_id = question_text[:20]  # Same ID format as in ai_handler
+                            used_template_ids.append(template_id)
+                            print(f"📝 BACKGROUND GENERATION: Tracked template ID for avoidance: {template_id}")
 
                         # ✅ FIX #2: Add to approval queue instead of manual sequential logic
                         queue_position = add_to_approval_queue(

@@ -1910,8 +1910,13 @@ def calculate_template_weights(templates: Dict[str, List[Dict[str, Any]]]) -> Di
     return templates
 
 
-def select_best_template(games_data: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Select the best template based on data availability and weights"""
+def select_best_template(games_data: List[Dict[str, Any]], avoid_templates: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+    """Select the best template based on data availability and weights, avoiding recently used templates
+    
+    Args:
+        games_data: List of game data dictionaries
+        avoid_templates: List of recently used template IDs to avoid in this batch
+    """
     templates = get_question_templates()
     weighted_templates = calculate_template_weights(templates)
 
@@ -1922,6 +1927,12 @@ def select_best_template(games_data: List[Dict[str, Any]]) -> Optional[Dict[str,
         for template in template_list:
             # Check if we have enough data for this template
             if is_template_viable(template, games_data):
+                # ✅ FIX: Skip recently-used templates in this batch
+                template_id = template.get("template", "")[:20]
+                if avoid_templates and template_id in avoid_templates:
+                    print(f"⏭️ Skipping recently-used template: {template_id}")
+                    continue
+                    
                 viable_templates.append((template, category))
 
     if not viable_templates:
@@ -2242,12 +2253,13 @@ def update_question_history(question_data: Dict[str, Any], category: str):
 
 
 async def generate_ai_trivia_question(
-        context: str = "trivia", avoid_questions: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+        context: str = "trivia", avoid_questions: Optional[List[str]] = None, avoid_templates: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
     """Generate a diverse trivia question using template-based system with AI fallback
 
     Args:
         context: Context string for rate limiting and logging
         avoid_questions: List of recently generated question texts to avoid repeating patterns
+        avoid_templates: List of recently used template IDs to avoid in this batch
     """
     if not ai_enabled:
         print("❌ AI not enabled for trivia question generation")
@@ -2263,6 +2275,8 @@ async def generate_ai_trivia_question(
         print(f"🧠 Generating diverse trivia question with context: {context}")
         if avoid_questions:
             print(f"   Avoiding {len(avoid_questions)} recent pattern(s)")
+        if avoid_templates:
+            print(f"   Avoiding {len(avoid_templates)} recently-used template(s)")
 
         # Get all available games data
         all_games = current_db.get_all_played_games()
@@ -2277,9 +2291,15 @@ async def generate_ai_trivia_question(
         max_template_attempts = 3
         for attempt in range(max_template_attempts):
             try:
-                selected_template = select_best_template(all_games)
+                # ✅ FIX: Pass avoid_templates to prevent batch repetition
+                selected_template = select_best_template(all_games, avoid_templates=avoid_templates)
 
                 if selected_template:
+                    # ✅ FIX: Update history IMMEDIATELY after selection (before duplicate check)
+                    # This ensures weights are updated even if this attempt fails
+                    template_id = selected_template.get("template", "")[:20]
+                    question_history["template_usage"][template_id] = question_history["template_usage"].get(template_id, 0) + 1
+                    
                     question_data = execute_answer_logic(
                         selected_template["answer_logic"],
                         all_games,
@@ -2306,7 +2326,7 @@ async def generate_ai_trivia_question(
                                 "generation_method": "template"
                             })
 
-                            # Update history
+                            # Update history with category cooldowns and recent questions tracking
                             update_question_history(question_data, selected_template.get("category", "unknown"))
 
                             print(f"✅ Template-generated question (unique): {question_data['question_text'][:50]}...")
