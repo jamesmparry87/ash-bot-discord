@@ -2795,7 +2795,7 @@ async def validate_startup_trivia_questions():
 
 
 async def _background_question_generation(current_question_count: int):
-    """Background task for generating trivia questions with sequential approval system"""
+    """Background task for generating trivia questions using the approval queue system"""
     try:
         print(f"🧠 BACKGROUND QUESTION GENERATION: Starting with {current_question_count} existing questions")
 
@@ -2805,39 +2805,57 @@ async def _background_question_generation(current_question_count: int):
         try:
             from ..config import JAM_USER_ID
             from ..handlers.ai_handler import generate_ai_trivia_question
-            from ..handlers.conversation_handler import jam_approval_conversations, start_jam_question_approval
+            from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
             print("✅ BACKGROUND GENERATION: AI handler and conversation handler loaded")
         except ImportError as import_error:
             print(f"❌ BACKGROUND GENERATION: Failed to import required modules - {import_error}")
             return
 
-        # Generate all questions first and queue them
-        question_queue = []
+        # Generate all questions first
         successful_generations = 0
         failed_generations = 0
+        duplicate_count = 0
 
-        print(f"🔄 BACKGROUND GENERATION: Generating {questions_needed} questions for sequential approval...")
+        print(f"🔄 BACKGROUND GENERATION: Generating {questions_needed} questions with cache-busting...")
 
         for i in range(questions_needed):
             try:
                 print(f"🔄 BACKGROUND GENERATION: Generating question {i+1}/{questions_needed}")
 
-                # Generate AI question with startup context for rate limit bypass
-                question_data = await generate_ai_trivia_question("startup_validation")
+                # ✅ FIX #1: Use unique context for each generation to avoid cache hits
+                unique_context = f"startup_validation_{i+1}"
+                question_data = await generate_ai_trivia_question(unique_context)
 
                 if question_data and isinstance(question_data, dict):
                     # Validate the generated question
                     required_fields = ['question_text', 'question_type', 'correct_answer']
                     if all(field in question_data for field in required_fields):
                         question_text = question_data.get('question_text', 'Unknown')
+                        
+                        # Check for duplicates before adding to queue
+                        if db:
+                            try:
+                                duplicate_check = db.check_question_duplicate(question_text, similarity_threshold=0.85)
+                                if duplicate_check:
+                                    similarity = duplicate_check['similarity_score']
+                                    duplicate_id = duplicate_check['duplicate_id']
+                                    print(f"⚠️ BACKGROUND GENERATION: Question {i+1} is duplicate ({similarity*100:.0f}% match to Q#{duplicate_id}), skipping")
+                                    duplicate_count += 1
+                                    continue
+                            except Exception as dup_error:
+                                print(f"⚠️ BACKGROUND GENERATION: Duplicate check failed: {dup_error}")
+                        
                         print(f"✅ BACKGROUND GENERATION: Generated question {i+1}: {question_text[:50]}...")
 
-                        # Add to queue instead of sending immediately
-                        question_queue.append({
-                            'data': question_data,
-                            'number': i + 1,
-                            'text_preview': question_text[:50]
-                        })
+                        # ✅ FIX #2: Add to approval queue instead of manual sequential logic
+                        queue_position = add_to_approval_queue(
+                            item_type='trivia_question',
+                            data=question_data,
+                            priority=5,  # Normal priority for startup questions
+                            source=f'startup_generation_{i+1}'
+                        )
+                        
+                        print(f"📋 BACKGROUND GENERATION: Question {i+1} added to approval queue at position {queue_position}")
                         successful_generations += 1
                     else:
                         missing_fields = [f for f in required_fields if f not in question_data]
@@ -2854,101 +2872,45 @@ async def _background_question_generation(current_question_count: int):
             # Small delay between generations to avoid overwhelming systems
             await asyncio.sleep(2)
 
-        print(
-            f"🧠 BACKGROUND GENERATION: Generated {len(question_queue)} questions, now starting sequential approval process")
+        print(f"🧠 BACKGROUND GENERATION: Complete - {successful_generations} questions added to approval queue")
+        print(f"📊 BACKGROUND GENERATION: Stats - Generated: {successful_generations}, Failed: {failed_generations}, Duplicates: {duplicate_count}")
 
-        # Now send questions one at a time with sequential approval
-        approved_count = 0
-        approval_failed_count = 0
-
-        for question in question_queue:
-            try:
-                # Check if JAM is already in an approval conversation before sending
-                approval_attempts = 0
-                max_attempts = 3
-
-                while JAM_USER_ID in jam_approval_conversations and approval_attempts < max_attempts:
-                    approval_attempts += 1
-                    print(
-                        f"⏳ SEQUENTIAL APPROVAL: JAM is in active approval conversation, waiting 30 seconds (attempt {approval_attempts}/{max_attempts})")
-                    await asyncio.sleep(30)
-
-                if JAM_USER_ID in jam_approval_conversations:
-                    print(
-                        f"⚠️ SEQUENTIAL APPROVAL: JAM still busy after {max_attempts} attempts, skipping question {question['number']}")
-                    approval_failed_count += 1
-                    continue
-
-                print(
-                    f"📤 SEQUENTIAL APPROVAL: Sending question {question['number']}/{len(question_queue)} for approval")
-                print(f"   Question: {question['text_preview']}...")
-
-                # Send question for approval
-                approval_sent = await start_jam_question_approval(question['data'])
-
-                if approval_sent:
-                    print(f"✅ SEQUENTIAL APPROVAL: Question {question['number']} sent successfully")
-                    approved_count += 1
-
-                    # Wait longer between questions to allow for review and approval
-                    if question != question_queue[-1]:  # Don't wait after the last question
-                        print(f"⏳ SEQUENTIAL APPROVAL: Waiting 60 seconds before sending next question...")
-                        await asyncio.sleep(60)
-
-                        # Send a brief status update to JAM
-                        try:
-                            if not _bot_instance:
-                                print("⚠️ Bot instance not available for sequential approval status update")
-                                continue
-
-                            user = await _bot_instance.fetch_user(JAM_USER_ID)
-                            if user and question['number'] < len(question_queue):
-                                remaining = len(question_queue) - question['number']
-                                await user.send(f"📋 **Sequential Approval Status**: {remaining} more question(s) pending review after this one.")
-                                print(f"📊 SEQUENTIAL APPROVAL: Status update sent to JAM ({remaining} remaining)")
-                        except Exception as status_error:
-                            print(f"⚠️ SEQUENTIAL APPROVAL: Failed to send status update: {status_error}")
-                else:
-                    print(f"❌ SEQUENTIAL APPROVAL: Failed to send question {question['number']}")
-                    approval_failed_count += 1
-
-            except Exception as approval_error:
-                print(f"❌ SEQUENTIAL APPROVAL: Error with question {question['number']}: {approval_error}")
-                approval_failed_count += 1
-
-        # Final comprehensive status report
-        print(f"🧠 SEQUENTIAL APPROVAL: Complete - {approved_count}/{len(question_queue)} questions sent for approval")
-
-        if approved_count > 0:
-            print(f"📬 SEQUENTIAL APPROVAL: JAM should have received {approved_count} question(s) sequentially")
-
-            # Send final summary notification to JAM
+        # ✅ FIX #2: Trigger the approval queue processor to start sending questions
+        if successful_generations > 0:
+            print(f"🔄 BACKGROUND GENERATION: Triggering approval queue processor...")
+            await process_next_approval()
+            print(f"✅ BACKGROUND GENERATION: Approval queue processor started - JAM will receive questions sequentially")
+            
+            # Send summary notification to JAM
             try:
                 if not _bot_instance:
-                    print("⚠️ Bot instance not available for final summary notification")
+                    print("⚠️ Bot instance not available for summary notification")
                     return
 
-                if hasattr(_bot_instance, 'fetch_user') and _bot_instance.user:  # Check if bot is available and ready
+                if hasattr(_bot_instance, 'fetch_user') and _bot_instance.user:
                     user = await _bot_instance.fetch_user(JAM_USER_ID)
                     if user:
+                        from ..handlers.conversation_handler import get_queue_length
+                        remaining = get_queue_length()
+                        
                         summary_message = (
-                            f"🧠 **Sequential Question Approval Complete**\n\n"
-                            f"**Final Status:**\n"
+                            f"🧠 **Background Question Generation Complete**\n\n"
+                            f"**Generation Summary:**\n"
                             f"• Questions generated: {successful_generations}\n"
-                            f"• Questions sent for approval: {approved_count}\n"
-                            f"• Approval sending failures: {approval_failed_count}\n"
-                            f"• Generation failures: {failed_generations}\n\n"
-                            f"Each question was sent individually with time for review between them.\n"
-                            f"This sequential approach prevents overwhelming you with multiple simultaneous approvals.\n\n"
-                            f"*All questions above are now ready for your individual review and approval.*")
+                            f"• Duplicates detected: {duplicate_count}\n"
+                            f"• Generation failures: {failed_generations}\n"
+                            f"• Total in approval queue: {remaining}\n\n"
+                            f"Questions will be sent to you **one at a time** for approval. "
+                            f"The next question will arrive automatically after you complete each approval.\n\n"
+                            f"*This queue system ensures you're never overwhelmed with multiple simultaneous approvals.*")
                         await user.send(summary_message)
-                        print("✅ SEQUENTIAL APPROVAL: Final summary notification sent to JAM")
+                        print("✅ BACKGROUND GENERATION: Summary notification sent to JAM")
             except Exception as summary_error:
-                print(f"⚠️ SEQUENTIAL APPROVAL: Failed to send final summary to JAM: {summary_error}")
+                print(f"⚠️ BACKGROUND GENERATION: Failed to send summary to JAM: {summary_error}")
         else:
-            print("⚠️ SEQUENTIAL APPROVAL: No questions were successfully sent for approval")
+            print("⚠️ BACKGROUND GENERATION: No questions were successfully generated")
 
     except Exception as e:
-        print(f"❌ SEQUENTIAL APPROVAL: Critical error - {e}")
+        print(f"❌ BACKGROUND GENERATION: Critical error - {e}")
         import traceback
         traceback.print_exc()
