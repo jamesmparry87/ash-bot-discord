@@ -42,17 +42,29 @@ class AIResponseCache:
 
         # TTL configuration (in seconds)
         self.ttl_config = {
-            "faq": 86400,           # 24 hours - FAQs rarely change
-            "gaming_query": 21600,  # 6 hours - game data is relatively static
-            "personality": 43200,   # 12 hours - greetings/personality responses
-            "trivia": 604800,       # 7 days - pre-generated trivia questions
-            "general": 10800        # 3 hours - general conversation
+            "faq": 86400,                    # 24 hours - FAQs rarely change
+            "gaming_query": 21600,           # 6 hours - game data is relatively static
+            "conversational_query": 7200,    # 2 hours - conversational responses are context-dependent
+            "personality": 43200,            # 12 hours - greetings/personality responses
+            "trivia": 604800,                # 7 days - pre-generated trivia questions
+            "general": 10800                 # 3 hours - general conversation
         }
 
     def _normalize_query(self, query: str) -> str:
         """Normalize query for better matching while preserving conversational context"""
         # Convert to lowercase
         normalized = query.lower()
+
+        # NEW: Normalize Discord user mentions to improve cache hits
+        # Replace <@123456789> with generic placeholder
+        import re
+        normalized = re.sub(r'<@!?\d+>', '<@user>', normalized)
+        
+        # NEW: Normalize Discord role mentions
+        normalized = re.sub(r'<@&\d+>', '<@role>', normalized)
+        
+        # NEW: Normalize Discord channel mentions
+        normalized = re.sub(r'<#\d+>', '<#channel>', normalized)
 
         # Remove extra whitespace
         normalized = " ".join(normalized.split())
@@ -153,18 +165,39 @@ class AIResponseCache:
         """Detect the query category for appropriate TTL (different from query type)"""
         query_lower = query.lower()
 
-        # FAQ patterns
+        # User presence/activity queries (NEW - check before conversational to prevent false matches)
+        presence_patterns = [
+            r'where (has|have) <@user>',  # "where has @user been"
+            r'<@user> (been|hiding|gone)',  # "@user been quiet", "@user hiding"
+            r'(where|what) (is|has) <@user> (been|up to|doing)',  # "what has @user been up to"
+            r'haven\'t seen <@user>',  # "haven't seen @user"
+        ]
+        if any(re.search(pattern, query_lower) is not None for pattern in presence_patterns):
+            return "gaming_query"  # User activity = gaming/community queries
+
+        # Conversational/emotional queries (REFINED - removed overly broad "been" pattern)
+        conversational_patterns = [
+            r'why (have|are) you (been )?(quiet|grouchy|upset|acting)',  # More specific: requires emotion
+            r'\b(quiet|grouchy|upset|feeling|mood|behavior)\b',  # Emotion/mood words
+            r'what\'s wrong',
+            r'are you (okay|ok|alright)',
+            r'(cheer up|calm down|relax|take it easy)'
+        ]
+        if any(re.search(pattern, query_lower) is not None for pattern in conversational_patterns):
+            return "conversational_query"
+
+        # FAQ patterns (EXPANDED - added "have/has" variants)
         faq_patterns = [
             r'who (is|are|am)',
-            r'what (is|are) (you|your|the)',
-            r'how (do|does|did) (you|i)',
-            r'where (is|are|do)',
-            r'when (is|are|do|did)'
+            r'what (is|are|have|has) (you|your|the)',
+            r'how (do|does|did|have|has) (you|i)',
+            r'where (is|are|do|have|has)',
+            r'when (is|are|do|did|have|has)'
         ]
         if any(re.search(pattern, query_lower) is not None for pattern in faq_patterns):
             return "faq"
 
-        # Gaming query patterns
+        # Gaming query patterns - must have specific gaming context
         gaming_patterns = [
             r'(game|play|episode|hour|complete|finish)',
             r'(jonesy|captain)',
@@ -205,6 +238,7 @@ class AIResponseCache:
         Find similar cached query using fuzzy matching within the same conversation context.
 
         IMPROVED: Prevents false matches between different query types (questions vs casual responses).
+        CATEGORY BOUNDARY: Only matches queries within the same category to prevent cross-category pollution.
         Optimized to search a random sample for large caches to avoid O(N) complexity.
         CRITICAL: Only searches within the same conversation location (DM/channel isolation).
         """
@@ -266,12 +300,18 @@ class AIResponseCache:
 
             cached_normalized = self._normalize_query(entry["original_query"])
 
-            # NEW: Detect cached query type
+            # NEW: Detect cached query type and category
             cached_type = self._detect_query_type(entry["original_query"])
+            cached_category = entry.get("query_type", self._detect_query_category(entry["original_query"]))
 
-            # NEW: Don't match different query types (prevents "take it easy" matching "what are your plans")
+            # CRITICAL: Don't match different query types
             if query_type != cached_type:
                 logger.debug(f"Cache: Skipping - type mismatch ({query_type} vs {cached_type})")
+                continue
+
+            # CRITICAL: Don't match different query categories (prevents gaming_query matching conversational_query)
+            if query_category != cached_category:
+                logger.debug(f"Cache: Skipping - category mismatch ({query_category} vs {cached_category})")
                 continue
 
             # NEW: Check word overlap for additional validation
