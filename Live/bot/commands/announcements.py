@@ -11,7 +11,7 @@ import discord
 from discord.ext import commands
 
 from ..config import ANNOUNCEMENTS_CHANNEL_ID, JAM_USER_ID, JONESY_USER_ID
-from ..database_module import get_database
+from ..database import get_database
 
 # Get database instance
 db = get_database()

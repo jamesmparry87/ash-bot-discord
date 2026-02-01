@@ -12,7 +12,7 @@ import discord
 from discord.ext import commands
 
 from ..config import JAM_USER_ID, JONESY_USER_ID
-from ..database_module import get_database
+from ..database import get_database
 from ..tasks.scheduled import perform_full_content_sync
 
 # Get database instance

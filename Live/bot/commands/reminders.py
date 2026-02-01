@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import commands
 
-from ..database_module import get_database
+from ..database import get_database
 from ..utils.dm_permissions import is_moderator_or_authorized
 
 # Get database instance

@@ -32,7 +32,7 @@ except ImportError:
 
 # Database and config imports
 try:
-    from ..database_module import DatabaseManager, get_database
+    from ..database import DatabaseManager, get_database
 
     # Get database instance
     db: DatabaseManager | None = get_database()

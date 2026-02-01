@@ -11,7 +11,7 @@ import discord
 from discord.ext import commands
 
 from ..config import JAM_USER_ID
-from ..database_module import get_database
+from ..database import get_database
 
 
 class DataCleanupCommands(commands.Cog):

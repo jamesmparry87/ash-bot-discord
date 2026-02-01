@@ -27,7 +27,7 @@ from ..config import (
     RATE_LIMIT_COOLDOWN,
     RATE_LIMIT_COOLDOWNS,
 )
-from ..database_module import get_database
+from ..database import get_database
 from ..persona.context_builder import build_ash_context
 from ..persona.examples import ASH_FEW_SHOT_EXAMPLES
 from ..persona.prompts import ASH_SYSTEM_INSTRUCTION

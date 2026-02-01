@@ -22,7 +22,7 @@ from ..config import (
     MOD_ALERT_CHANNEL_ID,
     YOUTUBE_UPLOADS_CHANNEL_ID,
 )
-from ..database_module import get_database
+from ..database import get_database
 from ..utils.permissions import get_user_communication_tier, user_is_mod_by_id
 from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
 

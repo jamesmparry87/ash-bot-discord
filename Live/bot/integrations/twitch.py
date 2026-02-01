@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 # Database import
-from ..database_module import get_database
+from ..database import get_database
 
 # Text processing utilities
 from ..utils.text_processing import cleanup_game_name, extract_game_name_from_title, is_generic_term

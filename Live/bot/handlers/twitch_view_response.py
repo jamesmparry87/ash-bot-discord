@@ -6,7 +6,7 @@ Purpose: Handle queries about Twitch game views with appropriate metric explanat
 
 from typing import Any, Dict, Optional
 
-from ..database_module import get_database
+from ..database import get_database
 
 db = get_database()
 

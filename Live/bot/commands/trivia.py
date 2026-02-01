@@ -20,7 +20,7 @@ import discord
 from discord.ext import commands
 
 from ..config import JAM_USER_ID, JONESY_USER_ID
-from ..database_module import DatabaseManager, get_database
+from ..database import DatabaseManager, get_database
 from ..handlers.ai_handler import call_ai_with_rate_limiting
 from ..handlers.conversation_handler import (
     force_reset_approval_session,
