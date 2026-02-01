@@ -726,10 +726,10 @@ async def trivia_tuesday():
                     print(f"✅ FIX #2: Found pre-approved question ID {approved_question_id} from 9 AM approval")
             except Exception as e:
                 print(f"⚠️ FIX #2: Error reading approved question ID from config: {e}")
-        
+
         # 1. Get the question (pre-approved or highest-priority available)
         question_data = None
-        
+
         if approved_question_id:
             # Use the pre-approved question
             try:
@@ -743,7 +743,8 @@ async def trivia_tuesday():
                     except Exception as clear_error:
                         print(f"⚠️ FIX #2: Failed to clear approved question ID: {clear_error}")
                 else:
-                    print(f"⚠️ FIX #2: Pre-approved question #{approved_question_id} not found, falling back to priority selection")
+                    print(
+                        f"⚠️ FIX #2: Pre-approved question #{approved_question_id} not found, falling back to priority selection")
                     # Clear the invalid config value
                     try:
                         db.delete_config_value('trivia_approved_question_id')
@@ -751,13 +752,13 @@ async def trivia_tuesday():
                         pass
             except Exception as e:
                 print(f"⚠️ FIX #2: Error retrieving pre-approved question: {e}")
-        
+
         # Fallback to priority selection if no pre-approved question
         if not question_data:
             question_data = db.get_next_trivia_question()
             if question_data:
                 print(f"✅ FIX #2: Using priority-selected question #{question_data.get('id')} (no pre-approval)")
-        
+
         if not question_data:
             await notify_scheduled_message_error("Trivia Tuesday", "No approved/available trivia questions found in the database.", uk_now)
             return
