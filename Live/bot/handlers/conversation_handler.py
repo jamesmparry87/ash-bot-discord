@@ -2165,7 +2165,21 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
             return
 
         if content == '1':  # Approve
-            await message.reply("✅ **Pre-Trivia Question Approved.** It will be posted automatically at 11:00 AM.")
+            # ✅ FIX #2: Store approved question ID in config for 11 AM posting
+            question_data = conversation.get('data', {}).get('question_data', {})
+            question_id = question_data.get('id')
+            
+            if question_id and db:
+                try:
+                    db.set_config_value('trivia_approved_question_id', str(question_id))
+                    print(f"✅ FIX #2: Stored approved question ID {question_id} for 11:00 AM posting")
+                    await message.reply("✅ **Pre-Trivia Question Approved.** Question #{} will be posted automatically at 11:00 AM.".format(question_id))
+                except Exception as e:
+                    print(f"⚠️ FIX #2: Failed to store approved question ID: {e}")
+                    await message.reply("✅ **Pre-Trivia Question Approved.** It will be posted automatically at 11:00 AM.")
+            else:
+                await message.reply("✅ **Pre-Trivia Question Approved.** It will be posted automatically at 11:00 AM.")
+            
             del jam_approval_conversations[user_id]
         elif content == '2':  # Reject
             # Mark the rejected question as retired
