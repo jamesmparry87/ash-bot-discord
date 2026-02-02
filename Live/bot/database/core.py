@@ -544,7 +544,7 @@ class DatabaseManager:
         return self.trivia.get_active_trivia_session()
 
     # ========== REMINDER DELEGATIONS (to users module) ==========
-    
+
     def get_due_reminders(self, current_time):
         """Delegate to users module - get due reminders"""
         return self.users.get_due_reminders(current_time)
@@ -553,12 +553,12 @@ class DatabaseManager:
         """Delegate to users module - get reminders awaiting auto action"""
         return self.users.get_reminders_awaiting_auto_action(current_time)
 
-    def add_reminder(self, user_id, reminder_text, scheduled_time, delivery_channel_id=None, 
-                     delivery_type='dm', auto_action_enabled=False, auto_action_type=None, 
+    def add_reminder(self, user_id, reminder_text, scheduled_time, delivery_channel_id=None,
+                     delivery_type='dm', auto_action_enabled=False, auto_action_type=None,
                      auto_action_data=None):
         """Delegate to users module - add reminder"""
-        return self.users.add_reminder(user_id, reminder_text, scheduled_time, 
-                                       delivery_channel_id, delivery_type, 
+        return self.users.add_reminder(user_id, reminder_text, scheduled_time,
+                                       delivery_channel_id, delivery_type,
                                        auto_action_enabled, auto_action_type, auto_action_data)
 
     def get_user_reminders(self, user_id, status='pending'):
