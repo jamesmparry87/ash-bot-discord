@@ -9,8 +9,6 @@ Handles all YouTube API interactions including:
 - IGDB validation for game names
 """
 
-from . import igdb
-from ..utils.text_processing import extract_game_name_from_title
 import asyncio
 import os
 import re
@@ -21,6 +19,8 @@ import aiohttp
 
 # Database import
 from ..database import DatabaseManager, get_database
+from ..utils.text_processing import extract_game_name_from_title
+from . import igdb
 
 db = get_database()
 
