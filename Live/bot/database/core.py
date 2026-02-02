@@ -543,6 +543,392 @@ class DatabaseManager:
         """Delegate to trivia module - get active trivia session"""
         return self.trivia.get_active_trivia_session()
 
+    # ========== REMINDER DELEGATIONS (to users module) ==========
+    
+    def get_due_reminders(self, current_time):
+        """Delegate to users module - get due reminders"""
+        return self.users.get_due_reminders(current_time)
+
+    def get_reminders_awaiting_auto_action(self, current_time):
+        """Delegate to users module - get reminders awaiting auto action"""
+        return self.users.get_reminders_awaiting_auto_action(current_time)
+
+    def add_reminder(self, user_id, reminder_text, scheduled_time, delivery_channel_id=None, 
+                     delivery_type='dm', auto_action_enabled=False, auto_action_type=None, 
+                     auto_action_data=None):
+        """Delegate to users module - add reminder"""
+        return self.users.add_reminder(user_id, reminder_text, scheduled_time, 
+                                       delivery_channel_id, delivery_type, 
+                                       auto_action_enabled, auto_action_type, auto_action_data)
+
+    def get_user_reminders(self, user_id, status='pending'):
+        """Delegate to users module - get user reminders"""
+        return self.users.get_user_reminders(user_id, status)
+
+    def update_reminder_status(self, reminder_id, status, delivered_at=None, auto_executed_at=None):
+        """Delegate to users module - update reminder status"""
+        return self.users.update_reminder_status(reminder_id, status, delivered_at, auto_executed_at)
+
+    def get_all_pending_reminders(self):
+        """Delegate to users module - get all pending reminders"""
+        return self.users.get_all_pending_reminders()
+
+    def get_pending_reminders_for_user(self, user_id):
+        """Delegate to users module - get pending reminders for user"""
+        return self.users.get_pending_reminders_for_user(user_id)
+
+    def get_reminder_by_id(self, reminder_id):
+        """Delegate to users module - get reminder by ID"""
+        return self.users.get_reminder_by_id(reminder_id)
+
+    def cancel_user_reminder(self, reminder_id, user_id):
+        """Delegate to users module - cancel user reminder"""
+        return self.users.cancel_user_reminder(reminder_id, user_id)
+
+    # ========== STRIKES DELEGATIONS (to users module) ==========
+
+    def get_user_strikes(self, user_id):
+        """Delegate to users module - get user strikes"""
+        return self.users.get_user_strikes(user_id)
+
+    def set_user_strikes(self, user_id, count):
+        """Delegate to users module - set user strikes"""
+        return self.users.set_user_strikes(user_id, count)
+
+    def add_user_strike(self, user_id):
+        """Delegate to users module - add user strike"""
+        return self.users.add_user_strike(user_id)
+
+    def get_all_strikes(self):
+        """Delegate to users module - get all strikes"""
+        return self.users.get_all_strikes()
+
+    def bulk_import_strikes(self, strikes_data):
+        """Delegate to users module - bulk import strikes"""
+        return self.users.bulk_import_strikes(strikes_data)
+
+    def clear_all_strikes(self):
+        """Delegate to users module - clear all strikes"""
+        return self.users.clear_all_strikes()
+
+    # ========== GAME RECOMMENDATIONS DELEGATIONS (to users module) ==========
+
+    def add_game_recommendation(self, name, reason, added_by):
+        """Delegate to users module - add game recommendation"""
+        return self.users.add_game_recommendation(name, reason, added_by)
+
+    def get_all_games(self):
+        """Delegate to users module - get all game recommendations"""
+        return self.users.get_all_games()
+
+    def remove_game_by_index(self, index):
+        """Delegate to users module - remove game by index"""
+        return self.users.remove_game_by_index(index)
+
+    def remove_game_by_name(self, name):
+        """Delegate to users module - remove game by name"""
+        return self.users.remove_game_by_name(name)
+
+    def remove_game_by_id(self, game_id):
+        """Delegate to users module - remove game by ID"""
+        return self.users.remove_game_by_id(game_id)
+
+    def game_exists(self, name):
+        """Delegate to users module - check if game exists"""
+        return self.users.game_exists(name)
+
+    def bulk_import_games(self, games_data):
+        """Delegate to users module - bulk import games"""
+        return self.users.bulk_import_games(games_data)
+
+    def clear_all_games(self):
+        """Delegate to users module - clear all games"""
+        return self.users.clear_all_games()
+
+    # ========== CONFIG DELEGATIONS (to config module) ==========
+
+    def get_config_value(self, key):
+        """Delegate to config module - get config value"""
+        return self.config.get_config_value(key)
+
+    def set_config_value(self, key, value):
+        """Delegate to config module - set config value"""
+        return self.config.set_config_value(key, value)
+
+    def delete_config_value(self, key):
+        """Delegate to config module - delete config value"""
+        return self.config.delete_config_value(key)
+
+    # ========== GAMES DELEGATIONS (to games module) ==========
+
+    def get_games_by_franchise(self, series_name):
+        """Delegate to games module - get games by franchise"""
+        return self.games.get_games_by_franchise(series_name)
+
+    def update_played_game(self, game_id, **kwargs):
+        """Delegate to games module - update played game"""
+        return self.games.update_played_game(game_id, **kwargs)
+
+    def add_played_game(self, **kwargs):
+        """Delegate to games module - add played game"""
+        return self.games.add_played_game(**kwargs)
+
+    def get_played_game(self, game_name):
+        """Delegate to games module - get played game"""
+        return self.games.get_played_game(game_name)
+
+    def deduplicate_played_games(self):
+        """Delegate to games module - deduplicate played games"""
+        return self.games.deduplicate_played_games()
+
+    def get_series_by_total_playtime(self):
+        """Delegate to games module - get series by total playtime"""
+        return self.games.get_series_by_total_playtime()
+
+    def get_games_by_average_episode_length(self):
+        """Delegate to games module - get games by average episode length"""
+        return self.games.get_games_by_average_episode_length()
+
+    def get_games_by_episode_count(self, order='DESC', limit=15):
+        """Delegate to games module - get games by episode count"""
+        return self.games.get_games_by_episode_count(order, limit)
+
+    def get_games_by_played_date(self, order='DESC', limit=15):
+        """Delegate to games module - get games by played date"""
+        return self.games.get_games_by_played_date(order, limit)
+
+    def get_games_by_release_year(self, order='DESC', limit=15):
+        """Delegate to games module - get games by release year"""
+        return self.games.get_games_by_release_year(order, limit)
+
+    def get_genre_statistics(self):
+        """Delegate to games module - get genre statistics"""
+        return self.games.get_genre_statistics()
+
+    def get_longest_completion_games(self):
+        """Delegate to games module - get longest completion games"""
+        return self.games.get_longest_completion_games()
+
+    def compare_games(self, game1_name, game2_name):
+        """Delegate to games module - compare games"""
+        return self.games.compare_games(game1_name, game2_name)
+
+    def get_games_by_genre_flexible(self, genre_query):
+        """Delegate to games module - get games by genre flexible"""
+        return self.games.get_games_by_genre_flexible(genre_query)
+
+    def get_series_games(self, series_name):
+        """Delegate to games module - get series games"""
+        return self.games.get_series_games(series_name)
+
+    def get_ranking_context(self, game_name, context_type='all'):
+        """Delegate to games module - get ranking context"""
+        return self.games.get_ranking_context(game_name, context_type)
+
+    def get_cached_youtube_rankings(self):
+        """Delegate to games module - get cached youtube rankings"""
+        return self.games.get_cached_youtube_rankings()
+
+    def update_youtube_cache(self, rankings):
+        """Delegate to games module - update youtube cache"""
+        return self.games.update_youtube_cache(rankings)
+
+    def get_games_by_twitch_views(self, limit=10):
+        """Delegate to games module - get games by twitch views"""
+        return self.games.get_games_by_twitch_views(limit)
+
+    def get_games_by_total_views(self, limit=10):
+        """Delegate to games module - get games by total views"""
+        return self.games.get_games_by_total_views(limit)
+
+    def get_platform_comparison_stats(self):
+        """Delegate to games module - get platform comparison stats"""
+        return self.games.get_platform_comparison_stats()
+
+    def get_engagement_metrics(self, limit=10):
+        """Delegate to games module - get engagement metrics"""
+        return self.games.get_engagement_metrics(limit)
+
+    def get_gaming_timeline(self, order='ASC'):
+        """Delegate to games module - get gaming timeline"""
+        return self.games.get_gaming_timeline(order)
+
+    def get_played_games_stats(self):
+        """Delegate to games module - get played games stats"""
+        return self.games.get_played_games_stats()
+
+    def get_all_unique_series_names(self):
+        """Delegate to games module - get all unique series names"""
+        return self.games.get_all_unique_series_names()
+
+    def played_game_exists(self, game_name):
+        """Delegate to games module - check if played game exists"""
+        return self.games.played_game_exists(game_name)
+
+    # ========== TRIVIA DELEGATIONS (to trivia module) ==========
+
+    def get_available_trivia_questions(self):
+        """Delegate to trivia module - get available trivia questions"""
+        return self.trivia.get_available_trivia_questions()
+
+    def calculate_dynamic_answer(self, query_type, parameter=None):
+        """Delegate to trivia module - calculate dynamic answer"""
+        return self.trivia.calculate_dynamic_answer(query_type, parameter)
+
+    def get_trivia_question_by_id(self, question_id):
+        """Delegate to trivia module - get trivia question by id"""
+        return self.trivia.get_trivia_question_by_id(question_id)
+
+    def get_next_trivia_question(self, exclude_user_id=None):
+        """Delegate to trivia module - get next trivia question"""
+        return self.trivia.get_next_trivia_question(exclude_user_id)
+
+    def create_trivia_session(self, question_id, **kwargs):
+        """Delegate to trivia module - create trivia session"""
+        return self.trivia.create_trivia_session(question_id, **kwargs)
+
+    def update_trivia_session_messages(self, session_id, question_message_id, confirmation_message_id):
+        """Delegate to trivia module - update trivia session messages"""
+        return self.trivia.update_trivia_session_messages(session_id, question_message_id, confirmation_message_id)
+
+    def end_trivia_session(self, session_id, ended_by=None):
+        """Delegate to trivia module - end trivia session"""
+        return self.trivia.end_trivia_session(session_id, ended_by)
+
+    def get_trivia_participant_stats_for_week(self):
+        """Delegate to trivia module - get trivia participant stats for week"""
+        return self.trivia.get_trivia_participant_stats_for_week()
+
+    def cleanup_hanging_trivia_sessions(self):
+        """Delegate to trivia module - cleanup hanging trivia sessions"""
+        return self.trivia.cleanup_hanging_trivia_sessions()
+
+    def add_trivia_question(self, **kwargs):
+        """Delegate to trivia module - add trivia question"""
+        return self.trivia.add_trivia_question(**kwargs)
+
+    def update_trivia_question_status(self, question_id, status):
+        """Delegate to trivia module - update trivia question status"""
+        return self.trivia.update_trivia_question_status(question_id, status)
+
+    def get_trivia_session_by_message_id(self, message_id):
+        """Delegate to trivia module - get trivia session by message id"""
+        return self.trivia.get_trivia_session_by_message_id(message_id)
+
+    def get_trivia_session_answers(self, session_id):
+        """Delegate to trivia module - get trivia session answers"""
+        return self.trivia.get_trivia_session_answers(session_id)
+
+    def submit_trivia_answer(self, session_id, user_id, answer_text, normalized_answer=None):
+        """Delegate to trivia module - submit trivia answer"""
+        return self.trivia.submit_trivia_answer(session_id, user_id, answer_text, normalized_answer)
+
+    def get_trivia_question(self, question_id):
+        """Delegate to trivia module - get trivia question"""
+        return self.trivia.get_trivia_question(question_id)
+
+    def start_trivia_session(self, question_id, **kwargs):
+        """Delegate to trivia module - start trivia session"""
+        return self.trivia.start_trivia_session(question_id, **kwargs)
+
+    def ensure_minimum_question_pool(self, minimum=5):
+        """Delegate to trivia module - ensure minimum question pool"""
+        return self.trivia.ensure_minimum_question_pool(minimum)
+
+    def get_trivia_leaderboard(self, timeframe='all'):
+        """Delegate to trivia module - get trivia leaderboard"""
+        return self.trivia.get_trivia_leaderboard(timeframe)
+
+    def get_pending_trivia_questions(self):
+        """Delegate to trivia module - get pending trivia questions"""
+        return self.trivia.get_pending_trivia_questions()
+
+    def reset_trivia_questions(self):
+        """Delegate to trivia module - reset trivia questions"""
+        return self.trivia.reset_trivia_questions()
+
+    def complete_trivia_session(self, session_id):
+        """Delegate to trivia module - complete trivia session"""
+        return self.trivia.complete_trivia_session(session_id)
+
+    def get_trivia_question_statistics(self):
+        """Delegate to trivia module - get trivia question statistics"""
+        return self.trivia.get_trivia_question_statistics()
+
+    def check_question_duplicate(self, question_text, similarity_threshold=0.8):
+        """Delegate to trivia module - check question duplicate"""
+        return self.trivia.check_question_duplicate(question_text, similarity_threshold)
+
+    def safe_add_trivia_question(self, **kwargs):
+        """Delegate to trivia module - safe add trivia question"""
+        return self.trivia.safe_add_trivia_question(**kwargs)
+
+    # ========== SESSIONS DELEGATIONS (to sessions module) ==========
+
+    def create_weekly_announcement(self, day, content, analysis_cache=None):
+        """Delegate to sessions module - create weekly announcement"""
+        return self.sessions.create_weekly_announcement(day, content, analysis_cache)
+
+    def get_announcement_by_day(self, day, status='pending_approval'):
+        """Delegate to sessions module - get announcement by day"""
+        return self.sessions.get_announcement_by_day(day, status)
+
+    def update_announcement_status(self, announcement_id, status, new_content=None):
+        """Delegate to sessions module - update announcement status"""
+        return self.sessions.update_announcement_status(announcement_id, status, new_content)
+
+    def get_all_active_approval_sessions(self):
+        """Delegate to sessions module - get all active approval sessions"""
+        return self.sessions.get_all_active_approval_sessions()
+
+    def update_approval_session(self, session_id, increment_restart_count=False, **kwargs):
+        """Delegate to sessions module - update approval session"""
+        return self.sessions.update_approval_session(session_id, increment_restart_count, **kwargs)
+
+    def complete_approval_session(self, session_id, status='completed'):
+        """Delegate to sessions module - complete approval session"""
+        return self.sessions.complete_approval_session(session_id, status)
+
+    def create_game_review_session(self, **kwargs):
+        """Delegate to sessions module - create game review session"""
+        return self.sessions.create_game_review_session(**kwargs)
+
+    def update_game_review_session(self, session_id, **kwargs):
+        """Delegate to sessions module - update game review session"""
+        return self.sessions.update_game_review_session(session_id, **kwargs)
+
+    def complete_game_review_session(self, session_id, status='completed'):
+        """Delegate to sessions module - complete game review session"""
+        return self.sessions.complete_game_review_session(session_id, status)
+
+    def create_approval_session(self, **kwargs):
+        """Delegate to sessions module - create approval session"""
+        return self.sessions.create_approval_session(**kwargs)
+
+    def cleanup_expired_approval_sessions(self):
+        """Delegate to sessions module - cleanup expired approval sessions"""
+        return self.sessions.cleanup_expired_approval_sessions()
+
+    # ========== STATS DELEGATIONS (to stats module) ==========
+
+    def update_last_sync_timestamp(self, timestamp):
+        """Delegate to stats module - update last sync timestamp"""
+        return self.stats.update_last_sync_timestamp(timestamp)
+
+    # ========== ADDITIONAL DELEGATIONS ==========
+
+    def cancel_reminder(self, reminder_id):
+        """Delegate to users module - cancel reminder (admin version)"""
+        return self.users.cancel_reminder(reminder_id)
+
+    def get_latest_game_update_timestamp(self):
+        """Delegate to games module - get latest game update timestamp"""
+        return self.games.get_latest_game_update_timestamp()
+
+    def log_announcement(self, user_id, message, announcement_type='general'):
+        """Delegate to config module - log announcement"""
+        return self.config.log_announcement(user_id, message, announcement_type)
+
     def close(self):
         """
         Close database connection.
