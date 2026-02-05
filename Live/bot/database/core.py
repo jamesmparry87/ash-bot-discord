@@ -787,9 +787,9 @@ class DatabaseManager:
         """Delegate to trivia module - create trivia session"""
         return self.trivia.create_trivia_session(question_id, **kwargs)
 
-    def update_trivia_session_messages(self, session_id, question_message_id, confirmation_message_id):
+    def update_trivia_session_messages(self, session_id, question_message_id, confirmation_message_id, channel_id):
         """Delegate to trivia module - update trivia session messages"""
-        return self.trivia.update_trivia_session_messages(session_id, question_message_id, confirmation_message_id)
+        return self.trivia.update_trivia_session_messages(session_id, question_message_id, confirmation_message_id, channel_id)
 
     def end_trivia_session(self, session_id, ended_by=None):
         """Delegate to trivia module - end trivia session"""

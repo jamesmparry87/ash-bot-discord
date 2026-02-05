@@ -426,12 +426,12 @@ class GamesDatabase:
                             completion_status,
                             CASE
                                 WHEN total_episodes > 0 THEN
-                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / total_episodes, 1)
+                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / total_episodes, 1)
                                 ELSE 0
                             END as views_per_episode,
                             CASE
                                 WHEN total_playtime_minutes > 0 THEN
-                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / (total_playtime_minutes::float / 60), 1)
+                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / (total_playtime_minutes::numeric / 60), 1)
                                 ELSE 0
                             END as views_per_hour
                         FROM played_games
@@ -453,12 +453,12 @@ class GamesDatabase:
                             completion_status,
                             CASE
                                 WHEN total_episodes > 0 THEN
-                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / total_episodes, 1)
+                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / total_episodes, 1)
                                 ELSE 0
                             END as views_per_episode,
                             CASE
                                 WHEN total_playtime_minutes > 0 THEN
-                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / (total_playtime_minutes::float / 60), 1)
+                                    ROUND((COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::numeric / (total_playtime_minutes::numeric / 60), 1)
                                 ELSE 0
                             END as views_per_hour
                         FROM played_games
@@ -468,7 +468,7 @@ class GamesDatabase:
                         ORDER BY
                             CASE
                                 WHEN total_playtime_minutes > 0 THEN
-                                    (COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / (total_playtime_minutes::float / 60)
+                                    (COALESCE(youtube_views, 0) + COALESCE(twitch_views, 0))::float / (total_playtime_minutes::numeric / 60)
                                 ELSE 0
                             END DESC
                         LIMIT %s
@@ -750,7 +750,7 @@ class GamesDatabase:
 
         try:
             # Validate order
-            order_clause = self._validate_order_direction(order)
+            order_clause = self.db._validate_order_direction(order)
 
             with conn.cursor() as cur:
                 cur.execute(f"""
@@ -1704,12 +1704,12 @@ class GamesDatabase:
                         series_name,
                         total_episodes,
                         total_playtime_minutes,
-                        ROUND(total_playtime_minutes::float / NULLIF(total_episodes, 0), 1) as avg_minutes_per_episode,
+                        ROUND(total_playtime_minutes::numeric / NULLIF(total_episodes, 0), 1) as avg_minutes_per_episode,
                         completion_status
                     FROM played_games
                     WHERE total_episodes > 0
                     AND total_playtime_minutes > 0
-                    ORDER BY (total_playtime_minutes::float / NULLIF(total_episodes, 0)) DESC
+                    ORDER BY (total_playtime_minutes::numeric / NULLIF(total_episodes, 0)) DESC
                     LIMIT 15
                 """)
                 results = cur.fetchall()
@@ -1756,7 +1756,7 @@ class GamesDatabase:
 
         try:
             # Validate order direction to prevent SQL injection
-            order_clause = self._validate_order_direction(order)
+            order_clause = self.db._validate_order_direction(order)
 
             with conn.cursor() as cur:
                 cur.execute(f"""
@@ -1866,7 +1866,7 @@ class GamesDatabase:
 
         try:
             # Validate order direction to prevent SQL injection
-            order_clause = self._validate_order_direction(order)
+            order_clause = self.db._validate_order_direction(order)
 
             with conn.cursor() as cur:
                 cur.execute(f"""
@@ -1904,7 +1904,7 @@ class GamesDatabase:
 
         try:
             # Validate order direction to prevent SQL injection
-            order_clause = self._validate_order_direction(order)
+            order_clause = self.db._validate_order_direction(order)
 
             with conn.cursor() as cur:
                 cur.execute(f"""
@@ -1942,7 +1942,7 @@ class GamesDatabase:
 
         try:
             # Validate order direction to prevent SQL injection
-            order_clause = self._validate_order_direction(order)
+            order_clause = self.db._validate_order_direction(order)
 
             with conn.cursor() as cur:
                 cur.execute(f"""
@@ -1980,7 +1980,7 @@ class GamesDatabase:
 
         try:
             # Validate order direction to prevent SQL injection
-            order_clause = self._validate_order_direction(order)
+            order_clause = self.db._validate_order_direction(order)
 
             with conn.cursor() as cur:
                 cur.execute(f"""
@@ -2062,7 +2062,7 @@ class GamesDatabase:
 
         try:
             # Validate order direction to prevent SQL injection
-            order_clause = self._validate_order_direction(order)
+            order_clause = self.db._validate_order_direction(order)
 
             with conn.cursor() as cur:
                 cur.execute(f"""
@@ -2091,7 +2091,7 @@ class GamesDatabase:
             return []
         try:
             # Validate order direction to prevent SQL injection
-            order_clause = self._validate_order_direction(order)
+            order_clause = self.db._validate_order_direction(order)
 
             with conn.cursor() as cur:
                 cur.execute(f"""
@@ -2113,7 +2113,7 @@ class GamesDatabase:
             return []
         try:
             # Validate order direction to prevent SQL injection
-            order_clause = self._validate_order_direction(order)
+            order_clause = self.db._validate_order_direction(order)
 
             with conn.cursor() as cur:
                 cur.execute(f"""
