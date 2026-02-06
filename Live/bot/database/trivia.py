@@ -922,6 +922,11 @@ class TriviaDatabase:
                 elif dynamic_query_type == "most_episodes":
                     where_clauses.append("total_episodes > 0")
                     order_by = "ORDER BY total_episodes DESC"
+                
+                # ✅ FIX: New query type for most episodes among COMPLETED games only
+                elif dynamic_query_type == "most_episodes_completed":
+                    where_clauses.extend(["total_episodes > 0", "completion_status = 'completed'"])
+                    order_by = "ORDER BY total_episodes DESC"
 
                 # Date-based queries (newest/most recent)
                 elif dynamic_query_type == "newest_game":
@@ -1549,6 +1554,86 @@ class TriviaDatabase:
         except Exception as e:
             logger.error(f"Error getting trivia question statistics: {e}")
             return {}
+    
+    def get_recent_question_patterns(self, limit: int = 10) -> List[str]:
+        """
+        ✅ FIX #3: Get recently used question patterns for diversity enforcement
+        
+        Analyzes recent questions to identify patterns and prevent repetition.
+        Returns list of pattern identifiers from recently used/added questions.
+        """
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            with conn.cursor() as cur:
+                # Get recently used questions (last 10 sessions) + recently added questions
+                cur.execute("""
+                    SELECT DISTINCT q.question_text, q.created_at, q.last_used_at
+                    FROM trivia_questions q
+                    WHERE q.is_active = TRUE
+                    AND (q.last_used_at IS NOT NULL OR q.created_at > NOW() - INTERVAL '7 days')
+                    ORDER BY COALESCE(q.last_used_at, q.created_at) DESC
+                    LIMIT %s
+                """, (limit,))
+                
+                recent_questions = cur.fetchall()
+                patterns = []
+                
+                for row in recent_questions:
+                    question_text = dict(row)['question_text'].lower()
+                    
+                    # Identify pattern types
+                    if ' or ' in question_text and ('first' in question_text or 'before' in question_text):
+                        patterns.append('comparison_temporal')
+                    elif ' vs ' in question_text or ' or ' in question_text:
+                        patterns.append('comparison_choice')
+                    elif 'most' in question_text or 'longest' in question_text or 'highest' in question_text:
+                        patterns.append('superlative_most')
+                    elif 'least' in question_text or 'shortest' in question_text or 'lowest' in question_text:
+                        patterns.append('superlative_least')
+                    elif 'first' in question_text and 'play' in question_text:
+                        patterns.append('temporal_first')
+                    elif 'completed' in question_text or 'finished' in question_text:
+                        patterns.append('completion_status')
+                    elif 'how many' in question_text:
+                        patterns.append('count_query')
+                    else:
+                        patterns.append('general')
+                
+                logger.info(f"Recent question patterns: {patterns[:5]}")
+                return patterns
+                
+        except Exception as e:
+            logger.error(f"Error getting recent question patterns: {e}")
+            return []
+    
+    def should_avoid_pattern(self, pattern: str, recent_patterns: List[str], threshold: int = 3) -> bool:
+        """
+        ✅ FIX #3: Check if a pattern has been overused recently
+        
+        Args:
+            pattern: The pattern to check
+            recent_patterns: List of recently used patterns
+            threshold: Maximum allowed occurrences before avoiding (default: 3 out of 10)
+        
+        Returns:
+            True if pattern should be avoided, False if it's okay to use
+        """
+        if not recent_patterns:
+            return False
+        
+        # Count occurrences of this pattern in recent questions
+        pattern_count = recent_patterns.count(pattern)
+        
+        # If pattern appears more than threshold times, avoid it
+        should_avoid = pattern_count >= threshold
+        
+        if should_avoid:
+            logger.info(f"Pattern '{pattern}' overused ({pattern_count}/{len(recent_patterns)}), avoiding")
+        
+        return should_avoid
 
     def get_trivia_participant_stats_for_week(self) -> Dict[str, Any]:
         """Gets key stats from the most recent Trivia Tuesday session."""
@@ -1594,20 +1679,30 @@ class TriviaDatabase:
             return {"status": "error"}
 
     def check_question_duplicate(self, question_text: str,
-                                 similarity_threshold: float = 0.8) -> Optional[Dict[str, Any]]:
-        """Check if a similar question already exists in the database"""
+                                 similarity_threshold: float = 0.8,
+                                 check_retired: bool = True) -> Optional[Dict[str, Any]]:
+        """
+        Check if a similar question already exists in the database
+        
+        ✅ FIX #2: Enhanced duplicate detection with semantic similarity
+        - Checks against ALL statuses including 'retired' (rejected questions)
+        - Uses semantic similarity to catch questions with different wording
+        - Prioritizes retired questions as strongest duplicates
+        """
         conn = self.get_connection()
         if not conn:
             return None
 
         try:
             with conn.cursor() as cur:
-                # Get all existing questions
+                # ✅ FIX #2: Get ALL questions including retired ones
                 cur.execute("""
                     SELECT id, question_text, status, created_at
                     FROM trivia_questions
                     WHERE is_active = TRUE
-                    ORDER BY created_at DESC
+                    ORDER BY 
+                        CASE WHEN status = 'retired' THEN 1 ELSE 2 END,
+                        created_at DESC
                 """)
                 existing_questions = cur.fetchall()
 
@@ -1616,6 +1711,9 @@ class TriviaDatabase:
 
                 # Normalize the new question for comparison
                 new_question_normalized = self._normalize_question_text(question_text)
+                
+                # ✅ FIX #2: Extract key concepts from the question
+                new_question_concepts = self._extract_question_concepts(question_text)
 
                 # Check each existing question
                 import difflib
@@ -1623,24 +1721,40 @@ class TriviaDatabase:
                 for existing in existing_questions:
                     existing_dict = dict(existing)
                     existing_text = existing_dict.get('question_text', '')
+                    existing_status = existing_dict.get('status', '')
                     existing_normalized = self._normalize_question_text(existing_text)
 
-                    # Calculate similarity
-                    similarity = difflib.SequenceMatcher(
+                    # Calculate text similarity
+                    text_similarity = difflib.SequenceMatcher(
                         None,
                         new_question_normalized.lower(),
                         existing_normalized.lower()
                     ).ratio()
+                    
+                    # ✅ FIX #2: Calculate semantic similarity (concept overlap)
+                    existing_concepts = self._extract_question_concepts(existing_text)
+                    concept_similarity = self._calculate_concept_similarity(
+                        new_question_concepts, existing_concepts
+                    )
+                    
+                    # ✅ FIX #2: Use combined similarity score
+                    combined_similarity = max(text_similarity, concept_similarity)
+                    
+                    # ✅ FIX #2: Lower threshold for retired questions (be stricter)
+                    effective_threshold = similarity_threshold * 0.85 if existing_status == 'retired' else similarity_threshold
 
-                    if similarity >= similarity_threshold:
-                        logger.info(
-                            f"Duplicate question detected: {similarity:.2f} similarity to question #{existing_dict['id']}")
+                    if combined_similarity >= effective_threshold:
+                        match_type = "semantic" if concept_similarity > text_similarity else "text"
+                        logger.warning(
+                            f"Duplicate question detected: {combined_similarity:.2%} {match_type} similarity to question #{existing_dict['id']} (status: {existing_status})")
                         return {
                             'duplicate_id': existing_dict['id'],
                             'duplicate_text': existing_text,
-                            'similarity_score': similarity,
-                            'status': existing_dict.get('status'),
-                            'created_at': existing_dict.get('created_at')
+                            'similarity_score': combined_similarity,
+                            'status': existing_status,
+                            'created_at': existing_dict.get('created_at'),
+                            'match_type': match_type,
+                            'is_retired': existing_status == 'retired'
                         }
 
                 return None  # No duplicate found
@@ -1666,6 +1780,64 @@ class TriviaDatabase:
         filtered_words = [word for word in words if word not in filler_words]
 
         return ' '.join(filtered_words)
+    
+    def _extract_question_concepts(self, question_text: str) -> set:
+        """
+        ✅ FIX #2: Extract key concepts from a question for semantic similarity
+        
+        Identifies: game titles, series, metrics (episodes, playtime), comparisons, completion status
+        """
+        import re
+        
+        concepts = set()
+        text_lower = question_text.lower()
+        
+        # Key metrics and data points
+        metrics = ['episodes', 'playtime', 'views', 'time', 'hours', 'completed', 'finished', 'first', 'longest', 'shortest', 'most', 'least']
+        for metric in metrics:
+            if metric in text_lower:
+                concepts.add(f"metric:{metric}")
+        
+        # Completion-related concepts
+        if any(word in text_lower for word in ['completed', 'finished', 'beat', 'completion']):
+            concepts.add('concept:completion')
+        
+        # Comparison-related concepts
+        if any(word in text_lower for word in [' or ', ' vs ', 'between', 'compare']):
+            concepts.add('concept:comparison')
+        
+        # Time-related concepts  
+        if any(word in text_lower for word in ['first', 'last', 'recent', 'oldest', 'newest', 'before', 'after']):
+            concepts.add('concept:temporal')
+        
+        # Superlative concepts (most/least)
+        if any(word in text_lower for word in ['most', 'least', 'highest', 'lowest', 'best', 'worst', 'longest', 'shortest']):
+            concepts.add('concept:superlative')
+        
+        # Extract potential game/series names (capitalized words or quoted text)
+        capitalized_words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', question_text)
+        for word in capitalized_words:
+            if word.lower() not in ['jonesy', 'captain', 'youtube', 'twitch']:
+                concepts.add(f"entity:{word.lower()}")
+        
+        return concepts
+    
+    def _calculate_concept_similarity(self, concepts1: set, concepts2: set) -> float:
+        """
+        ✅ FIX #2: Calculate similarity based on concept overlap
+        
+        Uses Jaccard similarity: intersection / union
+        """
+        if not concepts1 or not concepts2:
+            return 0.0
+        
+        intersection = len(concepts1.intersection(concepts2))
+        union = len(concepts1.union(concepts2))
+        
+        if union == 0:
+            return 0.0
+        
+        return intersection / union
 
     def ensure_minimum_question_pool(self, minimum_count: int = 5) -> Dict[str, Any]:
         """Ensure there are at least minimum_count available questions in the pool"""

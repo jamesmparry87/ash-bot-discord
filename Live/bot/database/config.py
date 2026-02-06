@@ -98,6 +98,37 @@ class ConfigDatabase:
             if conn:
                 conn.close()
 
+    def delete_config_value(self, key: str) -> bool:
+        """
+        Delete a configuration value by key.
+
+        Args:
+            key: Configuration key to delete
+
+        Returns:
+            True if successful, False otherwise
+        """
+        conn = self.db.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM bot_config WHERE key = %s", (key,))
+                conn.commit()
+                rows_deleted = cur.rowcount
+                if rows_deleted > 0:
+                    logger.info(f"Deleted config value: {key}")
+                    return True
+                return False
+        except Exception as e:
+            logger.error(f"Error deleting config value {key}: {e}")
+            conn.rollback()
+            return False
+        finally:
+            if conn:
+                conn.close()
+
     def log_announcement(
             self,
             user_id: int,
