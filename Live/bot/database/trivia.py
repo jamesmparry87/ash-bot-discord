@@ -1680,7 +1680,8 @@ class TriviaDatabase:
 
     def check_question_duplicate(self, question_text: str,
                                  similarity_threshold: float = 0.8,
-                                 check_retired: bool = True) -> Optional[Dict[str, Any]]:
+                                 check_retired: bool = True,
+                                 question_answer: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Check if a similar question already exists in the database
 
@@ -1688,6 +1689,11 @@ class TriviaDatabase:
         - Checks against ALL statuses including 'retired' (rejected questions)
         - Uses semantic similarity to catch questions with different wording
         - Prioritizes retired questions as strongest duplicates
+        
+        ✅ FIX #3: Answer-based duplicate detection
+        - If question_answer provided, checks for same answer in retired/recent questions
+        - Blocks questions with same answer as retired questions (0.3 threshold)
+        - Warns about questions with same answer as recently answered questions (0.5 threshold)
         """
         conn = self.get_connection()
         if not conn:
@@ -1697,7 +1703,7 @@ class TriviaDatabase:
             with conn.cursor() as cur:
                 # ✅ FIX #2: Get ALL questions including retired ones
                 cur.execute("""
-                    SELECT id, question_text, status, created_at
+                    SELECT id, question_text, status, created_at, correct_answer
                     FROM trivia_questions
                     WHERE is_active = TRUE
                     ORDER BY
@@ -1708,6 +1714,62 @@ class TriviaDatabase:
 
                 if not existing_questions:
                     return None
+                
+                # ✅ FIX #3: PHASE 1 - Check for answer-based duplicates FIRST (strictest filter)
+                if question_answer:
+                    normalized_new_answer = self.normalize_trivia_answer(question_answer).lower()
+                    
+                    for existing in existing_questions:
+                        existing_dict = dict(existing)
+                        existing_answer = existing_dict.get('correct_answer')
+                        existing_status = existing_dict.get('status', '')
+                        
+                        if not existing_answer:
+                            continue
+                        
+                        normalized_existing_answer = self.normalize_trivia_answer(existing_answer).lower()
+                        
+                        # Check if answers match
+                        if normalized_new_answer == normalized_existing_answer:
+                            # Same answer as RETIRED question - very strict (auto-reject territory)
+                            if existing_status == 'retired':
+                                logger.warning(
+                                    f"⚠️ ANSWER DUPLICATE (RETIRED): New question has same answer '{question_answer}' as retired question #{existing_dict['id']}")
+                                return {
+                                    'duplicate_id': existing_dict['id'],
+                                    'duplicate_text': existing_dict.get('question_text', ''),
+                                    'similarity_score': 1.0,  # Perfect match on answer
+                                    'status': existing_status,
+                                    'created_at': existing_dict.get('created_at'),
+                                    'match_type': 'answer_retired',
+                                    'is_retired': True,
+                                    'duplicate_reason': f"Same answer as retired question: '{question_answer}'"
+                                }
+                            
+                            # Same answer as recently ANSWERED question - warn with medium strictness
+                            elif existing_status == 'answered':
+                                # Check if it's recent (within last 10 answered questions)
+                                cur.execute("""
+                                    SELECT id FROM trivia_questions
+                                    WHERE is_active = TRUE AND status = 'answered'
+                                    ORDER BY last_used_at DESC NULLS LAST
+                                    LIMIT 10
+                                """)
+                                recent_answered_ids = [dict(row)['id'] for row in cur.fetchall()]
+                                
+                                if existing_dict['id'] in recent_answered_ids:
+                                    logger.warning(
+                                        f"⚠️ ANSWER DUPLICATE (RECENT): New question has same answer '{question_answer}' as recently answered question #{existing_dict['id']}")
+                                    return {
+                                        'duplicate_id': existing_dict['id'],
+                                        'duplicate_text': existing_dict.get('question_text', ''),
+                                        'similarity_score': 0.9,  # High match on answer
+                                        'status': existing_status,
+                                        'created_at': existing_dict.get('created_at'),
+                                        'match_type': 'answer_recent',
+                                        'is_retired': False,
+                                        'duplicate_reason': f"Same answer as recently used question: '{question_answer}'"
+                                    }
 
                 # Normalize the new question for comparison
                 new_question_normalized = self._normalize_question_text(question_text)
@@ -1741,7 +1803,8 @@ class TriviaDatabase:
                     combined_similarity = max(text_similarity, concept_similarity)
 
                     # ✅ FIX #2: Lower threshold for retired questions (be stricter)
-                    effective_threshold = similarity_threshold * 0.85 if existing_status == 'retired' else similarity_threshold
+                    # Changed from 0.85 to 0.65 to catch more semantic variations (e.g., "most views" questions)
+                    effective_threshold = similarity_threshold * 0.65 if existing_status == 'retired' else similarity_threshold
 
                     if combined_similarity >= effective_threshold:
                         match_type = "semantic" if concept_similarity > text_similarity else "text"

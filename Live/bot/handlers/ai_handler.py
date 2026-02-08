@@ -2501,9 +2501,11 @@ async def generate_ai_trivia_question(context: str = "trivia",
 
                     if question_data and question_data.get("question_text"):
                         # Check for duplicates before accepting this question
+                        # ✅ FIX #3: Pass answer to check for answer-based duplicates
                         duplicate_info = current_db.check_question_duplicate(
                             question_data["question_text"],
-                            similarity_threshold=0.8
+                            similarity_threshold=0.8,
+                            question_answer=question_data.get("correct_answer")
                         )
 
                         if duplicate_info:
@@ -2642,9 +2644,11 @@ Generate an engaging, unique question with correct audience (crew, not Jonesy)."
                         "question_type",
                         "correct_answer"]):
                     # Check for duplicates before accepting this AI question
+                    # ✅ FIX #3: Pass answer to check for answer-based duplicates
                     duplicate_info = current_db.check_question_duplicate(
                         ai_question["question_text"],
-                        similarity_threshold=0.8
+                        similarity_threshold=0.8,
+                        question_answer=ai_question.get("correct_answer")
                     )
 
                     if duplicate_info:
