@@ -2431,6 +2431,9 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                     await process_next_approval()
                 else:
                     print(f"✅ QUEUE EMPTY: No more questions pending, conversation fully cleared")
+                
+                # ✅ CRITICAL FIX: Return immediately after rejection to prevent conversation recreation
+                return
 
             else:
                 await message.reply(
