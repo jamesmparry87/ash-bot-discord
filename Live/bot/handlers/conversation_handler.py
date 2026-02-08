@@ -1,20 +1,6 @@
-."""
-Conversation Handler Module
-
-Handles interactive DM conversations for announcements and trivia submissions.
-Manages conversation state and user flows for complex multi-step interactions.
-"""
-
-import asyncio
-import re
-import traceback
-from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Tuple
-from zoneinfo import ZoneInfo
-
-import discord
-from discord.ext import commands
-
+from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+from ..utils.permissions import get_user_communication_tier, user_is_mod_by_id
+from ..database import get_database
 from ..config import (
     ANNOUNCEMENTS_CHANNEL_ID,
     JAM_USER_ID,
@@ -22,9 +8,21 @@ from ..config import (
     MOD_ALERT_CHANNEL_ID,
     YOUTUBE_UPLOADS_CHANNEL_ID,
 )
-from ..database import get_database
-from ..utils.permissions import get_user_communication_tier, user_is_mod_by_id
-from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+from discord.ext import commands
+import discord
+from zoneinfo import ZoneInfo
+from typing import Any, Dict, Optional, Tuple
+from datetime import datetime, timedelta
+import traceback
+import re
+import asyncio
+."""
+Conversation Handler Module
+
+Handles interactive DM conversations for announcements and trivia submissions.
+Manages conversation state and user flows for complex multi-step interactions.
+"""
+
 
 # Get database instance
 db = get_database()  # type: ignore
@@ -2128,14 +2126,15 @@ async def start_trivia_conversation(ctx):
 async def handle_jam_approval_conversation(message: discord.Message) -> None:
     """Handle the interactive DM conversation for JAM approval of trivia questions"""
     user_id = message.author.id
-    
+
     # ✅ CRITICAL: Check conversation exists AND is still valid
     conversation = jam_approval_conversations.get(user_id)
     if not conversation:
         print(f"🚫 CONVERSATION CHECK: No active approval conversation for user {user_id}")
         return
-    
-    print(f"🔄 CONVERSATION ACTIVE: Processing message '{message.content[:50]}...' for user {user_id} in step '{conversation.get('step')}'")
+
+    print(
+        f"🔄 CONVERSATION ACTIVE: Processing message '{message.content[:50]}...' for user {user_id} in step '{conversation.get('step')}'")
 
     # Get message content early for pre-trivia check
     content = message.content.strip()
@@ -2273,7 +2272,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
     if user_id != JAM_USER_ID:
         print(f"🚫 ACCESS DENIED: User {user_id} attempted to access JAM approval conversation")
         return
-    
+
     # ✅ CRITICAL: Double-check conversation still exists after all async operations
     if user_id not in jam_approval_conversations:
         print(f"🚫 CONVERSATION CLOSED: Approval conversation for JAM was closed during processing, ignoring message")
@@ -2403,7 +2402,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
                 # ✅ CRITICAL FIX: Get queue length BEFORE clearing conversation
                 queue_length = get_queue_length()
-                
+
                 # ✅ CRITICAL FIX: Clear conversation state IMMEDIATELY before any async operations
                 if user_id in jam_approval_conversations:
                     del jam_approval_conversations[user_id]
