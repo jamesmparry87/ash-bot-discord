@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 import traceback
 import re
 import asyncio
-."""
+"""
 Conversation Handler Module
 
 Handles interactive DM conversations for announcements and trivia submissions.
