@@ -329,7 +329,7 @@ class AIResponseCache:
             if query_type != cached_type:
                 logger.debug(f"Cache: Skipping - type mismatch ({query_type} vs {cached_type})")
                 continue
-            
+
             # 🚨 EXTRA SAFETY: For question types, ensure exact sub-type match
             if query_type.startswith('question_') and cached_type.startswith('question_'):
                 if query_type != cached_type:

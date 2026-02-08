@@ -2242,7 +2242,7 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
                 if active_trivia:
                     message_lower = message.content.lower()
                     message_words = len(message.content.strip().split())
-                    
+
                     # Define clear gaming keywords that override trivia blocking
                     gaming_keywords = [
                         'game', 'played', 'play', 'episode', 'hour', 'playtime',
@@ -2250,20 +2250,23 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
                         'series', 'genre', 'complete', 'finish', 'longest', 'shortest',
                         'most', 'recent', 'first', 'last'
                     ]
-                    
+
                     # Check if message contains clear gaming keywords
                     has_gaming_keywords = any(keyword in message_lower for keyword in gaming_keywords)
-                    
+
                     if has_gaming_keywords:
-                        print(f"🎮 GAMING QUERY OVERRIDE: Trivia active but gaming keywords detected - processing query: '{message.content[:50]}...'")
+                        print(
+                            f"🎮 GAMING QUERY OVERRIDE: Trivia active but gaming keywords detected - processing query: '{message.content[:50]}...'")
                         # Continue with gaming query processing
                     elif message_words <= 4:
                         # Short message without gaming keywords during trivia = likely trivia answer
-                        print(f"🧠 GAMING QUERY SKIP: Active trivia session detected, skipping short message without gaming keywords: '{message.content}'")
+                        print(
+                            f"🧠 GAMING QUERY SKIP: Active trivia session detected, skipping short message without gaming keywords: '{message.content}'")
                         return False
                     else:
                         # Longer message without clear gaming keywords during trivia
-                        print(f"🧠 GAMING QUERY: Active trivia session but longer message ({message_words} words), processing as potential gaming query")
+                        print(
+                            f"🧠 GAMING QUERY: Active trivia session but longer message ({message_words} words), processing as potential gaming query")
             except Exception as trivia_check_error:
                 print(f"⚠️ GAMING QUERY: Error checking trivia session: {trivia_check_error}")
                 # Continue with normal processing if trivia check fails
