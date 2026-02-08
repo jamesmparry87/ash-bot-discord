@@ -19,7 +19,6 @@ from ..database import get_database
 from ..utils.permissions import get_user_communication_tier, user_is_mod_by_id
 from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
 
-
 """
 Conversation Handler Module
 
