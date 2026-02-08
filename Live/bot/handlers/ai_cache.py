@@ -41,13 +41,14 @@ class AIResponseCache:
         }
 
         # TTL configuration (in seconds)
+        # 🚨 AGGRESSIVE TTL REDUCTION: Shorter cache times = fresher, more natural conversations
         self.ttl_config = {
             "faq": 86400,                    # 24 hours - FAQs rarely change
-            "gaming_query": 21600,           # 6 hours - game data is relatively static
-            "conversational_query": 7200,    # 2 hours - conversational responses are context-dependent
-            "personality": 43200,            # 12 hours - greetings/personality responses
+            "gaming_query": 21600,           # 6 hours - game data is relatively static (but bypassed anyway)
+            "conversational_query": 1800,    # 30 minutes - conversational responses need to feel fresh
+            "personality": 1800,             # 30 minutes - greetings should vary, not feel robotic
             "trivia": 604800,                # 7 days - pre-generated trivia questions
-            "general": 10800                 # 3 hours - general conversation
+            "general": 3600                  # 1 hour - general conversation (reduced from 3h)
         }
 
     def _normalize_query(self, query: str) -> str:
@@ -119,26 +120,38 @@ class AIResponseCache:
         """
         Detect query type to prevent matching incompatible message types.
 
-        Returns:
-            - 'question': Questions requiring informational responses
-            - 'conversational': Casual responses, greetings, acknowledgments
-            - 'statement': Declarative statements
+        🚨 ENHANCED: Now detects specific question types to prevent cross-matching
+        - 'question_identity': Who/what is questions (identity queries)
+        - 'question_status': How are you, what's happening (status queries)
+        - 'question_data': Informational data queries
+        - 'conversational': Casual responses, greetings, acknowledgments
+        - 'statement': Declarative statements
         """
         query_lower = query.lower().strip()
 
-        # Question detection (most specific first)
+        # 🚨 NEW: Detect specific question sub-types
+        if query_lower.startswith('who '):
+            return 'question_identity'  # "Who is Jonesy?" vs "Who recommended X?"
+        if query_lower.startswith('what is ') or query_lower.startswith('what are '):
+            # Check if it's asking about identity/definition or data
+            if any(word in query_lower for word in ['your purpose', 'you', 'ash', 'jonesy is', 'captain is']):
+                return 'question_identity'  # "What is your purpose?" vs "What is the longest game?"
+        if query_lower.startswith('how are') or query_lower.startswith('how is'):
+            return 'question_status'  # "How are you?" - status query
+
+        # General question detection (data queries)
         question_indicators = ['what', 'where', 'when', 'how', 'why', 'who', 'which', 'did',
                                'has', 'have', 'is', 'are', 'does', 'do', 'can', 'could', 'would', 'should']
         if any(query_lower.startswith(indicator) for indicator in question_indicators):
-            return 'question'
+            return 'question_data'  # Generic data questions
         if query_lower.endswith('?'):
-            return 'question'
+            return 'question_data'
 
         # Conversational responses (greetings, acknowledgments, casual chat)
         conversational_indicators = [
             'hi', 'hello', 'hey', 'thanks', 'thank you', 'ok', 'okay', 'cool', 'nice', 'great',
             'lol', 'haha', 'sure', 'alright', 'yeah', 'yep', 'nope', 'no worries',
-            'take it easy', 'calm down', 'grouchy', 'chill', 'relax'
+            'take it easy', 'calm down', 'grouchy', 'chill', 'relax', 'good morning', 'good afternoon'
         ]
         if any(indicator in query_lower for indicator in conversational_indicators):
             return 'conversational'
@@ -237,10 +250,11 @@ class AIResponseCache:
         """
         Find similar cached query using fuzzy matching within the same conversation context.
 
-        IMPROVED: Prevents false matches between different query types (questions vs casual responses).
-        CATEGORY BOUNDARY: Only matches queries within the same category to prevent cross-category pollution.
-        Optimized to search a random sample for large caches to avoid O(N) complexity.
-        CRITICAL: Only searches within the same conversation location (DM/channel isolation).
+        🚨 AGGRESSIVE RESTRICTIONS: Cache fuzzy matching heavily restricted to prevent false positives.
+        - Gaming queries: DISABLED (always query database fresh)
+        - Conversational: DISABLED (too context-dependent)
+        - Questions: NEAR-EXACT only (0.98+ similarity required)
+        - FAQ only: Moderate matching allowed
         """
         normalized_query = self._normalize_query(query)
 
@@ -252,24 +266,30 @@ class AIResponseCache:
         query_words = set(normalized_query.split())
         query_length = len(query_words)
 
-        # AGGRESSIVE RESTRICTION: Disable fuzzy matching for most query types
-        # Only enable for FAQ and gaming data queries with very high thresholds
+        # 🚨 CRITICAL FIX: DISABLE fuzzy matching for gaming queries entirely
+        # Gaming queries should ALWAYS hit the database for fresh data
+        if query_category == 'gaming_query':
+            logger.info(f"🚨 CACHE POLICY: Gaming query detected - DISABLING fuzzy match to ensure fresh database query")
+            return None  # Force cache miss for gaming queries
+
+        # 🚨 ULTRA-AGGRESSIVE RESTRICTION: Disable fuzzy matching for almost everything
         adjusted_threshold = 0.99  # Default: essentially exact match only
 
-        # Whitelist: Only enable fuzzy matching for safe categories
+        # 🚨 CRITICAL: Disable fuzzy matching for conversational, personality, and question types
+        if query_type in ['conversational', 'question_identity', 'question_status']:
+            logger.debug(f"Cache: DISABLED fuzzy match for type '{query_type}' (too context-dependent)")
+            return None  # Never fuzzy match these types
+
+        # Whitelist: Only enable fuzzy matching for FAQ with VERY strict threshold
         if query_category == 'faq':
-            # FAQ responses can have moderate fuzzy matching
-            adjusted_threshold = 0.92
-        elif query_category == 'gaming_query':
-            # Gaming data queries can have strict fuzzy matching
+            # 🚨 RAISED from 0.92 → 0.95: FAQ responses need near-exact match
+            # This prevents "Who is Jonesy?" from matching "What is your purpose?"
             adjusted_threshold = 0.95
-        elif query_type == 'conversational':
-            # NEVER fuzzy match conversational responses
-            logger.debug(f"Cache: Skipping fuzzy match for conversational query")
-            return None  # Skip fuzzy matching entirely
-        elif query_type == 'question' and query_category == 'general':
-            # General questions require near-exact match
-            adjusted_threshold = 0.98
+            logger.debug(f"Cache: FAQ fuzzy match enabled with strict threshold: {adjusted_threshold}")
+        else:
+            # Everything else: no fuzzy matching
+            logger.debug(f"Cache: Fuzzy match DISABLED for category '{query_category}' and type '{query_type}'")
+            return None
 
         best_match = None
         best_similarity = 0.0
@@ -304,10 +324,17 @@ class AIResponseCache:
             cached_type = self._detect_query_type(entry["original_query"])
             cached_category = entry.get("query_type", self._detect_query_category(entry["original_query"]))
 
-            # CRITICAL: Don't match different query types
+            # 🚨 CRITICAL: Don't match different query types (now with sub-types)
+            # This prevents "Who is X?" from matching "What is Y?"
             if query_type != cached_type:
                 logger.debug(f"Cache: Skipping - type mismatch ({query_type} vs {cached_type})")
                 continue
+            
+            # 🚨 EXTRA SAFETY: For question types, ensure exact sub-type match
+            if query_type.startswith('question_') and cached_type.startswith('question_'):
+                if query_type != cached_type:
+                    logger.debug(f"Cache: Skipping - question sub-type mismatch ({query_type} vs {cached_type})")
+                    continue
 
             # CRITICAL: Don't match different query categories (prevents gaming_query matching conversational_query)
             if query_category != cached_category:
@@ -361,6 +388,11 @@ class AIResponseCache:
         """
         Get cached response for query with conversation context isolation.
 
+        🚨 AGGRESSIVE CACHE POLICY:
+        - Gaming queries: NO CACHE (always fresh from database)
+        - Exact matches: Allowed for all types
+        - Fuzzy matches: Only FAQ, extremely restricted
+
         Args:
             query: The query string
             user_id: User ID making the query
@@ -373,6 +405,13 @@ class AIResponseCache:
         """
         with self._lock:
             self.stats["total_queries"] += 1
+
+            # 🚨 CRITICAL FIX: Detect gaming queries and skip cache entirely
+            query_category = self._detect_query_category(query)
+            if query_category == 'gaming_query':
+                self.stats["misses"] += 1
+                logger.info(f"🚨 CACHE BYPASS: Gaming query detected - forcing fresh database query")
+                return None  # Always bypass cache for gaming queries
 
             # Try exact match first with conversation context
             cache_key = self._generate_cache_key(query, user_id, channel_id, is_dm)
@@ -397,7 +436,7 @@ class AIResponseCache:
                 logger.info(f"CACHE HIT: {query[:50]}... (exact match in {context_type}, {entry['hits']} total hits)")
                 return entry["response"]
 
-            # Try similarity matching within same conversation context
+            # Try similarity matching within same conversation context (restricted to FAQ only now)
             similar_match = self._find_similar_cached_query(query, user_id, channel_id, is_dm, similarity_threshold)
 
             if similar_match:
