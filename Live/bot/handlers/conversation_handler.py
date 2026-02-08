@@ -1,4 +1,4 @@
-"""
+."""
 Conversation Handler Module
 
 Handles interactive DM conversations for announcements and trivia submissions.
@@ -2128,10 +2128,14 @@ async def start_trivia_conversation(ctx):
 async def handle_jam_approval_conversation(message: discord.Message) -> None:
     """Handle the interactive DM conversation for JAM approval of trivia questions"""
     user_id = message.author.id
+    
+    # ✅ CRITICAL: Check conversation exists AND is still valid
     conversation = jam_approval_conversations.get(user_id)
-
     if not conversation:
+        print(f"🚫 CONVERSATION CHECK: No active approval conversation for user {user_id}")
         return
+    
+    print(f"🔄 CONVERSATION ACTIVE: Processing message '{message.content[:50]}...' for user {user_id} in step '{conversation.get('step')}'")
 
     # Get message content early for pre-trivia check
     content = message.content.strip()
@@ -2267,9 +2271,15 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
     # Only JAM can use this conversation
     if user_id != JAM_USER_ID:
+        print(f"🚫 ACCESS DENIED: User {user_id} attempted to access JAM approval conversation")
+        return
+    
+    # ✅ CRITICAL: Double-check conversation still exists after all async operations
+    if user_id not in jam_approval_conversations:
+        print(f"🚫 CONVERSATION CLOSED: Approval conversation for JAM was closed during processing, ignoring message")
         return
 
-    print(f"🔄 JAM APPROVAL: Processing approval conversation")
+    print(f"🔄 JAM APPROVAL: Processing approval conversation (step: {conversation.get('step')})")
 
     # Update activity
     update_jam_approval_activity(user_id)
@@ -2391,12 +2401,13 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                     except Exception as e:
                         print(f"⚠️ Error marking question as retired: {e}")
 
-                # Clean up conversation BEFORE notifying user
+                # ✅ CRITICAL FIX: Get queue length BEFORE clearing conversation
+                queue_length = get_queue_length()
+                
+                # ✅ CRITICAL FIX: Clear conversation state IMMEDIATELY before any async operations
                 if user_id in jam_approval_conversations:
                     del jam_approval_conversations[user_id]
-
-                # Get queue status before processing
-                queue_length = get_queue_length()
+                    print(f"✅ CONVERSATION CLEANUP: Cleared approval conversation immediately (queue: {queue_length})")
 
                 # Notify user of rejection
                 rejection_msg = (
@@ -2412,12 +2423,12 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
                 await message.reply(rejection_msg)
 
-                # ✅ FIX: Auto-process next question in queue
+                # ✅ CRITICAL FIX: Only process queue if there are items AND conversation is cleared
                 if queue_length > 0:
-                    print(f"🔄 FIX: Auto-processing next question in queue ({queue_length} remaining)")
+                    print(f"🔄 QUEUE PROCESSING: Auto-processing next item ({queue_length} remaining)")
                     await process_next_approval()
                 else:
-                    print(f"✅ FIX: Queue empty after rejection")
+                    print(f"✅ QUEUE EMPTY: No more questions pending, conversation fully cleared")
 
             else:
                 await message.reply(
