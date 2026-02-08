@@ -1689,7 +1689,7 @@ class TriviaDatabase:
         - Checks against ALL statuses including 'retired' (rejected questions)
         - Uses semantic similarity to catch questions with different wording
         - Prioritizes retired questions as strongest duplicates
-        
+
         ✅ FIX #3: Answer-based duplicate detection
         - If question_answer provided, checks for same answer in retired/recent questions
         - Blocks questions with same answer as retired questions (0.3 threshold)
@@ -1714,21 +1714,21 @@ class TriviaDatabase:
 
                 if not existing_questions:
                     return None
-                
+
                 # ✅ FIX #3: PHASE 1 - Check for answer-based duplicates FIRST (strictest filter)
                 if question_answer:
                     normalized_new_answer = self.normalize_trivia_answer(question_answer).lower()
-                    
+
                     for existing in existing_questions:
                         existing_dict = dict(existing)
                         existing_answer = existing_dict.get('correct_answer')
                         existing_status = existing_dict.get('status', '')
-                        
+
                         if not existing_answer:
                             continue
-                        
+
                         normalized_existing_answer = self.normalize_trivia_answer(existing_answer).lower()
-                        
+
                         # Check if answers match
                         if normalized_new_answer == normalized_existing_answer:
                             # Same answer as RETIRED question - very strict (auto-reject territory)
@@ -1745,7 +1745,7 @@ class TriviaDatabase:
                                     'is_retired': True,
                                     'duplicate_reason': f"Same answer as retired question: '{question_answer}'"
                                 }
-                            
+
                             # Same answer as recently ANSWERED question - warn with medium strictness
                             elif existing_status == 'answered':
                                 # Check if it's recent (within last 10 answered questions)
@@ -1756,7 +1756,7 @@ class TriviaDatabase:
                                     LIMIT 10
                                 """)
                                 recent_answered_ids = [dict(row)['id'] for row in cur.fetchall()]
-                                
+
                                 if existing_dict['id'] in recent_answered_ids:
                                     logger.warning(
                                         f"⚠️ ANSWER DUPLICATE (RECENT): New question has same answer '{question_answer}' as recently answered question #{existing_dict['id']}")
