@@ -676,6 +676,87 @@ async def pre_trivia_approval():
         except Exception:
             pass
 
+# Run at 10:45 AM UK time every Tuesday - Pre-flight check
+@tasks.loop(time=time(10, 45, tzinfo=ZoneInfo("Europe/London")))
+async def pre_trivia_preflight_check():
+    """Verify approved question exists 15 minutes before trivia"""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    
+    # Only run on Tuesdays (weekday 1)
+    if uk_now.weekday() != 1:
+        return
+    
+    if not _should_run_automated_tasks():
+        return
+        
+    print(f"🔍 PRE-FLIGHT CHECK: Verifying approved question at {uk_now.strftime('%H:%M:%S UK')}")
+    
+    if not db:
+        print("❌ PRE-FLIGHT CHECK: Database not available")
+        return
+    
+    try:
+        # Check if approved question exists
+        approved_id_str = db.get_config_value('trivia_approved_question_id')
+        
+        if not approved_id_str:
+            # No approved question - send urgent alert
+            print("❌ PRE-FLIGHT CHECK: No approved question found!")
+            
+            from ..config import JAM_USER_ID
+            
+            if not _bot_instance:
+                print("❌ PRE-FLIGHT CHECK: Bot instance not available for alert")
+                return
+            
+            try:
+                user = await _bot_instance.fetch_user(JAM_USER_ID)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+                print(f"❌ PRE-FLIGHT CHECK: Could not fetch user for alert: {e}")
+                return
+                
+            if user:
+                alert_message = (
+                    f"🚨 **URGENT: Trivia Pre-Flight Check Failed**\n\n"
+                    f"**Problem:** No approved question found for today's Trivia Tuesday!\n"
+                    f"**Time Until Trivia:** 15 minutes (11:00 AM UK)\n"
+                    f"**Current Time:** {uk_now.strftime('%H:%M UK')}\n\n"
+                    f"**Options:**\n"
+                    f"1. Use `!setapprovedtrivia <question_id>` to manually approve a question\n"
+                    f"2. Use `!listpendingquestions` to see available questions\n"
+                    f"3. Use `!disabletrivia` if you want to skip trivia today\n\n"
+                    f"**Without action, trivia will NOT run automatically.**"
+                )
+                await user.send(alert_message)
+                print("✅ PRE-FLIGHT CHECK: Alert sent to JAM")
+        else:
+            # Verify question exists in database
+            approved_question_id = int(approved_id_str)
+            question_data = db.get_trivia_question_by_id(approved_question_id)
+            
+            if not question_data:
+                print(f"❌ PRE-FLIGHT CHECK: Approved question #{approved_question_id} not found in database!")
+                
+                from ..config import JAM_USER_ID
+                if not _bot_instance:
+                    return
+                    
+                user = await _bot_instance.fetch_user(JAM_USER_ID)
+                if user:
+                    alert_message = (
+                        f"⚠️ **Trivia Pre-Flight Check Warning**\n\n"
+                        f"**Problem:** Approved question #{approved_question_id} was deleted or not found!\n"
+                        f"**Time Until Trivia:** 15 minutes (11:00 AM UK)\n\n"
+                        f"Please approve a different question with `!setapprovedtrivia <question_id>`"
+                    )
+                    await user.send(alert_message)
+                    print("✅ PRE-FLIGHT CHECK: Warning sent to JAM")
+            else:
+                print(f"✅ PRE-FLIGHT CHECK: Approved question #{approved_question_id} verified - trivia ready")
+    
+    except Exception as e:
+        print(f"❌ PRE-FLIGHT CHECK: Error during check: {e}")
+
 # Run at 11:00 AM UK time every Tuesday - Trivia Tuesday question posting
 
 
@@ -716,51 +797,52 @@ async def trivia_tuesday():
         return
 
     try:
-        # ✅ FIX #2: Check for pre-approved question from 9 AM approval
+        # ✅ FIX: Strict approval required - no fallback to auto-selection
         approved_question_id = None
         if db:
             try:
                 approved_id_str = db.get_config_value('trivia_approved_question_id')
                 if approved_id_str:
                     approved_question_id = int(approved_id_str)
-                    print(f"✅ FIX #2: Found pre-approved question ID {approved_question_id} from 9 AM approval")
+                    print(f"✅ Found pre-approved question ID {approved_question_id} from 9 AM approval")
             except Exception as e:
-                print(f"⚠️ FIX #2: Error reading approved question ID from config: {e}")
+                print(f"⚠️ Error reading approved question ID from config: {e}")
 
-        # 1. Get the question (pre-approved or highest-priority available)
+        # STRICT REQUIREMENT: Trivia will NOT run without pre-approval
+        if not approved_question_id:
+            error_msg = "No approved question found - trivia cannot run without pre-approval. Use !setapprovedtrivia to manually approve a question."
+            await notify_scheduled_message_error("Trivia Tuesday", error_msg, uk_now)
+            print(f"❌ TRIVIA BLOCKED: {error_msg}")
+            return
+
+        # Get the pre-approved question
         question_data = None
-
-        if approved_question_id:
-            # Use the pre-approved question
+        try:
+            question_data = db.get_trivia_question_by_id(approved_question_id)
+            if not question_data:
+                error_msg = f"Approved question #{approved_question_id} not found in database. Question may have been deleted."
+                await notify_scheduled_message_error("Trivia Tuesday", error_msg, uk_now)
+                print(f"❌ TRIVIA BLOCKED: {error_msg}")
+                # Clear the invalid config value
+                try:
+                    db.delete_config_value('trivia_approved_question_id')
+                except Exception:
+                    pass
+                return
+            
+            print(f"✅ Using pre-approved question #{approved_question_id} from 9 AM approval")
+            
+            # Clear the config value after successful retrieval
             try:
-                question_data = db.get_trivia_question_by_id(approved_question_id)
-                if question_data:
-                    print(f"✅ FIX #2: Using pre-approved question #{approved_question_id} from 9 AM approval")
-                    # Clear the config value after successful retrieval
-                    try:
-                        db.delete_config_value('trivia_approved_question_id')
-                        print(f"✅ FIX #2: Cleared approved question ID from config")
-                    except Exception as clear_error:
-                        print(f"⚠️ FIX #2: Failed to clear approved question ID: {clear_error}")
-                else:
-                    print(
-                        f"⚠️ FIX #2: Pre-approved question #{approved_question_id} not found, falling back to priority selection")
-                    # Clear the invalid config value
-                    try:
-                        db.delete_config_value('trivia_approved_question_id')
-                    except Exception:
-                        pass
-            except Exception as e:
-                print(f"⚠️ FIX #2: Error retrieving pre-approved question: {e}")
-
-        # Fallback to priority selection if no pre-approved question
-        if not question_data:
-            question_data = db.get_next_trivia_question()
-            if question_data:
-                print(f"✅ FIX #2: Using priority-selected question #{question_data.get('id')} (no pre-approval)")
-
-        if not question_data:
-            await notify_scheduled_message_error("Trivia Tuesday", "No approved/available trivia questions found in the database.", uk_now)
+                db.delete_config_value('trivia_approved_question_id')
+                print(f"✅ Cleared approved question ID from config")
+            except Exception as clear_error:
+                print(f"⚠️ Failed to clear approved question ID: {clear_error}")
+                
+        except Exception as e:
+            error_msg = f"Error retrieving pre-approved question #{approved_question_id}: {e}"
+            await notify_scheduled_message_error("Trivia Tuesday", error_msg, uk_now)
+            print(f"❌ TRIVIA BLOCKED: {error_msg}")
             return
 
         question_id = question_data['id']
@@ -2478,6 +2560,7 @@ def start_all_scheduled_tasks(bot):
             (monday_morning_greeting, "Monday morning greeting task (9:00 AM UK time, Mondays)"),
             (tuesday_trivia_greeting, "Tuesday trivia greeting task (9:00 AM UK time, Tuesdays)"),
             (pre_trivia_approval, "Pre-trivia approval task (10:00 AM UK time, Tuesdays)"),
+            (pre_trivia_preflight_check, "Pre-trivia pre-flight check task (10:45 AM UK time, Tuesdays)"),
             (trivia_tuesday, "Trivia Tuesday task (11:00 AM UK time, Tuesdays)"),
             (friday_community_analysis, "Friday Community Analysis (Friday 8.15am)"),
             (friday_morning_greeting, "Friday morning greeting task (9:00 AM UK time, Fridays)"),

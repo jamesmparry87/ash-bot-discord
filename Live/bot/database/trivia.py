@@ -663,9 +663,10 @@ class TriviaDatabase:
                             WHERE id = %s
                         """, (first_correct_user_id, total_participants, correct_count, session_id))
 
-                        # ✅ FIX #5: Mark question as 'answered' within same transaction
+                        # ✅ FIX: Mark question as 'answered' within same transaction WITH VERIFICATION
                         question_id = session_dict.get("question_id")
                         if question_id:
+                            # Update status to 'answered'
                             cur.execute("""
                                 UPDATE trivia_questions
                                 SET status = 'answered'
@@ -673,9 +674,24 @@ class TriviaDatabase:
                             """, (question_id,))
 
                             if cur.rowcount == 0:
-                                logger.warning(f"⚠️ FIX #5: Question {question_id} status update affected 0 rows")
+                                logger.error(f"❌ CRITICAL: Question {question_id} status update affected 0 rows - question may not exist!")
                             else:
-                                logger.info(f"✅ FIX #5: Marked question {question_id} as 'answered'")
+                                logger.info(f"✅ Marked question {question_id} as 'answered' in transaction")
+                                
+                            # IMMEDIATE VERIFICATION: Check the update actually worked
+                            cur.execute("""
+                                SELECT status FROM trivia_questions WHERE id = %s
+                            """, (question_id,))
+                            verification = cur.fetchone()
+                            
+                            if verification and dict(verification)['status'] == 'answered':
+                                logger.info(f"✅ VERIFIED: Question {question_id} status confirmed as 'answered'")
+                            else:
+                                actual_status = dict(verification)['status'] if verification else 'NOT_FOUND'
+                                logger.error(f"❌ VERIFICATION FAILED: Question {question_id} status is '{actual_status}', not 'answered'!")
+                                # Rollback and raise error to prevent commit
+                                cur.execute("ROLLBACK TO SAVEPOINT trivia_completion")
+                                raise ValueError(f"Question status verification failed - status is '{actual_status}'")
 
                         # ✅ FIX #5: Release savepoint and commit entire transaction atomically
                         cur.execute("RELEASE SAVEPOINT trivia_completion")

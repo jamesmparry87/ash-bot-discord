@@ -968,9 +968,8 @@ async def process_trivia_answer(message, trivia_session):
     """Process a trivia answer submission with enhanced normalization"""
     try:
         if db is None:
+            print("❌ TRIVIA: Database not available for answer submission")
             return False
-
-        assert db is not None
 
         # Extract answer text
         answer_text = message.content.strip()
@@ -980,31 +979,55 @@ async def process_trivia_answer(message, trivia_session):
 
         print(f"🧠 TRIVIA: Processing answer - Original: '{answer_text}' → Normalized: '{normalized_answer}'")
 
-        # Submit answer to database
-        answer_id = db.submit_trivia_answer(
+        # Submit answer to database (returns Dict with 'success' and 'answer_id' or 'error')
+        result = db.submit_trivia_answer(
             session_id=trivia_session['id'],
             user_id=message.author.id,
             answer_text=answer_text,
             normalized_answer=normalized_answer
         )
 
-        if answer_id:
-            print(
-                f"✅ TRIVIA: Submitted answer #{answer_id} from user {message.author.id} for session {trivia_session['id']}")
+        # Verify the result is a Dict
+        if not isinstance(result, dict):
+            print(f"❌ TRIVIA: Unexpected return type from submit_trivia_answer: {type(result)}")
+            return False
+
+        # Check if submission was successful
+        if result.get('success'):
+            answer_id = result.get('answer_id')
+            print(f"✅ TRIVIA: Submitted answer #{answer_id} from user {message.author.id} for session {trivia_session['id']}")
 
             # React to acknowledge the submission
             try:
                 await message.add_reaction("📝")  # Notebook emoji to show submission received
+                print(f"✅ TRIVIA: Added acknowledgment reaction to answer from user {message.author.id}")
+            except discord.Forbidden:
+                print(f"⚠️ TRIVIA: No permission to add reaction to answer from user {message.author.id}")
+            except discord.HTTPException as e:
+                print(f"⚠️ TRIVIA: HTTP error adding reaction to answer: {e}")
             except Exception as reaction_error:
-                print(f"⚠️ Could not add reaction to trivia answer: {reaction_error}")
+                print(f"⚠️ TRIVIA: Could not add reaction to trivia answer: {reaction_error}")
 
             return True
         else:
-            print(f"❌ TRIVIA: Failed to submit answer from user {message.author.id}")
+            # Handle specific error cases
+            error = result.get('error', 'unknown')
+            if error == 'duplicate':
+                print(f"ℹ️ TRIVIA: User {message.author.id} already submitted an answer for this session")
+                # Still add reaction to acknowledge they tried
+                try:
+                    await message.add_reaction("⚠️")  # Warning emoji for duplicate
+                except Exception:
+                    pass
+            else:
+                print(f"❌ TRIVIA: Failed to submit answer from user {message.author.id}: {error}")
+            
             return False
 
     except Exception as e:
-        print(f"❌ Error processing trivia answer: {e}")
+        print(f"❌ TRIVIA: Error processing trivia answer: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 

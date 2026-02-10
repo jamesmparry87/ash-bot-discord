@@ -864,6 +864,10 @@ class DatabaseManager:
         """Delegate to trivia module - safe add trivia question"""
         return self.trivia.safe_add_trivia_question(**kwargs)
 
+    def normalize_trivia_answer(self, answer_text):
+        """Delegate to trivia module - normalize trivia answer for matching"""
+        return self.trivia.normalize_trivia_answer(answer_text)
+
     # ========== SESSIONS DELEGATIONS (to sessions module) ==========
 
     def create_weekly_announcement(self, day, content, analysis_cache=None):
