@@ -677,44 +677,46 @@ async def pre_trivia_approval():
             pass
 
 # Run at 10:45 AM UK time every Tuesday - Pre-flight check
+
+
 @tasks.loop(time=time(10, 45, tzinfo=ZoneInfo("Europe/London")))
 async def pre_trivia_preflight_check():
     """Verify approved question exists 15 minutes before trivia"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    
+
     # Only run on Tuesdays (weekday 1)
     if uk_now.weekday() != 1:
         return
-    
+
     if not _should_run_automated_tasks():
         return
-        
+
     print(f"🔍 PRE-FLIGHT CHECK: Verifying approved question at {uk_now.strftime('%H:%M:%S UK')}")
-    
+
     if not db:
         print("❌ PRE-FLIGHT CHECK: Database not available")
         return
-    
+
     try:
         # Check if approved question exists
         approved_id_str = db.get_config_value('trivia_approved_question_id')
-        
+
         if not approved_id_str:
             # No approved question - send urgent alert
             print("❌ PRE-FLIGHT CHECK: No approved question found!")
-            
+
             from ..config import JAM_USER_ID
-            
+
             if not _bot_instance:
                 print("❌ PRE-FLIGHT CHECK: Bot instance not available for alert")
                 return
-            
+
             try:
                 user = await _bot_instance.fetch_user(JAM_USER_ID)
             except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
                 print(f"❌ PRE-FLIGHT CHECK: Could not fetch user for alert: {e}")
                 return
-                
+
             if user:
                 alert_message = (
                     f"🚨 **URGENT: Trivia Pre-Flight Check Failed**\n\n"
@@ -733,14 +735,14 @@ async def pre_trivia_preflight_check():
             # Verify question exists in database
             approved_question_id = int(approved_id_str)
             question_data = db.get_trivia_question_by_id(approved_question_id)
-            
+
             if not question_data:
                 print(f"❌ PRE-FLIGHT CHECK: Approved question #{approved_question_id} not found in database!")
-                
+
                 from ..config import JAM_USER_ID
                 if not _bot_instance:
                     return
-                    
+
                 user = await _bot_instance.fetch_user(JAM_USER_ID)
                 if user:
                     alert_message = (
@@ -753,7 +755,7 @@ async def pre_trivia_preflight_check():
                     print("✅ PRE-FLIGHT CHECK: Warning sent to JAM")
             else:
                 print(f"✅ PRE-FLIGHT CHECK: Approved question #{approved_question_id} verified - trivia ready")
-    
+
     except Exception as e:
         print(f"❌ PRE-FLIGHT CHECK: Error during check: {e}")
 
@@ -829,16 +831,16 @@ async def trivia_tuesday():
                 except Exception:
                     pass
                 return
-            
+
             print(f"✅ Using pre-approved question #{approved_question_id} from 9 AM approval")
-            
+
             # Clear the config value after successful retrieval
             try:
                 db.delete_config_value('trivia_approved_question_id')
                 print(f"✅ Cleared approved question ID from config")
             except Exception as clear_error:
                 print(f"⚠️ Failed to clear approved question ID: {clear_error}")
-                
+
         except Exception as e:
             error_msg = f"Error retrieving pre-approved question #{approved_question_id}: {e}"
             await notify_scheduled_message_error("Trivia Tuesday", error_msg, uk_now)

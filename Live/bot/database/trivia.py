@@ -674,21 +674,23 @@ class TriviaDatabase:
                             """, (question_id,))
 
                             if cur.rowcount == 0:
-                                logger.error(f"❌ CRITICAL: Question {question_id} status update affected 0 rows - question may not exist!")
+                                logger.error(
+                                    f"❌ CRITICAL: Question {question_id} status update affected 0 rows - question may not exist!")
                             else:
                                 logger.info(f"✅ Marked question {question_id} as 'answered' in transaction")
-                                
+
                             # IMMEDIATE VERIFICATION: Check the update actually worked
                             cur.execute("""
                                 SELECT status FROM trivia_questions WHERE id = %s
                             """, (question_id,))
                             verification = cur.fetchone()
-                            
+
                             if verification and dict(verification)['status'] == 'answered':
                                 logger.info(f"✅ VERIFIED: Question {question_id} status confirmed as 'answered'")
                             else:
                                 actual_status = dict(verification)['status'] if verification else 'NOT_FOUND'
-                                logger.error(f"❌ VERIFICATION FAILED: Question {question_id} status is '{actual_status}', not 'answered'!")
+                                logger.error(
+                                    f"❌ VERIFICATION FAILED: Question {question_id} status is '{actual_status}', not 'answered'!")
                                 # Rollback and raise error to prevent commit
                                 cur.execute("ROLLBACK TO SAVEPOINT trivia_completion")
                                 raise ValueError(f"Question status verification failed - status is '{actual_status}'")

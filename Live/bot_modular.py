@@ -995,7 +995,8 @@ async def process_trivia_answer(message, trivia_session):
         # Check if submission was successful
         if result.get('success'):
             answer_id = result.get('answer_id')
-            print(f"✅ TRIVIA: Submitted answer #{answer_id} from user {message.author.id} for session {trivia_session['id']}")
+            print(
+                f"✅ TRIVIA: Submitted answer #{answer_id} from user {message.author.id} for session {trivia_session['id']}")
 
             # React to acknowledge the submission
             try:
@@ -1021,7 +1022,7 @@ async def process_trivia_answer(message, trivia_session):
                     pass
             else:
                 print(f"❌ TRIVIA: Failed to submit answer from user {message.author.id}: {error}")
-            
+
             return False
 
     except Exception as e:
