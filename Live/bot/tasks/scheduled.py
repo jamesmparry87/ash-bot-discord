@@ -799,7 +799,7 @@ async def trivia_tuesday():
         return
 
     try:
-        # ✅ FIX: Strict approval required - no fallback to auto-selection
+        # ✅ FIX #3: Try pre-approved question first, fallback to 'available' pool
         approved_question_id = None
         if db:
             try:
@@ -810,42 +810,53 @@ async def trivia_tuesday():
             except Exception as e:
                 print(f"⚠️ Error reading approved question ID from config: {e}")
 
-        # STRICT REQUIREMENT: Trivia will NOT run without pre-approval
-        if not approved_question_id:
-            error_msg = "No approved question found - trivia cannot run without pre-approval. Use !setapprovedtrivia to manually approve a question."
-            await notify_scheduled_message_error("Trivia Tuesday", error_msg, uk_now)
-            print(f"❌ TRIVIA BLOCKED: {error_msg}")
-            return
-
-        # Get the pre-approved question
+        # Get question data - try pre-approved first, then fallback to available pool
         question_data = None
-        try:
-            question_data = db.get_trivia_question_by_id(approved_question_id)
-            if not question_data:
-                error_msg = f"Approved question #{approved_question_id} not found in database. Question may have been deleted."
+        
+        if approved_question_id:
+            # STEP 1: Try to use pre-approved question
+            try:
+                question_data = db.get_trivia_question_by_id(approved_question_id)
+                if question_data:
+                    print(f"✅ Using pre-approved question #{approved_question_id} from 9 AM approval")
+                    # Clear the config value after successful retrieval
+                    try:
+                        db.delete_config_value('trivia_approved_question_id')
+                        print(f"✅ Cleared approved question ID from config")
+                    except Exception as clear_error:
+                        print(f"⚠️ Failed to clear approved question ID: {clear_error}")
+                else:
+                    print(f"⚠️ Pre-approved question #{approved_question_id} not found in database, falling back to pool")
+                    # Clear the invalid config value
+                    try:
+                        db.delete_config_value('trivia_approved_question_id')
+                    except Exception:
+                        pass
+            except Exception as e:
+                print(f"⚠️ Error retrieving pre-approved question #{approved_question_id}: {e}")
+                # Continue to fallback
+        
+        if not question_data:
+            # STEP 2: Fallback to querying available questions (same logic as manual !starttrivia)
+            print("🔄 TRIVIA AUTO-START: No pre-approved question, querying available pool...")
+            try:
+                available_questions = db.get_available_trivia_questions()  # type: ignore
+                
+                if not available_questions or len(available_questions) == 0:
+                    error_msg = "No available questions found in pool - trivia cannot run automatically. Use !starttrivia with a specific question ID or add new questions."
+                    await notify_scheduled_message_error("Trivia Tuesday", error_msg, uk_now)
+                    print(f"❌ TRIVIA BLOCKED: {error_msg}")
+                    return
+                
+                # Select first available (highest priority - matches manual !starttrivia logic)
+                question_data = available_questions[0]
+                print(f"✅ TRIVIA AUTO-START: Auto-selected question #{question_data['id']} from available pool ({len(available_questions)} questions available)")
+                
+            except Exception as pool_error:
+                error_msg = f"Error querying available questions pool: {pool_error}"
                 await notify_scheduled_message_error("Trivia Tuesday", error_msg, uk_now)
                 print(f"❌ TRIVIA BLOCKED: {error_msg}")
-                # Clear the invalid config value
-                try:
-                    db.delete_config_value('trivia_approved_question_id')
-                except Exception:
-                    pass
                 return
-
-            print(f"✅ Using pre-approved question #{approved_question_id} from 9 AM approval")
-
-            # Clear the config value after successful retrieval
-            try:
-                db.delete_config_value('trivia_approved_question_id')
-                print(f"✅ Cleared approved question ID from config")
-            except Exception as clear_error:
-                print(f"⚠️ Failed to clear approved question ID: {clear_error}")
-
-        except Exception as e:
-            error_msg = f"Error retrieving pre-approved question #{approved_question_id}: {e}"
-            await notify_scheduled_message_error("Trivia Tuesday", error_msg, uk_now)
-            print(f"❌ TRIVIA BLOCKED: {error_msg}")
-            return
 
         question_id = question_data['id']
         question_text = question_data.get("question_text", "")
@@ -1307,29 +1318,93 @@ async def scheduled_ai_refresh():
         usage_stats = ai_status.get('usage_stats', {})
         previous_errors = usage_stats.get('consecutive_errors', 0)
 
-        if previous_errors > 0:
-            # Try to notify JAM that AI is back online after quota issues
-            try:
-                from ..config import JAM_USER_ID
+        # NEW: Trivia Pool Validation and Auto-Replenishment
+        pool_status_message = ""
+        try:
+            if db:
+                available_questions = db.get_available_trivia_questions()
+                pool_count = len(available_questions) if available_questions else 0
+                
+                print(f"🧠 TRIVIA POOL CHECK (8:15 AM): {pool_count} questions available")
+                
+                if pool_count >= 5:
+                    pool_status_message = f"✅ Trivia Pool: {pool_count} questions available"
+                else:
+                    pool_status_message = f"⚠️ Trivia Pool: {pool_count}/5 questions (LOW)"
+                    
+                    # Auto-generate needed questions
+                    needed = 5 - pool_count
+                    print(f"🔄 TRIVIA POOL: Generating {needed} questions...")
+                    
+                    try:
+                        from ..handlers.ai_handler import generate_ai_trivia_question
+                        from ..handlers.conversation_handler import start_jam_question_approval
+                        
+                        generated = 0
+                        failed = 0
+                        
+                        for i in range(needed):
+                            try:
+                                question_data = await generate_ai_trivia_question(f"auto_replenish_{i}")
+                                if question_data:
+                                    if await start_jam_question_approval(question_data):
+                                        generated += 1
+                                        print(f"✅ Generated question {i+1}/{needed}")
+                                    else:
+                                        failed += 1
+                                else:
+                                    failed += 1
+                                await asyncio.sleep(2)
+                            except Exception as gen_error:
+                                failed += 1
+                                print(f"❌ Question generation {i+1} failed: {gen_error}")
+                        
+                        pool_status_message += f"\n📤 Auto-generated: {generated} questions sent to approval queue"
+                        if failed > 0:
+                            pool_status_message += f"\n⚠️ Failed: {failed} generation attempts"
+                        
+                    except Exception as replenish_error:
+                        pool_status_message += f"\n❌ Replenishment failed: {str(replenish_error)[:100]}"
+                        print(f"❌ TRIVIA POOL: Replenishment error: {replenish_error}")
+            else:
+                pool_status_message = "❌ Trivia Pool: Database unavailable"
+                
+        except Exception as pool_error:
+            pool_status_message = f"❌ Trivia Pool: Check failed - {str(pool_error)[:100]}"
+            print(f"❌ TRIVIA POOL CHECK: Error - {pool_error}")
 
-                if not _bot_instance:
-                    print("⚠️ Bot instance not available for AI refresh notification")
-                    return
+        # Send notification to JAM (always send now, includes pool status)
+        try:
+            from ..config import JAM_USER_ID
 
-                user = await _bot_instance.fetch_user(JAM_USER_ID)
-                if user:
-                    await user.send(
+            if not _bot_instance:
+                print("⚠️ Bot instance not available for AI refresh notification")
+                return
+
+            user = await _bot_instance.fetch_user(JAM_USER_ID)
+            if user:
+                # Build notification message
+                if previous_errors > 0:
+                    notification_msg = (
                         f"🤖 **AI Module Refresh Complete**\n"
                         f"• Status: {ai_status['status_message']}\n"
                         f"• Previous errors cleared: {previous_errors}\n"
                         f"• Daily quota reset at {uk_now.strftime(f'%H:%M {timezone_name}')}\n\n"
+                        f"{pool_status_message}\n\n"
                         f"*AI functionality should now be restored.*"
                     )
-                    print("✅ AI refresh notification sent to JAM")
-            except Exception as notify_e:
-                print(f"⚠️ Could not send AI refresh notification: {notify_e}")
-        else:
-            print("✅ AI refresh completed silently (no previous issues)")
+                else:
+                    notification_msg = (
+                        f"🤖 **Daily System Refresh - {uk_now.strftime(f'%H:%M {timezone_name}')}**\n"
+                        f"• AI Status: {ai_status['status_message']}\n"
+                        f"• {pool_status_message}\n\n"
+                        f"*All systems refreshed post-quota reset.*"
+                    )
+                
+                await user.send(notification_msg)
+                print("✅ AI refresh notification with trivia pool status sent to JAM")
+        except Exception as notify_e:
+            print(f"⚠️ Could not send AI refresh notification: {notify_e}")
 
     except Exception as e:
         print(f"❌ Error in scheduled_ai_refresh: {e}")
