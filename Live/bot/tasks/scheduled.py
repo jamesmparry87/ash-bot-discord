@@ -1344,22 +1344,39 @@ async def scheduled_ai_refresh():
 
                         generated = 0
                         failed = 0
+                        
+                        # ✅ CIRCUIT BREAKER: Protect API quota from consecutive failures
+                        consecutive_failures = 0
+                        MAX_CONSECUTIVE_FAILURES = 2  # Stop after 2 failures in a row
 
                         for i in range(needed):
+                            # ✅ CIRCUIT BREAKER CHECK: Stop if too many consecutive failures
+                            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                                print(f"🚨 CIRCUIT BREAKER (8:15 AM): Stopping auto-replenishment after {consecutive_failures} consecutive failures")
+                                print(f"⚠️ API quota preserved: {needed - i} questions not attempted")
+                                pool_status_message += f"\n🚨 Circuit breaker activated after {consecutive_failures} failures"
+                                break
+                            
                             try:
                                 question_data = await generate_ai_trivia_question(f"auto_replenish_{i}")
                                 if question_data:
                                     if await start_jam_question_approval(question_data):
                                         generated += 1
+                                        consecutive_failures = 0  # ✅ Reset on success
                                         print(f"✅ Generated question {i+1}/{needed}")
                                     else:
                                         failed += 1
+                                        consecutive_failures += 1
                                 else:
                                     failed += 1
+                                    consecutive_failures += 1
+                                    print(f"⚠️ Generation failure {consecutive_failures}/{MAX_CONSECUTIVE_FAILURES}")
                                 await asyncio.sleep(2)
                             except Exception as gen_error:
                                 failed += 1
+                                consecutive_failures += 1
                                 print(f"❌ Question generation {i+1} failed: {gen_error}")
+                                print(f"⚠️ Consecutive failures: {consecutive_failures}/{MAX_CONSECUTIVE_FAILURES}")
 
                         pool_status_message += f"\n📤 Auto-generated: {generated} questions sent to approval queue"
                         if failed > 0:
@@ -3019,6 +3036,10 @@ async def _background_question_generation(current_question_count: int):
         failed_generations = 0
         duplicate_count = 0
 
+        # ✅ CIRCUIT BREAKER: Protect API quota from consecutive failures
+        consecutive_failures = 0
+        MAX_CONSECUTIVE_FAILURES = 2  # Stop after 2 failures in a row
+
         # ✅ FIX: Track recently generated questions AND templates to prevent repetition
         generated_question_texts = []
         used_template_ids = []  # ✅ NEW: Track templates used in this batch
@@ -3026,6 +3047,31 @@ async def _background_question_generation(current_question_count: int):
         print(f"🔄 BACKGROUND GENERATION: Generating {questions_needed} questions with pattern diversity...")
 
         for i in range(questions_needed):
+            # ✅ CIRCUIT BREAKER CHECK: Stop if too many consecutive failures
+            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                print(f"🚨 CIRCUIT BREAKER: Stopping generation after {consecutive_failures} consecutive failures")
+                print(f"⚠️ API quota preserved: {questions_needed - i} questions not attempted")
+                
+                # Notify JAM of the circuit breaker activation
+                try:
+                    if not _bot_instance:
+                        print("⚠️ Bot instance not available for circuit breaker notification")
+                    else:
+                        user = await _bot_instance.fetch_user(JAM_USER_ID)
+                        if user:
+                            await user.send(
+                                f"🚨 **Trivia Generation Circuit Breaker Activated**\n\n"
+                                f"Question generation stopped after {consecutive_failures} consecutive failures.\n"
+                                f"**API calls saved:** {questions_needed - i}\n"
+                                f"**Successful:** {successful_generations} questions\n"
+                                f"**Error:** Check logs for details\n\n"
+                                f"*Manual intervention may be required to fix underlying issue.*"
+                            )
+                            print("✅ Circuit breaker notification sent to JAM")
+                except Exception as notify_error:
+                    print(f"⚠️ Failed to send circuit breaker notification: {notify_error}")
+                break
+
             try:
                 print(f"🔄 BACKGROUND GENERATION: Generating question {i+1}/{questions_needed}")
 
@@ -3040,6 +3086,8 @@ async def _background_question_generation(current_question_count: int):
                 )
 
                 if question_data and isinstance(question_data, dict):
+                    # ✅ SUCCESS: Reset consecutive failure counter
+                    consecutive_failures = 0
                     # Validate the generated question
                     required_fields = ['question_text', 'question_type', 'correct_answer']
                     if all(field in question_data for field in required_fields):
