@@ -1344,7 +1344,7 @@ async def scheduled_ai_refresh():
 
                         generated = 0
                         failed = 0
-                        
+
                         # ✅ CIRCUIT BREAKER: Protect API quota from consecutive failures
                         consecutive_failures = 0
                         MAX_CONSECUTIVE_FAILURES = 2  # Stop after 2 failures in a row
@@ -1352,11 +1352,12 @@ async def scheduled_ai_refresh():
                         for i in range(needed):
                             # ✅ CIRCUIT BREAKER CHECK: Stop if too many consecutive failures
                             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                                print(f"🚨 CIRCUIT BREAKER (8:15 AM): Stopping auto-replenishment after {consecutive_failures} consecutive failures")
+                                print(
+                                    f"🚨 CIRCUIT BREAKER (8:15 AM): Stopping auto-replenishment after {consecutive_failures} consecutive failures")
                                 print(f"⚠️ API quota preserved: {needed - i} questions not attempted")
                                 pool_status_message += f"\n🚨 Circuit breaker activated after {consecutive_failures} failures"
                                 break
-                            
+
                             try:
                                 question_data = await generate_ai_trivia_question(f"auto_replenish_{i}")
                                 if question_data:
@@ -3051,7 +3052,7 @@ async def _background_question_generation(current_question_count: int):
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 print(f"🚨 CIRCUIT BREAKER: Stopping generation after {consecutive_failures} consecutive failures")
                 print(f"⚠️ API quota preserved: {questions_needed - i} questions not attempted")
-                
+
                 # Notify JAM of the circuit breaker activation
                 try:
                     if not _bot_instance:
