@@ -812,7 +812,7 @@ async def trivia_tuesday():
 
         # Get question data - try pre-approved first, then fallback to available pool
         question_data = None
-        
+
         if approved_question_id:
             # STEP 1: Try to use pre-approved question
             try:
@@ -826,7 +826,8 @@ async def trivia_tuesday():
                     except Exception as clear_error:
                         print(f"⚠️ Failed to clear approved question ID: {clear_error}")
                 else:
-                    print(f"⚠️ Pre-approved question #{approved_question_id} not found in database, falling back to pool")
+                    print(
+                        f"⚠️ Pre-approved question #{approved_question_id} not found in database, falling back to pool")
                     # Clear the invalid config value
                     try:
                         db.delete_config_value('trivia_approved_question_id')
@@ -835,23 +836,24 @@ async def trivia_tuesday():
             except Exception as e:
                 print(f"⚠️ Error retrieving pre-approved question #{approved_question_id}: {e}")
                 # Continue to fallback
-        
+
         if not question_data:
             # STEP 2: Fallback to querying available questions (same logic as manual !starttrivia)
             print("🔄 TRIVIA AUTO-START: No pre-approved question, querying available pool...")
             try:
                 available_questions = db.get_available_trivia_questions()  # type: ignore
-                
+
                 if not available_questions or len(available_questions) == 0:
                     error_msg = "No available questions found in pool - trivia cannot run automatically. Use !starttrivia with a specific question ID or add new questions."
                     await notify_scheduled_message_error("Trivia Tuesday", error_msg, uk_now)
                     print(f"❌ TRIVIA BLOCKED: {error_msg}")
                     return
-                
+
                 # Select first available (highest priority - matches manual !starttrivia logic)
                 question_data = available_questions[0]
-                print(f"✅ TRIVIA AUTO-START: Auto-selected question #{question_data['id']} from available pool ({len(available_questions)} questions available)")
-                
+                print(
+                    f"✅ TRIVIA AUTO-START: Auto-selected question #{question_data['id']} from available pool ({len(available_questions)} questions available)")
+
             except Exception as pool_error:
                 error_msg = f"Error querying available questions pool: {pool_error}"
                 await notify_scheduled_message_error("Trivia Tuesday", error_msg, uk_now)
@@ -1324,25 +1326,25 @@ async def scheduled_ai_refresh():
             if db:
                 available_questions = db.get_available_trivia_questions()
                 pool_count = len(available_questions) if available_questions else 0
-                
+
                 print(f"🧠 TRIVIA POOL CHECK (8:15 AM): {pool_count} questions available")
-                
+
                 if pool_count >= 5:
                     pool_status_message = f"✅ Trivia Pool: {pool_count} questions available"
                 else:
                     pool_status_message = f"⚠️ Trivia Pool: {pool_count}/5 questions (LOW)"
-                    
+
                     # Auto-generate needed questions
                     needed = 5 - pool_count
                     print(f"🔄 TRIVIA POOL: Generating {needed} questions...")
-                    
+
                     try:
                         from ..handlers.ai_handler import generate_ai_trivia_question
                         from ..handlers.conversation_handler import start_jam_question_approval
-                        
+
                         generated = 0
                         failed = 0
-                        
+
                         for i in range(needed):
                             try:
                                 question_data = await generate_ai_trivia_question(f"auto_replenish_{i}")
@@ -1358,17 +1360,17 @@ async def scheduled_ai_refresh():
                             except Exception as gen_error:
                                 failed += 1
                                 print(f"❌ Question generation {i+1} failed: {gen_error}")
-                        
+
                         pool_status_message += f"\n📤 Auto-generated: {generated} questions sent to approval queue"
                         if failed > 0:
                             pool_status_message += f"\n⚠️ Failed: {failed} generation attempts"
-                        
+
                     except Exception as replenish_error:
                         pool_status_message += f"\n❌ Replenishment failed: {str(replenish_error)[:100]}"
                         print(f"❌ TRIVIA POOL: Replenishment error: {replenish_error}")
             else:
                 pool_status_message = "❌ Trivia Pool: Database unavailable"
-                
+
         except Exception as pool_error:
             pool_status_message = f"❌ Trivia Pool: Check failed - {str(pool_error)[:100]}"
             print(f"❌ TRIVIA POOL CHECK: Error - {pool_error}")
@@ -1400,7 +1402,7 @@ async def scheduled_ai_refresh():
                         f"• {pool_status_message}\n\n"
                         f"*All systems refreshed post-quota reset.*"
                     )
-                
+
                 await user.send(notification_msg)
                 print("✅ AI refresh notification with trivia pool status sent to JAM")
         except Exception as notify_e:
