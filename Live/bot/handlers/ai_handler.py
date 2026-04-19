@@ -141,9 +141,9 @@ GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
 # Gemini model cascade configuration (priority order)
 # These models are tested on startup and used with automatic fallback
 GEMINI_MODEL_CASCADE = [
-    'gemini-2.5-flash',       # Primary: Latest, fastest
-    'gemini-2.0-flash',       # Secondary: Stable version
-    'gemini-2.0-flash-lite'   # Backup: Stable version
+    'gemini-3.1-flash',       # Primary: The reliable, smart workhorse
+    'gemini-3.1-flash-lite',  # First Fallback: Fast, cheap backup if primary hits rate limit
+    'gemini-2.5-flash'        # Final Fallback: Proven safety net (legacy support)
 ]
 
 # AI instances (google-genai v1.56+ API)
