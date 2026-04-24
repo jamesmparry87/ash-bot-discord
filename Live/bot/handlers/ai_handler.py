@@ -141,8 +141,8 @@ GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
 # Gemini model cascade configuration (priority order)
 # These models are tested on startup and used with automatic fallback
 GEMINI_MODEL_CASCADE = [
-    'gemini-3-flash',       # Primary: The reliable, smart workhorse
-    'gemini-3-flash-lite',  # First Fallback: Fast, cheap backup if primary hits rate limit
+    'gemini-2.5-flash',       # Primary: The reliable, smart workhorse
+    'gemini-2.5-flash-pro',  # First Fallback: Fast, cheap backup if primary hits rate limit
     'gemini-2.5-flash'        # Final Fallback: Proven safety net (legacy support)
 ]
 
