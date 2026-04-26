@@ -141,9 +141,8 @@ GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
 # Gemini model cascade configuration (priority order)
 # These models are tested on startup and used with automatic fallback
 GEMINI_MODEL_CASCADE = [
-    'gemini-2.5-flash',       # Primary: The reliable, smart workhorse
-    'gemini-2.5-flash-pro',  # First Fallback: Fast, cheap backup if primary hits rate limit
-    'gemini-2.5-flash'        # Final Fallback: Proven safety net (legacy support)
+    'gemini-2.5-flash',       # Primary: Latest, fastest (PROVEN)
+    'gemini-2.0-flash-001',   # Backup: Stable, reliable
 ]
 
 # AI instances (google-genai v1.56+ API)
@@ -1400,63 +1399,88 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                     pass
 
             # === ENHANCEMENT: Add engagement metrics context for view queries ===
+            # Defensive error handling: Skip if database schema doesn't support engagement metrics
             current_db = _get_db()
             if current_db:
                 try:
                     engagement_context = "\n\n--- ENGAGEMENT METRICS AVAILABLE ---\n"
                     engagement_context += "The database tracks cross-platform engagement analytics:\n\n"
 
-                    # Get platform statistics
+                    # Get platform statistics (wrapped in try-except for schema compatibility)
+                    platform_stats = None
                     if hasattr(current_db, 'get_platform_comparison_stats'):
-                        platform_stats = current_db.get_platform_comparison_stats()
-                        if platform_stats:
-                            yt_stats = platform_stats.get('youtube', {})
-                            tw_stats = platform_stats.get('twitch', {})
+                        try:
+                            platform_stats = current_db.get_platform_comparison_stats()
+                        except Exception as platform_error:
+                            # Database schema may not have youtube_views/twitch_views columns
+                            error_str = str(platform_error).lower()
+                            if "does not exist" in error_str or "column" in error_str:
+                                print(f"⚠️ Engagement metrics unavailable (database schema outdated): {platform_error}")
+                            else:
+                                print(f"⚠️ Error fetching platform stats: {platform_error}")
+                            platform_stats = None
+                    
+                    if platform_stats:
+                        yt_stats = platform_stats.get('youtube', {})
+                        tw_stats = platform_stats.get('twitch', {})
 
-                            engagement_context += "📊 Platform Metrics:\n"
-                            engagement_context += f"  • YouTube: {yt_stats.get('game_count', 0)} games, {yt_stats.get('total_views', 0):,} total views\n"
-                            engagement_context += f"  • Twitch: {tw_stats.get('game_count', 0)} games, {tw_stats.get('total_views', 0):,} total views\n"
-                            engagement_context += f"  • Cross-platform titles: {platform_stats.get('cross_platform_count', 0)}\n\n"
+                        engagement_context += "📊 Platform Metrics:\n"
+                        engagement_context += f"  • YouTube: {yt_stats.get('game_count', 0)} games, {yt_stats.get('total_views', 0):,} total views\n"
+                        engagement_context += f"  • Twitch: {tw_stats.get('game_count', 0)} games, {tw_stats.get('total_views', 0):,} total views\n"
+                        engagement_context += f"  • Cross-platform titles: {platform_stats.get('cross_platform_count', 0)}\n\n"
 
-                    # Get top games by different metrics
-                    engagement_context += "🎮 Top Performers by Metric:\n"
+                        # Get top games by different metrics
+                        engagement_context += "🎮 Top Performers by Metric:\n"
 
-                    if hasattr(current_db, 'get_games_by_twitch_views'):
-                        top_twitch = current_db.get_games_by_twitch_views(limit=3)
-                        if top_twitch:
-                            engagement_context += "  • Twitch Leaders: "
-                            engagement_context += ", ".join(
-                                [f"{g['canonical_name']} ({g.get('twitch_views', 0):,} views)" for g in top_twitch])
-                            engagement_context += "\n"
+                        if hasattr(current_db, 'get_games_by_twitch_views'):
+                            try:
+                                top_twitch = current_db.get_games_by_twitch_views(limit=3)
+                                if top_twitch:
+                                    engagement_context += "  • Twitch Leaders: "
+                                    engagement_context += ", ".join(
+                                        [f"{g['canonical_name']} ({g.get('twitch_views', 0):,} views)" for g in top_twitch])
+                                    engagement_context += "\n"
+                            except Exception:
+                                pass  # Skip if query fails
 
-                    if hasattr(current_db, 'get_games_by_total_views'):
-                        top_total = current_db.get_games_by_total_views(limit=3)
-                        if top_total:
-                            engagement_context += "  • Combined Leaders: "
-                            engagement_context += ", ".join(
-                                [f"{g['canonical_name']} ({g.get('total_views', 0):,} views)" for g in top_total])
-                            engagement_context += "\n"
+                        if hasattr(current_db, 'get_games_by_total_views'):
+                            try:
+                                top_total = current_db.get_games_by_total_views(limit=3)
+                                if top_total:
+                                    engagement_context += "  • Combined Leaders: "
+                                    engagement_context += ", ".join(
+                                        [f"{g['canonical_name']} ({g.get('total_views', 0):,} views)" for g in top_total])
+                                    engagement_context += "\n"
+                            except Exception:
+                                pass  # Skip if query fails
 
-                    if hasattr(current_db, 'get_engagement_metrics'):
-                        top_efficiency = current_db.get_engagement_metrics(limit=3)
-                        if top_efficiency:
-                            engagement_context += "  • Engagement Efficiency: "
-                            engagement_context += ", ".join(
-                                [f"{g['canonical_name']} ({g.get('views_per_hour', 0):,.0f} views/hr)" for g in top_efficiency])
-                            engagement_context += "\n"
+                        if hasattr(current_db, 'get_engagement_metrics'):
+                            try:
+                                top_efficiency = current_db.get_engagement_metrics(limit=3)
+                                if top_efficiency:
+                                    engagement_context += "  • Engagement Efficiency: "
+                                    engagement_context += ", ".join(
+                                        [f"{g['canonical_name']} ({g.get('views_per_hour', 0):,.0f} views/hr)" for g in top_efficiency])
+                                    engagement_context += "\n"
+                            except Exception:
+                                pass  # Skip if query fails
 
-                    engagement_context += "\n📌 Query Capabilities:\n"
-                    engagement_context += "  • Twitch-specific analytics (views, VOD counts)\n"
-                    engagement_context += "  • Cross-platform comparisons (YouTube vs Twitch)\n"
-                    engagement_context += "  • Engagement efficiency (views per episode/hour)\n"
-                    engagement_context += "  • Platform performance analysis\n"
-                    engagement_context += "\nUse this data to answer engagement and popularity questions naturally.\n"
-                    engagement_context += "--- END ENGAGEMENT METRICS ---\n"
+                        engagement_context += "\n📌 Query Capabilities:\n"
+                        engagement_context += "  • Twitch-specific analytics (views, VOD counts)\n"
+                        engagement_context += "  • Cross-platform comparisons (YouTube vs Twitch)\n"
+                        engagement_context += "  • Engagement efficiency (views per episode/hour)\n"
+                        engagement_context += "  • Platform performance analysis\n"
+                        engagement_context += "\nUse this data to answer engagement and popularity questions naturally.\n"
+                        engagement_context += "--- END ENGAGEMENT METRICS ---\n"
 
-                    # Append engagement data to operational context
-                    dynamic_context += engagement_context
+                        # Append engagement data to operational context
+                        dynamic_context += engagement_context
+                    else:
+                        # Schema incompatible - skip engagement metrics silently
+                        print(f"ℹ️ Engagement metrics skipped (database schema compatibility)")
+                        
                 except Exception as engagement_error:
-                    # Silently fail if engagement data unavailable - not critical
+                    # Gracefully handle any engagement context errors
                     print(f"⚠️ Could not load engagement metrics context: {engagement_error}")
                     pass
 
