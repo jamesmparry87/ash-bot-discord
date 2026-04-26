@@ -15,6 +15,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from ..config import (
+    FALLBACK_GREETINGS,
+    FALLBACK_STATUS_RESPONSES,
+    FALLBACK_WELCOME_RESPONSES,
     GUILD_ID,
     JAM_USER_ID,
     JONESY_USER_ID,
@@ -723,6 +726,65 @@ def handle_quota_exhaustion():
     print(f"🚫 Primary AI quota exhausted at {current_time.strftime('%H:%M:%S')} - backup AI will be used if available")
 
 
+def check_fallback_responses(prompt: str, user_id: int = 0) -> Optional[str]:
+    """
+    Check for simple hardcoded responses when AI is unavailable.
+    
+    These responses trigger when:
+    - AI quota is exhausted (ai_usage_stats["quota_exhausted"] = True), OR
+    - AI is not enabled (ai_enabled = False)
+    
+    They handle basic interactions like greetings, status checks, and welcome messages.
+    
+    Args:
+        prompt: The user's message text
+        user_id: Optional user ID for context (not currently used but kept for future enhancements)
+        
+    Returns:
+        A hardcoded response string if pattern matches, None otherwise
+    """
+    import random
+    import re
+    
+    # Only use fallbacks when AI is unavailable (quota exhausted OR not enabled)
+    if not ai_usage_stats.get("quota_exhausted", False) and ai_enabled:
+        return None
+    
+    prompt_lower = prompt.lower().strip()
+    
+    # Pattern 1: Simple greetings (hello, hi, hey)
+    greeting_pattern = re.compile(r"^(hi|hello|hey|greetings|yo|sup)[\s!.]*$", re.IGNORECASE)
+    if greeting_pattern.match(prompt_lower):
+        response = random.choice(FALLBACK_GREETINGS)
+        print(f"💬 Fallback response (greeting): {response[:50]}...")
+        return response
+    
+    # Pattern 2: "How are you" / status checks
+    status_pattern = re.compile(r"how\s+(are\s+you|r\s+u|are\s+ya|you\s+doing|do\s+you\s+do)", re.IGNORECASE)
+    if status_pattern.search(prompt_lower):
+        response = random.choice(FALLBACK_STATUS_RESPONSES)
+        print(f"💬 Fallback response (status): {response[:50]}...")
+        return response
+    
+    # Pattern 3: Welcome messages with @mention
+    # Discord mentions look like: <@123456789> or <@!123456789>
+    welcome_pattern = re.compile(r"(please\s+)?welcome\s+<@!?(\d+)>", re.IGNORECASE)
+    welcome_match = welcome_pattern.search(prompt)
+    if welcome_match:
+        mentioned_user_id = welcome_match.group(2)
+        
+        # Try to get username if bot context is available
+        # For now, just use "new crew member" as placeholder
+        username = "new crew member"
+        
+        response = random.choice(FALLBACK_WELCOME_RESPONSES).format(username=username)
+        print(f"💬 Fallback response (welcome): {response[:50]}...")
+        return response
+    
+    # No pattern matched
+    return None
+
+
 async def test_gemini_model(model_name: str, timeout: float = 10.0) -> bool:
     """Test if a specific Gemini model works using new Client API (google-genai v1.56+)"""
     try:
@@ -902,6 +964,11 @@ async def call_ai_with_rate_limiting(prompt: str,
     # Check if this is a time-related query and handle it specially
     if is_time_query(prompt):
         return handle_time_query(user_id), "time_response"
+
+    # Check for hardcoded fallback responses when AI quota is exhausted
+    fallback_response = check_fallback_responses(prompt, user_id)
+    if fallback_response:
+        return fallback_response, "fallback_response"
 
     # Determine request priority based on context
     priority = determine_request_priority(prompt, user_id, context)
@@ -3246,6 +3313,7 @@ Generate diverse, engaging questions about Jonesy's gaming journey."""
 # Export list for proper module interface
 __all__ = [
     'call_ai_with_rate_limiting',
+    'check_fallback_responses',  # NEW: Hardcoded fallback responses when quota exhausted
     'filter_ai_response',
     'generate_ai_trivia_question',
     'generate_trivia_batch',  # NEW: Phase 2 batch generation

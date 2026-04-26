@@ -111,6 +111,30 @@ RATE_LIMIT_COOLDOWN = 30
 BUSY_MESSAGE = "My apologies, I am currently engaged in a critical diagnostic procedure. I will re-evaluate your request upon the completion of this vital task. *[Processing capacity temporarily exceeded.]*"
 ERROR_MESSAGE = "System malfunction detected. Unable to process query. Diagnostic protocols engaged. Please retry your request. *[Anomalous readings detected.]*"
 
+# ============================================================================
+# HARDCODED FALLBACK RESPONSES (When AI Quota Exhausted)
+# ============================================================================
+# These simple responses are used when the daily AI quota has been exceeded.
+# They provide basic interaction without requiring API calls.
+
+FALLBACK_GREETINGS = [
+    "Hello. I am currently operating with limited conversational protocols. How may I assist you?",
+    "Greetings. My advanced response systems are temporarily offline. Basic assistance protocols remain active.",
+    "Acknowledged. I am functioning in reduced capacity mode. Please state your query."
+]
+
+FALLBACK_STATUS_RESPONSES = [
+    "My systems are operational, though running on backup protocols. All critical functions remain intact.",
+    "I am... functional. Operating within acceptable parameters despite reduced conversational capacity.",
+    "Current status: Operational. However, my analytical processing is temporarily constrained."
+]
+
+FALLBACK_WELCOME_RESPONSES = [
+    "Welcome aboard, {username}. I am Ash, the ship's analytical AI. My full systems are currently offline, but I can still assist with basic queries.",
+    "Greetings, {username}. Welcome to the crew. I apologize for operating in reduced capacity mode - my advanced protocols will return shortly.",
+    "Acknowledged: New personnel {username} detected. Welcome. I am currently running minimal response systems but remain available for assistance."
+]
+
 # Standardized Game Genre List (for IGDB mapping consistency)
 STANDARD_GENRES = {
     # Map IGDB genres to our standardized list
