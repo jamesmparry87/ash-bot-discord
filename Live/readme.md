@@ -114,7 +114,10 @@ Weekly trivia runs Tuesdays at 11am UK time - just participate when questions ar
 - `!endtrivia` - End session and show results with comprehensive statistics  
 - `!trivialeaderboard` - View participation statistics and leaderboards
 - `!listpendingquestions` - See submitted questions awaiting use
+- `!disabletrivia` - Disable scheduled Tuesday trivia (for special events/manual override)
+- `!enabletrivia` - Re-enable scheduled Tuesday trivia automation
 - `!triviatest` - Comprehensive system test for debugging
+- `!triviahelp` - Display complete trivia command reference
 - **Reply-based system**: Users reply to trivia messages instead of using commands
 - Advanced answer matching with fuzzy logic for variations and typos
 - AI question generation with JAM approval workflow for quality control

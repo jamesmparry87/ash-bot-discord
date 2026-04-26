@@ -1,4 +1,4 @@
-"""
+ bot"""
 Database Trivia Module - Trivia System
 
 This module handles:
@@ -116,8 +116,16 @@ class TriviaDatabase:
         submitted_by_user_id: Optional[int] = None,
         category: Optional[str] = None,
         difficulty_level: int = 1,
+        status: str = 'available',
     ) -> Optional[int]:
-        """Add a new trivia question to the database"""
+        """
+        Add a new trivia question to the database
+        
+        Args:
+            status: Question status - 'pending_approval', 'available', 'answered', 'rejected', 'retired'
+                    Default 'available' for manually added questions
+                    Use 'pending_approval' for AI-generated questions awaiting approval
+        """
         conn = self.db.get_connection()
         if not conn:
             return None
@@ -129,8 +137,8 @@ class TriviaDatabase:
                     INSERT INTO trivia_questions (
                         question_text, question_type, correct_answer, multiple_choice_options,
                         is_dynamic, dynamic_query_type, submitted_by_user_id, category, difficulty_level,
-                        created_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                        status, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                     RETURNING id
                 """,
                     (
@@ -143,6 +151,7 @@ class TriviaDatabase:
                         submitted_by_user_id,
                         category,
                         difficulty_level,
+                        status,
                     ),
                 )
                 result = cur.fetchone()
@@ -150,7 +159,7 @@ class TriviaDatabase:
 
                 if result:
                     question_id = int(result["id"])  # type: ignore
-                    logger.info(f"Added trivia question ID {question_id}")
+                    logger.info(f"Added trivia question ID {question_id} with status '{status}'")
                     return question_id
                 return None
         except Exception as e:
@@ -1391,6 +1400,61 @@ class TriviaDatabase:
         except Exception as e:
             logger.error(f"Error getting pending trivia questions: {e}")
             return []
+
+    def get_pending_approval_questions(self) -> List[Dict[str, Any]]:
+        """
+        Get all questions awaiting approval (status = 'pending_approval')
+        
+        This is used during startup to restore orphaned questions that were
+        generated but not yet reviewed due to bot restart.
+        
+        Returns:
+            List of question dicts with pending_approval status, ordered by creation time
+        """
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM trivia_questions
+                    WHERE status = 'pending_approval'
+                    AND is_active = TRUE
+                    ORDER BY created_at ASC
+                """
+                )
+                results = cur.fetchall()
+                logger.info(f"Found {len(results)} questions with pending_approval status")
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting pending approval questions: {e}")
+            return []
+
+    def approve_trivia_question(self, question_id: int) -> bool:
+        """
+        Approve a question by updating its status from pending_approval to available
+        
+        Args:
+            question_id: ID of the question to approve
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        return self.update_trivia_question_status(question_id, 'available')
+
+    def reject_trivia_question(self, question_id: int) -> bool:
+        """
+        Reject a question by updating its status to rejected
+        
+        Args:
+            question_id: ID of the question to reject
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        return self.update_trivia_question_status(question_id, 'rejected')
 
     def get_answered_trivia_questions(self) -> List[Dict[str, Any]]:
         """Get all trivia questions that have been answered"""

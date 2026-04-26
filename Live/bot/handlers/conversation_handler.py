@@ -2188,16 +2188,19 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
             del jam_approval_conversations[user_id]
         elif content == '2':  # Reject
-            # Mark the rejected question as retired
+            # Mark the rejected question as rejected
             question_data = conversation.get('data', {}).get('question_data', {})
             question_id = question_data.get('id')
 
             if question_id and db:
                 try:
-                    db.update_trivia_question_status(question_id, 'retired')
-                    print(f"✅ Marked question {question_id} as retired")
+                    success = db.reject_trivia_question(question_id)  # type: ignore
+                    if success:
+                        print(f"✅ PRE-TRIVIA REJECTION: Updated question #{question_id} status to rejected")
+                    else:
+                        print(f"⚠️ PRE-TRIVIA REJECTION: Failed to update status for question #{question_id}")
                 except Exception as e:
-                    print(f"⚠️ Error marking question as retired: {e}")
+                    print(f"⚠️ PRE-TRIVIA REJECTION: Status update error: {e}")
 
             await message.reply("🔄 **Question Rejected.** Searching for alternative question...")
 
@@ -2298,21 +2301,42 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 question_data = data.get('question_data')
                 if question_data:
                     try:
-                        # Add the approved question to the database
+                        # Check database availability
                         if db is None:
                             await message.reply("❌ **Database offline.** Cannot save approved question.")
                             return
 
-                        question_id = db.add_trivia_question(  # type: ignore
-                            question_text=question_data['question_text'],
-                            question_type=question_data.get('question_type', 'single_answer'),
-                            correct_answer=question_data.get('correct_answer'),
-                            multiple_choice_options=question_data.get('multiple_choice_options'),
-                            is_dynamic=question_data.get('is_dynamic', False),
-                            dynamic_query_type=question_data.get('dynamic_query_type'),
-                            category=question_data.get('category', 'ai_generated'),
-                            submitted_by_user_id=None,  # AI-generated
-                        )
+                        # ✅ NEW: Check if question already exists in database (was persisted during generation)
+                        existing_question_id = question_data.get('id')
+                        
+                        if existing_question_id:
+                            # Question was already persisted with pending_approval status - just update status
+                            try:
+                                success = db.approve_trivia_question(existing_question_id)  # type: ignore
+                                if success:
+                                    question_id = existing_question_id
+                                    print(f"✅ APPROVAL: Updated question #{question_id} status from pending_approval to available")
+                                else:
+                                    print(f"⚠️ APPROVAL: Failed to update status for question #{existing_question_id}, will create new")
+                                    existing_question_id = None  # Fall through to creation
+                            except Exception as status_error:
+                                print(f"⚠️ APPROVAL: Status update failed: {status_error}, will create new")
+                                existing_question_id = None  # Fall through to creation
+                        
+                        if not existing_question_id:
+                            # Question not persisted yet (manual submission) - create it
+                            question_id = db.add_trivia_question(  # type: ignore
+                                question_text=question_data['question_text'],
+                                question_type=question_data.get('question_type', 'single_answer'),
+                                correct_answer=question_data.get('correct_answer'),
+                                multiple_choice_options=question_data.get('multiple_choice_options'),
+                                is_dynamic=question_data.get('is_dynamic', False),
+                                dynamic_query_type=question_data.get('dynamic_query_type'),
+                                category=question_data.get('category', 'ai_generated'),
+                                submitted_by_user_id=None,  # AI-generated
+                                status='available'  # Set to available immediately for manual submissions
+                            )
+                            print(f"✅ APPROVAL: Created new question #{question_id} with available status")
 
                         if question_id:
                             # Get queue status before replying
@@ -2366,42 +2390,23 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 )
 
             elif content in ['3', 'reject', 'no', 'decline']:
-                # ✅ FIX: Handle rejected questions properly
+                # ✅ NEW: Use reject_trivia_question method for clean status transition
                 question_data = data.get('question_data', {})
                 question_id = question_data.get('id')
 
-                # ✅ FIX: If AI-generated question (no ID), save it as 'retired' to prevent regeneration
-                if not question_id and db:
+                if question_id and db:
+                    # Question already in database - update status to rejected
                     try:
-                        # Add the rejected AI question to database with 'retired' status
-                        retired_id = db.add_trivia_question(
-                            question_text=question_data.get('question_text', ''),
-                            question_type=question_data.get('question_type', 'single_answer'),
-                            correct_answer=question_data.get('correct_answer'),
-                            multiple_choice_options=question_data.get('multiple_choice_options'),
-                            is_dynamic=question_data.get('is_dynamic', False),
-                            dynamic_query_type=question_data.get('dynamic_query_type'),
-                            category=question_data.get('category', 'ai_generated_retired'),
-                            submitted_by_user_id=None,
-                        )
-
-                        if retired_id:
-                            # Immediately mark as retired
-                            db.update_trivia_question_status(retired_id, 'retired')
-                            print(
-                                f"✅ FIX: Saved rejected AI question {retired_id} as 'retired' to prevent regeneration")
+                        success = db.reject_trivia_question(question_id)  # type: ignore
+                        if success:
+                            print(f"✅ REJECTION: Updated question #{question_id} status to rejected")
                         else:
-                            print(f"⚠️ FIX: Failed to save rejected AI question to database")
+                            print(f"⚠️ REJECTION: Failed to update status for question #{question_id}")
                     except Exception as e:
-                        print(f"⚠️ FIX: Error saving rejected AI question as retired: {e}")
-
-                # Mark as retired if it has an existing ID (database question)
-                elif question_id and db:
-                    try:
-                        db.update_trivia_question_status(question_id, 'retired')
-                        print(f"✅ FIX #4: Marked rejected question {question_id} as 'retired'")
-                    except Exception as e:
-                        print(f"⚠️ Error marking question as retired: {e}")
+                        print(f"⚠️ REJECTION: Status update error: {e}")
+                else:
+                    # Question not in database yet (shouldn't happen with new flow, but handle gracefully)
+                    print(f"⚠️ REJECTION: Question has no ID, cannot mark as rejected in database")
 
                 # ✅ CRITICAL FIX: Get queue length BEFORE clearing conversation
                 queue_length = get_queue_length()
