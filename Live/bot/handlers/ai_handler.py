@@ -2665,7 +2665,6 @@ The question must be about the GAME ITSELF, not about Jonesy's stream.
 Frame it as: "Captain Jonesy played {game['canonical_name']}. [Question about game]?"
 """
 
-
         elif selected_category == 'Franchise_Connection':
             series_name = metadata.get('series_name', 'Unknown')
             game_names = [g['canonical_name'] for g in games]
@@ -2688,7 +2687,6 @@ REQUIREMENT: Generate a trivia question about this FRANCHISE that:
 
 Frame it as: "Captain Jonesy has played multiple {series_name} games. [Question about the series or the games she played]?"
 """
-
 
         elif selected_category == 'Genre_Knowledge':
             genre = metadata.get('genre', 'Unknown')
@@ -2713,17 +2711,16 @@ REQUIREMENT: Generate a trivia question about {genre} games that:
 Reference that Jonesy has played these {genre} games: {', '.join(game_names[:2])}
 """
 
-
         elif selected_category == 'Timeline_Challenge':
             game1 = games[0]
             game2 = games[1] if len(games) > 1 else games[0]
-            
+
             # Extract play dates and release years for context
             game1_played = metadata.get('date1', game1.get('first_played_date', 'Unknown'))
             game2_played = metadata.get('date2', game2.get('first_played_date', 'Unknown'))
             game1_released = game1.get('release_year', 'Unknown')
             game2_released = game2.get('release_year', 'Unknown')
-            
+
             category_prompt = f"""
 CATEGORY: Timeline Challenge
 GAME 1: {game1['canonical_name']}
@@ -2749,7 +2746,6 @@ EXAMPLE FORMAT:
 Must be factual and verifiable from the provided release year data.
 """
 
-
         else:
             # Fallback to generic
             category_prompt = f"""
@@ -2772,7 +2768,7 @@ Generate a question about Captain Jonesy's gaming experiences with these titles.
 
 🎯 CRITICAL RULES:
 🚫 DO NOT ask about stream statistics (view counts, episode counts, playtime)
-🚫 DO NOT ask about completion percentages or Jonesy's progress  
+🚫 DO NOT ask about completion percentages or Jonesy's progress
 🚫 DO NOT reference games, sequels, DLC, or expansions not explicitly listed in the category section
 ✅ DO test actual game knowledge (lore, mechanics, history)
 ✅ DO use YOUR internal knowledge ABOUT the specific games provided above - not games in general
