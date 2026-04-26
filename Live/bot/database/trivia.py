@@ -1,12 +1,14 @@
-from psycopg2.extras import RealDictRow
-from zoneinfo import ZoneInfo
-from typing import Any, Dict, List, Optional, Tuple, cast
-from datetime import datetime, timedelta, timezone
-import time
-import re
-import logging
-import json
 import difflib
+import json
+import logging
+import re
+import time
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple, cast
+from zoneinfo import ZoneInfo
+
+from psycopg2.extras import RealDictRow
+
 bot"""
 Database Trivia Module - Trivia System
 

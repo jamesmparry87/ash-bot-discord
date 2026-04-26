@@ -745,7 +745,7 @@ def check_fallback_responses(prompt: str, user_id: int = 0) -> Optional[str]:
     """
     import random
     import re
-    
+
     # Only use fallbacks when AI is unavailable (quota exhausted OR not enabled)
     if not ai_usage_stats.get("quota_exhausted", False) and ai_enabled:
         return None
