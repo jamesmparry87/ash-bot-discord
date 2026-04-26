@@ -729,17 +729,17 @@ def handle_quota_exhaustion():
 def check_fallback_responses(prompt: str, user_id: int = 0) -> Optional[str]:
     """
     Check for simple hardcoded responses when AI is unavailable.
-    
+
     These responses trigger when:
     - AI quota is exhausted (ai_usage_stats["quota_exhausted"] = True), OR
     - AI is not enabled (ai_enabled = False)
-    
+
     They handle basic interactions like greetings, status checks, and welcome messages.
-    
+
     Args:
         prompt: The user's message text
         user_id: Optional user ID for context (not currently used but kept for future enhancements)
-        
+
     Returns:
         A hardcoded response string if pattern matches, None otherwise
     """
@@ -749,38 +749,38 @@ def check_fallback_responses(prompt: str, user_id: int = 0) -> Optional[str]:
     # Only use fallbacks when AI is unavailable (quota exhausted OR not enabled)
     if not ai_usage_stats.get("quota_exhausted", False) and ai_enabled:
         return None
-    
+
     prompt_lower = prompt.lower().strip()
-    
+
     # Pattern 1: Simple greetings (hello, hi, hey)
     greeting_pattern = re.compile(r"^(hi|hello|hey|greetings|yo|sup)[\s!.]*$", re.IGNORECASE)
     if greeting_pattern.match(prompt_lower):
         response = random.choice(FALLBACK_GREETINGS)
         print(f"💬 Fallback response (greeting): {response[:50]}...")
         return response
-    
+
     # Pattern 2: "How are you" / status checks
     status_pattern = re.compile(r"how\s+(are\s+you|r\s+u|are\s+ya|you\s+doing|do\s+you\s+do)", re.IGNORECASE)
     if status_pattern.search(prompt_lower):
         response = random.choice(FALLBACK_STATUS_RESPONSES)
         print(f"💬 Fallback response (status): {response[:50]}...")
         return response
-    
+
     # Pattern 3: Welcome messages with @mention
     # Discord mentions look like: <@123456789> or <@!123456789>
     welcome_pattern = re.compile(r"(please\s+)?welcome\s+<@!?(\d+)>", re.IGNORECASE)
     welcome_match = welcome_pattern.search(prompt)
     if welcome_match:
         mentioned_user_id = welcome_match.group(2)
-        
+
         # Try to get username if bot context is available
         # For now, just use "new crew member" as placeholder
         username = "new crew member"
-        
+
         response = random.choice(FALLBACK_WELCOME_RESPONSES).format(username=username)
         print(f"💬 Fallback response (welcome): {response[:50]}...")
         return response
-    
+
     # No pattern matched
     return None
 
