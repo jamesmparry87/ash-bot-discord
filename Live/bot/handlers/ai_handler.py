@@ -2588,9 +2588,16 @@ REQUIREMENT: Generate a trivia question that tests knowledge of THIS specific ga
 - Historical facts or development trivia
 - Easter eggs or hidden content
 
+🚫 CRITICAL RESTRICTION:
+- ONLY ask about {game['canonical_name']} - the exact game listed above
+- DO NOT reference DLC, expansions, sequels, or prequels unless they are the same title
+- DO NOT assume knowledge from related games in the franchise
+- Use ONLY information about this specific game title
+
 The question must be about the GAME ITSELF, not about Jonesy's stream.
 Frame it as: "Captain Jonesy played {game['canonical_name']}. [Question about game]?"
 """
+
 
         elif selected_category == 'Franchise_Connection':
             series_name = metadata.get('series_name', 'Unknown')
@@ -2598,7 +2605,7 @@ Frame it as: "Captain Jonesy played {game['canonical_name']}. [Question about ga
             category_prompt = f"""
 CATEGORY: Franchise Connection
 SERIES: {series_name}
-GAMES PLAYED: {', '.join(game_names)}
+GAMES PLAYED BY JONESY: {', '.join(game_names)}
 
 REQUIREMENT: Generate a trivia question about this FRANCHISE that:
 - Connects multiple games in the series
@@ -2606,8 +2613,15 @@ REQUIREMENT: Generate a trivia question about this FRANCHISE that:
 - Asks about recurring characters or themes
 - Compares gameplay evolution across entries
 
-Frame it as: "Captain Jonesy has played multiple {series_name} games. [Question about series]?"
+🚫 CRITICAL RESTRICTION:
+- DO NOT mention specific game titles that Jonesy hasn't played
+- ONLY reference the games listed above: {', '.join(game_names)}
+- You may use general franchise knowledge (publisher, genre, main protagonist)
+- BUT you must NOT fabricate details about sequels or prequels not in the played list
+
+Frame it as: "Captain Jonesy has played multiple {series_name} games. [Question about the series or the games she played]?"
 """
+
 
         elif selected_category == 'Genre_Knowledge':
             genre = metadata.get('genre', 'Unknown')
@@ -2615,7 +2629,7 @@ Frame it as: "Captain Jonesy has played multiple {series_name} games. [Question 
             category_prompt = f"""
 CATEGORY: Genre Knowledge
 GENRE: {genre}
-GAMES PLAYED: {', '.join(game_names)}
+GAMES PLAYED BY JONESY: {', '.join(game_names)}
 
 REQUIREMENT: Generate a trivia question about {genre} games that:
 - Tests knowledge of genre-defining mechanics
@@ -2623,23 +2637,51 @@ REQUIREMENT: Generate a trivia question about {genre} games that:
 - Compares different games' approaches
 - Tests historical knowledge of the genre
 
+🚫 CRITICAL RESTRICTION:
+- ONLY reference the {genre} games that Jonesy has played: {', '.join(game_names)}
+- DO NOT mention other {genre} games that aren't in the list above
+- You may use general genre knowledge (mechanics, history, conventions)
+- BUT you must NOT fabricate questions about specific {genre} titles not in the played list
+
 Reference that Jonesy has played these {genre} games: {', '.join(game_names[:2])}
 """
 
+
         elif selected_category == 'Timeline_Challenge':
-            game1 = games[0]['canonical_name']
-            game2 = games[1]['canonical_name'] if len(games) > 1 else game1
+            game1 = games[0]
+            game2 = games[1] if len(games) > 1 else games[0]
+            
+            # Extract play dates and release years for context
+            game1_played = metadata.get('date1', game1.get('first_played_date', 'Unknown'))
+            game2_played = metadata.get('date2', game2.get('first_played_date', 'Unknown'))
+            game1_released = game1.get('release_year', 'Unknown')
+            game2_released = game2.get('release_year', 'Unknown')
+            
             category_prompt = f"""
 CATEGORY: Timeline Challenge
-GAMES: {game1} vs {game2}
+GAME 1: {game1['canonical_name']}
+  - Jonesy first played: {game1_played}
+  - Original release year: {game1_released}
 
-REQUIREMENT: Generate a chronological trivia question:
-- "Which was released first: {game1} or {game2}?"
-- "What year was {game1} released?"
-- Compare release years or play dates
+GAME 2: {game2['canonical_name']}
+  - Jonesy first played: {game2_played}
+  - Original release year: {game2_released}
 
-Must be factual and verifiable from game release data.
+REQUIREMENT: Generate a chronological trivia question that:
+- Includes when Jonesy played each game as contextual clues
+- Asks about the original release dates (which came first)
+- Makes the question engaging by connecting to Jonesy's timeline
+
+EXAMPLE FORMAT:
+"Jonesy first streamed {game1['canonical_name']} in [month/year from played date] and {game2['canonical_name']} in [month/year from played date]. Based on their original release dates, which game was released first?"
+
+🚫 DO NOT just ask "which was released first" without context
+✅ DO include the play dates as interesting background
+✅ DO make it clear you're asking about RELEASE dates, not play dates
+
+Must be factual and verifiable from the provided release year data.
 """
+
 
         else:
             # Fallback to generic
@@ -2663,13 +2705,16 @@ Generate a question about Captain Jonesy's gaming experiences with these titles.
 
 🎯 CRITICAL RULES:
 🚫 DO NOT ask about stream statistics (view counts, episode counts, playtime)
-🚫 DO NOT ask about completion percentages or Jonesy's progress
+🚫 DO NOT ask about completion percentages or Jonesy's progress  
+🚫 DO NOT reference games, sequels, DLC, or expansions not explicitly listed in the category section
 ✅ DO test actual game knowledge (lore, mechanics, history)
-✅ DO use YOUR internal knowledge of these games
+✅ DO use YOUR internal knowledge ABOUT the specific games provided above - not games in general
 ✅ DO frame questions around the fact Jonesy played these games
+✅ DO ground all questions in the games explicitly listed in the category requirements
 
 AUDIENCE: You are asking the CREW (not Jonesy directly)
 PHRASING: "Captain Jonesy played [game]..." or "In [game] that Jonesy completed..."
+
 
 TEMPERATURE: 0.9 for maximum creativity and variety
 
