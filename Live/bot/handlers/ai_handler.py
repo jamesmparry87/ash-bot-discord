@@ -1419,7 +1419,7 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                             else:
                                 print(f"⚠️ Error fetching platform stats: {platform_error}")
                             platform_stats = None
-                    
+
                     if platform_stats:
                         yt_stats = platform_stats.get('youtube', {})
                         tw_stats = platform_stats.get('twitch', {})
@@ -1478,7 +1478,7 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                     else:
                         # Schema incompatible - skip engagement metrics silently
                         print(f"ℹ️ Engagement metrics skipped (database schema compatibility)")
-                        
+
                 except Exception as engagement_error:
                     # Gracefully handle any engagement context errors
                     print(f"⚠️ Could not load engagement metrics context: {engagement_error}")
