@@ -1,4 +1,13 @@
- bot"""
+from psycopg2.extras import RealDictRow
+from zoneinfo import ZoneInfo
+from typing import Any, Dict, List, Optional, Tuple, cast
+from datetime import datetime, timedelta, timezone
+import time
+import re
+import logging
+import json
+import difflib
+bot"""
 Database Trivia Module - Trivia System
 
 This module handles:
@@ -10,16 +19,6 @@ This module handles:
 - Question pool management
 """
 
-import difflib
-import json
-import logging
-import re
-import time
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
-from zoneinfo import ZoneInfo
-
-from psycopg2.extras import RealDictRow
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +119,7 @@ class TriviaDatabase:
     ) -> Optional[int]:
         """
         Add a new trivia question to the database
-        
+
         Args:
             status: Question status - 'pending_approval', 'available', 'answered', 'rejected', 'retired'
                     Default 'available' for manually added questions
@@ -1404,10 +1403,10 @@ class TriviaDatabase:
     def get_pending_approval_questions(self) -> List[Dict[str, Any]]:
         """
         Get all questions awaiting approval (status = 'pending_approval')
-        
+
         This is used during startup to restore orphaned questions that were
         generated but not yet reviewed due to bot restart.
-        
+
         Returns:
             List of question dicts with pending_approval status, ordered by creation time
         """
@@ -1435,10 +1434,10 @@ class TriviaDatabase:
     def approve_trivia_question(self, question_id: int) -> bool:
         """
         Approve a question by updating its status from pending_approval to available
-        
+
         Args:
             question_id: ID of the question to approve
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -1447,10 +1446,10 @@ class TriviaDatabase:
     def reject_trivia_question(self, question_id: int) -> bool:
         """
         Reject a question by updating its status to rejected
-        
+
         Args:
             question_id: ID of the question to reject
-            
+
         Returns:
             True if successful, False otherwise
         """

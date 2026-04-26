@@ -2308,21 +2308,23 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
                         # ✅ NEW: Check if question already exists in database (was persisted during generation)
                         existing_question_id = question_data.get('id')
-                        
+
                         if existing_question_id:
                             # Question was already persisted with pending_approval status - just update status
                             try:
                                 success = db.approve_trivia_question(existing_question_id)  # type: ignore
                                 if success:
                                     question_id = existing_question_id
-                                    print(f"✅ APPROVAL: Updated question #{question_id} status from pending_approval to available")
+                                    print(
+                                        f"✅ APPROVAL: Updated question #{question_id} status from pending_approval to available")
                                 else:
-                                    print(f"⚠️ APPROVAL: Failed to update status for question #{existing_question_id}, will create new")
+                                    print(
+                                        f"⚠️ APPROVAL: Failed to update status for question #{existing_question_id}, will create new")
                                     existing_question_id = None  # Fall through to creation
                             except Exception as status_error:
                                 print(f"⚠️ APPROVAL: Status update failed: {status_error}, will create new")
                                 existing_question_id = None  # Fall through to creation
-                        
+
                         if not existing_question_id:
                             # Question not persisted yet (manual submission) - create it
                             question_id = db.add_trivia_question(  # type: ignore
