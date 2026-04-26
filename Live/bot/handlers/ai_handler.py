@@ -2444,15 +2444,25 @@ def update_question_history(question_data: Dict[str, Any], category: str):
 
 async def generate_ai_trivia_question(context: str = "trivia",
                                       avoid_questions: Optional[List[str]] = None,
-                                      avoid_templates: Optional[List[str]] = None) -> Optional[Dict[str,
-                                                                                                    Any]]:
-    """Generate a diverse trivia question using template-based system with AI fallback
-
+                                      avoid_game_ids: Optional[List[int]] = None,
+                                      avoid_templates: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+    """
+    Generate a trivia question using the Trivia Director system.
+    
+    This new system selects a random category, curates appropriate games from the database,
+    and uses AI to generate questions that test actual game knowledge rather than stream statistics.
+    
     Args:
         context: Context string for rate limiting and logging
-        avoid_questions: List of recently generated question texts to avoid repeating patterns
-        avoid_templates: List of recently used template IDs to avoid in this batch
+        avoid_questions: List of recently generated question texts to avoid patterns
+        avoid_game_ids: List of game IDs to avoid using in generation
+        avoid_templates: DEPRECATED - kept for backward compatibility, no longer used
+        
+    Returns:
+        Dict with question data or None if generation failed
     """
+    # Note: avoid_templates parameter is deprecated but kept for backward compatibility
+    # The new Trivia Director system doesn't use templates
     if not ai_enabled:
         print("❌ AI not enabled for trivia question generation")
         return None
@@ -2464,174 +2474,222 @@ async def generate_ai_trivia_question(context: str = "trivia",
         return None
 
     try:
-        print(f"🧠 Generating diverse trivia question with context: {context}")
+        print(f"🎬 TRIVIA DIRECTOR: Starting question generation with context: {context}")
         if avoid_questions:
             print(f"   Avoiding {len(avoid_questions)} recent pattern(s)")
-        if avoid_templates:
-            print(f"   Avoiding {len(avoid_templates)} recently-used template(s)")
+        if avoid_game_ids:
+            print(f"   Avoiding {len(avoid_game_ids)} recent game(s)")
 
-        # Get all available games data
-        all_games = current_db.get_all_played_games()
-
-        if not all_games:
-            print("❌ No games data available for question generation")
+        # === TRIVIA DIRECTOR: Category Selection ===
+        TRIVIA_CATEGORIES = {
+            'Single_Game_Lore': {'weight': 2.0, 'min_games': 1},
+            'Franchise_Connection': {'weight': 1.5, 'min_games': 2},
+            'Genre_Knowledge': {'weight': 1.5, 'min_games': 3},
+            'Timeline_Challenge': {'weight': 1.2, 'min_games': 2},
+        }
+        
+        # Weighted random selection
+        import random
+        categories = list(TRIVIA_CATEGORIES.keys())
+        weights = [TRIVIA_CATEGORIES[c]['weight'] for c in categories]
+        
+        max_category_attempts = 3
+        used_categories = set()
+        selected_category = None
+        curated_data = None
+        
+        for cat_attempt in range(max_category_attempts):
+            # Select category (avoid recently tried ones)
+            available_cats = [c for c in categories if c not in used_categories]
+            if not available_cats:
+                used_categories.clear()
+                available_cats = categories
+            
+            available_weights = [TRIVIA_CATEGORIES[c]['weight'] for c in available_cats]
+            selected_category = random.choices(available_cats, weights=available_weights, k=1)[0]
+            used_categories.add(selected_category)
+            
+            print(f"🎬 TRIVIA DIRECTOR: Attempt {cat_attempt+1}/{max_category_attempts} - Selected category '{selected_category}'")
+            
+            # Get curated games for this category
+            curated_data = current_db.trivia.get_trivia_curated_games(
+                selected_category,
+                avoid_game_ids=avoid_game_ids or []
+            )
+            
+            # Check if we got valid data
+            if curated_data and curated_data.get('games') and len(curated_data['games']) > 0:
+                print(f"✅ TRIVIA DIRECTOR: Got {len(curated_data['games'])} game(s) for '{selected_category}'")
+                break
+            else:
+                print(f"⚠️ TRIVIA DIRECTOR: No games available for '{selected_category}', trying another category")
+                curated_data = None
+        
+        if not curated_data or not curated_data.get('games'):
+            print("❌ TRIVIA DIRECTOR: Failed to curate games for any category")
             return None
+        
+        games = curated_data['games']
+        metadata = curated_data.get('metadata', {})
+        fallback_used = curated_data.get('fallback_used', False)
+        
+        print(f"🎮 TRIVIA DIRECTOR: Curated {len(games)} game(s) - {[g['canonical_name'] for g in games]}")
+        if fallback_used:
+            print(f"   ⚠️ Fallback was used during curation")
+        
+        # === BUILD CATEGORY-SPECIFIC PROMPTS ===
+        
+        # Build game details for prompt
+        game_details = []
+        for game in games:
+            name = game['canonical_name']
+            genre = game.get('genre', 'Unknown')
+            year = game.get('release_year', 'Unknown')
+            status = game.get('completion_status', 'Unknown')
+            game_details.append(f"{name} ({genre}, {year}, {status})")
+        
+        # Category-specific prompt generation
+        if selected_category == 'Single_Game_Lore':
+            game = games[0]
+            category_prompt = f"""
+CATEGORY: Single Game Lore Test
+GAME: {game['canonical_name']} ({game.get('release_year', 'Unknown')})
+GENRE: {game.get('genre', 'Unknown')}
+STATUS: Captain Jonesy {game.get('completion_status', 'played')} this game
 
-        print(f"📊 Available games data: {len(all_games)} games")
+REQUIREMENT: Generate a trivia question that tests knowledge of THIS specific game's:
+- Characters, plot, or story elements
+- Gameplay mechanics or features  
+- Historical facts or development trivia
+- Easter eggs or hidden content
 
-        # Try template-based generation first (more reliable and diverse)
-        max_template_attempts = 3
-        for attempt in range(max_template_attempts):
-            try:
-                # ✅ FIX: Pass avoid_templates to prevent batch repetition
-                selected_template = select_best_template(all_games, avoid_templates=avoid_templates)
+The question must be about the GAME ITSELF, not about Jonesy's stream.
+Frame it as: "Captain Jonesy played {game['canonical_name']}. [Question about game]?"
+"""
+        
+        elif selected_category == 'Franchise_Connection':
+            series_name = metadata.get('series_name', 'Unknown')
+            game_names = [g['canonical_name'] for g in games]
+            category_prompt = f"""
+CATEGORY: Franchise Connection
+SERIES: {series_name}
+GAMES PLAYED: {', '.join(game_names)}
 
-                if selected_template:
-                    # ✅ FIX: Update history IMMEDIATELY after selection (before duplicate check)
-                    # This ensures weights are updated even if this attempt fails
-                    template_id = selected_template.get("template", "")[:20]
-                    question_history["template_usage"][template_id] = question_history["template_usage"].get(
-                        template_id, 0) + 1
+REQUIREMENT: Generate a trivia question about this FRANCHISE that:
+- Connects multiple games in the series
+- Tests knowledge of franchise lore or timeline
+- Asks about recurring characters or themes
+- Compares gameplay evolution across entries
 
-                    question_data = execute_answer_logic(
-                        selected_template["answer_logic"],
-                        all_games,
-                        selected_template
-                    )
+Frame it as: "Captain Jonesy has played multiple {series_name} games. [Question about series]?"
+"""
+        
+        elif selected_category == 'Genre_Knowledge':
+            genre = metadata.get('genre', 'Unknown')
+            game_names = [g['canonical_name'] for g in games]
+            category_prompt = f"""
+CATEGORY: Genre Knowledge  
+GENRE: {genre}
+GAMES PLAYED: {', '.join(game_names)}
 
-                    if question_data and question_data.get("question_text"):
-                        # Check for duplicates before accepting this question
-                        duplicate_info = current_db.check_question_duplicate(
-                            question_data["question_text"],
-                            similarity_threshold=0.8
-                        )
+REQUIREMENT: Generate a trivia question about {genre} games that:
+- Tests knowledge of genre-defining mechanics
+- Asks about common tropes or themes
+- Compares different games' approaches
+- Tests historical knowledge of the genre
 
-                        if duplicate_info:
-                            duplicate_status = duplicate_info.get('status', 'unknown')
-                            duplicate_id = duplicate_info['duplicate_id']
-                            similarity = duplicate_info['similarity_score']
+Reference that Jonesy has played these {genre} games: {', '.join(game_names[:2])}
+"""
+        
+        elif selected_category == 'Timeline_Challenge':
+            game1 = games[0]['canonical_name']
+            game2 = games[1]['canonical_name'] if len(games) > 1 else game1
+            category_prompt = f"""
+CATEGORY: Timeline Challenge
+GAMES: {game1} vs {game2}
 
-                            # ✅ FIX: If duplicate is retired, it's especially problematic - track it
-                            if duplicate_status == 'retired':
-                                print(
-                                    f"🚫 Template question matches RETIRED question #{duplicate_id} ({similarity:.2f} similarity) - explicitly avoiding this pattern")
-                            else:
-                                print(
-                                    f"🔍 Template question duplicate detected (attempt {attempt+1}/{max_template_attempts}): {similarity:.2f} similarity to question #{duplicate_id} (status: {duplicate_status})")
+REQUIREMENT: Generate a chronological trivia question:
+- "Which was released first: {game1} or {game2}?"
+- "What year was {game1} released?"
+- Compare release years or play dates
 
-                            if attempt < max_template_attempts - 1:
-                                continue  # Try generating a different template question
-                        else:
-                            # Add metadata
-                            question_data.update({
-                                "is_dynamic": False,
-                                "category": selected_template.get("category", "template_generated"),
-                                "generation_method": "template"
-                            })
+Must be factual and verifiable from game release data.
+"""
+        
+        else:
+            # Fallback to generic
+            category_prompt = f"""
+CATEGORY: General Gaming Knowledge
+GAMES: {', '.join([g['canonical_name'] for g in games])}
 
-                            # Update history with category cooldowns and recent questions tracking
-                            update_question_history(question_data, selected_template.get("category", "unknown"))
-
-                            print(f"✅ Template-generated question (unique): {question_data['question_text'][:50]}...")
-                            return question_data
-
-            except Exception as template_error:
-                print(f"⚠️ Template generation attempt {attempt+1} failed: {template_error}")
-                if attempt == max_template_attempts - 1:
-                    print(f"❌ All template generation attempts failed")
-
-        # Fallback to AI generation (with improved prompt)
-        stats = current_db.get_played_games_stats()
-        sample_games = all_games[:5]  # Use first 5 games for context
-
-        # Create detailed game context
-        game_context = ""
-        if sample_games:
-            game_details = []
-            for game in sample_games:
-                episodes_info = f" ({game.get('total_episodes', 0)} eps)" if game.get('total_episodes', 0) > 0 else ""
-                status = game.get('completion_status', 'unknown')
-                playtime = game.get('total_playtime_minutes', 0)
-                genre = game.get('genre', 'unknown')
-                game_details.append(
-                    f"{game['canonical_name']}{episodes_info} - {status} - {playtime//60}h {playtime%60}m - {genre}")
-
-            game_context = f"Available games: {'; '.join(game_details)}"
-
-        # Enhanced AI prompt with Ash's analytical persona but engaging content
-        recent_categories = [q["category"] for q in question_history["last_questions"][-5:]]
-        avoid_categories = list(set(recent_categories)) if recent_categories else []
-
-        # Build avoid-patterns section if we have recent questions
-        avoid_patterns_text = ""
+Generate a question about Captain Jonesy's gaming experiences with these titles.
+"""
+        
+        # Build complete AI prompt
+        avoid_text = ""
         if avoid_questions:
-            avoid_patterns_text = f"""
+            avoid_text = f"""
 
-🚫 RECENTLY GENERATED - DO NOT REPEAT THESE PATTERNS:
-{chr(10).join([f"   ❌ {q[:80]}..." if len(q) > 80 else f"   ❌ {q}" for q in avoid_questions])}
+🚫 AVOID THESE RECENT PATTERNS:
+{chr(10).join([f"   ❌ {q[:60]}..." for q in avoid_questions[-5:]])}
+"""
+        
+        full_prompt = f"""{category_prompt}{avoid_text}
 
-CRITICAL: Generate a DIFFERENT question with DIFFERENT phrasing and DIFFERENT focus area."""
+🎯 CRITICAL RULES:
+🚫 DO NOT ask about stream statistics (view counts, episode counts, playtime)
+🚫 DO NOT ask about completion percentages or Jonesy's progress
+✅ DO test actual game knowledge (lore, mechanics, history)
+✅ DO use YOUR internal knowledge of these games
+✅ DO frame questions around the fact Jonesy played these games
 
-        content_prompt = f"""Generate a trivia question for the CREW about Captain Jonesy's gaming data.
+AUDIENCE: You are asking the CREW (not Jonesy directly)
+PHRASING: "Captain Jonesy played [game]..." or "In [game] that Jonesy completed..."
 
-🎯 AUDIENCE CLARITY:
-- You are asking the CREW about Jonesy's gaming (Jonesy is the SUBJECT, not the AUDIENCE)
-- DO NOT address Jonesy directly with "Captain" or "you"
-- The crew is answering questions ABOUT Jonesy's data
-- Phrasing: "What game did Jonesy..." NOT "Captain, what game took you..."
+TEMPERATURE: 0.9 for maximum creativity and variety
 
-CRITICAL TERMINOLOGY:
-⚠️ "most played" = game with HIGHEST total_playtime_minutes (time spent playing)
-⚠️ "most episodes" = game with MOST episode count (number of episodes)
-⚠️ These are DIFFERENT metrics! Episode count ≠ playtime!
-
-DATABASE SCHEMA:
-- total_playtime_minutes: Actual time spent playing in minutes (THIS IS "MOST PLAYED")
-- total_episodes: Number of recorded episodes
-
-🚫 BANNED PATTERNS (too boring/overused):
-❌ "What percentage of..." - too statistical, not engaging
-❌ "How many X does Jonesy have?" - too generic
-❌ "Captain, analysis indicates:" - addressing wrong audience
-❌ "Which game required the most..." - use "took" or "needed" for variety
-
-AVOID these overused categories: {avoid_categories}{avoid_patterns_text}
-
-✅ PREFERRED QUESTION TYPES (pick one with variety):
-🎮 **Genre Adventures**: "What horror game did Jonesy play most recently?"
-🏆 **Gaming Milestones**: "Which was Jonesy's first completed RPG?"
-📚 **Series Explorer**: "How many Resident Evil games has Jonesy played?"
-🎯 **Gaming Stories**: "What game took Jonesy the most episodes to finish?"
-🕐 **Timeline Fun**: "Which game did Jonesy complete first - [Game A] or [Game B]?"
-⭐ **Playtime Champion**: "What game has Jonesy spent the most time playing?"
-📺 **Platform Detective**: "Which game has the most YouTube views?"
-
-AVAILABLE GAMES: {game_context}
-Total games: {stats.get('total_games', 0)}
-
-RETURN ONLY JSON:
+RETURN JSON:
 {{
-    "question_text": "Direct question about Jonesy's gaming (crew is audience)",
+    "question_text": "Question about the GAME ITSELF",
     "question_type": "single_answer",
-    "correct_answer": "The answer",
-    "is_dynamic": false,
-    "category": "ai_generated"
+    "correct_answer": "Answer from game knowledge",
+    "category": "{selected_category}",
+    "source_games": {[g['canonical_name'] for g in games]}
 }}
 
-Generate an engaging, unique question with correct audience (crew, not Jonesy)."""
-
-        # For now, use the content_prompt directly
-        # TODO: Will be replaced with proper system_instruction integration
-        prompt = content_prompt
-
-        # Call AI with rate limiting
+Generate a unique, engaging question that tests GAME knowledge, not stream stats."""
+        
+        prompt = full_prompt
+        
+        # === CALL AI WITH CATEGORY-SPECIFIC TEMPERATURE ===
+        CATEGORY_TEMPERATURES = {
+            'Single_Game_Lore': 0.9,       # High creativity for unique questions
+            'Franchise_Connection': 0.85,  # Moderate-high for connections
+            'Genre_Knowledge': 0.85,       # Moderate-high for variety
+            'Timeline_Challenge': 0.7,     # Lower for factual accuracy
+        }
+        
+        temperature = CATEGORY_TEMPERATURES.get(selected_category, 0.9)
+        print(f"🌡️ TRIVIA DIRECTOR: Using temperature {temperature} for '{selected_category}'")
+        
+        # Call AI with rate limiting and retries
         max_ai_attempts = 3
+        failed_questions = []  # Track failed attempts to avoid repeating
+        
         for ai_attempt in range(max_ai_attempts):
-            response_text, status_message = await call_ai_with_rate_limiting(prompt, JONESY_USER_ID, context)
+            # Add failed attempts to avoid list
+            if failed_questions:
+                avoid_failed = "\n\n🔄 PREVIOUS ATTEMPTS (do NOT repeat):\n"
+                avoid_failed += "\n".join([f"   ❌ Attempt {i+1}: {q[:60]}..." for i, q in enumerate(failed_questions)])
+                current_prompt = prompt + avoid_failed
+            else:
+                current_prompt = prompt
+            
+            response_text, status_message = await call_ai_with_rate_limiting(current_prompt, JONESY_USER_ID, context)
 
             if response_text:
                 print(
-                    f"✅ AI fallback response received: {len(response_text)} characters (attempt {ai_attempt+1}/{max_ai_attempts})")
+                    f"✅ TRIVIA DIRECTOR: AI response received: {len(response_text)} characters (attempt {ai_attempt+1}/{max_ai_attempts})")
 
                 # Parse AI response
                 ai_question = robust_json_parse(response_text)
@@ -2641,7 +2699,8 @@ Generate an engaging, unique question with correct audience (crew, not Jonesy)."
                         "question_text",
                         "question_type",
                         "correct_answer"]):
-                    # Check for duplicates before accepting this AI question
+                    
+                    # Check for duplicates before accepting
                     duplicate_info = current_db.check_question_duplicate(
                         ai_question["question_text"],
                         similarity_threshold=0.8
@@ -2649,18 +2708,44 @@ Generate an engaging, unique question with correct audience (crew, not Jonesy)."
 
                     if duplicate_info:
                         print(
-                            f"🔍 AI question duplicate detected (attempt {ai_attempt+1}/{max_ai_attempts}): {duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']}")
+                            f"🔍 TRIVIA DIRECTOR: Duplicate detected (attempt {ai_attempt+1}/{max_ai_attempts}): {duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']}")
+                        
+                        # Track this failed question
+                        failed_questions.append(ai_question["question_text"])
+                        
                         if ai_attempt < max_ai_attempts - 1:
-                            continue  # Try generating a different AI question
+                            print(f"🔄 TRIVIA DIRECTOR: Retrying with different category on next attempt...")
+                            continue  # Try again with modified prompt
                     else:
-                        ai_question["generation_method"] = "ai_fallback"
-                        print(f"✅ AI fallback question generated (unique): {ai_question['question_text'][:50]}...")
+                        # === SUCCESS - ADD METADATA ===
+                        ai_question.update({
+                            "generation_method": "trivia_director",
+                            "director_category": selected_category,
+                            "source_games": [
+                                {
+                                    'id': g.get('id'),
+                                    'name': g['canonical_name'],
+                                    'genre': g.get('genre'),
+                                    'year': g.get('release_year')
+                                } for g in games
+                            ],
+                            "temperature": temperature,
+                            "fallback_used": fallback_used,
+                            "generation_timestamp": datetime.now(ZoneInfo('Europe/London')).isoformat()
+                        })
+                        
+                        print(f"✅ TRIVIA DIRECTOR: Question generated successfully!")
+                        print(f"   Category: {selected_category}")
+                        print(f"   Games: {[g['canonical_name'] for g in games]}")
+                        print(f"   Question: {ai_question['question_text'][:60]}...")
                         return ai_question
+                else:
+                    print(f"⚠️ TRIVIA DIRECTOR: AI response missing required fields (attempt {ai_attempt+1})")
             else:
-                print(f"❌ AI fallback attempt {ai_attempt+1} failed: {status_message}")
+                print(f"❌ TRIVIA DIRECTOR: AI call failed (attempt {ai_attempt+1}): {status_message}")
                 break  # Don't retry on rate limits or API failures
 
-        print(f"❌ All AI generation attempts failed")
+        print(f"❌ TRIVIA DIRECTOR: All {max_ai_attempts} generation attempts failed")
         return None
 
     except Exception as e:

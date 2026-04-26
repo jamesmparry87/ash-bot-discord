@@ -2292,7 +2292,242 @@ class TriviaDatabase:
             conn.rollback()
             return {"error": str(e), "cleaned_sessions": 0}
 
-    # --- M
+    # --- Trivia Director System: Category-Based Game Curation ---
+
+    def get_trivia_curated_games(
+        self,
+        category: str,
+        avoid_game_ids: Optional[List[int]] = None
+    ) -> Dict[str, Any]:
+        """
+        Curate game data based on trivia category for the Trivia Director system.
+        
+        This method selects appropriate games from the played_games table based on
+        the requested category, enabling the AI to generate questions that leverage
+        its internal knowledge of video games rather than relying on stream statistics.
+        
+        Categories:
+        - 'Single_Game_Lore': Returns 1 random game for deep dive questions
+        - 'Franchise_Connection': Returns 2-3 games from the same series
+        - 'Genre_Knowledge': Returns 3 games from the same genre
+        - 'Timeline_Challenge': Returns 2 games for chronological comparison
+        
+        Args:
+            category: The trivia category to curate for
+            avoid_game_ids: Optional list of game IDs to exclude from selection
+            
+        Returns:
+            Dict containing:
+                - category: The category used
+                - games: List of curated game dicts
+                - fallback_used: Boolean indicating if fallback logic was used
+                - metadata: Additional context for AI prompt generation
+        """
+        conn = self.get_connection()
+        if not conn:
+            logger.error("No database connection for trivia curation")
+            return {
+                'category': category,
+                'games': [],
+                'fallback_used': False,
+                'error': 'No database connection'
+            }
+        
+        avoid_ids = avoid_game_ids or []
+        avoid_clause = "AND id NOT IN %(avoid_ids)s" if avoid_ids else ""
+        
+        try:
+            with conn.cursor() as cur:
+                games = []
+                fallback_used = False
+                metadata = {}
+                
+                # === SINGLE GAME LORE: Deep dive into one specific game ===
+                if category == 'Single_Game_Lore':
+                    # Priority: Completed games (more knowledge available)
+                    query = f"""
+                        SELECT * FROM played_games
+                        WHERE completion_status = 'completed'
+                        {avoid_clause}
+                        ORDER BY RANDOM()
+                        LIMIT 1
+                    """
+                    cur.execute(query, {'avoid_ids': tuple(avoid_ids)} if avoid_ids else {})
+                    result = cur.fetchone()
+                    
+                    if not result:
+                        # Fallback: Any game
+                        logger.info("Falling back to any game for Single_Game_Lore")
+                        query = f"""
+                            SELECT * FROM played_games
+                            {avoid_clause.replace('AND', 'WHERE') if avoid_ids else ''}
+                            ORDER BY RANDOM()
+                            LIMIT 1
+                        """
+                        cur.execute(query, {'avoid_ids': tuple(avoid_ids)} if avoid_ids else {})
+                        result = cur.fetchone()
+                        fallback_used = True
+                    
+                    if result:
+                        games = [dict(result)]
+                        metadata = {
+                            'focus_game': games[0]['canonical_name'],
+                            'genre': games[0].get('genre', 'Unknown'),
+                            'completion_status': games[0].get('completion_status', 'Unknown')
+                        }
+                
+                # === FRANCHISE CONNECTION: Multiple games from same series ===
+                elif category == 'Franchise_Connection':
+                    # Step 1: Find a series with 2+ games
+                    query = f"""
+                        SELECT series_name, COUNT(*) as game_count
+                        FROM played_games
+                        WHERE series_name IS NOT NULL 
+                          AND series_name != ''
+                          {avoid_clause}
+                        GROUP BY series_name
+                        HAVING COUNT(*) >= 2
+                        ORDER BY RANDOM()
+                        LIMIT 1
+                    """
+                    cur.execute(query, {'avoid_ids': tuple(avoid_ids)} if avoid_ids else {})
+                    series_result = cur.fetchone()
+                    
+                    if series_result:
+                        selected_series = dict(series_result)['series_name']
+                        
+                        # Step 2: Get games from that series
+                        query = f"""
+                            SELECT * FROM played_games
+                            WHERE series_name = %(series)s
+                            {avoid_clause}
+                            LIMIT 3
+                        """
+                        params = {'series': selected_series}
+                        if avoid_ids:
+                            params['avoid_ids'] = tuple(avoid_ids)
+                        cur.execute(query, params)
+                        results = cur.fetchall()
+                        
+                        games = [dict(row) for row in results]
+                        metadata = {
+                            'series_name': selected_series,
+                            'game_count': len(games)
+                        }
+                    else:
+                        # Fallback: Use Genre_Knowledge instead
+                        logger.info("No franchise with 2+ games, falling back to Genre_Knowledge")
+                        return self.get_trivia_curated_games('Genre_Knowledge', avoid_game_ids)
+                
+                # === GENRE KNOWLEDGE: Multiple games from same genre ===
+                elif category == 'Genre_Knowledge':
+                    # Step 1: Find a genre with 3+ games
+                    query = f"""
+                        SELECT genre, COUNT(*) as game_count
+                        FROM played_games
+                        WHERE genre IS NOT NULL 
+                          AND genre != ''
+                          {avoid_clause}
+                        GROUP BY genre
+                        HAVING COUNT(*) >= 3
+                        ORDER BY RANDOM()
+                        LIMIT 1
+                    """
+                    cur.execute(query, {'avoid_ids': tuple(avoid_ids)} if avoid_ids else {})
+                    genre_result = cur.fetchone()
+                    
+                    if genre_result:
+                        selected_genre = dict(genre_result)['genre']
+                        
+                        # Step 2: Get games from that genre
+                        query = f"""
+                            SELECT * FROM played_games
+                            WHERE genre = %(genre)s
+                            {avoid_clause}
+                            ORDER BY RANDOM()
+                            LIMIT 3
+                        """
+                        params = {'genre': selected_genre}
+                        if avoid_ids:
+                            params['avoid_ids'] = tuple(avoid_ids)
+                        cur.execute(query, params)
+                        results = cur.fetchall()
+                        
+                        games = [dict(row) for row in results]
+                        metadata = {
+                            'genre': selected_genre,
+                            'game_count': len(games)
+                        }
+                    else:
+                        # Fallback: Single_Game_Lore (always works)
+                        logger.info("No genre with 3+ games, falling back to Single_Game_Lore")
+                        return self.get_trivia_curated_games('Single_Game_Lore', avoid_game_ids)
+                
+                # === TIMELINE CHALLENGE: Chronological comparison ===
+                elif category == 'Timeline_Challenge':
+                    # Get 2 games with different first_played_dates
+                    query = f"""
+                        SELECT * FROM played_games
+                        WHERE first_played_date IS NOT NULL
+                        {avoid_clause}
+                        ORDER BY RANDOM()
+                        LIMIT 2
+                    """
+                    cur.execute(query, {'avoid_ids': tuple(avoid_ids)} if avoid_ids else {})
+                    results = cur.fetchall()
+                    
+                    if results and len(results) >= 2:
+                        games = [dict(row) for row in results]
+                        metadata = {
+                            'game1': games[0]['canonical_name'],
+                            'game2': games[1]['canonical_name'],
+                            'date1': games[0].get('first_played_date'),
+                            'date2': games[1].get('first_played_date')
+                        }
+                    else:
+                        # Fallback: Single_Game_Lore
+                        logger.info("Not enough timeline data, falling back to Single_Game_Lore")
+                        return self.get_trivia_curated_games('Single_Game_Lore', avoid_game_ids)
+                
+                else:
+                    # Unknown category - default to Single_Game_Lore
+                    logger.warning(f"Unknown category '{category}', using Single_Game_Lore")
+                    return self.get_trivia_curated_games('Single_Game_Lore', avoid_game_ids)
+                
+                # Return curated data
+                return {
+                    'category': category,
+                    'games': games,
+                    'fallback_used': fallback_used,
+                    'metadata': metadata
+                }
+        
+        except Exception as e:
+            logger.error(f"Error curating games for category '{category}': {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Emergency fallback: Try to get ANY game
+            try:
+                cur.execute("SELECT * FROM played_games ORDER BY RANDOM() LIMIT 1")
+                result = cur.fetchone()
+                if result:
+                    return {
+                        'category': 'Single_Game_Lore',
+                        'games': [dict(result)],
+                        'fallback_used': True,
+                        'metadata': {'emergency_fallback': True},
+                        'error': str(e)
+                    }
+            except Exception:
+                pass
+            
+            return {
+                'category': category,
+                'games': [],
+                'fallback_used': True,
+                'error': str(e)
+            }
 
 
 # Export
