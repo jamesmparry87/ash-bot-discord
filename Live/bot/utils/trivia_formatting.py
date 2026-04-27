@@ -5,9 +5,10 @@ Shared formatting functions for trivia display to ensure consistency
 between manual and scheduled trivia posting.
 """
 
-import discord
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+import discord
 
 
 def create_trivia_question_embed(

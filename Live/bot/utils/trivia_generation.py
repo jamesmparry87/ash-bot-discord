@@ -12,8 +12,8 @@ import logging
 import random
 from typing import Optional
 
-from .trivia_parsing import validate_question_quality
 from .trivia_formatting import format_view_count_range, get_episode_range_choices
+from .trivia_parsing import validate_question_quality
 
 logger = logging.getLogger(__name__)
 
@@ -155,8 +155,8 @@ async def generate_ai_enhanced_question(prompt_data: dict, bot=None):
         dict: Question data or None if generation fails
     """
     try:
-        from ..handlers.ai_handler import call_ai_with_rate_limiting
         from ..config import JAM_USER_ID
+        from ..handlers.ai_handler import call_ai_with_rate_limiting
 
         # Create data-rich prompt for AI
         prompt = (
@@ -248,8 +248,8 @@ async def generate_ai_question_fallback(db=None, bot=None, avoid_questions=None,
         dict: Question data or None if generation fails
     """
     try:
-        from ..handlers.ai_handler import call_ai_with_rate_limiting
         from ..config import JAM_USER_ID
+        from ..handlers.ai_handler import call_ai_with_rate_limiting
 
         # Try YouTube analytics integration first for data-driven questions
         youtube_question = await generate_youtube_analytics_question(db)
