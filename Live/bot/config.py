@@ -132,8 +132,7 @@ FALLBACK_STATUS_RESPONSES = [
 FALLBACK_WELCOME_RESPONSES = [
     "Welcome aboard, {username}. I am Ash, the ship's analytical AI. My full systems are currently offline, but I can still assist with basic queries.",
     "Greetings, {username}. Welcome to the crew. I apologize for operating in reduced capacity mode - my advanced protocols will return shortly.",
-    "Acknowledged: New personnel {username} detected. Welcome. I am currently running minimal response systems but remain available for assistance."
-]
+    "Acknowledged: New personnel {username} detected. Welcome. I am currently running minimal response systems but remain available for assistance."]
 
 # Standardized Game Genre List (for IGDB mapping consistency)
 STANDARD_GENRES = {
