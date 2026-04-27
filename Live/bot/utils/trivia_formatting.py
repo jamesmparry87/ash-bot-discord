@@ -18,10 +18,10 @@ def create_trivia_question_embed(
 ) -> discord.Embed:
     """
     Create a standardized Discord Embed for trivia question display.
-    
+
     This function ensures consistent formatting whether trivia is started
     manually by a moderator or automatically by the scheduled task.
-    
+
     Args:
         question_data: Dict containing question details
             - question_text (str): The trivia question
@@ -30,14 +30,14 @@ def create_trivia_question_embed(
             - id (int): Question ID
         session_id: The trivia session ID
         started_by: Optional name of moderator who started (None for automated)
-    
+
     Returns:
         discord.Embed: Formatted embed ready to post
     """
     question_text = question_data.get('question_text', '')
     question_type = question_data.get('question_type', 'single')
     question_id = question_data.get('id', 0)
-    
+
     # Create base embed
     if started_by:
         # Manual trivia - moderator initiated
@@ -53,25 +53,25 @@ def create_trivia_question_embed(
             title="🧠 **TRIVIA TUESDAY - INTELLIGENCE ASSESSMENT**",
             description=f"**Analysis required, personnel.** Today's intelligence assessment focuses on Captain Jonesy's gaming archives.\n\n📋 **QUESTION:**\n{question_text}",
             color=0x00ff00,
-            timestamp=datetime.now(ZoneInfo("Europe/London"))
-        )
-    
+            timestamp=datetime.now(
+                ZoneInfo("Europe/London")))
+
     # Add multiple choice options if applicable (supports 2-4 options)
     if question_type == 'multiple_choice' and question_data.get('multiple_choice_options'):
         options = question_data['multiple_choice_options']
-        
+
         # Dynamically format options based on count (2-4 supported)
         choices_text = '\n'.join([
-            f"**{chr(65+i)}.** {option}" 
+            f"**{chr(65+i)}.** {option}"
             for i, option in enumerate(options)
         ])
-        
+
         embed.add_field(
             name="📝 **Answer Choices:**",
             value=choices_text,
             inline=False
         )
-        
+
         # Instructions for multiple choice
         embed.add_field(
             name="💡 **How to Answer:**",
@@ -85,38 +85,38 @@ def create_trivia_question_embed(
             value="**Reply to this message** with your answer!",
             inline=False
         )
-    
+
     # Add session info
     embed.add_field(
         name="⏰ **Session Info:**",
         value=f"Session #{session_id} • Question #{question_id}",
         inline=False
     )
-    
+
     # Footer varies based on how it was started
     if started_by:
         embed.set_footer(text=f"Started by {started_by} • End with !endtrivia")
     else:
         embed.set_footer(text="Automated Weekly Trivia • First correct response receives priority recognition")
-    
+
     return embed
 
 
 def format_options_preview(options: list) -> str:
     """
     Format multiple choice options for moderator preview.
-    
+
     Shows how options will appear to end users.
-    
+
     Args:
         options: List of option strings (2-4 items)
-    
+
     Returns:
         str: Formatted preview text
     """
     if not options:
         return ""
-    
+
     preview_lines = [f"**{chr(65+i)}.** {option}" for i, option in enumerate(options)]
     return "\n".join(preview_lines)
 
@@ -124,10 +124,10 @@ def format_options_preview(options: list) -> str:
 def format_view_count_range(actual_views: int) -> str:
     """
     Format view count into a reasonable range for trivia answers.
-    
+
     Args:
         actual_views: The actual view count number
-    
+
     Returns:
         str: Human-readable view range description
     """
@@ -148,12 +148,12 @@ def format_view_count_range(actual_views: int) -> str:
 def get_episode_range_choices(actual_episodes: int) -> dict:
     """
     Generate multiple choice options for episode count questions.
-    
+
     Creates appropriate ranges around the actual episode count.
-    
+
     Args:
         actual_episodes: The actual episode count
-    
+
     Returns:
         dict with 'choices' (list) and 'correct_letter' (str)
     """

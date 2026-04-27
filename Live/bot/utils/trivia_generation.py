@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 async def generate_youtube_analytics_question(db=None):
     """
     Generate trivia questions powered by real YouTube analytics data
-    
+
     Args:
         db: Database instance for duplicate checking (optional)
-    
+
     Returns:
         dict: Question data or None if generation fails
     """
@@ -146,11 +146,11 @@ async def generate_youtube_analytics_question(db=None):
 async def generate_ai_enhanced_question(prompt_data: dict, bot=None):
     """
     Generate AI question enhanced with real YouTube data
-    
+
     Args:
         prompt_data: Dict with game_name, total_views, episodes, avg_views
         bot: Bot instance for AI call (optional, will try to import if None)
-    
+
     Returns:
         dict: Question data or None if generation fails
     """
@@ -237,13 +237,13 @@ async def generate_ai_question_fallback(db=None, bot=None, avoid_questions=None,
     - Quality validation before approval
     - Better error handling and retry logic
     - Enhanced parsing with fallbacks
-    
+
     Args:
         db: Database instance for duplicate checking (optional)
         bot: Bot instance for AI calls (optional)
         avoid_questions: List of question texts to avoid (for diversity)
         avoid_templates: List of template IDs to avoid (for diversity)
-    
+
     Returns:
         dict: Question data or None if generation fails
     """
@@ -268,8 +268,7 @@ async def generate_ai_question_fallback(db=None, bot=None, avoid_questions=None,
         # Enhanced prompts with stricter guidelines
         question_types = [
             {
-                'type': 'fan_observable',
-                'prompt': (
+                'type': 'fan_observable', 'prompt': (
                     "Generate a trivia question about Captain Jonesy's gaming that fans could answer from watching streams.\n\n"
                     "STRICT REQUIREMENTS:\n"
                     "- Question must be answerable by regular viewers\n"
@@ -280,12 +279,8 @@ async def generate_ai_question_fallback(db=None, bot=None, avoid_questions=None,
                     "- Answer must be 2-30 words\n\n"
                     "GOOD: 'What genre does Captain Jonesy play most often?'\n"
                     "BAD: 'How many episodes of God of War has Jonesy uploaded?' (too specific)\n\n"
-                    "Format EXACTLY: Question: [your question] | Answer: [your answer]"
-                )
-            },
-            {
-                'type': 'gaming_knowledge',
-                'prompt': (
+                    "Format EXACTLY: Question: [your question] | Answer: [your answer]")}, {
+                'type': 'gaming_knowledge', 'prompt': (
                     "Generate general gaming trivia related to games Captain Jonesy has played.\n\n"
                     "STRICT REQUIREMENTS:\n"
                     "- Focus on gaming industry knowledge\n"
@@ -296,42 +291,31 @@ async def generate_ai_question_fallback(db=None, bot=None, avoid_questions=None,
                     "- No ambiguous or subjective questions\n\n"
                     "GOOD: 'What genre is The Last of Us?'\n"
                     "BAD: 'What is the best game ever?' (subjective)\n\n"
-                    "Format EXACTLY: Question: [your question] | Answer: [your answer]"
-                )
-            },
-            {
-                'type': 'broad_trends',
-                'prompt': (
-                    "Generate a trivia question about observable trends in Captain Jonesy's gaming.\n\n"
-                    "STRICT REQUIREMENTS:\n"
-                    "- Use broad categories (action vs RPG, horror vs platformer)\n"
-                    "- Avoid exact numbers or dates\n"
-                    "- Focus on comparative questions\n"
-                    "- ONE clear correct answer\n"
-                    "- Question must end with '?'\n"
-                    "- Answer must be 2-30 words\n\n"
-                    "GOOD: 'Does Jonesy play more horror or action games?'\n"
-                    "BAD: 'Exactly how many horror games has Jonesy completed?' (too specific)\n\n"
-                    "Format EXACTLY: Question: [your question] | Answer: [your answer]"
-                )
-            },
-            {
-                'type': 'series_knowledge',
-                'prompt': (
-                    "Generate trivia about game series Captain Jonesy has played.\n\n"
-                    "STRICT REQUIREMENTS:\n"
-                    "- Focus on multi-entry series (God of War, Resident Evil, etc.)\n"
-                    "- Must be verifiable from stream history\n"
-                    "- ONE clear correct answer\n"
-                    "- Question must end with '?'\n"
-                    "- Answer must be 2-30 words\n"
-                    "- Avoid exact episode/date counts\n\n"
-                    "GOOD: 'Which game series has Jonesy completed multiple entries from?'\n"
-                    "BAD: 'On what date did Jonesy start God of War?' (too specific)\n\n"
-                    "Format EXACTLY: Question: [your question] | Answer: [your answer]"
-                )
-            }
-        ]
+                    "Format EXACTLY: Question: [your question] | Answer: [your answer]")}, {
+                        'type': 'broad_trends', 'prompt': (
+                            "Generate a trivia question about observable trends in Captain Jonesy's gaming.\n\n"
+                            "STRICT REQUIREMENTS:\n"
+                            "- Use broad categories (action vs RPG, horror vs platformer)\n"
+                            "- Avoid exact numbers or dates\n"
+                            "- Focus on comparative questions\n"
+                            "- ONE clear correct answer\n"
+                            "- Question must end with '?'\n"
+                            "- Answer must be 2-30 words\n\n"
+                            "GOOD: 'Does Jonesy play more horror or action games?'\n"
+                            "BAD: 'Exactly how many horror games has Jonesy completed?' (too specific)\n\n"
+                            "Format EXACTLY: Question: [your question] | Answer: [your answer]")}, {
+                                'type': 'series_knowledge', 'prompt': (
+                                    "Generate trivia about game series Captain Jonesy has played.\n\n"
+                                    "STRICT REQUIREMENTS:\n"
+                                    "- Focus on multi-entry series (God of War, Resident Evil, etc.)\n"
+                                    "- Must be verifiable from stream history\n"
+                                    "- ONE clear correct answer\n"
+                                    "- Question must end with '?'\n"
+                                    "- Answer must be 2-30 words\n"
+                                    "- Avoid exact episode/date counts\n\n"
+                                    "GOOD: 'Which game series has Jonesy completed multiple entries from?'\n"
+                                    "BAD: 'On what date did Jonesy start God of War?' (too specific)\n\n"
+                                    "Format EXACTLY: Question: [your question] | Answer: [your answer]")}]
 
         # Retry logic for quality - try up to 2 times
         max_attempts = 2
@@ -340,7 +324,7 @@ async def generate_ai_question_fallback(db=None, bot=None, avoid_questions=None,
             selected_type = random.choice(question_types)
 
             logger.info(f"Generating trivia question (attempt {attempt + 1}/{max_attempts}): {selected_type['type']}")
-            
+
             response_text, status = await call_ai_with_rate_limiting(
                 selected_type['prompt'], JAM_USER_ID, context="trivia_generation",
                 member_obj=None, bot=bot)
@@ -424,7 +408,8 @@ async def generate_ai_question_fallback(db=None, bot=None, avoid_questions=None,
                                 logger.warning(f"Duplicate check failed for AI question: {dup_error}")
                                 # Continue with the question if duplicate check fails
 
-                        logger.info(f"✅ Generated quality question (score: {quality_score:.1f}%): {question_text[:50]}...")
+                        logger.info(
+                            f"✅ Generated quality question (score: {quality_score:.1f}%): {question_text[:50]}...")
                         return question_data
                     else:
                         logger.warning(f"⚠️ Generated question failed quality check ({quality_score:.1f}%): {reason}")

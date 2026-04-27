@@ -883,7 +883,7 @@ async def trivia_tuesday():
 
         # 4. Format the message using shared formatting function for consistency
         from bot.utils.trivia_formatting import create_trivia_question_embed
-        
+
         embed = create_trivia_question_embed(
             question_data=question_data,
             session_id=session_id,

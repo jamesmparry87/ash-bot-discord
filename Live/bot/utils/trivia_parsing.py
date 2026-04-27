@@ -56,10 +56,10 @@ def is_natural_multiple_choice_format(content: str) -> bool:
 def parse_natural_multiple_choice(content: str) -> Optional[dict]:
     """
     Parse natural multiple choice format into structured data
-    
+
     Args:
         content: Raw multi-line content with question, choices, and answer
-        
+
     Returns:
         dict with 'question', 'choices', 'answer' or None if parsing fails
     """
