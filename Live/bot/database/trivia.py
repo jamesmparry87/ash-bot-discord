@@ -1,13 +1,4 @@
-from psycopg2.extras import RealDictRow
-from zoneinfo import ZoneInfo
-from typing import Any, Dict, List, Optional, Tuple, cast
-from datetime import datetime, timedelta, timezone
-import time
-import re
-import logging
-import json
-import difflib
-bot"""
+"""
 Database Trivia Module - Trivia System
 
 This module handles:
@@ -19,6 +10,15 @@ This module handles:
 - Question pool management
 """
 
+from psycopg2.extras import RealDictRow
+from zoneinfo import ZoneInfo
+from typing import Any, Dict, List, Optional, Tuple, cast
+from datetime import datetime, timedelta, timezone
+import time
+import re
+import logging
+import json
+import difflib
 
 logger = logging.getLogger(__name__)
 

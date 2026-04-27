@@ -31,6 +31,25 @@ from ..handlers.conversation_handler import (
 from ..integrations.youtube import get_most_viewed_game_overall, get_youtube_analytics_for_game
 from ..utils.permissions import user_is_mod_by_id
 
+# Import refactored trivia utilities for better modularity
+from ..data.trivia_templates import DATABASE_QUESTION_TEMPLATES
+from ..utils.trivia_parsing import (
+    is_natural_multiple_choice_format,
+    parse_natural_multiple_choice,
+    validate_multiple_choice_options,
+    validate_question_quality
+)
+from ..utils.trivia_generation import (
+    generate_youtube_analytics_question,
+    generate_ai_enhanced_question,
+    generate_ai_question_fallback
+)
+from ..utils.trivia_formatting import (
+    format_options_preview,
+    format_view_count_range,
+    get_episode_range_choices
+)
+
 # Set up logging
 logger = logging.getLogger(__name__)
 

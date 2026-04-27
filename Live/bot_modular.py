@@ -1071,6 +1071,30 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    # STAGING BOT RESTRICTION: Only allow Discord Mods channel + DMs to James
+    try:
+        # Import staging detection
+        from bot.tasks.scheduled import _detect_bot_environment
+        
+        is_live = _detect_bot_environment()
+        if is_live is False:  # Explicitly check for staging bot
+            is_dm = isinstance(message.channel, discord.DMChannel)
+            
+            # Allow DMs only to/from James
+            if is_dm:
+                if message.author.id != JAM_USER_ID:
+                    print(f"⚠️ STAGING: Ignoring DM from user {message.author.id} (not James)")
+                    return
+            # Allow only Discord Mods channel (869530924302344233)
+            elif message.channel.id != MOD_ALERT_CHANNEL_ID:
+                print(f"⚠️ STAGING: Ignoring message in channel {message.channel.id} (not Discord Mods channel)")
+                return
+            
+            print(f"✅ STAGING: Allowing message in {'DM with James' if is_dm else f'channel {message.channel.id}'}")
+    except Exception as staging_error:
+        print(f"⚠️ STAGING: Error checking staging restrictions: {staging_error}")
+        # Continue processing if check fails
+
     # PRIORITY 1: Process traditional commands first
     if message.content.strip().startswith('!'):
         print(f"🔧 Traditional command detected (priority): {message.content[:50]}...")

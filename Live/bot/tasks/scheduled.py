@@ -881,26 +881,19 @@ async def trivia_tuesday():
             await notify_scheduled_message_error("Trivia Tuesday", f"Failed to create database session for question #{question_id}.", uk_now)
             return
 
-        # 4. Format the message
-        if question_data.get("question_type") == "multiple_choice" and question_data.get("multiple_choice_options"):
-            options = question_data["multiple_choice_options"]
-            options_text = "\n".join([f"**{chr(65+i)}.** {option}" for i, option in enumerate(options)])
-            formatted_question = f"{question_text}\n\n{options_text}"
-        else:
-            formatted_question = question_text
-
-        trivia_message = (
-            f"🧠 **TRIVIA TUESDAY - INTELLIGENCE ASSESSMENT**\n\n"
-            f"**Analysis required, personnel.** Today's intelligence assessment focuses on Captain Jonesy's gaming archives.\n\n"
-            f"📋 **QUESTION:**\n{formatted_question}\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🎯 **Mission Parameters:** Reply to this message with your analysis. First correct response receives priority recognition.\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        # 4. Format the message using shared formatting function for consistency
+        from bot.utils.trivia_formatting import create_trivia_question_embed
+        
+        embed = create_trivia_question_embed(
+            question_data=question_data,
+            session_id=session_id,
+            started_by=None  # None indicates automated/scheduled
+        )
 
         # 5. Post the message and update the session
         channel = bot.get_channel(MEMBERS_CHANNEL_ID)
         if channel and isinstance(channel, discord.TextChannel):
-            trivia_post = await channel.send(trivia_message)
+            trivia_post = await channel.send(embed=embed)
 
             # CRITICAL: Update the session with message IDs for answer detection
             db.update_trivia_session_messages(
