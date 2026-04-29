@@ -45,8 +45,7 @@ except Exception as db_error:
 try:
     from ..integrations.twitch import detect_multiple_games_in_title
     from ..integrations.twitch import extract_game_name_from_title as extract_game_from_twitch
-    from ..integrations.twitch import fetch_new_vods_since
-    from ..integrations.twitch import smart_extract_with_validation
+    from ..integrations.twitch import fetch_new_vods_since, smart_extract_with_validation
     from ..integrations.youtube import execute_youtube_auto_post
     from ..integrations.youtube import extract_game_name_from_title as extract_game_from_youtube
     from ..integrations.youtube import fetch_playlist_based_content_since
