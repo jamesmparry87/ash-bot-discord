@@ -5,8 +5,8 @@ Run this script once to create the sync_staging table in the database.
 This table is used for pre-approval workflow before committing games.
 """
 
-import sys
 import os
+import sys
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
