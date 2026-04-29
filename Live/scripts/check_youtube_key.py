@@ -23,25 +23,25 @@ else:
     print(f"     First 10 chars: {api_key[:10]}...")
     print(f"     Last 5 chars: ...{api_key[-5:]}")
     print()
-    
+
     # Check for common issues
     issues = []
-    
+
     if api_key != api_key.strip():
         issues.append("Key has leading/trailing whitespace")
-    
+
     if ' ' in api_key:
         issues.append("Key contains spaces (invalid)")
-    
+
     if '\n' in api_key or '\r' in api_key:
         issues.append("Key contains newline characters")
-    
+
     if len(api_key) < 30:
         issues.append(f"Key seems too short ({len(api_key)} chars, expected ~39)")
-    
+
     if len(api_key) > 50:
         issues.append(f"Key seems too long ({len(api_key)} chars, expected ~39)")
-    
+
     if issues:
         print("[WARNING] Potential issues detected:")
         for issue in issues:
