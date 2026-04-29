@@ -11,6 +11,7 @@ Handles all background scheduled tasks including:
 
 import asyncio
 import json
+import uuid
 from datetime import datetime, time, timedelta
 from typing import TYPE_CHECKING, Any, Dict, Optional, cast
 from zoneinfo import ZoneInfo
@@ -2071,6 +2072,13 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
 
     print(f"🔄 SYNC: Fetching new content since {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
+    # Initialize staging table (auto-creates if not exists)
+    db.games.create_staging_table_if_not_exists()
+    
+    # Generate unique session ID for this sync
+    sync_session_id = str(uuid.uuid4())
+    print(f"🔄 SYNC: Starting sync session {sync_session_id}")
+
     # Import IGDB integration
     try:
         from ..integrations.igdb import should_use_igdb_data, validate_and_enrich
@@ -2268,36 +2276,42 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                 # ❌ notes - Manually added annotations
                 # ❌ first_played_date - Historical record
 
-                db.update_played_game(existing_game['id'], **update_params)
+                # Stage update for approval
+                db.games.stage_game_for_approval(
+                    sync_session_id=sync_session_id,
+                    game_data=game_data,
+                    action_type='update',
+                    confidence_score=1.0,  # High confidence for YouTube playlist data
+                    source_platform='youtube'
+                )
                 print(
-                    f"✅ SYNC: Updated '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, status: {completion_status} (metadata protected)")
+                    f"✅ SYNC: Staged update for '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, status: {completion_status}")
                 games_updated += 1
 
             else:
-                # Add new game with complete metadata
-                db.add_played_game(
-                    canonical_name=canonical_name,
-                    series_name=series_name,
-                    total_playtime_minutes=game_data.get(
-                        'total_playtime_minutes',
-                        0),
-                    total_episodes=game_data.get(
-                        'total_episodes',
-                        0),
-                    youtube_views=game_data.get(
-                        'youtube_views',
-                        0),
-                    youtube_playlist_url=game_data.get('youtube_playlist_url'),
-                    completion_status=completion_status,
-                    alternative_names=game_data.get(
-                        'alternative_names',
-                        []),
-                    first_played_date=game_data.get('first_played_date'),
-                    notes=game_data.get(
-                        'notes',
-                        f"Auto-synced from YouTube on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"))
+                # Stage new game for approval
+                full_game_data = {
+                    'canonical_name': canonical_name,
+                    'series_name': series_name,
+                    'total_playtime_minutes': game_data.get('total_playtime_minutes', 0),
+                    'total_episodes': game_data.get('total_episodes', 0),
+                    'youtube_views': game_data.get('youtube_views', 0),
+                    'youtube_playlist_url': game_data.get('youtube_playlist_url'),
+                    'completion_status': completion_status,
+                    'alternative_names': game_data.get('alternative_names', []),
+                    'first_played_date': game_data.get('first_played_date'),
+                    'notes': game_data.get('notes', f"Auto-synced from YouTube on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}")
+                }
+                
+                db.games.stage_game_for_approval(
+                    sync_session_id=sync_session_id,
+                    game_data=full_game_data,
+                    action_type='add',
+                    confidence_score=1.0,  # High confidence for YouTube playlist data
+                    source_platform='youtube'
+                )
                 print(
-                    f"✅ SYNC: Added '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, {game_data.get('youtube_views', 0):,} views")
+                    f"✅ SYNC: Staged new game '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, {game_data.get('youtube_views', 0):,} views")
                 games_added += 1
 
         except Exception as game_error:
@@ -2340,18 +2354,23 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                 existing_game = db.get_played_game(extracted_name)
 
                                 if existing_game:
-                                    update_params = {
-                                        'total_playtime_minutes': existing_game.get(
-                                            'total_playtime_minutes',
-                                            0) + fractional_duration,
-                                        'total_episodes': existing_game.get(
-                                            'total_episodes',
-                                            0) + 1}
-                                    db.update_played_game(existing_game['id'], **update_params)
-                                    print(f"   ✅ Updated '{extracted_name}' with {fractional_duration} mins")
+                                    # Stage multi-game update
+                                    update_data = {
+                                        'canonical_name': extracted_name,
+                                        'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + fractional_duration,
+                                        'total_episodes': existing_game.get('total_episodes', 0) + 1
+                                    }
+                                    db.games.stage_game_for_approval(
+                                        sync_session_id=sync_session_id,
+                                        game_data=update_data,
+                                        action_type='update',
+                                        confidence_score=confidence,
+                                        source_platform='twitch'
+                                    )
+                                    print(f"   ✅ Staged update for '{extracted_name}' with {fractional_duration} mins")
                                     games_updated += 1
                                 else:
-                                    # Add new game
+                                    # Stage new multi-game entry
                                     game_data = {
                                         'canonical_name': extracted_name,
                                         'series_name': extracted_name,
@@ -2362,8 +2381,14 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                     if vod_url:
                                         game_data['twitch_vod_urls'] = [vod_url]
 
-                                    db.add_played_game(**game_data)
-                                    print(f"   ✅ Added '{extracted_name}' with {fractional_duration} mins")
+                                    db.games.stage_game_for_approval(
+                                        sync_session_id=sync_session_id,
+                                        game_data=game_data,
+                                        action_type='add',
+                                        confidence_score=confidence,
+                                        source_platform='twitch'
+                                    )
+                                    print(f"   ✅ Staged new game '{extracted_name}' with {fractional_duration} mins")
                                     games_added += 1
 
                                 total_new_minutes += fractional_duration
@@ -2462,118 +2487,118 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                         update_params['twitch_vod_urls'] = existing_vods
                         print(f"📎 SYNC: Added VOD URL to '{game_name}' ({len(existing_vods)} total)")
 
-                db.update_played_game(existing_game['id'], **update_params)
-                print(f"✅ SYNC: Updated '{game_name}' with Twitch VOD ({duration_minutes} mins, {view_count:,} views)")
+                # Stage single-game Twitch update
+                update_data = {
+                    'canonical_name': game_name,
+                    'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + duration_minutes,
+                    'total_episodes': existing_game.get('total_episodes', 0) + 1,
+                    'twitch_views': existing_game.get('twitch_views', 0) + view_count
+                }
+                if vod_url:
+                    existing_vods = existing_game.get('twitch_vod_urls', [])
+                    if isinstance(existing_vods, str):
+                        existing_vods = [v.strip() for v in existing_vods.split(',') if v.strip()]
+                    elif not isinstance(existing_vods, list):
+                        existing_vods = []
+                    if vod_url not in existing_vods:
+                        existing_vods.append(vod_url)
+                        update_data['twitch_vod_urls'] = existing_vods[-10:]
+                
+                db.games.stage_game_for_approval(
+                    sync_session_id=sync_session_id,
+                    game_data=update_data,
+                    action_type='update',
+                    confidence_score=confidence,
+                    source_platform='twitch'
+                )
+                print(f"✅ SYNC: Staged Twitch update for '{game_name}' ({duration_minutes} mins, {view_count:,} views)")
                 games_updated += 1
 
-                # Track low-confidence update for notification
-                if is_low_confidence:
-                    low_confidence_entries.append({
-                        'id': existing_game['id'],
-                        'name': game_name,
-                        'confidence': confidence,
-                        'source': 'twitch_vod',
-                        'original_title': title,
-                        'vod_url': vod_url,
-                        'action': 'updated',
-                        'playtime_added': duration_minutes
-                    })
-
             else:
-                # Add new game from Twitch VOD with IGDB enrichment if available
+                # Stage new Twitch game
                 game_data = {
                     'canonical_name': game_name,
                     'series_name': game_name,
                     'total_playtime_minutes': duration_minutes,
                     'total_episodes': 1,
-                    'twitch_views': view_count,  # NEW: Include Twitch views for new games
+                    'twitch_views': view_count,
                     'first_played_date': vod['published_at'].date(),
-                    'notes': f"Auto-synced from Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
-
-                # Phase 1.3: Add VOD URL for new games
+                    'notes': f"Auto-synced from Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"
+                }
+                
                 if vod_url:
                     game_data['twitch_vod_urls'] = [vod_url]
-                    print(f"📎 SYNC: Storing VOD URL for new game '{game_name}'")
-
-                # Try IGDB enrichment for new Twitch games if confidence is high
+                
+                # IGDB enrichment for high-confidence matches
                 if igdb_available and confidence >= 0.75:
                     try:
                         igdb_data = await validate_and_enrich(game_name)
                         if igdb_data and igdb_data.get('match_found'):
-                            # Add enriched metadata
                             if igdb_data.get('genre'):
                                 game_data['genre'] = map_genre_to_standard(igdb_data['genre'])
-                                print(f"🎮 SYNC: Added genre from IGDB: {game_data['genre']}")
-
                             if igdb_data.get('release_year'):
                                 game_data['release_year'] = igdb_data['release_year']
-                                print(f"📅 SYNC: Added release year from IGDB: {igdb_data['release_year']}")
-
                             if igdb_data.get('series_name'):
                                 game_data['series_name'] = igdb_data['series_name']
-                                print(f"📚 SYNC: Added series from IGDB: {igdb_data['series_name']}")
-
                             if igdb_data.get('alternative_names'):
                                 game_data['alternative_names'] = igdb_data['alternative_names'][:5]
-                                print(f"🔤 SYNC: Added alternative names from IGDB")
                     except Exception as igdb_error:
-                        print(f"⚠️ SYNC: IGDB enrichment failed for Twitch game '{game_name}': {igdb_error}")
-
-                new_game_id = db.add_played_game(**game_data)
-                print(f"✅ SYNC: Added '{game_name}' from Twitch VOD ({duration_minutes} mins)")
+                        print(f"⚠️ SYNC: IGDB enrichment failed: {igdb_error}")
+                
+                db.games.stage_game_for_approval(
+                    sync_session_id=sync_session_id,
+                    game_data=game_data,
+                    action_type='add',
+                    confidence_score=confidence,
+                    source_platform='twitch'
+                )
+                print(f"✅ SYNC: Staged new Twitch game '{game_name}' ({duration_minutes} mins)")
                 games_added += 1
-
-                # Track low-confidence addition for notification
-                if is_low_confidence and new_game_id:
-                    low_confidence_entries.append({
-                        'id': new_game_id,
-                        'name': game_name,
-                        'confidence': confidence,
-                        'source': 'twitch_vod',
-                        'original_title': title,
-                        'vod_url': vod_url,
-                        'action': 'added',
-                        'playtime_added': duration_minutes
-                    })
 
         except Exception as vod_error:
             print(f"⚠️ SYNC: Error processing Twitch VOD '{vod.get('title', 'Unknown')}': {vod_error}")
             continue
 
-    # --- Post-Sync Deduplication ---
-    print("🔄 SYNC: Running deduplication...")
-    try:
-        duplicates_merged = db.deduplicate_played_games()
-        print(f"✅ SYNC: Merged {duplicates_merged} duplicate entries")
-    except Exception as dedup_error:
-        print(f"⚠️ SYNC: Deduplication failed: {dedup_error}")
-        duplicates_merged = 0
-
-    # --- Update Last Sync Timestamp ---
-    try:
-        sync_completion_time = datetime.now(ZoneInfo("Europe/London"))
-        db.update_last_sync_timestamp(sync_completion_time)
-        print(f"✅ SYNC: Updated last sync timestamp to {sync_completion_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    except Exception as timestamp_error:
-        print(f"⚠️ SYNC: Failed to update last sync timestamp: {timestamp_error}")
-
     # --- Send Low-Confidence Notification ---
     if low_confidence_entries:
         await send_low_confidence_notification(low_confidence_entries)
+
+    # --- Get Staging Summary ---
+    summary = db.games.get_staging_session_summary(sync_session_id)
+    print(f"🔄 SYNC: Session {sync_session_id} complete - {summary['total_count']} games staged for approval")
+
+    # --- Trigger Approval Conversation ---
+    from bot.handlers.conversation_handler import start_sync_approval
+    
+    bot = get_bot_instance()
+    if bot:
+        try:
+            await start_sync_approval(
+                sync_session_id=sync_session_id,
+                summary=summary
+            )
+            print(f"✅ SYNC: Approval conversation started for session {sync_session_id}")
+        except Exception as conversation_error:
+            print(f"❌ SYNC: Failed to start approval conversation: {conversation_error}")
+    else:
+        print("❌ SYNC: Bot instance not available for approval conversation")
+
+    # NOTE: Last sync timestamp will be updated AFTER approval in conversation_handler
+    # This ensures timestamp only advances when changes are actually committed
 
     # --- Enhanced Reporting ---
     total_content_count = sum(game.get('total_episodes', 0) for game in playlist_games) + len(twitch_vods)
 
     return {
-        "status": "success",
+        "status": "pending_approval",
+        "sync_session_id": sync_session_id,
         "new_content_count": total_content_count,
         "new_hours": round(total_new_minutes / 60, 1),
         "new_views": new_views,
+        "games_staged": summary['total_count'],
         "games_added": games_added,
         "games_updated": games_updated,
-        "duplicates_merged": duplicates_merged,
-        "completed_games": completed_games,  # Games that changed to 'completed' status
-        "top_video": None,  # Can be enhanced later if needed for specific video tracking
+        "completed_games": completed_games,
         "low_confidence_count": len(low_confidence_entries)
     }
 

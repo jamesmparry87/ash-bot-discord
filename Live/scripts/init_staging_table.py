@@ -15,18 +15,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 def init_staging_table():
     """Initialize the sync_staging table"""
-    print("🔄 Initializing sync staging table...")
+    print("[*] Initializing sync staging table...")
 
     db = get_database()
     if not db:
-        print("❌ Failed to connect to database")
+        print("[FAIL] Failed to connect to database")
         return False
 
     # Create the staging table
     success = db.games.create_staging_table_if_not_exists()
 
     if success:
-        print("✅ Sync staging table initialized successfully")
+        print("[OK] Sync staging table initialized successfully")
         print("\nTable structure:")
         print("  - id: Serial primary key")
         print("  - sync_session_id: UUID for grouping sync sessions")
@@ -42,7 +42,7 @@ def init_staging_table():
         print("  - idx_sync_staging_reviewed (sync_session_id, reviewed)")
         return True
     else:
-        print("❌ Failed to create sync staging table")
+        print("[FAIL] Failed to create sync staging table")
         return False
 
 

@@ -3730,6 +3730,13 @@ async def bulk_approve_sync(message: discord.Message, conv: Dict[str, Any]):
         # Clear staging
         db.games.clear_staging_session(sync_session_id)
 
+        # Update last sync timestamp NOW that changes are approved and committed
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        current_time_uk = datetime.now(ZoneInfo('Europe/London'))
+        db.config.update_config('last_sync_timestamp', current_time_uk.isoformat())
+        print(f"✅ SYNC APPROVAL: Updated last_sync_timestamp to {current_time_uk.isoformat()}")
+
         # Notify JAM
         await message.channel.send(
             f"✅ **Sync Complete!**\n\n"
@@ -3971,6 +3978,13 @@ async def finalize_individual_review(message: discord.Message, conv: Dict[str, A
 
         # Clear staging
         db.games.clear_staging_session(sync_session_id)
+
+        # Update last sync timestamp NOW that changes are approved and committed
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        current_time_uk = datetime.now(ZoneInfo('Europe/London'))
+        db.config.update_config('last_sync_timestamp', current_time_uk.isoformat())
+        print(f"✅ SYNC APPROVAL: Updated last_sync_timestamp to {current_time_uk.isoformat()}")
 
         # Build summary
         summary_msg = f"✅ **Individual Review Complete!**\n\n"
