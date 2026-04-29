@@ -3548,3 +3548,472 @@ async def get_restoration_status() -> Dict[str, Any]:
 
     except Exception as e:
         return {"error": str(e)}
+
+
+# ============================================================================
+# SYNC APPROVAL CONVERSATION HANDLER
+# ============================================================================
+
+# Global state for sync approval conversations
+sync_approval_conversations = {}
+
+
+async def start_sync_approval(sync_session_id: str, summary: Dict[str, Any]) -> bool:
+    """
+    Send sync approval request to JAM via DM.
+    
+    Args:
+        sync_session_id: UUID for this sync session
+        summary: Summary dict from get_staging_session_summary()
+        
+    Returns:
+        True if message sent successfully
+    """
+    try:
+        bot = _get_bot_instance()
+        if not bot:
+            print("❌ SYNC APPROVAL: Bot instance not available")
+            return False
+        
+        user = await bot.fetch_user(JAM_USER_ID)
+        if not user:
+            print(f"❌ SYNC APPROVAL: Could not fetch JAM user {JAM_USER_ID}")
+            return False
+        
+        # Build approval message
+        new_games = summary.get('new_games', [])
+        updates = summary.get('updates', [])
+        total_count = summary.get('total_count', 0)
+        
+        message = "🔄 **Database Sync Complete**\n\n"
+        message += f"📊 **{total_count} games detected**\n\n"
+        
+        # Show new games with IDs
+        if new_games:
+            message += f"🆕 **New Games ({len(new_games)}):**\n"
+            for game in new_games[:10]:  # Limit to first 10
+                game_data = game['game_data']
+                confidence = game.get('confidence_score', 1.0)
+                platform = game.get('source_platform', 'unknown')
+                playtime = game_data.get('total_playtime_minutes', 0)
+                episodes = game_data.get('total_episodes', 0)
+                
+                warning = " ⚠️" if confidence < 0.75 else ""
+                message += (
+                    f"{game['id']}. **{game_data['canonical_name']}** "
+                    f"({platform.title()}, {episodes} ep, "
+                    f"{playtime//60}h {playtime%60}m, {int(confidence*100)}%){warning}\n"
+                )
+            
+            if len(new_games) > 10:
+                message += f"... and {len(new_games) - 10} more\n"
+            message += "\n"
+        
+        # Show updates
+        if updates:
+            message += f"🔄 **Updated Games ({len(updates)}):**\n"
+            for game in updates[:5]:  # Show first 5
+                game_data = game['game_data']
+                existing_episodes = game_data.get('existing_episodes', 0)
+                new_episodes = game_data.get('total_episodes', 0)
+                added_episodes = new_episodes - existing_episodes
+                
+                message += (
+                    f"{game['id']}. **{game_data['canonical_name']}** "
+                    f"(+{added_episodes} ep)\n"
+                )
+            
+            if len(updates) > 5:
+                message += f"... and {len(updates) - 5} more\n"
+            message += "\n"
+        
+        message += "**Choose an action:**\n"
+        message += "✅ **1** - Approve all and commit to database\n"
+        message += "🔍 **2** - Review individually\n"
+        message += "❌ **3** - Cancel entire sync\n"
+        
+        await user.send(message)
+        print(f"✅ SYNC APPROVAL: Sent approval request to JAM (session {sync_session_id})")
+        
+        # Store conversation state
+        sync_approval_conversations[JAM_USER_ID] = {
+            'type': 'sync_approval',
+            'sync_session_id': sync_session_id,
+            'stage': 'awaiting_choice',
+            'summary': summary,
+            'started_at': datetime.now(ZoneInfo("Europe/London"))
+        }
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ SYNC APPROVAL: Error sending approval request: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+async def handle_sync_approval_conversation(message: discord.Message) -> bool:
+    """
+    Handle JAM's responses in sync approval conversation.
+    
+    Returns:
+        True if message was handled by this conversation
+    """
+    user_id = message.author.id
+    
+    if user_id not in sync_approval_conversations:
+        return False
+    
+    conv = sync_approval_conversations[user_id]
+    
+    try:
+        if conv['stage'] == 'awaiting_choice':
+            choice = message.content.strip()
+            
+            if choice == "1":
+                await bulk_approve_sync(message, conv)
+                return True
+            elif choice == "2":
+                await start_individual_review(message, conv)
+                return True
+            elif choice == "3":
+                await cancel_sync(message, conv)
+                return True
+            else:
+                await message.channel.send(
+                    "❓ Please reply with **1**, **2**, or **3**:\n"
+                    "1 = Approve all\n"
+                    "2 = Review individually\n"
+                    "3 = Cancel sync"
+                )
+                return True
+        
+        elif conv['stage'] == 'awaiting_game_ids':
+            await process_individual_review_ids(message, conv)
+            return True
+        
+        elif conv['stage'] == 'reviewing_game':
+            await process_game_review_action(message, conv)
+            return True
+        
+        elif conv['stage'] == 'awaiting_game_name_edit':
+            await process_game_name_edit(message, conv)
+            return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"❌ SYNC APPROVAL: Error handling conversation: {e}")
+        await message.channel.send(
+            f"❌ Error processing your response: {str(e)}\n"
+            f"Use **!cancelsync** to restart."
+        )
+        return True
+
+
+async def bulk_approve_sync(message: discord.Message, conv: Dict[str, Any]):
+    """Approve all games and commit to database"""
+    try:
+        sync_session_id = conv['sync_session_id']
+        
+        await message.channel.send("⏳ Approving all games and committing to database...")
+        
+        # Mark all as approved
+        staged_games = db.games.get_staged_games(sync_session_id)
+        for game in staged_games:
+            db.games.mark_staged_game_reviewed(game['id'], approved=True)
+        
+        # Commit to database
+        counts = db.games.commit_staged_games(sync_session_id)
+        
+        # Clear staging
+        db.games.clear_staging_session(sync_session_id)
+        
+        # Notify JAM
+        await message.channel.send(
+            f"✅ **Sync Complete!**\n\n"
+            f"📊 **Results:**\n"
+            f"• {counts['added']} new games added\n"
+            f"• {counts['updated']} games updated\n"
+            f"• {counts['skipped']} skipped\n\n"
+            f"All changes have been committed to the database."
+        )
+        
+        print(f"✅ SYNC APPROVAL: Bulk approval complete (session {sync_session_id})")
+        
+        # Clean up conversation
+        del sync_approval_conversations[message.author.id]
+        
+    except Exception as e:
+        print(f"❌ SYNC APPROVAL: Error in bulk approval: {e}")
+        await message.channel.send(f"❌ Error during bulk approval: {str(e)}")
+
+
+async def start_individual_review(message: discord.Message, conv: Dict[str, Any]):
+    """Start individual game review process"""
+    try:
+        await message.channel.send(
+            "🔍 **Individual Review Mode**\n\n"
+            "Which games need review?\n"
+            "• Enter game IDs separated by commas (e.g., `97, 99, 103`)\n"
+            "• Or reply **all** to review all games\n"
+            "• Or reply **cancel** to go back"
+        )
+        
+        conv['stage'] = 'awaiting_game_ids'
+        
+    except Exception as e:
+        print(f"❌ SYNC APPROVAL: Error starting individual review: {e}")
+        await message.channel.send(f"❌ Error: {str(e)}")
+
+
+async def process_individual_review_ids(message: discord.Message, conv: Dict[str, Any]):
+    """Process the game IDs to review"""
+    try:
+        content = message.content.strip().lower()
+        
+        if content == 'cancel':
+            # Go back to main choice
+            conv['stage'] = 'awaiting_choice'
+            await message.channel.send(
+                "↩️ Cancelled. Reply **1**, **2**, or **3** to choose an action."
+            )
+            return
+        
+        sync_session_id = conv['sync_session_id']
+        staged_games = db.games.get_staged_games(sync_session_id)
+        
+        if content == 'all':
+            games_to_review = staged_games
+        else:
+            # Parse comma-separated IDs
+            try:
+                ids = [int(id_str.strip()) for id_str in content.split(',')]
+                games_to_review = [g for g in staged_games if g['id'] in ids]
+                
+                if not games_to_review:
+                    await message.channel.send(
+                        f"❌ No games found with those IDs. Please try again or reply **cancel**."
+                    )
+                    return
+            except ValueError:
+                await message.channel.send(
+                    f"❌ Invalid format. Please enter game IDs separated by commas (e.g., `97, 99`) or reply **all**."
+                )
+                return
+        
+        # Start reviewing first game
+        conv['games_to_review'] = games_to_review
+        conv['review_index'] = 0
+        conv['stage'] = 'reviewing_game'
+        
+        # Auto-approve high-confidence games
+        conv['auto_approved'] = []
+        for game in games_to_review:
+            if game.get('confidence_score', 1.0) >= 0.9:
+                db.games.mark_staged_game_reviewed(game['id'], approved=True)
+                conv['auto_approved'].append(game)
+        
+        if conv['auto_approved']:
+            names = [g['game_data']['canonical_name'] for g in conv['auto_approved']]
+            await message.channel.send(
+                f"✅ **Auto-approved {len(conv['auto_approved'])} high-confidence games (≥90%):**\n"
+                + "\n".join(f"• {name}" for name in names)
+            )
+        
+        await show_next_game_for_review(message, conv)
+        
+    except Exception as e:
+        print(f"❌ SYNC APPROVAL: Error processing review IDs: {e}")
+        await message.channel.send(f"❌ Error: {str(e)}")
+
+
+async def show_next_game_for_review(message: discord.Message, conv: Dict[str, Any]):
+    """Show the next game in the review queue"""
+    try:
+        games = conv['games_to_review']
+        index = conv['review_index']
+        
+        # Skip auto-approved games
+        while index < len(games) and games[index] in conv.get('auto_approved', []):
+            index += 1
+            conv['review_index'] = index
+        
+        if index >= len(games):
+            # All games reviewed - commit
+            await finalize_individual_review(message, conv)
+            return
+        
+        game = games[index]
+        game_data = game['game_data']
+        
+        review_msg = f"🔍 **Game {index + 1}/{len(games)}**\n\n"
+        review_msg += f"**ID:** {game['id']}\n"
+        review_msg += f"**Name:** {game_data['canonical_name']}\n"
+        review_msg += f"**Action:** {game['action_type']}\n"
+        review_msg += f"**Platform:** {game.get('source_platform', 'unknown').title()}\n"
+        review_msg += f"**Episodes:** {game_data.get('total_episodes', 0)}\n"
+        review_msg += f"**Playtime:** {game_data.get('total_playtime_minutes', 0)//60}h {game_data.get('total_playtime_minutes', 0)%60}m\n"
+        review_msg += f"**Confidence:** {int(game.get('confidence_score', 1.0)*100)}%\n\n"
+        
+        review_msg += "**Choose an action:**\n"
+        review_msg += "✅ **1** - Approve as-is\n"
+        review_msg += "✏️ **2** - Edit game name\n"
+        review_msg += "⏭️ **3** - Skip this game\n"
+        review_msg += "❌ **cancel** - Cancel review\n"
+        
+        await message.channel.send(review_msg)
+        
+    except Exception as e:
+        print(f"❌ SYNC APPROVAL: Error showing game for review: {e}")
+        await message.channel.send(f"❌ Error: {str(e)}")
+
+
+async def process_game_review_action(message: discord.Message, conv: Dict[str, Any]):
+    """Process user's choice for current game"""
+    try:
+        choice = message.content.strip().lower()
+        
+        if choice == 'cancel':
+            await cancel_sync(message, conv)
+            return
+        
+        games = conv['games_to_review']
+        index = conv['review_index']
+        game = games[index]
+        
+        if choice == '1':
+            # Approve
+            db.games.mark_staged_game_reviewed(game['id'], approved=True)
+            await message.channel.send(f"✅ Approved: {game['game_data']['canonical_name']}")
+            
+            # Move to next
+            conv['review_index'] += 1
+            await show_next_game_for_review(message, conv)
+            
+        elif choice == '2':
+            # Edit game name
+            conv['stage'] = 'awaiting_game_name_edit'
+            await message.channel.send(
+                f"✏️ **Edit Game Name**\n\n"
+                f"Current: `{game['game_data']['canonical_name']}`\n\n"
+                f"Enter the corrected game name (or **cancel** to go back):"
+            )
+            
+        elif choice == '3':
+            # Skip
+            db.games.mark_staged_game_reviewed(game['id'], approved=False)
+            await message.channel.send(f"⏭️ Skipped: {game['game_data']['canonical_name']}")
+            
+            # Move to next
+            conv['review_index'] += 1
+            await show_next_game_for_review(message, conv)
+        
+        else:
+            await message.channel.send(
+                "❓ Please reply with **1**, **2**, **3**, or **cancel**"
+            )
+        
+    except Exception as e:
+        print(f"❌ SYNC APPROVAL: Error processing review action: {e}")
+        await message.channel.send(f"❌ Error: {str(e)}")
+
+
+async def process_game_name_edit(message: discord.Message, conv: Dict[str, Any]):
+    """Process edited game name"""
+    try:
+        new_name = message.content.strip()
+        
+        if new_name.lower() == 'cancel':
+            conv['stage'] = 'reviewing_game'
+            await message.channel.send("↩️ Cancelled edit. Choose an action for this game:")
+            await show_next_game_for_review(message, conv)
+            return
+        
+        games = conv['games_to_review']
+        index = conv['review_index']
+        game = games[index]
+        
+        # Update the game data
+        game_data = game['game_data'].copy()
+        old_name = game_data['canonical_name']
+        game_data['canonical_name'] = new_name
+        
+        db.games.update_staged_game_data(game['id'], game_data)
+        db.games.mark_staged_game_reviewed(game['id'], approved=True)
+        
+        await message.channel.send(
+            f"✅ **Updated and approved:**\n"
+            f"Old: `{old_name}`\n"
+            f"New: `{new_name}`"
+        )
+        
+        # Move to next
+        conv['review_index'] += 1
+        conv['stage'] = 'reviewing_game'
+        await show_next_game_for_review(message, conv)
+        
+    except Exception as e:
+        print(f"❌ SYNC APPROVAL: Error processing name edit: {e}")
+        await message.channel.send(f"❌ Error: {str(e)}")
+
+
+async def finalize_individual_review(message: discord.Message, conv: Dict[str, Any]):
+    """Finalize review and commit approved games"""
+    try:
+        sync_session_id = conv['sync_session_id']
+        
+        await message.channel.send("⏳ Committing approved games to database...")
+        
+        # Commit approved games
+        counts = db.games.commit_staged_games(sync_session_id)
+        
+        # Clear staging
+        db.games.clear_staging_session(sync_session_id)
+        
+        # Build summary
+        summary_msg = f"✅ **Individual Review Complete!**\n\n"
+        summary_msg += f"📊 **Results:**\n"
+        summary_msg += f"• {counts['added']} new games added\n"
+        summary_msg += f"• {counts['updated']} games updated\n"
+        summary_msg += f"• {counts['skipped']} skipped\n"
+        
+        if conv.get('auto_approved'):
+            summary_msg += f"• {len(conv['auto_approved'])} auto-approved (high confidence)\n"
+        
+        summary_msg += f"\nAll approved changes have been committed to the database."
+        
+        await message.channel.send(summary_msg)
+        
+        print(f"✅ SYNC APPROVAL: Individual review complete (session {sync_session_id})")
+        
+        # Clean up conversation
+        del sync_approval_conversations[message.author.id]
+        
+    except Exception as e:
+        print(f"❌ SYNC APPROVAL: Error finalizing review: {e}")
+        await message.channel.send(f"❌ Error during finalization: {str(e)}")
+
+
+async def cancel_sync(message: discord.Message, conv: Dict[str, Any]):
+    """Cancel the entire sync"""
+    try:
+        sync_session_id = conv['sync_session_id']
+        
+        # Clear staging without committing
+        db.games.clear_staging_session(sync_session_id)
+        
+        await message.channel.send(
+            "❌ **Sync Cancelled**\n\n"
+            "No changes were made to the database. All staged games have been discarded."
+        )
+        
+        print(f"✅ SYNC APPROVAL: Sync cancelled (session {sync_session_id})")
+        
+        # Clean up conversation
+        del sync_approval_conversations[message.author.id]
+        
+    except Exception as e:
+        print(f"❌ SYNC APPROVAL: Error cancelling sync: {e}")
+        await message.channel.send(f"❌ Error: {str(e)}")

@@ -46,9 +46,10 @@ try:
     from ..integrations.twitch import detect_multiple_games_in_title
     from ..integrations.twitch import extract_game_name_from_title as extract_game_from_twitch
     from ..integrations.twitch import fetch_new_vods_since
+    from ..integrations.twitch import smart_extract_with_validation
     from ..integrations.youtube import execute_youtube_auto_post
     from ..integrations.youtube import extract_game_name_from_title as extract_game_from_youtube
-    from ..integrations.youtube import fetch_new_videos_since
+    from ..integrations.youtube import fetch_playlist_based_content_since
 except ImportError:
     print("⚠️ YouTube/Twitch integration not available for scheduled tasks")
 
@@ -56,13 +57,19 @@ except ImportError:
         print("⚠️ YouTube auto-post not available - integration not loaded")
         return None
 
-    async def fetch_new_videos_since(*args, **kwargs):
-        print("⚠️ fetch_new_videos_since not available - integration not loaded")
+    async def fetch_playlist_based_content_since(*args, **kwargs):
+        print("⚠️ fetch_playlist_based_content_since not available - integration not loaded")
         return []
 
     async def fetch_new_vods_since(*args, **kwargs):
         print("⚠️ fetch_new_vods_since not available - integration not loaded")
         return []
+
+    async def smart_extract_with_validation(title: str):
+        print("⚠️ smart_extract_with_validation not available - integration not loaded")
+        # Fallback to basic extraction with 0.0 confidence
+        extracted = extract_game_from_twitch(title)
+        return extracted, 0.0
 
     def extract_game_from_youtube(*args, **kwargs) -> Optional[str]:
         print("⚠️ extract_game_from_youtube not available - integration not loaded")
@@ -2084,8 +2091,6 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
     # --- Data Gathering: YouTube playlists ---
     playlist_games = []
     try:
-        from ..integrations.youtube import fetch_playlist_based_content_since
-
         playlist_games = await fetch_playlist_based_content_since(
             "UCPoUxLHeTnE9SUDAkqfJzDQ",  # Jonesy's channel
             start_sync_time
