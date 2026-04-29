@@ -2074,7 +2074,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
 
     # Initialize staging table (auto-creates if not exists)
     db.games.create_staging_table_if_not_exists()
-    
+
     # Generate unique session ID for this sync
     sync_session_id = str(uuid.uuid4())
     print(f"🔄 SYNC: Starting sync session {sync_session_id}")
@@ -2293,16 +2293,25 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                 full_game_data = {
                     'canonical_name': canonical_name,
                     'series_name': series_name,
-                    'total_playtime_minutes': game_data.get('total_playtime_minutes', 0),
-                    'total_episodes': game_data.get('total_episodes', 0),
-                    'youtube_views': game_data.get('youtube_views', 0),
+                    'total_playtime_minutes': game_data.get(
+                        'total_playtime_minutes',
+                        0),
+                    'total_episodes': game_data.get(
+                        'total_episodes',
+                        0),
+                    'youtube_views': game_data.get(
+                        'youtube_views',
+                        0),
                     'youtube_playlist_url': game_data.get('youtube_playlist_url'),
                     'completion_status': completion_status,
-                    'alternative_names': game_data.get('alternative_names', []),
+                    'alternative_names': game_data.get(
+                        'alternative_names',
+                        []),
                     'first_played_date': game_data.get('first_played_date'),
-                    'notes': game_data.get('notes', f"Auto-synced from YouTube on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}")
-                }
-                
+                    'notes': game_data.get(
+                        'notes',
+                        f"Auto-synced from YouTube on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}")}
+
                 db.games.stage_game_for_approval(
                     sync_session_id=sync_session_id,
                     game_data=full_game_data,
@@ -2357,9 +2366,12 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                     # Stage multi-game update
                                     update_data = {
                                         'canonical_name': extracted_name,
-                                        'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + fractional_duration,
-                                        'total_episodes': existing_game.get('total_episodes', 0) + 1
-                                    }
+                                        'total_playtime_minutes': existing_game.get(
+                                            'total_playtime_minutes',
+                                            0) + fractional_duration,
+                                        'total_episodes': existing_game.get(
+                                            'total_episodes',
+                                            0) + 1}
                                     db.games.stage_game_for_approval(
                                         sync_session_id=sync_session_id,
                                         game_data=update_data,
@@ -2503,7 +2515,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                     if vod_url not in existing_vods:
                         existing_vods.append(vod_url)
                         update_data['twitch_vod_urls'] = existing_vods[-10:]
-                
+
                 db.games.stage_game_for_approval(
                     sync_session_id=sync_session_id,
                     game_data=update_data,
@@ -2523,12 +2535,11 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                     'total_episodes': 1,
                     'twitch_views': view_count,
                     'first_played_date': vod['published_at'].date(),
-                    'notes': f"Auto-synced from Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"
-                }
-                
+                    'notes': f"Auto-synced from Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
+
                 if vod_url:
                     game_data['twitch_vod_urls'] = [vod_url]
-                
+
                 # IGDB enrichment for high-confidence matches
                 if igdb_available and confidence >= 0.75:
                     try:
@@ -2544,7 +2555,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                 game_data['alternative_names'] = igdb_data['alternative_names'][:5]
                     except Exception as igdb_error:
                         print(f"⚠️ SYNC: IGDB enrichment failed: {igdb_error}")
-                
+
                 db.games.stage_game_for_approval(
                     sync_session_id=sync_session_id,
                     game_data=game_data,
@@ -2569,7 +2580,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
 
     # --- Trigger Approval Conversation ---
     from bot.handlers.conversation_handler import start_sync_approval
-    
+
     bot = get_bot_instance()
     if bot:
         try:
