@@ -5,27 +5,26 @@ Run this script once to create the sync_staging table in the database.
 This table is used for pre-approval workflow before committing games.
 """
 
+from bot.database import get_database
 import os
 import sys
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from bot.database import get_database
-
 
 def init_staging_table():
     """Initialize the sync_staging table"""
     print("🔄 Initializing sync staging table...")
-    
+
     db = get_database()
     if not db:
         print("❌ Failed to connect to database")
         return False
-    
+
     # Create the staging table
     success = db.games.create_staging_table_if_not_exists()
-    
+
     if success:
         print("✅ Sync staging table initialized successfully")
         print("\nTable structure:")
