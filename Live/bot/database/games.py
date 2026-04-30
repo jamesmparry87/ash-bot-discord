@@ -2735,10 +2735,13 @@ class GamesDatabase:
 
         try:
             with conn.cursor() as cur:
-                # Convert datetime objects to ISO strings for JSON serialization
+                # Convert datetime and date objects to ISO strings for JSON serialization
+                from datetime import date
                 game_data_serializable = {}
                 for k, v in game_data.items():
                     if isinstance(v, datetime):
+                        game_data_serializable[k] = v.isoformat()
+                    elif isinstance(v, date):
                         game_data_serializable[k] = v.isoformat()
                     else:
                         game_data_serializable[k] = v

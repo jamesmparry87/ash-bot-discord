@@ -20,7 +20,7 @@ import aiohttp
 from ..database import get_database
 
 # Text processing utilities
-from ..utils.text_processing import cleanup_game_name, extract_game_name_from_title, is_generic_term
+from ..utils.text_processing import cleanup_game_name, extract_game_name_from_title, is_generic_term, is_stream_command_tag
 
 # IGDB integration
 from . import igdb
@@ -98,7 +98,10 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
                 # Use BEFORE dash instead
                 cleaned_before = clean_title_part(before_dash)
 
-                if len(cleaned_before) >= 3 and not is_generic_term(cleaned_before):
+                # FILTER: Skip if this is a stream command/tag
+                if is_stream_command_tag(cleaned_before):
+                    print(f"⚠️ Skipping stream command/tag: '{cleaned_before}'")
+                elif len(cleaned_before) >= 3 and not is_generic_term(cleaned_before):
                     best_name = cleaned_before
                     print(f"🔍 Validating '{cleaned_before}' (before dash, after-dash was commentary) with IGDB...")
                     igdb_result = await igdb.validate_and_enrich(cleaned_before)
@@ -114,8 +117,11 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
                 # Try AFTER dash first (if not all caps)
                 cleaned_after = clean_title_part(after_dash)
 
+                # FILTER: Skip if this is a stream command/tag
+                if is_stream_command_tag(cleaned_after):
+                    print(f"⚠️ Skipping stream command/tag: '{cleaned_after}'")
                 # Reject if it's ONLY "Part X" or similar episode marker
-                if not re.match(r'^(?:part|ep|episode|day)\s+\d+$', cleaned_after, flags=re.IGNORECASE):
+                elif not re.match(r'^(?:part|ep|episode|day)\s+\d+$', cleaned_after, flags=re.IGNORECASE):
                     if len(cleaned_after) >= 3 and not is_generic_term(cleaned_after):
                         best_name = cleaned_after
                         print(f"🔍 Validating '{cleaned_after}' (after dash) with IGDB...")
@@ -133,7 +139,10 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
                 if best_confidence < 0.8:
                     cleaned_before = clean_title_part(before_dash)
 
-                    if len(cleaned_before) >= 3 and not is_generic_term(cleaned_before):
+                    # FILTER: Skip if this is a stream command/tag
+                    if is_stream_command_tag(cleaned_before):
+                        print(f"⚠️ Skipping stream command/tag: '{cleaned_before}'")
+                    elif len(cleaned_before) >= 3 and not is_generic_term(cleaned_before):
                         print(f"🔍 Validating '{cleaned_before}' (before dash) with IGDB...")
                         igdb_result = await igdb.validate_and_enrich(cleaned_before)
                         confidence = igdb_result.get('confidence', 0.0)
@@ -152,7 +161,10 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
             # Apply full cleaning (including "First Time Playing" removal)
             cleaned_extracted = clean_title_part(extracted)
 
-            if cleaned_extracted != best_name:  # Avoid duplicate validation
+            # FILTER: Skip if this is a stream command/tag (e.g., !Fractal)
+            if is_stream_command_tag(cleaned_extracted):
+                print(f"⚠️ Skipping stream command/tag: '{cleaned_extracted}'")
+            elif cleaned_extracted != best_name:  # Avoid duplicate validation
                 # Keep this extraction even if IGDB fails
                 if best_name is None:
                     best_name = cleaned_extracted

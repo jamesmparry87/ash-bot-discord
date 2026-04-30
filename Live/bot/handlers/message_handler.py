@@ -2177,7 +2177,9 @@ async def handle_dm_conversations(message: discord.Message) -> bool:
         try:
             from .conversation_handler import (
                 announcement_conversations,
+                game_review_conversations,
                 handle_announcement_conversation,
+                handle_game_review_conversation,
                 handle_jam_approval_conversation,
                 handle_mod_trivia_conversation,
                 handle_sync_approval_conversation,
@@ -2190,6 +2192,12 @@ async def handle_dm_conversations(message: discord.Message) -> bool:
         except ImportError:
             print("⚠️ Conversation handlers not available for DM routing")
             return False
+
+        # PRIORITY 1: Handle game review conversations FIRST (must be before AI routing)
+        if user_id in game_review_conversations:
+            print(f"🔄 Processing game review conversation for user {user_id}")
+            await handle_game_review_conversation(message)
+            return True
 
         # Handle announcement conversations
         if user_id in announcement_conversations:
