@@ -2428,7 +2428,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
 
                 # ✅ TWITCH-SPECIFIC: Use higher threshold (0.85 vs 0.75) due to inconsistent title formats
                 TWITCH_CONFIDENCE_THRESHOLD = 0.85
-                
+
                 if not extracted_name or confidence < 0.5:
                     print(f"⚠️ SYNC: Very low confidence ({confidence:.2f}) for Twitch title: '{title}' - skipping")
                     continue
@@ -2447,7 +2447,8 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                         }
 
                         await start_game_review_approval(review_data)
-                        print(f"📤 SYNC: Sent Twitch VOD for manual review (confidence: {confidence:.2f} < {TWITCH_CONFIDENCE_THRESHOLD})")
+                        print(
+                            f"📤 SYNC: Sent Twitch VOD for manual review (confidence: {confidence:.2f} < {TWITCH_CONFIDENCE_THRESHOLD})")
                     except Exception as review_error:
                         print(f"❌ SYNC: Failed to send Twitch VOD for review: {review_error}")
 
