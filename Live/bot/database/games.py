@@ -71,6 +71,15 @@ class GamesDatabase:
         if not conn:
             return False
 
+        # FIX 1: Check for existing game to prevent duplicates
+        existing_game = self.get_played_game(canonical_name)
+        if existing_game:
+            logger.warning(
+                f"FIX 1: Game '{canonical_name}' already exists in database (ID: {existing_game['id']}). "
+                f"Skipping duplicate add. Use update instead."
+            )
+            return False
+
         try:
             with conn.cursor() as cur:
                 # NEW: Convert lists to JSON strings for robust storage
@@ -2735,6 +2744,80 @@ class GamesDatabase:
 
         try:
             with conn.cursor() as cur:
+                canonical_name = game_data.get('canonical_name')
+                
+                # FIX 2: Check if this game is already staged in this session
+                cur.execute(
+                    """
+                    SELECT id, game_data, action_type FROM sync_staging
+                    WHERE sync_session_id = %s
+                    AND game_data->>'canonical_name' = %s
+                    """,
+                    (sync_session_id, canonical_name)
+                )
+                existing_staged = cur.fetchone()
+                
+                if existing_staged:
+                    # Game already staged - aggregate the data instead of creating duplicate
+                    existing_id = existing_staged['id']
+                    existing_data = existing_staged['game_data']
+                    if isinstance(existing_data, str):
+                        existing_data = json.loads(existing_data)
+                    
+                    logger.info(
+                        f"FIX 2: Game '{canonical_name}' already staged (ID: {existing_id}). "
+                        f"Aggregating data instead of creating duplicate."
+                    )
+                    
+                    # Aggregate numeric fields (playtime, episodes, views)
+                    merged_data = existing_data.copy()
+                    merged_data['total_playtime_minutes'] = (
+                        existing_data.get('total_playtime_minutes', 0) +
+                        game_data.get('total_playtime_minutes', 0)
+                    )
+                    merged_data['total_episodes'] = (
+                        existing_data.get('total_episodes', 0) +
+                        game_data.get('total_episodes', 0)
+                    )
+                    merged_data['youtube_views'] = max(
+                        existing_data.get('youtube_views', 0),
+                        game_data.get('youtube_views', 0)
+                    )
+                    merged_data['twitch_views'] = (
+                        existing_data.get('twitch_views', 0) +
+                        game_data.get('twitch_views', 0)
+                    )
+                    
+                    # Merge VOD URLs if present
+                    if 'twitch_vod_urls' in game_data:
+                        existing_vods = existing_data.get('twitch_vod_urls', [])
+                        new_vods = game_data.get('twitch_vod_urls', [])
+                        if isinstance(existing_vods, list) and isinstance(new_vods, list):
+                            merged_data['twitch_vod_urls'] = list(set(existing_vods + new_vods))
+                    
+                    # Use most recent completion status
+                    if game_data.get('completion_status'):
+                        merged_data['completion_status'] = game_data['completion_status']
+                    
+                    # Update the existing staged entry with aggregated data
+                    cur.execute(
+                        """
+                        UPDATE sync_staging
+                        SET game_data = %s
+                        WHERE id = %s
+                        """,
+                        (json.dumps(merged_data), existing_id)
+                    )
+                    conn.commit()
+                    
+                    logger.info(
+                        f"FIX 2: Aggregated data for '{canonical_name}': "
+                        f"{existing_data.get('total_episodes', 0)} -> {merged_data.get('total_episodes', 0)} episodes"
+                    )
+                    
+                    return existing_id
+                
+                # No existing entry - create new staging entry
                 # Convert datetime and date objects to ISO strings for JSON serialization
                 from datetime import date
                 game_data_serializable = {}
