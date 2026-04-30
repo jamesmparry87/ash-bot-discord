@@ -2578,19 +2578,26 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
     summary = db.games.get_staging_session_summary(sync_session_id)
     print(f"🔄 SYNC: Session {sync_session_id} complete - {summary['total_count']} games staged for approval")
 
-    # --- Trigger Approval Conversation ---
-    from bot.handlers.conversation_handler import start_sync_approval
+    # --- Trigger Approval Conversation via Queue System ---
+    from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
 
     bot = get_bot_instance()
     if bot:
         try:
-            await start_sync_approval(
-                sync_session_id=sync_session_id,
-                summary=summary
+            # Add to approval queue with appropriate priority
+            queue_position = add_to_approval_queue(
+                item_type='sync_approval',
+                data={'sync_session_id': sync_session_id, 'summary': summary},
+                priority=6,  # Between weekly announcements (5) and trivia (5)
+                source='monday_content_sync'
             )
-            print(f"✅ SYNC: Approval conversation started for session {sync_session_id}")
+            print(f"✅ SYNC: Added to approval queue at position {queue_position}")
+            
+            # Trigger queue processor
+            await process_next_approval()
+            print(f"✅ SYNC: Queue processor triggered for session {sync_session_id}")
         except Exception as conversation_error:
-            print(f"❌ SYNC: Failed to start approval conversation: {conversation_error}")
+            print(f"❌ SYNC: Failed to queue approval conversation: {conversation_error}")
     else:
         print("❌ SYNC: Bot instance not available for approval conversation")
 

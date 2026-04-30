@@ -242,6 +242,19 @@ async def process_next_approval() -> bool:
                 print(f"❌ Failed to start {item_type} approval")
                 return False
 
+        elif item_type == 'sync_approval':
+            sync_session_id = data.get('sync_session_id')
+            summary = data.get('summary')
+
+            success = await start_sync_approval(sync_session_id, summary)
+
+            if success:
+                jam_approval_active = True
+                return True
+            else:
+                print(f"❌ Failed to start {item_type} approval")
+                return False
+
         else:
             print(f"⚠️ Unknown approval type: {item_type}")
             return False
@@ -3734,8 +3747,8 @@ async def bulk_approve_sync(message: discord.Message, conv: Dict[str, Any]):
         from datetime import datetime
         from zoneinfo import ZoneInfo
         current_time_uk = datetime.now(ZoneInfo('Europe/London'))
-        db.config.update_config('last_sync_timestamp', current_time_uk.isoformat())
-        print(f"✅ SYNC APPROVAL: Updated last_sync_timestamp to {current_time_uk.isoformat()}")
+        db.config.set_config_value('last_content_sync_timestamp', current_time_uk.isoformat())
+        print(f"✅ SYNC APPROVAL: Updated last_content_sync_timestamp to {current_time_uk.isoformat()}")
 
         # Notify JAM
         await message.channel.send(
@@ -3983,8 +3996,8 @@ async def finalize_individual_review(message: discord.Message, conv: Dict[str, A
         from datetime import datetime
         from zoneinfo import ZoneInfo
         current_time_uk = datetime.now(ZoneInfo('Europe/London'))
-        db.config.update_config('last_sync_timestamp', current_time_uk.isoformat())
-        print(f"✅ SYNC APPROVAL: Updated last_sync_timestamp to {current_time_uk.isoformat()}")
+        db.config.set_config_value('last_content_sync_timestamp', current_time_uk.isoformat())
+        print(f"✅ SYNC APPROVAL: Updated last_content_sync_timestamp to {current_time_uk.isoformat()}")
 
         # Build summary
         summary_msg = f"✅ **Individual Review Complete!**\n\n"

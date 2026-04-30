@@ -2735,6 +2735,14 @@ class GamesDatabase:
 
         try:
             with conn.cursor() as cur:
+                # Convert datetime objects to ISO strings for JSON serialization
+                game_data_serializable = {}
+                for k, v in game_data.items():
+                    if isinstance(v, (datetime.date, datetime.datetime)):
+                        game_data_serializable[k] = v.isoformat()
+                    else:
+                        game_data_serializable[k] = v
+                
                 cur.execute(
                     """
                     INSERT INTO sync_staging (
@@ -2744,10 +2752,10 @@ class GamesDatabase:
                     VALUES (%s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (sync_session_id, json.dumps(game_data), action_type,
+                    (sync_session_id, json.dumps(game_data_serializable), action_type,
                      confidence_score, source_platform)
                 )
-                staged_id = cur.fetchone()[0]
+                staged_id = cur.fetchone()['id']
                 conn.commit()
                 logger.info(
                     f"Staged game '{game_data.get('canonical_name')}' "
@@ -2806,8 +2814,9 @@ class GamesDatabase:
                 staged_games = []
                 for row in results:
                     row_dict = dict(row)
-                    # Parse JSON game_data
-                    row_dict['game_data'] = json.loads(row_dict['game_data'])
+                    # Parse JSON game_data only if it's a string (JSONB may auto-deserialize)
+                    if isinstance(row_dict['game_data'], str):
+                        row_dict['game_data'] = json.loads(row_dict['game_data'])
                     staged_games.append(row_dict)
 
                 return staged_games
