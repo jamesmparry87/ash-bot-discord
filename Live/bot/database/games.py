@@ -2738,7 +2738,7 @@ class GamesDatabase:
                 # Convert datetime objects to ISO strings for JSON serialization
                 game_data_serializable = {}
                 for k, v in game_data.items():
-                    if isinstance(v, (datetime.date, datetime.datetime)):
+                    if isinstance(v, datetime):
                         game_data_serializable[k] = v.isoformat()
                     else:
                         game_data_serializable[k] = v

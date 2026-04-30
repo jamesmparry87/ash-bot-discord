@@ -2426,26 +2426,30 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                 from ..integrations.twitch import smart_extract_with_validation
                 extracted_name, confidence = await smart_extract_with_validation(title)
 
+                # ✅ TWITCH-SPECIFIC: Use higher threshold (0.85 vs 0.75) due to inconsistent title formats
+                TWITCH_CONFIDENCE_THRESHOLD = 0.85
+                
                 if not extracted_name or confidence < 0.5:
-                    print(f"⚠️ SYNC: Low confidence ({confidence:.2f}) for Twitch title: '{title}'")
+                    print(f"⚠️ SYNC: Very low confidence ({confidence:.2f}) for Twitch title: '{title}' - skipping")
+                    continue
 
-                    # Flag for manual review if confidence is between 0.3-0.5
-                    if 0.3 <= confidence < 0.5 and extracted_name:
-                        try:
-                            from ..handlers.conversation_handler import start_game_review_approval
+                # Flag for manual review if confidence is below Twitch threshold (0.85)
+                if confidence < TWITCH_CONFIDENCE_THRESHOLD and extracted_name:
+                    try:
+                        from ..handlers.conversation_handler import start_game_review_approval
 
-                            review_data = {
-                                'original_title': title,
-                                'extracted_name': extracted_name,
-                                'confidence_score': confidence,
-                                'source': 'twitch_sync',
-                                'vod_url': vod_url
-                            }
+                        review_data = {
+                            'original_title': title,
+                            'extracted_name': extracted_name,
+                            'confidence_score': confidence,
+                            'source': 'twitch_sync',
+                            'vod_url': vod_url
+                        }
 
-                            await start_game_review_approval(review_data)
-                            print(f"📤 SYNC: Sent Twitch VOD for manual review (confidence: {confidence:.2f})")
-                        except Exception as review_error:
-                            print(f"❌ SYNC: Failed to send Twitch VOD for review: {review_error}")
+                        await start_game_review_approval(review_data)
+                        print(f"📤 SYNC: Sent Twitch VOD for manual review (confidence: {confidence:.2f} < {TWITCH_CONFIDENCE_THRESHOLD})")
+                    except Exception as review_error:
+                        print(f"❌ SYNC: Failed to send Twitch VOD for review: {review_error}")
 
                     continue
 

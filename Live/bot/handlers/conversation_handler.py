@@ -2207,7 +2207,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
             if question_id and db:
                 try:
-                    success = db.reject_trivia_question(question_id)  # type: ignore
+                    success = db.trivia.reject_trivia_question(question_id)  # type: ignore
                     if success:
                         print(f"✅ PRE-TRIVIA REJECTION: Updated question #{question_id} status to rejected")
                     else:
@@ -2412,7 +2412,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 if question_id and db:
                     # Question already in database - update status to rejected
                     try:
-                        success = db.reject_trivia_question(question_id)  # type: ignore
+                        success = db.trivia.reject_trivia_question(question_id)  # type: ignore
                         if success:
                             print(f"✅ REJECTION: Updated question #{question_id} status to rejected")
                         else:

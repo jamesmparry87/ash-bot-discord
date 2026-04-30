@@ -70,6 +70,9 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         return None
 
     cleaned_title = title.strip()
+    
+    # Remove leading exclamation marks early (e.g., "!Fractal - Title")
+    cleaned_title = re.sub(r'^!', '', cleaned_title).strip()
 
     # PRIORITY 0: Handle "=" separator for creative titles (e.g., "Episode Title = Game Name")
     # This is common for creative stream titles
@@ -145,6 +148,7 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
 
     # PRIORITY 3: Remove common prefixes
     prefix_patterns = [
+        r'^!',  # Remove leading exclamation marks (e.g., "!Fractal - Title")
         r'^\*?(DROPS?|NEW|SPONSORED?|LIVE)\*?\s*[-:]?\s*',
         r'^First Time Playing:?\s*',
         r'^Let\'?s Play:?\s*',
