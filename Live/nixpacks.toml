@@ -1,0 +1,19 @@
+# Nixpacks configuration for Railway deployment
+# This configuration ensures secrets are only available at runtime, not baked into build layers
+
+[phases.setup]
+# Use Python 3.11 to match runtime.txt
+nixPkgs = ["python311"]
+
+[phases.install]
+# Install Python dependencies
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+# Start command for the Discord bot
+cmd = "python bot_modular.py"
+
+# Note: Environment variables (DISCORD_TOKEN, API keys, etc.) 
+# are intentionally NOT defined here. Railway will inject them
+# at runtime only, which is the secure approach and fixes the
+# "SecretsUsedInArgOrEnv" warnings.
