@@ -3983,6 +3983,23 @@ async def finalize_individual_review(message: discord.Message, conv: Dict[str, A
     """Finalize review and commit approved games"""
     try:
         sync_session_id = conv['sync_session_id']
+        
+        # Auto-approve un-reviewed games (games not in the review list)
+        all_staged = db.games.get_staged_games(sync_session_id)
+        reviewed_ids = [g['id'] for g in conv.get('games_to_review', [])]
+        
+        auto_approved_unreviewed = []
+        for game in all_staged:
+            if game['id'] not in reviewed_ids and not game.get('approved'):
+                db.games.mark_staged_game_reviewed(game['id'], approved=True)
+                auto_approved_unreviewed.append(game['game_data']['canonical_name'])
+        
+        if auto_approved_unreviewed:
+            await message.channel.send(
+                f"✅ **Auto-approved {len(auto_approved_unreviewed)} un-reviewed games:**\n" +
+                "\n".join(f"• {name}" for name in auto_approved_unreviewed[:5]) +
+                (f"\n... and {len(auto_approved_unreviewed) - 5} more" if len(auto_approved_unreviewed) > 5 else "")
+            )
 
         await message.channel.send("⏳ Committing approved games to database...")
 

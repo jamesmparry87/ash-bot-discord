@@ -1752,64 +1752,6 @@ async def notify_scheduled_message_error(task_name: str, error_message: str, tim
         print(f"❌ Failed to notify JAM of scheduled message error: {notify_error}")
 
 
-async def send_low_confidence_notification(entries: list) -> None:
-    """Send batch DM notification to JAM about low-confidence game extractions"""
-    try:
-        from ..config import JAM_USER_ID
-
-        if not _bot_instance:
-            print("❌ Bot instance not available for low-confidence notification")
-            return
-
-        user = await _bot_instance.fetch_user(JAM_USER_ID)
-        if not user:
-            print(f"❌ Could not fetch JAM user for low-confidence notification")
-            return
-
-        # Group entries by action type
-        added = [e for e in entries if e['action'] == 'added']
-        updated = [e for e in entries if e['action'] == 'updated']
-
-        # Build notification message
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
-        message = (
-            f"⚠️ **Low Confidence Game Extractions - Monday Sync**\n\n"
-            f"**Time:** {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}\n"
-            f"**Total Entries:** {len(entries)}\n\n"
-        )
-
-        if added:
-            message += f"**🆕 New Games Added ({len(added)}):**\n"
-            for entry in added[:5]:  # Limit to first 5
-                message += f"• **{entry['name']}** (ID: {entry['id']}, {entry['confidence']:.0%} confidence)\n"
-                message += f"  From: \"{entry['original_title'][:50]}...\"\n"
-            if len(added) > 5:
-                message += f"  ...and {len(added) - 5} more\n"
-            message += "\n"
-
-        if updated:
-            message += f"**🔄 Existing Games Updated ({len(updated)}):**\n"
-            for entry in updated[:5]:  # Limit to first 5
-                message += f"• **{entry['name']}** (ID: {entry['id']}, +{entry['playtime_added']} mins)\n"
-            if len(updated) > 5:
-                message += f"  ...and {len(updated) - 5} more\n"
-            message += "\n"
-
-        total_playtime = sum(e.get('playtime_added', 0) for e in entries)
-        message += (
-            f"**📊 Summary:**\n"
-            f"• Total playtime preserved: {total_playtime} minutes ({round(total_playtime/60, 1)} hours)\n"
-            f"• All entries saved to database with review flags\n\n"
-            f"*These extractions had confidence between 30-50% but were saved to preserve playtime data. "
-            f"You can review and correct them later if needed.*"
-        )
-
-        await user.send(message)
-        print(f"✅ Sent low-confidence notification to JAM ({len(entries)} entries)")
-
-    except Exception as e:
-        print(f"❌ Failed to send low-confidence notification: {e}")
-
 # --- Reminder Helper Functions ---
 
 
@@ -2191,32 +2133,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                     print(f"📚 SYNC: Added series from IGDB: '{series_name}'")
                         else:
                             print(f"⚠️ SYNC: IGDB confidence too low ({confidence:.2f}), keeping original data")
-
-                            # Trigger manual review for low-confidence matches (between minimum match
-                            # threshold and auto-approval threshold)
-                            if 0.3 <= confidence < 0.75:
-                                try:
-                                    from ..handlers.conversation_handler import start_game_review_approval
-
-                                    review_data = {
-                                        'original_title': game_data.get('canonical_name', canonical_name),
-                                        'extracted_name': canonical_name,
-                                        'igdb_match': igdb_data.get('canonical_name', ''),
-                                        'confidence_score': confidence,
-                                        'alternative_names': igdb_data.get('alternative_names', []),
-                                        'source': 'youtube_sync',
-                                        'igdb_data': igdb_data,
-                                        'video_url': game_data.get('youtube_playlist_url'),
-                                        'series_name': igdb_data.get('series_name'),
-                                        'genre': igdb_data.get('genre'),
-                                        'release_year': igdb_data.get('release_year')
-                                    }
-
-                                    await start_game_review_approval(review_data)
-                                    print(
-                                        f"📤 SYNC: Sent '{canonical_name}' for manual review (confidence: {confidence:.2f})")
-                                except Exception as review_error:
-                                    print(f"❌ SYNC: Failed to send game for review: {review_error}")
+                            # Low-confidence games will be shown with ⚠️ warning in final approval summary
                     else:
                         print(f"ℹ️ SYNC: No IGDB match found for '{canonical_name}'")
 
@@ -2327,9 +2244,6 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
             print(f"⚠️ SYNC: Error processing game '{game_data.get('canonical_name', 'Unknown')}': {game_error}")
             continue
 
-    # Track low-confidence entries for batch notification
-    low_confidence_entries = []
-
     # Process Twitch VODs with smart extraction and IGDB enrichment
     for vod in twitch_vods:
         try:
@@ -2426,34 +2340,11 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                 from ..integrations.twitch import smart_extract_with_validation
                 extracted_name, confidence = await smart_extract_with_validation(title)
 
-                # ✅ TWITCH-SPECIFIC: Use higher threshold (0.85 vs 0.75) due to inconsistent title formats
-                TWITCH_CONFIDENCE_THRESHOLD = 0.85
-
                 if not extracted_name or confidence < 0.5:
                     print(f"⚠️ SYNC: Very low confidence ({confidence:.2f}) for Twitch title: '{title}' - skipping")
                     continue
 
-                # Flag for manual review if confidence is below Twitch threshold (0.85)
-                if confidence < TWITCH_CONFIDENCE_THRESHOLD and extracted_name:
-                    try:
-                        from ..handlers.conversation_handler import start_game_review_approval
-
-                        review_data = {
-                            'original_title': title,
-                            'extracted_name': extracted_name,
-                            'confidence_score': confidence,
-                            'source': 'twitch_sync',
-                            'vod_url': vod_url
-                        }
-
-                        await start_game_review_approval(review_data)
-                        print(
-                            f"📤 SYNC: Sent Twitch VOD for manual review (confidence: {confidence:.2f} < {TWITCH_CONFIDENCE_THRESHOLD})")
-                    except Exception as review_error:
-                        print(f"❌ SYNC: Failed to send Twitch VOD for review: {review_error}")
-
-                    continue
-
+                # Low-confidence games (0.5-0.85) will be shown with ⚠️ warning in final approval summary
                 game_name = extracted_name
                 is_low_confidence = confidence < 0.5
                 print(
@@ -2575,10 +2466,6 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
             print(f"⚠️ SYNC: Error processing Twitch VOD '{vod.get('title', 'Unknown')}': {vod_error}")
             continue
 
-    # --- Send Low-Confidence Notification ---
-    if low_confidence_entries:
-        await send_low_confidence_notification(low_confidence_entries)
-
     # --- Get Staging Summary ---
     summary = db.games.get_staging_session_summary(sync_session_id)
     print(f"🔄 SYNC: Session {sync_session_id} complete - {summary['total_count']} games staged for approval")
@@ -2621,8 +2508,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
         "games_staged": summary['total_count'],
         "games_added": games_added,
         "games_updated": games_updated,
-        "completed_games": completed_games,
-        "low_confidence_count": len(low_confidence_entries)
+        "completed_games": completed_games
     }
 
 
