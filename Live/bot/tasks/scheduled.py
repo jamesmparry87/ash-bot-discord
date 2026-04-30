@@ -2366,15 +2366,31 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
             duration_minutes = vod.get('duration_seconds', 0) // 60
             total_new_minutes += duration_minutes
 
-            # Check if game exists in database
+            # FIX 4: Check if game exists in database (searches both canonical and alternative names)
             existing_game = db.get_played_game(game_name)
 
             if existing_game:
+                # FIX 4: Ensure extracted name is stored as alternative name if different from canonical
+                canonical_name = existing_game.get('canonical_name', '')
+                existing_alt_names = existing_game.get('alternative_names', [])
+                
+                # If extracted name differs from canonical and isn't already an alias, add it
+                if game_name.lower() != canonical_name.lower():
+                    if game_name not in existing_alt_names:
+                        updated_alt_names = existing_alt_names + [game_name]
+                        print(f"🔤 FIX 4: Adding '{game_name}' as alternative name for '{canonical_name}'")
+                    else:
+                        updated_alt_names = existing_alt_names
+                else:
+                    updated_alt_names = existing_alt_names
+                
                 # Update existing game - add to totals
                 update_params = {
+                    'canonical_name': canonical_name,  # Use DB canonical name, not extracted
                     'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + duration_minutes,
                     'total_episodes': existing_game.get('total_episodes', 0) + 1,
-                    'twitch_views': existing_game.get('twitch_views', 0) + view_count  # NEW: Aggregate Twitch views
+                    'twitch_views': existing_game.get('twitch_views', 0) + view_count,  # NEW: Aggregate Twitch views
+                    'alternative_names': updated_alt_names  # FIX 4: Include updated aliases
                 }
 
                 # Phase 1.3: Store VOD URLs
