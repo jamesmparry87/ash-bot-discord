@@ -2373,7 +2373,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                 # FIX 4: Ensure extracted name is stored as alternative name if different from canonical
                 canonical_name = existing_game.get('canonical_name', '')
                 existing_alt_names = existing_game.get('alternative_names', [])
-                
+
                 # If extracted name differs from canonical and isn't already an alias, add it
                 if game_name.lower() != canonical_name.lower():
                     if game_name not in existing_alt_names:
@@ -2383,7 +2383,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                         updated_alt_names = existing_alt_names
                 else:
                     updated_alt_names = existing_alt_names
-                
+
                 # Update existing game - add to totals
                 update_params = {
                     'canonical_name': canonical_name,  # Use DB canonical name, not extracted

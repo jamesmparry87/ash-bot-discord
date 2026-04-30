@@ -52,12 +52,12 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
     title = re.sub(r'\s*@[\w]+', '', title)  # Remove @mentions
     title = re.sub(r'\[DROPS?\]', '', title, flags=re.IGNORECASE)  # Remove [DROPS]
     title = title.strip()
-    
+
     if title != original_title:
         print(f"🧹 FIX 5: Cleaned stream commands from title")
         print(f"   Before: '{original_title}'")
         print(f"   After:  '{title}'")
-    
+
     best_name = None
     best_confidence = 0.0
 
