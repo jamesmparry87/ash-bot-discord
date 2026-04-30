@@ -48,31 +48,31 @@ def is_generic_term(name: str) -> bool:
 def is_stream_command_tag(name: str) -> bool:
     """
     Check if extracted name is a stream command/tag (not a game).
-    
+
     Stream commands typically start with ! and are common sponsor/stream tags.
-    
+
     Args:
         name: Extracted name to validate
-        
+
     Returns:
         True if this is a stream command/tag, False otherwise
     """
     name_clean = name.strip()
-    
+
     # Check if it starts with ! (command tag)
     if name_clean.startswith('!'):
         # Common stream command tags that should never be games
         stream_tags = [
-            '!fractal', '!pp', '!drops', '!discord', '!twitter', 
+            '!fractal', '!pp', '!drops', '!discord', '!twitter',
             '!schedule', '!commands', '!socials', '!merch'
         ]
         if name_clean.lower() in stream_tags:
             return True
-        
+
         # Any single-word command starting with ! is likely a command
         if ' ' not in name_clean and len(name_clean) <= 15:
             return True
-    
+
     # Check for common sponsor/metadata patterns
     metadata_patterns = [
         r'^#\w+$',  # Hashtags alone
@@ -80,11 +80,11 @@ def is_stream_command_tag(name: str) -> bool:
         r'^\(DROPS?\)$',  # (DROPS) tag
         r'^@\w+$',  # Social media handles
     ]
-    
+
     for pattern in metadata_patterns:
         if re.match(pattern, name_clean, re.IGNORECASE):
             return True
-    
+
     return False
 
 
