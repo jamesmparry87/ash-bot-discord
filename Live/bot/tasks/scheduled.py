@@ -2592,7 +2592,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                 source='monday_content_sync'
             )
             print(f"✅ SYNC: Added to approval queue at position {queue_position}")
-            
+
             # Trigger queue processor
             await process_next_approval()
             print(f"✅ SYNC: Queue processor triggered for session {sync_session_id}")

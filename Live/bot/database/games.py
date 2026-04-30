@@ -2742,7 +2742,7 @@ class GamesDatabase:
                         game_data_serializable[k] = v.isoformat()
                     else:
                         game_data_serializable[k] = v
-                
+
                 cur.execute(
                     """
                     INSERT INTO sync_staging (
