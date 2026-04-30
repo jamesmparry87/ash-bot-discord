@@ -397,7 +397,12 @@ class GamesDatabase:
                     'cross_platform_count': int(cross_platform_dict.get('cross_platform_count') or 0)
                 }
         except Exception as e:
-            logger.error(f"Error getting platform comparison stats: {e}")
+            # Handle known schema compatibility issue gracefully
+            error_str = str(e).lower()
+            if "youtube_views" in error_str or "column" in error_str and "does not exist" in error_str:
+                logger.info("ℹ️ Engagement metrics skipped (database schema compatibility)")
+            else:
+                logger.error(f"Error getting platform comparison stats: {e}")
             return {}
 
     def get_engagement_metrics(self, game_name: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
@@ -2664,6 +2669,398 @@ class GamesDatabase:
         except Exception as e:
             logger.error(f"Error getting unique series names: {e}")
             return []
+
+    # --- Sync Staging Methods ---
+
+    def create_staging_table_if_not_exists(self) -> bool:
+        """Create the sync_staging table if it doesn't exist"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS sync_staging (
+                        id SERIAL PRIMARY KEY,
+                        sync_session_id UUID NOT NULL,
+                        game_data JSONB NOT NULL,
+                        action_type VARCHAR(20) NOT NULL CHECK (action_type IN ('add', 'update')),
+                        confidence_score FLOAT,
+                        source_platform VARCHAR(20),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        reviewed BOOLEAN DEFAULT FALSE,
+                        approved BOOLEAN DEFAULT FALSE,
+                        edited BOOLEAN DEFAULT FALSE
+                    );
+
+                    CREATE INDEX IF NOT EXISTS idx_sync_staging_session
+                    ON sync_staging(sync_session_id);
+
+                    CREATE INDEX IF NOT EXISTS idx_sync_staging_reviewed
+                    ON sync_staging(sync_session_id, reviewed);
+                """)
+                conn.commit()
+                logger.info("Sync staging table created/verified")
+                return True
+        except Exception as e:
+            logger.error(f"Error creating sync staging table: {e}")
+            conn.rollback()
+            return False
+
+    def stage_game_for_approval(
+        self,
+        sync_session_id: str,
+        game_data: Dict[str, Any],
+        action_type: str,
+        confidence_score: float = 1.0,
+        source_platform: str = 'unknown'
+    ) -> Optional[int]:
+        """
+        Stage a game for approval before committing to database.
+
+        Args:
+            sync_session_id: UUID for this sync session
+            game_data: Complete game data dictionary
+            action_type: 'add' or 'update'
+            confidence_score: Confidence in the extraction (0.0-1.0)
+            source_platform: 'youtube' or 'twitch'
+
+        Returns:
+            Staged game ID or None if failed
+        """
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                # Convert datetime objects to ISO strings for JSON serialization
+                game_data_serializable = {}
+                for k, v in game_data.items():
+                    if isinstance(v, (datetime.date, datetime.datetime)):
+                        game_data_serializable[k] = v.isoformat()
+                    else:
+                        game_data_serializable[k] = v
+                
+                cur.execute(
+                    """
+                    INSERT INTO sync_staging (
+                        sync_session_id, game_data, action_type,
+                        confidence_score, source_platform
+                    )
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (sync_session_id, json.dumps(game_data_serializable), action_type,
+                     confidence_score, source_platform)
+                )
+                staged_id = cur.fetchone()['id']
+                conn.commit()
+                logger.info(
+                    f"Staged game '{game_data.get('canonical_name')}' "
+                    f"for session {sync_session_id} (ID: {staged_id})"
+                )
+                return staged_id
+        except Exception as e:
+            logger.error(f"Error staging game for approval: {e}")
+            conn.rollback()
+            return None
+
+    def get_staged_games(
+        self,
+        sync_session_id: str,
+        reviewed_only: bool = False
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all staged games for a sync session.
+
+        Args:
+            sync_session_id: UUID for the sync session
+            reviewed_only: If True, only return reviewed games
+
+        Returns:
+            List of staged game dictionaries with metadata
+        """
+        conn = self.get_connection()
+        if not conn:
+            return []
+
+        try:
+            with conn.cursor() as cur:
+                query = """
+                    SELECT
+                        id,
+                        game_data,
+                        action_type,
+                        confidence_score,
+                        source_platform,
+                        reviewed,
+                        approved,
+                        edited,
+                        created_at
+                    FROM sync_staging
+                    WHERE sync_session_id = %s
+                """
+
+                if reviewed_only:
+                    query += " AND reviewed = TRUE"
+
+                query += " ORDER BY id ASC"
+
+                cur.execute(query, (sync_session_id,))
+                results = cur.fetchall()
+
+                staged_games = []
+                for row in results:
+                    row_dict = dict(row)
+                    # Parse JSON game_data only if it's a string (JSONB may auto-deserialize)
+                    if isinstance(row_dict['game_data'], str):
+                        row_dict['game_data'] = json.loads(row_dict['game_data'])
+                    staged_games.append(row_dict)
+
+                return staged_games
+        except Exception as e:
+            logger.error(f"Error getting staged games: {e}")
+            return []
+
+    def get_staged_game_by_id(self, staged_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific staged game by its staging ID"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        id,
+                        sync_session_id,
+                        game_data,
+                        action_type,
+                        confidence_score,
+                        source_platform,
+                        reviewed,
+                        approved,
+                        edited
+                    FROM sync_staging
+                    WHERE id = %s
+                    """,
+                    (staged_id,)
+                )
+                result = cur.fetchone()
+                if result:
+                    row_dict = dict(result)
+                    row_dict['game_data'] = json.loads(row_dict['game_data'])
+                    return row_dict
+                return None
+        except Exception as e:
+            logger.error(f"Error getting staged game {staged_id}: {e}")
+            return None
+
+    def update_staged_game_data(
+        self,
+        staged_id: int,
+        updated_data: Dict[str, Any]
+    ) -> bool:
+        """
+        Update the game_data for a staged game (for corrections).
+
+        Args:
+            staged_id: ID of the staged game
+            updated_data: Updated game data dictionary
+
+        Returns:
+            True if successful
+        """
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE sync_staging
+                    SET game_data = %s, edited = TRUE
+                    WHERE id = %s
+                    """,
+                    (json.dumps(updated_data), staged_id)
+                )
+                conn.commit()
+                logger.info(f"Updated staged game {staged_id} data")
+                return cur.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error updating staged game {staged_id}: {e}")
+            conn.rollback()
+            return False
+
+    def mark_staged_game_reviewed(
+        self,
+        staged_id: int,
+        approved: bool
+    ) -> bool:
+        """
+        Mark a staged game as reviewed with approval status.
+
+        Args:
+            staged_id: ID of the staged game
+            approved: Whether the game was approved
+
+        Returns:
+            True if successful
+        """
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE sync_staging
+                    SET reviewed = TRUE, approved = %s
+                    WHERE id = %s
+                    """,
+                    (approved, staged_id)
+                )
+                conn.commit()
+                status = "approved" if approved else "rejected"
+                logger.info(f"Marked staged game {staged_id} as {status}")
+                return cur.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error marking staged game {staged_id}: {e}")
+            conn.rollback()
+            return False
+
+    def commit_staged_games(self, sync_session_id: str) -> Dict[str, int]:
+        """
+        Commit all approved staged games to the played_games table.
+
+        Args:
+            sync_session_id: UUID for the sync session
+
+        Returns:
+            Dictionary with counts: {'added': X, 'updated': Y, 'skipped': Z}
+        """
+        conn = self.get_connection()
+        if not conn:
+            return {'added': 0, 'updated': 0, 'skipped': 0}
+
+        counts = {'added': 0, 'updated': 0, 'skipped': 0}
+
+        # Get all approved staged games
+        staged_games = self.get_staged_games(sync_session_id, reviewed_only=False)
+
+        for staged_game in staged_games:
+            if not staged_game.get('approved'):
+                counts['skipped'] += 1
+                continue
+
+            game_data = staged_game['game_data']
+            action_type = staged_game['action_type']
+
+            try:
+                if action_type == 'add':
+                    # Add new game
+                    success = self.add_played_game(**game_data)
+                    if success:
+                        counts['added'] += 1
+                        logger.info(f"Committed new game: {game_data.get('canonical_name')}")
+                    else:
+                        counts['skipped'] += 1
+
+                elif action_type == 'update':
+                    # Update existing game
+                    game_name = game_data.get('canonical_name')
+                    existing_game = self.get_played_game(game_name)
+
+                    if existing_game:
+                        # Extract update parameters from game_data
+                        update_params = {
+                            'total_playtime_minutes': game_data.get('total_playtime_minutes'),
+                            'total_episodes': game_data.get('total_episodes'),
+                            'youtube_views': game_data.get('youtube_views'),
+                            'twitch_views': game_data.get('twitch_views'),
+                            'youtube_playlist_url': game_data.get('youtube_playlist_url'),
+                            'completion_status': game_data.get('completion_status')
+                        }
+
+                        success = self.update_played_game(existing_game['id'], **update_params)
+                        if success:
+                            counts['updated'] += 1
+                            logger.info(f"Committed update for: {game_name}")
+                        else:
+                            counts['skipped'] += 1
+                    else:
+                        counts['skipped'] += 1
+                        logger.warning(f"Could not find game to update: {game_name}")
+
+            except Exception as game_error:
+                logger.error(f"Error committing staged game: {game_error}")
+                counts['skipped'] += 1
+                continue
+
+        logger.info(
+            f"Commit complete for session {sync_session_id}: "
+            f"{counts['added']} added, {counts['updated']} updated, "
+            f"{counts['skipped']} skipped"
+        )
+
+        return counts
+
+    def clear_staging_session(self, sync_session_id: str) -> bool:
+        """
+        Clear all staged games for a sync session.
+
+        Args:
+            sync_session_id: UUID for the sync session
+
+        Returns:
+            True if successful
+        """
+        conn = self.get_connection()
+        if not conn:
+            return False
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM sync_staging WHERE sync_session_id = %s",
+                    (sync_session_id,)
+                )
+                deleted_count = cur.rowcount
+                conn.commit()
+                logger.info(f"Cleared {deleted_count} staged games for session {sync_session_id}")
+                return True
+        except Exception as e:
+            logger.error(f"Error clearing staging session: {e}")
+            conn.rollback()
+            return False
+
+    def get_staging_session_summary(self, sync_session_id: str) -> Dict[str, Any]:
+        """
+        Get summary statistics for a staging session.
+
+        Returns:
+            Dictionary with counts and lists of games by category
+        """
+        staged_games = self.get_staged_games(sync_session_id)
+
+        new_games = [g for g in staged_games if g['action_type'] == 'add']
+        updates = [g for g in staged_games if g['action_type'] == 'update']
+        low_confidence = [g for g in staged_games if g.get('confidence_score', 1.0) < 0.75]
+
+        return {
+            'total_count': len(staged_games),
+            'new_count': len(new_games),
+            'update_count': len(updates),
+            'low_confidence_count': len(low_confidence),
+            'new_games': new_games,
+            'updates': updates,
+            'low_confidence_games': low_confidence
+        }
 
     # --- Trivia System Methods ---
 
