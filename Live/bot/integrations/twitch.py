@@ -20,7 +20,12 @@ import aiohttp
 from ..database import get_database
 
 # Text processing utilities
-from ..utils.text_processing import cleanup_game_name, extract_game_name_from_title, is_generic_term, is_stream_command_tag
+from ..utils.text_processing import (
+    cleanup_game_name,
+    extract_game_name_from_title,
+    is_generic_term,
+    is_stream_command_tag,
+)
 
 # IGDB integration
 from . import igdb
