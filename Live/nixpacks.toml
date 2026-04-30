@@ -7,7 +7,7 @@ nixPkgs = ["python311"]
 
 [phases.install]
 # Install Python dependencies
-cmds = ["pip install -r requirements.txt"]
+cmds = ["python -m pip install -r requirements.txt"]
 
 [start]
 # Start command for the Discord bot
