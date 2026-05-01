@@ -117,7 +117,40 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     # Remove leading exclamation marks early (e.g., "!Fractal - Title")
     cleaned_title = re.sub(r'^!', '', cleaned_title).strip()
 
-    # PRIORITY 0: Handle "=" separator for creative titles (e.g., "Episode Title = Game Name")
+    # PRIORITY 0A: Extract game name from special markers like *SAROS* or **GameName**
+    # This handles titles like "Early Access *SAROS* - Thanks @PlayStation"
+    marker_pattern = r'\*+([A-Z][A-Za-z0-9\s:]{2,30})\*+'
+    marker_match = re.search(marker_pattern, cleaned_title)
+    if marker_match:
+        potential_game = marker_match.group(1).strip()
+        # Clean and validate
+        potential_game = cleanup_game_name(potential_game)
+        if len(potential_game) >= 3 and not is_generic_term(potential_game):
+            # Check if it's not just a metadata tag
+            if not re.match(r'^(DROPS?|NEW|LIVE|SPONSORED?)$', potential_game, re.IGNORECASE):
+                print(f"Found game in special markers: '{potential_game}'")
+                return potential_game
+
+    # PRIORITY 0B: Handle common game title patterns with colons
+    # "HITMAN: World of Assassination" or "Hitman World of Assassination" → try both
+    # But ONLY for "World of" patterns to avoid false matches
+    temp_clean = re.sub(r'^First Time Playing:\s*', '', cleaned_title, flags=re.IGNORECASE)
+    
+    # Only match "GAMENAME World of Something" pattern (no colon yet, or already has colon)
+    world_of_pattern = r'^([A-Z][A-Z0-9]+)[\s:]+World of ([A-Za-z]+)'
+    world_of_match = re.search(world_of_pattern, temp_clean, re.IGNORECASE)
+    if world_of_match:
+        # Extract game name with "World of" subtitle
+        base_name = world_of_match.group(1).strip()
+        subtitle_word = world_of_match.group(2).strip()
+        
+        # Format as "GAMENAME: World of Subtitle"
+        with_colon = f"{base_name}: World of {subtitle_word}"
+        if len(with_colon) >= 5 and not is_generic_term(with_colon):
+            # We'll return this for IGDB validation - it can try variants
+            return cleanup_game_name(with_colon)
+
+    # PRIORITY 0B: Handle "=" separator for creative titles (e.g., "Episode Title = Game Name")
     # This is common for creative stream titles
     if '=' in cleaned_title:
         parts = cleaned_title.split('=')
@@ -166,13 +199,42 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         game_name = re.sub(r'\s+(?:ft\.|feat\.|featuring).*$', '', game_name, flags=re.IGNORECASE)
         game_name = cleanup_game_name(game_name)
 
-        # Validate
-        if len(game_name) >= 3 and not is_generic_term(game_name):
-            # Reject short exclamatory phrases (episode titles)
-            if len(game_name) < 25 and game_name.endswith('!') and game_name.count(' ') <= 5:
-                pass  # Continue to fallback patterns
+        # FIX: Don't extract if the game name ends with just a number that matches the episode marker
+        # e.g., "Resident Evil 9" when original has "(day 9)" - likely wrong extraction
+        # Check if game_name ends with a digit and that digit appears in the marker
+        if re.search(r'\d+$', game_name):
+            # Get the number from the marker
+            marker_text = day_marker_match.group(0) if day_marker_match else bracket_marker_match.group(0)
+            marker_number_match = re.search(r'\d+', marker_text)
+            if marker_number_match:
+                marker_number = marker_number_match.group(0)
+                # If game name ends with same number as marker, it's likely wrong
+                if game_name.endswith(marker_number):
+                    # This might be "Resident Evil 9" from "Resident Evil Requiem (day 9)"
+                    # Skip this extraction and try other methods
+                    print(f"⚠️ Skipping extraction '{game_name}' - ends with episode number from marker")
+                    pass  # Continue to other strategies
+                else:
+                    # Number doesn't match marker, likely legitimate (e.g., "Halo 3 (day 1)")
+                    if len(game_name) >= 3 and not is_generic_term(game_name):
+                        if len(game_name) < 25 and game_name.endswith('!') and game_name.count(' ') <= 5:
+                            pass  # Reject short exclamatory phrases
+                        else:
+                            return game_name
             else:
-                return game_name
+                # No number in marker, proceed normally
+                if len(game_name) >= 3 and not is_generic_term(game_name):
+                    if len(game_name) < 25 and game_name.endswith('!') and game_name.count(' ') <= 5:
+                        pass  # Reject short exclamatory phrases
+                    else:
+                        return game_name
+        else:
+            # Game name doesn't end with number, proceed normally
+            if len(game_name) >= 3 and not is_generic_term(game_name):
+                if len(game_name) < 25 and game_name.endswith('!') and game_name.count(' ') <= 5:
+                    pass  # Reject short exclamatory phrases
+                else:
+                    return game_name
 
     # PRIORITY 2: Look for clear game title before episode/part numbers
     # Handles formats like "Game Name - Episode 5" or "Game Name | Part 3"

@@ -2445,6 +2445,7 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                     'series_name': game_name,
                     'total_playtime_minutes': duration_minutes,
                     'total_episodes': 1,
+                    'youtube_views': 0,  # Explicit 0 for Twitch-only content (not NULL)
                     'twitch_views': view_count,
                     'first_played_date': vod['published_at'].date(),
                     'notes': f"Auto-synced from Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}

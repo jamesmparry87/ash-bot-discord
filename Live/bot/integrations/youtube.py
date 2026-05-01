@@ -531,15 +531,17 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                     if any(pattern in playlist_title.lower() for pattern in skip_patterns):
                         continue
 
-                    # Check if playlist has content since start_timestamp
+                    # ALWAYS process playlists to keep metrics up-to-date
+                    # Check if playlist has NEW content (for logging/priority)
                     has_new_content = await playlist_has_new_content(
                         session, playlist_id, start_timestamp, youtube_api_key
                     )
 
-                    if not has_new_content:
-                        continue
+                    if has_new_content:
+                        print(f"✅ Processing playlist: {playlist_title} (has NEW content)")
+                    else:
+                        print(f"🔄 Processing playlist: {playlist_title} (updating metrics only)")
 
-                    print(f"✅ Processing playlist: {playlist_title}")
 
                     # Detect completion status from playlist title
                     completion_status = 'completed' if '[COMPLETED]' in playlist_title.upper() else 'in_progress'
@@ -630,6 +632,7 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                         'total_episodes': total_episodes,
                         'youtube_playlist_url': f"https://youtube.com/playlist?list={playlist_id}",
                         'youtube_views': total_views,
+                        'twitch_views': 0,  # Explicit 0 for YouTube-only content (not NULL)
                         'completion_status': completion_status,
                         'alternative_names': alternative_names,
                         'first_played_date': first_video_date,
@@ -659,13 +662,17 @@ async def playlist_has_new_content(session, playlist_id: str, start_timestamp: d
     """
     Check if a playlist has any videos published since the start timestamp.
 
-    Uses pagination to check ALL videos until we find content newer than start_timestamp
-    or encounter a video older than it (robust approach - Option C).
+    Checks at least the first 2 pages (100 videos) before deciding, to handle:
+    - Playlists with manual reordering
+    - Unavailable/private videos that may appear out of order
+    - Mixed old/new content
     """
     try:
         next_page_token = None
         pages_checked = 0
+        min_pages_to_check = 2  # Check at least 2 pages (100 videos) to handle reordering
         max_pages = 10  # Safety limit to prevent infinite loops (10 pages = 500 videos)
+        found_new_content = False
 
         print(f"🔍 Checking playlist {playlist_id[:8]}... for content since {start_timestamp.strftime('%Y-%m-%d')}")
 
@@ -690,33 +697,44 @@ async def playlist_has_new_content(session, playlist_id: str, start_timestamp: d
 
                 if not items:
                     # No more videos in playlist
-                    return False
+                    return found_new_content
 
                 # Check each video in this page
                 for item in items:
-                    published_at = datetime.fromisoformat(item['snippet']['publishedAt'].replace('Z', '+00:00'))
+                    try:
+                        published_at = datetime.fromisoformat(item['snippet']['publishedAt'].replace('Z', '+00:00'))
 
-                    # If we find a video newer than our timestamp, this playlist has new content
-                    if published_at >= start_timestamp:
-                        print(f"✅ Found new content in playlist (published: {published_at.strftime('%Y-%m-%d')})")
-                        return True
-
-                    # If we encounter a video older than our timestamp, stop searching
-                    # (videos are in reverse chronological order - newest first)
-                    if published_at < start_timestamp:
-                        print(f"⏹️ Reached content older than {start_timestamp.strftime('%Y-%m-%d')}, stopping search")
-                        return False
+                        # If we find a video newer than our timestamp, mark that we found new content
+                        if published_at >= start_timestamp:
+                            if not found_new_content:
+                                print(f"✅ Found new content in playlist (published: {published_at.strftime('%Y-%m-%d')})")
+                            found_new_content = True
+                            # Don't return yet - keep checking to log properly
+                    except (KeyError, ValueError) as e:
+                        # Skip videos with invalid/missing dates (e.g., unavailable videos)
+                        continue
 
                 # Check if there are more pages
                 next_page_token = data.get('nextPageToken')
-                if not next_page_token:
-                    # No more pages, and we haven't found content newer than timestamp
-                    return False
-
                 pages_checked += 1
 
+                # If we've found new content and checked minimum pages, we can stop
+                if found_new_content and pages_checked >= min_pages_to_check:
+                    return True
+
+                # If we've checked minimum pages and found nothing, stop
+                if not found_new_content and pages_checked >= min_pages_to_check:
+                    print(f"⏹️ Checked {pages_checked} pages, no content newer than {start_timestamp.strftime('%Y-%m-%d')}")
+                    return False
+
+                # If no more pages, return what we found
+                if not next_page_token:
+                    if not found_new_content:
+                        print(f"⏹️ Reached end of playlist, no content newer than {start_timestamp.strftime('%Y-%m-%d')}")
+                    return found_new_content
+
         print(f"⚠️ Reached max pages ({max_pages}) for playlist check")
-        return False
+        return found_new_content
 
     except Exception as e:
         print(f"⚠️ Error checking playlist for new content: {e}")

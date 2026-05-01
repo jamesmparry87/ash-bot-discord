@@ -57,6 +57,7 @@ mod_trivia_conversations: Dict[int, Dict[str, Any]] = {}
 jam_approval_conversations: Dict[int, Dict[str, Any]] = {}
 weekly_announcement_approvals: Dict[int, Dict[str, Any]] = {}
 game_review_conversations: Dict[int, Dict[str, Any]] = {}
+manual_game_input_conversations: Dict[int, Dict[str, Any]] = {}  # NEW: For manual game name input during sync
 
 # ============================================================================
 # APPROVAL QUEUE SYSTEM (Fix #4 - Prevent Overlapping Conversations)
@@ -4061,3 +4062,170 @@ async def cancel_sync(message: discord.Message, conv: Dict[str, Any]):
     except Exception as e:
         print(f"❌ SYNC APPROVAL: Error cancelling sync: {e}")
         await message.channel.send(f"❌ Error: {str(e)}")
+
+
+# ============================================================================
+# MANUAL GAME NAME INPUT HANDLER (For Low-Confidence Extractions)
+# ============================================================================
+
+async def request_manual_game_name(
+    vod_title: str,
+    vod_data: Dict[str, Any],
+    extracted_name: Optional[str],
+    confidence: float,
+    callback_data: Dict[str, Any]
+) -> bool:
+    """
+    Request manual game name input from JAM for a low-confidence extraction.
+    
+    Args:
+        vod_title: Original VOD/video title
+        vod_data: Full VOD data dict
+        extracted_name: The name we extracted (or None)
+        confidence: Confidence score (0.0-1.0)
+        callback_data: Data to pass back to the sync process
+        
+    Returns:
+        True if request sent successfully
+    """
+    try:
+        bot = _get_bot_instance()
+        if not bot:
+            print("❌ MANUAL INPUT: Bot instance not available")
+            return False
+
+        user = await bot.fetch_user(JAM_USER_ID)
+        if not user:
+            print(f"❌ MANUAL INPUT: Could not fetch JAM user")
+            return False
+
+        # Store conversation state
+        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        manual_game_input_conversations[JAM_USER_ID] = {
+            'step': 'awaiting_game_name',
+            'vod_title': vod_title,
+            'vod_data': vod_data,
+            'extracted_name': extracted_name,
+            'confidence': confidence,
+            'callback_data': callback_data,
+            'initiated_at': uk_now,
+            'last_activity': uk_now
+        }
+
+        # Build request message
+        duration_mins = vod_data.get('duration_seconds', 0) // 60
+        views = vod_data.get('view_count', 0)
+        platform = callback_data.get('platform', 'unknown')
+
+        request_msg = (
+            f"🤔 **Manual Game Identification Needed**\n\n"
+            f"I couldn't confidently identify the game from this {platform} title:\n\n"
+            f"**Title:** `{vod_title}`\n"
+        )
+
+        if extracted_name:
+            request_msg += f"**My guess:** `{extracted_name}` (confidence: {int(confidence*100)}%)\n"
+        else:
+            request_msg += f"**My guess:** *(no match found)*\n"
+
+        request_msg += (
+            f"**Duration:** {duration_mins} minutes\n"
+            f"**Views:** {views:,}\n\n"
+            f"**Please reply with:**\n"
+            f"• The correct game name (e.g., `SAROS`, `Hitman 3`)\n"
+            f"• **skip** to ignore this VOD\n"
+            f"• **accept** to use my guess (if you think it's correct)\n\n"
+            f"*Your input will help me continue the sync process accurately.*"
+        )
+
+        await user.send(request_msg)
+        print(f"✅ MANUAL INPUT: Sent request to JAM for '{vod_title[:50]}'")
+        return True
+
+    except Exception as e:
+        print(f"❌ MANUAL INPUT: Error requesting manual input: {e}")
+        return False
+
+
+async def handle_manual_game_input_conversation(message: discord.Message) -> bool:
+    """
+    Handle JAM's response to manual game name request.
+    
+    Returns:
+        True if message was handled by this conversation
+    """
+    user_id = message.author.id
+
+    if user_id not in manual_game_input_conversations:
+        return False
+
+    conv = manual_game_input_conversations[user_id]
+
+    try:
+        content = message.content.strip()
+        
+        # Check for escape/cancel
+        if check_escape_command(content):
+            await message.channel.send(
+                "❌ **Manual Input Cancelled**\n\n"
+                "This VOD will be skipped. The sync will continue with the next item."
+            )
+            
+            # Trigger callback with skip action
+            if 'callback' in conv.get('callback_data', {}):
+                await conv['callback_data']['callback']('skip', None)
+            
+            del manual_game_input_conversations[user_id]
+            return True
+
+        # Process the response
+        if content.lower() == 'skip':
+            await message.channel.send(
+                "⏭️ **Skipped**\n\n"
+                f"VOD '{conv['vod_title'][:50]}...' will not be added to the database."
+            )
+            
+            # Trigger callback with skip action
+            if 'callback' in conv.get('callback_data', {}):
+                await conv['callback_data']['callback']('skip', None)
+                
+        elif content.lower() == 'accept':
+            if conv['extracted_name']:
+                await message.channel.send(
+                    f"✅ **Accepted**\n\n"
+                    f"Using: `{conv['extracted_name']}`"
+                )
+                
+                # Trigger callback with accept action
+                if 'callback' in conv.get('callback_data', {}):
+                    await conv['callback_data']['callback']('accept', conv['extracted_name'])
+            else:
+                await message.channel.send(
+                    "❌ **Cannot Accept**\n\n"
+                    "I didn't extract a game name, so there's nothing to accept. "
+                    "Please provide the game name or reply **skip**."
+                )
+                return True  # Don't close conversation
+                
+        else:
+            # User provided a game name
+            game_name = content.strip()
+            
+            await message.channel.send(
+                f"✅ **Game Name Recorded**\n\n"
+                f"Using: `{game_name}`\n\n"
+                f"*Continuing sync process...*"
+            )
+            
+            # Trigger callback with manual name
+            if 'callback' in conv.get('callback_data', {}):
+                await conv['callback_data']['callback']('manual', game_name)
+
+        # Clean up conversation
+        del manual_game_input_conversations[user_id]
+        return True
+
+    except Exception as e:
+        print(f"❌ MANUAL INPUT: Error handling response: {e}")
+        await message.channel.send(f"❌ Error processing your response: {str(e)}")
+        return True
