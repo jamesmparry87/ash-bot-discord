@@ -266,15 +266,17 @@ class TestPlayedGames:
         """Test successfully adding a played game."""
         db, mock_cursor = db_with_mock_connection
 
-        result = db.games.add_played_game(
-            canonical_name="Test Game",
-            alternative_names=["TG", "Test"],
-            series_name="Test Series",
-            genre="Action",
-            release_year=2023,
-            completion_status="completed",
-            total_episodes=10
-        )
+        # Mock get_played_game to return None (no existing game)
+        with patch.object(db.games, 'get_played_game', return_value=None):
+            result = db.games.add_played_game(
+                canonical_name="Test Game",
+                alternative_names=["TG", "Test"],
+                series_name="Test Series",
+                genre="Action",
+                release_year=2023,
+                completion_status="completed",
+                total_episodes=10
+            )
 
         assert result is True
         mock_cursor.execute.assert_called_once()
