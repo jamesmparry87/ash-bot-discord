@@ -164,7 +164,7 @@ class GamesDatabase:
                         except (json.JSONDecodeError, TypeError):
                             # Fallback to old parsing for legacy data
                             alt_names = self._parse_comma_separated_list(alt_names_text)
-                        
+
                         # Check each alternative name (case-insensitive)
                         for alt_name in alt_names:
                             if alt_name.lower().strip() == name_lower:
@@ -198,7 +198,7 @@ class GamesDatabase:
                             except (json.JSONDecodeError, TypeError):
                                 # Fallback to old parsing for legacy data
                                 alt_names = self._parse_comma_separated_list(alt_names_text)
-                            
+
                             for alt_name in alt_names:
                                 alt_lower = alt_name.lower().strip()
                                 game_names_map[alt_lower] = game_dict
