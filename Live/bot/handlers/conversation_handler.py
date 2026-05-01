@@ -120,7 +120,8 @@ def is_jam_approval_active() -> bool:
     has_active_conversation = (
         JAM_USER_ID in jam_approval_conversations or
         JAM_USER_ID in weekly_announcement_approvals or
-        JAM_USER_ID in game_review_conversations
+        JAM_USER_ID in game_review_conversations or
+        JAM_USER_ID in sync_approval_conversations  # FIX: Include sync approvals
     )
 
     # Sync the flag with actual state
