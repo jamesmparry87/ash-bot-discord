@@ -158,7 +158,13 @@ class GamesDatabase:
                     game_dict = dict(game_row)
                     alt_names_text = game_dict.get('alternative_names', '')
                     if alt_names_text:
-                        alt_names = self._parse_comma_separated_list(alt_names_text)
+                        # FIX: Parse JSON array instead of comma-separated text
+                        try:
+                            alt_names = json.loads(alt_names_text) if alt_names_text else []
+                        except (json.JSONDecodeError, TypeError):
+                            # Fallback to old parsing for legacy data
+                            alt_names = self._parse_comma_separated_list(alt_names_text)
+                        
                         # Check each alternative name (case-insensitive)
                         for alt_name in alt_names:
                             if alt_name.lower().strip() == name_lower:
@@ -186,8 +192,13 @@ class GamesDatabase:
                         # format)
                         alt_names_text = game_dict.get('alternative_names', '')
                         if alt_names_text and isinstance(alt_names_text, str):
-                            alt_names = self._parse_comma_separated_list(
-                                alt_names_text)
+                            # FIX: Parse JSON array instead of comma-separated text
+                            try:
+                                alt_names = json.loads(alt_names_text) if alt_names_text else []
+                            except (json.JSONDecodeError, TypeError):
+                                # Fallback to old parsing for legacy data
+                                alt_names = self._parse_comma_separated_list(alt_names_text)
+                            
                             for alt_name in alt_names:
                                 alt_lower = alt_name.lower().strip()
                                 game_names_map[alt_lower] = game_dict
