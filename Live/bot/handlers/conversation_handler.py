@@ -4077,14 +4077,14 @@ async def request_manual_game_name(
 ) -> bool:
     """
     Request manual game name input from JAM for a low-confidence extraction.
-    
+
     Args:
         vod_title: Original VOD/video title
         vod_data: Full VOD data dict
         extracted_name: The name we extracted (or None)
         confidence: Confidence score (0.0-1.0)
         callback_data: Data to pass back to the sync process
-        
+
     Returns:
         True if request sent successfully
     """
@@ -4150,7 +4150,7 @@ async def request_manual_game_name(
 async def handle_manual_game_input_conversation(message: discord.Message) -> bool:
     """
     Handle JAM's response to manual game name request.
-    
+
     Returns:
         True if message was handled by this conversation
     """
@@ -4163,18 +4163,18 @@ async def handle_manual_game_input_conversation(message: discord.Message) -> boo
 
     try:
         content = message.content.strip()
-        
+
         # Check for escape/cancel
         if check_escape_command(content):
             await message.channel.send(
                 "❌ **Manual Input Cancelled**\n\n"
                 "This VOD will be skipped. The sync will continue with the next item."
             )
-            
+
             # Trigger callback with skip action
             if 'callback' in conv.get('callback_data', {}):
                 await conv['callback_data']['callback']('skip', None)
-            
+
             del manual_game_input_conversations[user_id]
             return True
 
@@ -4184,18 +4184,18 @@ async def handle_manual_game_input_conversation(message: discord.Message) -> boo
                 "⏭️ **Skipped**\n\n"
                 f"VOD '{conv['vod_title'][:50]}...' will not be added to the database."
             )
-            
+
             # Trigger callback with skip action
             if 'callback' in conv.get('callback_data', {}):
                 await conv['callback_data']['callback']('skip', None)
-                
+
         elif content.lower() == 'accept':
             if conv['extracted_name']:
                 await message.channel.send(
                     f"✅ **Accepted**\n\n"
                     f"Using: `{conv['extracted_name']}`"
                 )
-                
+
                 # Trigger callback with accept action
                 if 'callback' in conv.get('callback_data', {}):
                     await conv['callback_data']['callback']('accept', conv['extracted_name'])
@@ -4206,17 +4206,17 @@ async def handle_manual_game_input_conversation(message: discord.Message) -> boo
                     "Please provide the game name or reply **skip**."
                 )
                 return True  # Don't close conversation
-                
+
         else:
             # User provided a game name
             game_name = content.strip()
-            
+
             await message.channel.send(
                 f"✅ **Game Name Recorded**\n\n"
                 f"Using: `{game_name}`\n\n"
                 f"*Continuing sync process...*"
             )
-            
+
             # Trigger callback with manual name
             if 'callback' in conv.get('callback_data', {}):
                 await conv['callback_data']['callback']('manual', game_name)

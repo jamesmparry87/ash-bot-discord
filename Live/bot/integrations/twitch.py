@@ -47,7 +47,7 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
     # FIX 5: Strip stream commands/tags BEFORE any extraction logic
     # Remove common stream commands (e.g., !Fractal, !PP), hashtags, and mentions
     original_title = title
-    
+
     # More aggressive metadata stripping
     title = re.sub(r'\s*![\w]+', '', title)  # Remove !commands
     title = re.sub(r'\s*#ad\b', '', title, flags=re.IGNORECASE)  # Remove #ad

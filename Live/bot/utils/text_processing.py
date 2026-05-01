@@ -135,7 +135,7 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
     # "HITMAN: World of Assassination" or "Hitman World of Assassination" → try both
     # But ONLY for "World of" patterns to avoid false matches
     temp_clean = re.sub(r'^First Time Playing:\s*', '', cleaned_title, flags=re.IGNORECASE)
-    
+
     # Only match "GAMENAME World of Something" pattern (no colon yet, or already has colon)
     world_of_pattern = r'^([A-Z][A-Z0-9]+)[\s:]+World of ([A-Za-z]+)'
     world_of_match = re.search(world_of_pattern, temp_clean, re.IGNORECASE)
@@ -143,7 +143,7 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         # Extract game name with "World of" subtitle
         base_name = world_of_match.group(1).strip()
         subtitle_word = world_of_match.group(2).strip()
-        
+
         # Format as "GAMENAME: World of Subtitle"
         with_colon = f"{base_name}: World of {subtitle_word}"
         if len(with_colon) >= 5 and not is_generic_term(with_colon):

@@ -128,19 +128,19 @@ async def validate_and_enrich(game_name: str) -> Dict[str, Any]:
 
     # Try multiple search variants for better matching
     search_variants = [game_name]
-    
+
     # If name has colon, try without colon (e.g., "HITMAN: World" → "HITMAN World")
     if ':' in game_name:
         no_colon = game_name.replace(':', '').replace('  ', ' ').strip()
         search_variants.append(no_colon)
-    
+
     # If name has no colon but contains "World of", try with colon
     # (e.g., "HITMAN World of Assassination" → "HITMAN: World of Assassination")
     elif 'World of' in game_name or 'World Of' in game_name:
         # Insert colon before "World of"
         with_colon = re.sub(r'\s+(World of)', r': \1', game_name, count=1, flags=re.IGNORECASE)
         search_variants.append(with_colon)
-    
+
     results = []
     for variant in search_variants:
         # Search IGDB

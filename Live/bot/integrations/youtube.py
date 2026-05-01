@@ -542,7 +542,6 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                     else:
                         print(f"🔄 Processing playlist: {playlist_title} (updating metrics only)")
 
-
                     # Detect completion status from playlist title
                     completion_status = 'completed' if '[COMPLETED]' in playlist_title.upper() else 'in_progress'
 
@@ -707,7 +706,8 @@ async def playlist_has_new_content(session, playlist_id: str, start_timestamp: d
                         # If we find a video newer than our timestamp, mark that we found new content
                         if published_at >= start_timestamp:
                             if not found_new_content:
-                                print(f"✅ Found new content in playlist (published: {published_at.strftime('%Y-%m-%d')})")
+                                print(
+                                    f"✅ Found new content in playlist (published: {published_at.strftime('%Y-%m-%d')})")
                             found_new_content = True
                             # Don't return yet - keep checking to log properly
                     except (KeyError, ValueError) as e:
@@ -730,7 +730,8 @@ async def playlist_has_new_content(session, playlist_id: str, start_timestamp: d
                 # If no more pages, return what we found
                 if not next_page_token:
                     if not found_new_content:
-                        print(f"⏹️ Reached end of playlist, no content newer than {start_timestamp.strftime('%Y-%m-%d')}")
+                        print(
+                            f"⏹️ Reached end of playlist, no content newer than {start_timestamp.strftime('%Y-%m-%d')}")
                     return found_new_content
 
         print(f"⚠️ Reached max pages ({max_pages}) for playlist check")
