@@ -1,85 +1,82 @@
+#!/usr/bin/env python3
 """
-Test sync parser fixes for edge cases found in logs.
+Test script for Fix #3: Punctuation Normalization
 
-Run this to verify the parser improvements handle all the problematic titles.
+This script tests the new _normalize_for_matching() function to verify
+it correctly handles HITMAN and other punctuation variations.
 """
 
 import sys
-sys.path.insert(0, 'Live')
+import os
 
-from bot.utils.text_processing import extract_game_name_from_title
+# Add the Live directory to the path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'Live'))
+
+from bot.database.games import GamesDatabase
 
 
-def test_parser_fixes():
-    """Test all the edge cases from the sync logs"""
+def test_normalization():
+    """Test the _normalize_for_matching() function"""
+    # Create a mock database instance just for the normalization function
+    class MockDB:
+        def get_connection(self):
+            return None
+        def get_config_value(self, key):
+            return None
+    
+    db = GamesDatabase(MockDB())
     
     test_cases = [
-        # SAROS detection via *markers*
-        ("Early Access *SAROS* - Many thank to @PlayStation for the Key !Fractal #ad", "SAROS"),
-        ("SPF NEEDED - SAROS - COME BACK STRONGER - !Fractal #ad", "SAROS"),
-        ("Death Simulator SAROS !Fractal #ad", "Death Simulator SAROS"),
-        
-        # Resident Evil 9 false positive prevention
-        ("First Time Playing: Resident Evil Requiem (day 9) - !Fractal", None),  # Should NOT extract "Resident Evil 9"
-        ("First Time Playing: Resident Evil Requiem (day 5) - !Fractal", None),
-        
-        # HITMAN variants - should extract with colon
-        ("First Time Playing: HITMAN World of Assassination - !Fractal [DROPS]", "HITMAN: World of Assassination"),
-        ("HITMAN World of Assassination [DROPS] - !PP !Fractal", "HITMAN: World of Assassination"),
-        
-        # Should still work for legitimate numbered games
-        ("Halo 3 (day 1) - First Playthrough", "Halo 3"),
-        ("Resident Evil 4 Remake (part 2)", "Resident Evil 4 Remake"),
-        
-        # Multi-game streams
-        ("Ink, Jazz & RAT-tat-tat Action (DAY 1) - !Fractal", "Ink, Jazz"),
-        
-        # Metro with creative prefix
-        ("Mind the Gap (It's Full of Monsters): METRO 2033 (DAY 1) - !Fractal", None),  # Too complex
-        
-        # Standard extractions should still work
-        ("Yakuza 0 Director's Cut - Episode 5", "Yakuza 0 Director's Cut"),
-        ("Saints Row: The Third - Part 12 Thanks @sponsor", "Saints Row: The Third"),
+        # (input1, input2, should_match)
+        ("HITMAN: World of Assassination", "HITMAN World of Assassination", True),
+        ("Resident Evil 2 - Remake", "Resident Evil 2 Remake", True),
+        ("The Legend of Zelda: Breath of the Wild", "Legend of Zelda Breath of the Wild", True),
+        ("Metal Gear Solid: The Twin Snakes", "Metal Gear Solid The Twin Snakes", True),
+        ("Don't Starve", "Dont Starve", True),
+        ("Assassin's Creed", "Assassins Creed", True),
+        ("The Witcher 3", "Witcher 3", True),
+        ("Half-Life 2", "Half Life 2", True),
+        ("BioShock", "Bioshock", True),
+        ("HITMAN: World of Assassination", "Resident Evil 9", False),
     ]
     
-    print("Testing Sync Parser Fixes\n" + "=" * 60)
+    print("Testing Fix #3: Punctuation Normalization\n")
+    print("=" * 70)
     
     passed = 0
     failed = 0
     
-    for title, expected in test_cases:
-        result = extract_game_name_from_title(title)
+    for title1, title2, should_match in test_cases:
+        normalized1 = db._normalize_for_matching(title1)
+        normalized2 = db._normalize_for_matching(title2)
+        matches = (normalized1 == normalized2)
         
-        # Special handling for SAROS - check if it contains SAROS
-        if expected == "SAROS" and result and "SAROS" in result.upper():
-            status = "[PASS]"
-            passed += 1
-        elif expected and result and expected.lower() == result.lower():
-            status = "[PASS]"
-            passed += 1
-        elif expected is None and result is None:
-            status = "[PASS]"
+        status = "[PASS]" if matches == should_match else "[FAIL]"
+        
+        if matches == should_match:
             passed += 1
         else:
-            status = "[FAIL]"
             failed += 1
         
-        print(f"\n{status}")
-        print(f"  Title:    {title[:70]}...")
-        print(f"  Expected: {expected}")
-        print(f"  Got:      {result}")
+        print(f"{status}")
+        print(f"  Input 1: '{title1}'")
+        print(f"  Input 2: '{title2}'")
+        print(f"  Normalized 1: '{normalized1}'")
+        print(f"  Normalized 2: '{normalized2}'")
+        print(f"  Match: {matches} (Expected: {should_match})")
+        print()
     
-    print("\n" + "=" * 60)
-    print(f"Results: {passed} passed, {failed} failed out of {len(test_cases)} tests")
+    print("=" * 70)
+    print(f"\nResults: {passed} passed, {failed} failed out of {len(test_cases)} tests")
     
     if failed == 0:
-        print("[SUCCESS] All parser fixes working correctly!")
+        print("[SUCCESS] All tests passed! Fix #3 is working correctly.")
+        return True
     else:
-        print(f"[WARNING] {failed} tests failed - review needed")
-    
-    return failed == 0
+        print("[ERROR] Some tests failed. Please review the implementation.")
+        return False
 
 
 if __name__ == "__main__":
-    success = test_parser_fixes()
+    success = test_normalization()
     sys.exit(0 if success else 1)

@@ -126,6 +126,7 @@ class GamesDatabase:
         try:
             with conn.cursor() as cur:
                 name_lower = name.lower().strip()
+                name_normalized = self._normalize_for_matching(name)
 
                 # Search canonical name first (exact match)
                 cur.execute("""
@@ -141,6 +142,22 @@ class GamesDatabase:
                     logger.debug(
                         f"Found game by exact canonical name match: {name}")
                     return result_dict
+
+                # FIX #3: Try normalized matching for punctuation variations
+                # This catches "HITMAN World of Assassination" vs "HITMAN: World of Assassination"
+                cur.execute("SELECT * FROM played_games")
+                all_games = cur.fetchall()
+                
+                for game_row in all_games:
+                    game_dict = dict(game_row)
+                    canonical_name = game_dict.get('canonical_name', '')
+                    if canonical_name:
+                        canonical_normalized = self._normalize_for_matching(canonical_name)
+                        if canonical_normalized == name_normalized:
+                            result_dict = game_dict
+                            result_dict = self._convert_text_to_arrays(result_dict)
+                            logger.debug(f"FIX #3: Found game by normalized canonical name: {name} -> {canonical_name}")
+                            return result_dict
 
                 # Search alternative names (handles JSON, PostgreSQL array, and comma-separated formats)
                 # Pre-filter in the database using LIKE to avoid fetching all rows, then do precise matching in Python.
@@ -165,12 +182,20 @@ class GamesDatabase:
                             # Fallback to old parsing for legacy data
                             alt_names = self._parse_comma_separated_list(alt_names_text)
 
-                        # Check each alternative name (case-insensitive)
+                        # Check each alternative name (exact match first, then normalized)
                         for alt_name in alt_names:
                             if alt_name.lower().strip() == name_lower:
                                 result_dict = game_dict
                                 result_dict = self._convert_text_to_arrays(result_dict)
                                 logger.debug(f"Found game by alternative name match: {name} -> {alt_name}")
+                                return result_dict
+                            
+                            # FIX #3: Try normalized matching on alternative names too
+                            alt_normalized = self._normalize_for_matching(alt_name)
+                            if alt_normalized == name_normalized:
+                                result_dict = game_dict
+                                result_dict = self._convert_text_to_arrays(result_dict)
+                                logger.debug(f"FIX #3: Found game by normalized alternative name: {name} -> {alt_name}")
                                 return result_dict
 
                 # Fuzzy search on canonical names with better matching
@@ -533,6 +558,31 @@ class GamesDatabase:
 
         # 3. Handle legacy comma-separated format
         return [item.strip() for item in text.split(',') if item.strip()]
+
+    def _normalize_for_matching(self, name: str) -> str:
+        """
+        Normalize a game name for matching by removing/standardizing punctuation.
+        
+        This helps match variations like:
+        - "HITMAN: World of Assassination" vs "HITMAN World of Assassination"
+        - "Resident Evil 2 - Remake" vs "Resident Evil 2 Remake"
+        - "The Legend of Zelda: Breath of the Wild" vs "Legend of Zelda Breath of the Wild"
+        - "Half-Life 2" vs "Half Life 2"
+        """
+        if not name:
+            return ""
+        import re
+        # Convert to lowercase
+        normalized = name.lower().strip()
+        # Replace hyphens with spaces to preserve word boundaries
+        normalized = re.sub(r'-', ' ', normalized)
+        # Remove colons, apostrophes, periods, and other punctuation
+        normalized = re.sub(r'[:\'.!?]', '', normalized)
+        # Replace multiple spaces with single space
+        normalized = re.sub(r'\s+', ' ', normalized)
+        # Remove leading "the " to handle "The Game" vs "Game"
+        normalized = re.sub(r'^the\s+', '', normalized)
+        return normalized.strip()
 
     def _convert_text_to_arrays(
             self, game_dict: Dict[str, Any]) -> Dict[str, Any]:

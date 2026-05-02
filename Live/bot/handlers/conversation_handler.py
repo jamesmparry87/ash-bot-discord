@@ -3830,10 +3830,10 @@ async def process_individual_review_ids(message: discord.Message, conv: Dict[str
         conv['review_index'] = 0
         conv['stage'] = 'reviewing_game'
 
-        # Auto-approve high-confidence games
+        # Auto-approve high-confidence UPDATES only (not new games)
         conv['auto_approved'] = []
         for game in games_to_review:
-            if game.get('confidence_score', 1.0) >= 0.9:
+            if game.get('confidence_score', 1.0) >= 0.9 and game.get('action_type') == 'update':
                 db.games.mark_staged_game_reviewed(game['id'], approved=True)
                 conv['auto_approved'].append(game)
 
