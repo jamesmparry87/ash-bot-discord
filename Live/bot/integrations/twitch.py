@@ -706,7 +706,8 @@ def detect_multiple_games_in_title(title: str) -> List[str]:
     potential_games = []
 
     # Common multi-game separators
-    separators = [' + ', ' & ', ' and ', ', ']
+    # NOTE: Removed ' & ' because it's commonly used IN game titles (e.g., "Banjo & Kazooie")
+    separators = [' + ', ' and ', ' - ']
 
     for sep in separators:
         if sep in title.lower():

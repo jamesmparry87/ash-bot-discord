@@ -3890,7 +3890,7 @@ async def show_next_game_for_review(message: discord.Message, conv: Dict[str, An
         review_msg += "**Choose an action:**\n"
         review_msg += "✅ **1** - Approve as-is\n"
         review_msg += "✏️ **2** - Edit game name\n"
-        review_msg += "⏭️ **3** - Skip this game\n"
+        review_msg += "⏭️ **3** - Skip (permanently excludes this playlist/VOD from future syncs)\n"
         review_msg += "❌ **cancel** - Cancel review\n"
 
         await message.channel.send(review_msg)
@@ -3932,9 +3932,38 @@ async def process_game_review_action(message: discord.Message, conv: Dict[str, A
             )
 
         elif choice == '3':
-            # Skip
+            # Skip - mark as not approved and add to permanent exclusions
             db.games.mark_staged_game_reviewed(game['id'], approved=False)
-            await message.channel.send(f"⏭️ Skipped: {game['game_data']['canonical_name']}")
+
+            # Add to permanent skip list so this URL won't appear in future syncs
+            game_data = game.get('game_data', {})
+            source_platform = game.get('source_platform', 'youtube')
+            canonical_name = game_data.get('canonical_name', 'Unknown')
+
+            # Get the appropriate URL for this platform
+            skip_url = ''
+            if source_platform == 'youtube':
+                skip_url = game_data.get('youtube_playlist_url', '')
+            else:
+                # Twitch - use first VOD URL
+                vod_urls = game_data.get('twitch_vod_urls', [])
+                if isinstance(vod_urls, list) and vod_urls:
+                    skip_url = vod_urls[0]
+                elif isinstance(vod_urls, str) and vod_urls:
+                    skip_url = vod_urls.split(',')[0].strip()
+
+            if skip_url:
+                from ..config import JAM_USER_ID
+                db.games.add_skipped_vod(skip_url, source_platform, canonical_name, JAM_USER_ID)
+                print(f"⏭️ SYNC APPROVAL: Added '{canonical_name}' ({source_platform}) to permanent skip list")
+                platform_label = "playlist" if source_platform == "youtube" else "VOD"
+                await message.channel.send(
+                    f"⏭️ Skipped: **{canonical_name}**\n"
+                    f"*This {platform_label} has been permanently excluded from future syncs.*"
+                )
+            else:
+                print(f"⏭️ SYNC APPROVAL: Skipped '{canonical_name}' (no URL available for permanent exclusion)")
+                await message.channel.send(f"⏭️ Skipped: {canonical_name}")
 
             # Move to next
             conv['review_index'] += 1

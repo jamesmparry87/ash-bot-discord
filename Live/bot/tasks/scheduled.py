@@ -2077,6 +2077,13 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
     # Process YouTube playlist games
     for game_data in playlist_games:
         try:
+            # Check if this playlist has been previously skipped
+            playlist_url = game_data.get('youtube_playlist_url', '')
+            if playlist_url and db and db.games.is_vod_skipped(playlist_url):
+                canonical_name = game_data.get('canonical_name', 'Unknown')
+                print(f"⏭️ SYNC: Skipping previously ignored YouTube playlist: {canonical_name}")
+                continue
+
             # Normalize data before processing (if available)
             if DATA_QUALITY_AVAILABLE and GameDataValidator:
                 game_data = GameDataValidator.normalize_game_data(game_data)
@@ -2334,7 +2341,81 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
 
                                 total_new_minutes += fractional_duration
                             else:
-                                print(f"   ⚠️ Low confidence for '{game_name}' ({confidence:.2f}), skipping")
+                                # Low confidence - request manual input instead of skipping
+                                print(f"   ⚠️ Low confidence for '{game_name}' ({confidence:.2f}) - requesting manual input")
+                                
+                                from ..handlers.manual_game_input import request_manual_game_name
+                                
+                                vod_data = {
+                                    'title': f"{game_name} (from multi-game stream: {title})",
+                                    'url': vod_url,
+                                    'source': 'twitch',
+                                    'extracted_name': game_name,
+                                    'confidence': confidence
+                                }
+                                
+                                # Request manual input (blocks until response)
+                                manual_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
+                                
+                                if manual_response == "skip":
+                                    # Add to skipped list
+                                    if db:
+                                        db.games.add_skipped_vod(vod_url, 'twitch', title, JAM_USER_ID)
+                                    print(f"   ⏭️ User skipped multi-game entry: {game_name}")
+                                elif manual_response:
+                                    # Use manual name and process this game
+                                    extracted_name = manual_response
+                                    confidence = 1.0  # High confidence for manual input
+                                    print(f"   ✅ Using manual name '{extracted_name}' from user input")
+                                    
+                                    # Check if game exists
+                                    existing_game = db.get_played_game(extracted_name)
+                                    
+                                    if existing_game:
+                                        # Stage multi-game update
+                                        update_data = {
+                                            'canonical_name': extracted_name,
+                                            'total_playtime_minutes': existing_game.get(
+                                                'total_playtime_minutes',
+                                                0) + fractional_duration,
+                                            'total_episodes': existing_game.get(
+                                                'total_episodes',
+                                                0) + 1}
+                                        db.games.stage_game_for_approval(
+                                            sync_session_id=sync_session_id,
+                                            game_data=update_data,
+                                            action_type='update',
+                                            confidence_score=confidence,
+                                            source_platform='twitch'
+                                        )
+                                        print(f"   ✅ Staged update for '{extracted_name}' with {fractional_duration} mins")
+                                        games_updated += 1
+                                    else:
+                                        # Stage new multi-game entry
+                                        game_data = {
+                                            'canonical_name': extracted_name,
+                                            'series_name': extracted_name,
+                                            'total_playtime_minutes': fractional_duration,
+                                            'total_episodes': 1,
+                                            'first_played_date': vod['published_at'].date(),
+                                            'notes': f"Auto-synced from multi-game Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
+                                        if vod_url:
+                                            game_data['twitch_vod_urls'] = [vod_url]
+                                        
+                                        db.games.stage_game_for_approval(
+                                            sync_session_id=sync_session_id,
+                                            game_data=game_data,
+                                            action_type='add',
+                                            confidence_score=confidence,
+                                            source_platform='twitch'
+                                        )
+                                        print(f"   ✅ Staged new game '{extracted_name}' with {fractional_duration} mins")
+                                        games_added += 1
+                                    
+                                    total_new_minutes += fractional_duration
+                                else:
+                                    # Timeout - skip this game
+                                    print(f"   ⏭️ Manual input timeout - skipping multi-game entry: {game_name}")
 
                         except Exception as multi_game_error:
                             print(f"   ❌ Error processing multi-game entry '{game_name}': {multi_game_error}")
