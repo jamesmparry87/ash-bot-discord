@@ -110,14 +110,16 @@ class TestStrikesOperations:
     @pytest.fixture
     def db_with_mock_connection(self):
         """Create database manager with mocked connection."""
-        db = DatabaseManager()
-        db.database_url = 'test_url'  # type: ignore
-
         mock_connection = MagicMock()
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
-        with patch.object(db, 'get_connection', return_value=mock_connection):
+        # Patch methods BEFORE creating DatabaseManager to prevent SQL during init
+        with patch('bot.database.core.DatabaseManager.get_connection', return_value=mock_connection), \
+             patch('bot.database.games.GamesDatabase._run_migrations'):
+            db = DatabaseManager()
+            db.database_url = 'test_url'  # type: ignore
+            mock_cursor.reset_mock()  # Clear any initialization calls
             yield db, mock_cursor
 
     def test_get_user_strikes_existing_user(self, db_with_mock_connection):
@@ -176,14 +178,16 @@ class TestGameRecommendations:
     @pytest.fixture
     def db_with_mock_connection(self):
         """Create database manager with mocked connection."""
-        db = DatabaseManager()
-        db.database_url = 'test_url'  # type: ignore
-
         mock_connection = MagicMock()
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
-        with patch.object(db, 'get_connection', return_value=mock_connection):
+        # Patch methods BEFORE creating DatabaseManager to prevent SQL during init
+        with patch('bot.database.core.DatabaseManager.get_connection', return_value=mock_connection), \
+             patch('bot.database.games.GamesDatabase._run_migrations'):
+            db = DatabaseManager()
+            db.database_url = 'test_url'  # type: ignore
+            mock_cursor.reset_mock()  # Clear any initialization calls
             yield db, mock_cursor
 
     def test_add_game_recommendation(self, db_with_mock_connection):
@@ -252,14 +256,16 @@ class TestPlayedGames:
     @pytest.fixture
     def db_with_mock_connection(self):
         """Create database manager with mocked connection."""
-        db = DatabaseManager()
-        db.database_url = 'test_url'  # type: ignore
-
         mock_connection = MagicMock()
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
-        with patch.object(db, 'get_connection', return_value=mock_connection):
+        # Patch methods BEFORE creating DatabaseManager to prevent SQL during init
+        with patch('bot.database.core.DatabaseManager.get_connection', return_value=mock_connection), \
+             patch('bot.database.games.GamesDatabase._run_migrations'):
+            db = DatabaseManager()
+            db.database_url = 'test_url'  # type: ignore
+            mock_cursor.reset_mock()  # Clear any initialization calls
             yield db, mock_cursor
 
     def test_add_played_game_success(self, db_with_mock_connection):
@@ -364,14 +370,16 @@ class TestConfigOperations:
     @pytest.fixture
     def db_with_mock_connection(self):
         """Create database manager with mocked connection."""
-        db = DatabaseManager()
-        db.database_url = 'test_url'  # type: ignore
-
         mock_connection = MagicMock()
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
-        with patch.object(db, 'get_connection', return_value=mock_connection):
+        # Patch methods BEFORE creating DatabaseManager to prevent SQL during init
+        with patch('bot.database.core.DatabaseManager.get_connection', return_value=mock_connection), \
+             patch('bot.database.games.GamesDatabase._run_migrations'):
+            db = DatabaseManager()
+            db.database_url = 'test_url'  # type: ignore
+            mock_cursor.reset_mock()  # Clear any initialization calls
             yield db, mock_cursor
 
     def test_get_config_value_exists(self, db_with_mock_connection):
@@ -407,14 +415,16 @@ class TestBulkOperations:
     @pytest.fixture
     def db_with_mock_connection(self):
         """Create database manager with mocked connection."""
-        db = DatabaseManager()
-        db.database_url = 'test_url'  # type: ignore
-
         mock_connection = MagicMock()
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
-        with patch.object(db, 'get_connection', return_value=mock_connection):
+        # Patch methods BEFORE creating DatabaseManager to prevent SQL during init
+        with patch('bot.database.core.DatabaseManager.get_connection', return_value=mock_connection), \
+             patch('bot.database.games.GamesDatabase._run_migrations'):
+            db = DatabaseManager()
+            db.database_url = 'test_url'  # type: ignore
+            mock_cursor.reset_mock()  # Clear any initialization calls
             yield db, mock_cursor
 
     def test_bulk_import_strikes(self, db_with_mock_connection):
@@ -466,14 +476,16 @@ class TestStatisticsAndQueries:
     @pytest.fixture
     def db_with_mock_connection(self):
         """Create database manager with mocked connection."""
-        db = DatabaseManager()
-        db.database_url = 'test_url'  # type: ignore
-
         mock_connection = MagicMock()
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
-        with patch.object(db, 'get_connection', return_value=mock_connection):
+        # Patch methods BEFORE creating DatabaseManager to prevent SQL during init
+        with patch('bot.database.core.DatabaseManager.get_connection', return_value=mock_connection), \
+             patch('bot.database.games.GamesDatabase._run_migrations'):
+            db = DatabaseManager()
+            db.database_url = 'test_url'  # type: ignore
+            mock_cursor.reset_mock()  # Clear any initialization calls
             yield db, mock_cursor
 
     def test_get_played_games_stats(self, db_with_mock_connection):

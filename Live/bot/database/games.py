@@ -38,6 +38,46 @@ class GamesDatabase:
             db_manager: DatabaseManager instance for connection access
         """
         self.db = db_manager
+        # Run one-time database migrations on initialization
+        self._run_migrations()
+
+    def _run_migrations(self):
+        """
+        Run one-time database migrations on initialization.
+        
+        This method is idempotent - it safely checks if migrations are needed
+        before applying them, so it can run on every bot startup.
+        """
+        conn = self.get_connection()
+        if not conn:
+            logger.warning("Cannot run migrations - no database connection")
+            return
+        
+        try:
+            with conn.cursor() as cur:
+                # Migration 1: Add skip_igdb_enrichment column
+                cur.execute("""
+                    DO $$ 
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns 
+                            WHERE table_name='played_games' 
+                            AND column_name='skip_igdb_enrichment'
+                        ) THEN
+                            ALTER TABLE played_games 
+                            ADD COLUMN skip_igdb_enrichment BOOLEAN DEFAULT FALSE;
+                            
+                            RAISE NOTICE '✅ Migration: Added skip_igdb_enrichment column to played_games';
+                        ELSE
+                            RAISE NOTICE '⏭️ Migration: skip_igdb_enrichment column already exists';
+                        END IF;
+                    END $$;
+                """)
+                conn.commit()
+                logger.info("✅ Database migrations complete")
+        except Exception as e:
+            logger.error(f"❌ Migration error: {e}")
+            conn.rollback()
 
     def get_connection(self):
         """Get database connection from the database manager"""
@@ -65,7 +105,8 @@ class GamesDatabase:
                         twitch_vod_urls: Optional[List[str]] = None,
                         notes: Optional[str] = None,
                         youtube_views: int = 0,
-                        twitch_views: int = 0) -> bool:
+                        twitch_views: int = 0,
+                        skip_igdb_enrichment: bool = False) -> bool:
         """Add a played game to the database"""
         conn = self.get_connection()
         if not conn:
@@ -91,8 +132,8 @@ class GamesDatabase:
                         canonical_name, alternative_names, series_name, genre,
                         release_year, first_played_date, completion_status, total_episodes,
                         total_playtime_minutes, youtube_playlist_url, twitch_vod_urls, notes, youtube_views, twitch_views,
-                        created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        skip_igdb_enrichment, created_at, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """, (
                     canonical_name,
                     alt_names_str,
@@ -107,7 +148,8 @@ class GamesDatabase:
                     vod_urls_str,
                     notes,
                     youtube_views,
-                    twitch_views
+                    twitch_views,
+                    skip_igdb_enrichment
                 ))
                 conn.commit()
                 logger.info(f"Added played game: {canonical_name}")
@@ -147,7 +189,7 @@ class GamesDatabase:
                 # This catches "HITMAN World of Assassination" vs "HITMAN: World of Assassination"
                 cur.execute("SELECT * FROM played_games")
                 all_games = cur.fetchall()
-                
+
                 for game_row in all_games:
                     game_dict = dict(game_row)
                     canonical_name = game_dict.get('canonical_name', '')
@@ -189,7 +231,7 @@ class GamesDatabase:
                                 result_dict = self._convert_text_to_arrays(result_dict)
                                 logger.debug(f"Found game by alternative name match: {name} -> {alt_name}")
                                 return result_dict
-                            
+
                             # FIX #3: Try normalized matching on alternative names too
                             alt_normalized = self._normalize_for_matching(alt_name)
                             if alt_normalized == name_normalized:
@@ -253,6 +295,55 @@ class GamesDatabase:
         except Exception as e:
             logger.error(f"Error getting played game {name}: {e}")
             return None
+
+    def get_played_games_batch(self, game_names: List[str]) -> Dict[str, Dict[str, Any]]:
+        """
+        Fetch multiple played games in a single query (PERFORMANCE OPTIMIZATION).
+        
+        This method solves the N+1 query problem by fetching all games at once
+        instead of calling get_played_game() in a loop.
+        
+        Args:
+            game_names: List of canonical game names to fetch
+            
+        Returns:
+            Dictionary mapping lowercase game name to game record
+            Example: {"game name": {id: 1, canonical_name: "Game Name", ...}}
+        """
+        conn = self.get_connection()
+        if not conn or not game_names:
+            return {}
+        
+        try:
+            with conn.cursor() as cur:
+                # Use parameterized query with IN clause for batch lookup
+                placeholders = ','.join(['%s'] * len(game_names))
+                query = f"""
+                    SELECT * FROM played_games
+                    WHERE LOWER(TRIM(canonical_name)) IN ({placeholders})
+                """
+                
+                # Pass lowercase names for case-insensitive matching
+                lowercase_names = [name.lower().strip() for name in game_names]
+                cur.execute(query, lowercase_names)
+                results = cur.fetchall()
+                
+                # Build dictionary mapping lowercase name to game record
+                games_dict = {}
+                for row in results:
+                    game_dict = dict(row)
+                    # Convert TEXT fields back to lists
+                    game_dict = self._convert_text_to_arrays(game_dict)
+                    # Use lowercase canonical name as key for case-insensitive lookups
+                    canonical_lower = game_dict.get('canonical_name', '').lower().strip()
+                    games_dict[canonical_lower] = game_dict
+                    
+                logger.debug(f"Batch fetched {len(games_dict)} games from {len(game_names)} requested names")
+                return games_dict
+                
+        except Exception as e:
+            logger.error(f"Error in batch game lookup: {e}")
+            return {}
 
     def get_cached_youtube_rankings(self) -> List[Dict[str, Any]]:
         """Gets all played games ranked by their cached YouTube views."""
@@ -562,7 +653,7 @@ class GamesDatabase:
     def _normalize_for_matching(self, name: str) -> str:
         """
         Normalize a game name for matching by removing/standardizing punctuation.
-        
+
         This helps match variations like:
         - "HITMAN: World of Assassination" vs "HITMAN World of Assassination"
         - "Resident Evil 2 - Remake" vs "Resident Evil 2 Remake"
@@ -572,6 +663,7 @@ class GamesDatabase:
         if not name:
             return ""
         import re
+
         # Convert to lowercase
         normalized = name.lower().strip()
         # Replace hyphens with spaces to preserve word boundaries
@@ -3099,6 +3191,11 @@ class GamesDatabase:
 
         # Get all approved staged games
         staged_games = self.get_staged_games(sync_session_id, reviewed_only=False)
+        
+        # PERFORMANCE OPTIMIZATION: Batch fetch all games at once to avoid N+1 query problem
+        game_names = [g['game_data'].get('canonical_name') for g in staged_games if g.get('approved')]
+        existing_games_map = self.get_played_games_batch(game_names)
+        logger.info(f"Batch fetched {len(existing_games_map)} existing games for commit validation")
 
         for staged_game in staged_games:
             if not staged_game.get('approved'):
@@ -3110,13 +3207,73 @@ class GamesDatabase:
 
             try:
                 if action_type == 'add':
-                    # Add new game
-                    success = self.add_played_game(**game_data)
-                    if success:
-                        counts['added'] += 1
-                        logger.info(f"Committed new game: {game_data.get('canonical_name')}")
+                    # FIX 6: Check if game already exists before adding
+                    game_name = game_data.get('canonical_name')
+                    existing_game = self.get_played_game(game_name)
+
+                    if existing_game:
+                        # Game exists - convert to update with aggregated data
+                        logger.info(
+                            f"FIX 6: Game '{game_name}' already exists (ID: {existing_game['id']}). "
+                            f"Converting 'add' to 'update' with aggregated data."
+                        )
+
+                        # Aggregate numeric fields
+                        update_params = {
+                            'total_playtime_minutes': existing_game.get(
+                                'total_playtime_minutes',
+                                0) +
+                            game_data.get(
+                                'total_playtime_minutes',
+                                0),
+                            'total_episodes': existing_game.get(
+                                'total_episodes',
+                                0) +
+                            game_data.get(
+                                'total_episodes',
+                                0),
+                            'youtube_views': max(
+                                existing_game.get(
+                                    'youtube_views',
+                                    0),
+                                game_data.get(
+                                    'youtube_views',
+                                    0)),
+                            'twitch_views': existing_game.get(
+                                'twitch_views',
+                                0) +
+                            game_data.get(
+                                'twitch_views',
+                                0),
+                        }
+
+                        # Merge VOD URLs if present
+                        if game_data.get('twitch_vod_urls'):
+                            existing_vods = existing_game.get('twitch_vod_urls', [])
+                            new_vods = game_data.get('twitch_vod_urls', [])
+                            if isinstance(existing_vods, list) and isinstance(new_vods, list):
+                                update_params['twitch_vod_urls'] = list(set(existing_vods + new_vods))
+
+                        # Use most recent completion status if provided
+                        if game_data.get('completion_status'):
+                            update_params['completion_status'] = game_data['completion_status']
+
+                        success = self.update_played_game(existing_game['id'], **update_params)
+                        if success:
+                            counts['updated'] += 1
+                            logger.info(
+                                f"FIX 6: Aggregated data for '{game_name}': "
+                                f"{existing_game.get('total_episodes', 0)} -> {update_params['total_episodes']} episodes")
+                        else:
+                            counts['skipped'] += 1
                     else:
-                        counts['skipped'] += 1
+                        # Game doesn't exist - add it normally
+                        success = self.add_played_game(**game_data)
+                        if success:
+                            counts['added'] += 1
+                            logger.info(f"Committed new game: {game_name}")
+                        else:
+                            counts['skipped'] += 1
 
                 elif action_type == 'update':
                     # Update existing game
@@ -3208,6 +3365,66 @@ class GamesDatabase:
             'updates': updates,
             'low_confidence_games': low_confidence
         }
+
+    # --- IGDB Exclusion Management ---
+
+    def set_igdb_exclusion(self, game_name: str, exclude: bool = True) -> bool:
+        """
+        Set or unset IGDB exclusion flag for a game.
+        
+        Args:
+            game_name: Canonical name of the game
+            exclude: True to exclude, False to re-enable IGDB enrichment
+            
+        Returns:
+            True if successful
+        """
+        game = self.get_played_game(game_name)
+        if not game:
+            logger.warning(f"Game '{game_name}' not found, cannot set IGDB exclusion")
+            return False
+            
+        return self.update_played_game(game['id'], skip_igdb_enrichment=exclude)
+    
+    def get_igdb_excluded_games(self) -> List[Dict[str, Any]]:
+        """
+        Get list of games excluded from IGDB enrichment.
+        
+        Returns:
+            List of game dictionaries with exclusion flag set to True
+        """
+        conn = self.get_connection()
+        if not conn:
+            return []
+            
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT canonical_name, series_name, genre, release_year, skip_igdb_enrichment
+                    FROM played_games
+                    WHERE skip_igdb_enrichment = TRUE
+                    ORDER BY canonical_name ASC
+                """)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting IGDB excluded games: {e}")
+            return []
+    
+    def is_igdb_excluded(self, game_name: str) -> bool:
+        """
+        Check if a game is excluded from IGDB enrichment.
+        
+        Args:
+            game_name: Name of the game to check
+            
+        Returns:
+            True if excluded, False otherwise
+        """
+        game = self.get_played_game(game_name)
+        if not game:
+            return False
+        return game.get('skip_igdb_enrichment', False)
 
     # --- Trivia System Methods ---
 

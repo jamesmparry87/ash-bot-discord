@@ -2105,7 +2105,8 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                             # Update canonical name if IGDB provides better one
                             if igdb_data.get('canonical_name') and confidence >= 0.95:
                                 canonical_name = igdb_data['canonical_name']
-                                game_data['canonical_name'] = canonical_name  # ← FIX: Update game_data so approval shows IGDB name
+                                # ← FIX: Update game_data so approval shows IGDB name
+                                game_data['canonical_name'] = canonical_name
                                 print(f"📝 SYNC: Updated canonical name from IGDB: '{canonical_name}'")
 
                             # Enrich missing fields with IGDB data
@@ -2118,14 +2119,22 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                 game_data['release_year'] = igdb_data['release_year']
                                 print(f"📅 SYNC: Added release year from IGDB: {igdb_data['release_year']}")
 
-                            # Merge alternative names
-                            existing_alt_names = game_data.get('alternative_names', [])
-                            igdb_alt_names = igdb_data.get('alternative_names', [])
-                            if igdb_alt_names:
-                                # Combine and deduplicate
-                                all_alt_names = list(set(existing_alt_names + igdb_alt_names))
-                                game_data['alternative_names'] = all_alt_names[:10]  # Limit to 10
-                                print(f"🔤 SYNC: Merged alternative names ({len(all_alt_names)} total)")
+                            # Merge alternative names (check exclusion flag first)
+                            # Check if this game is excluded from IGDB enrichment
+                            # PERFORMANCE FIX: Look up game once and reuse (was also done at line 2173)
+                            existing_game = db.games.get_played_game(canonical_name)
+                            skip_igdb = existing_game.get('skip_igdb_enrichment', False) if existing_game else False
+                            
+                            if skip_igdb:
+                                print(f"⏭️ SYNC: Skipping IGDB alternative names for '{canonical_name}' (user excluded)")
+                            else:
+                                existing_alt_names = game_data.get('alternative_names', [])
+                                igdb_alt_names = igdb_data.get('alternative_names', [])
+                                if igdb_alt_names:
+                                    # Combine and deduplicate
+                                    all_alt_names = list(set(existing_alt_names + igdb_alt_names))
+                                    game_data['alternative_names'] = all_alt_names[:10]  # Limit to 10
+                                    print(f"🔤 SYNC: Merged alternative names ({len(all_alt_names)} total)")
 
                             # Use IGDB series name if not present
                             if not series_name or series_name == canonical_name:
