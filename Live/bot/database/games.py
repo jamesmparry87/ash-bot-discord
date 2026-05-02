@@ -299,13 +299,13 @@ class GamesDatabase:
     def get_played_games_batch(self, game_names: List[str]) -> Dict[str, Dict[str, Any]]:
         """
         Fetch multiple played games in a single query (PERFORMANCE OPTIMIZATION).
-        
+
         This method solves the N+1 query problem by fetching all games at once
         instead of calling get_played_game() in a loop.
-        
+
         Args:
             game_names: List of canonical game names to fetch
-            
+
         Returns:
             Dictionary mapping lowercase game name to game record
             Example: {"game name": {id: 1, canonical_name: "Game Name", ...}}
@@ -313,7 +313,7 @@ class GamesDatabase:
         conn = self.get_connection()
         if not conn or not game_names:
             return {}
-        
+
         try:
             with conn.cursor() as cur:
                 # Use parameterized query with IN clause for batch lookup
@@ -322,12 +322,12 @@ class GamesDatabase:
                     SELECT * FROM played_games
                     WHERE LOWER(TRIM(canonical_name)) IN ({placeholders})
                 """
-                
+
                 # Pass lowercase names for case-insensitive matching
                 lowercase_names = [name.lower().strip() for name in game_names]
                 cur.execute(query, lowercase_names)
                 results = cur.fetchall()
-                
+
                 # Build dictionary mapping lowercase name to game record
                 games_dict = {}
                 for row in results:
@@ -337,10 +337,10 @@ class GamesDatabase:
                     # Use lowercase canonical name as key for case-insensitive lookups
                     canonical_lower = game_dict.get('canonical_name', '').lower().strip()
                     games_dict[canonical_lower] = game_dict
-                    
+
                 logger.debug(f"Batch fetched {len(games_dict)} games from {len(game_names)} requested names")
                 return games_dict
-                
+
         except Exception as e:
             logger.error(f"Error in batch game lookup: {e}")
             return {}
@@ -3191,7 +3191,7 @@ class GamesDatabase:
 
         # Get all approved staged games
         staged_games = self.get_staged_games(sync_session_id, reviewed_only=False)
-        
+
         # PERFORMANCE OPTIMIZATION: Batch fetch all games at once to avoid N+1 query problem
         game_names = [g['game_data'].get('canonical_name') for g in staged_games if g.get('approved')]
         existing_games_map = self.get_played_games_batch(game_names)
