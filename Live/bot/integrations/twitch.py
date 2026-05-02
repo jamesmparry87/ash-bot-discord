@@ -110,7 +110,8 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
 
     # NEW STRATEGY 0A: Asterisk-wrapped game names (*GAME*)
     # Pattern: "Text *GAMENAME* more text" → Extract "GAMENAME"
-    asterisk_match = re.search(r'\*([A-Z][A-Za-z0-9\s:&\'-]+)\*', title)
+    # PERFORMANCE FIX: Allow alphanumeric start (e.g., "*12 Minutes*")
+    asterisk_match = re.search(r'\*([A-Za-z0-9][A-Za-z0-9\s:&\'-]+)\*', title)
     if asterisk_match:
         asterisk_game = asterisk_match.group(1).strip()
         cleaned_asterisk = clean_title_part(asterisk_game)
@@ -151,7 +152,8 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
     # NEW STRATEGY 0C: All-caps word detection (find game names in ALL CAPS)
     # Pattern: "Text GAMENAME text" → Extract "GAMENAME" if it's a known game
     # Look for sequences of 2+ all-caps words (likely game names, not commentary)
-    all_caps_pattern = r'\b([A-Z][A-Z0-9]+(?:\s+[A-Z][A-Z0-9]+)*)\b'
+    # PERFORMANCE FIX: Allow digit start (e.g., "7 DAYS TO DIE")
+    all_caps_pattern = r'\b([A-Z0-9]+(?:\s+[A-Z0-9]+)*)\b'
     all_caps_matches = re.findall(all_caps_pattern, title)
 
     for caps_match in all_caps_matches:
