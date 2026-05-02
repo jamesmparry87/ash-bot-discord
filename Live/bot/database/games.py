@@ -572,6 +572,7 @@ class GamesDatabase:
         if not name:
             return ""
         import re
+
         # Convert to lowercase
         normalized = name.lower().strip()
         # Replace hyphens with spaces to preserve word boundaries
