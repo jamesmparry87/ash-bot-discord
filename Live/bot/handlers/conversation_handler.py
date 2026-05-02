@@ -2781,6 +2781,14 @@ async def save_final_modifications(message, data: Dict[str, Any], user_id: int):
     if user_id in jam_approval_conversations:
         del jam_approval_conversations[user_id]
 
+    # ✅ FIX: Process next item in approval queue
+    queue_length = get_queue_length()
+    if queue_length > 0:
+        print(f"🔄 AUTO-QUEUE: Processing next approval after modifications ({queue_length} remaining)")
+        await process_next_approval()
+    else:
+        print(f"✅ QUEUE: Empty after modifications")
+
 
 async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
     """Start JAM approval workflow for a generated trivia question with persistent storage"""

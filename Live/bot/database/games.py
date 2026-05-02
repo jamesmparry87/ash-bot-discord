@@ -73,6 +73,20 @@ class GamesDatabase:
                         END IF;
                     END $$;
                 """)
+                
+                # Migration 2: Create skipped_vods table for sync title review
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS skipped_vods (
+                        vod_url TEXT PRIMARY KEY,
+                        source TEXT NOT NULL,  -- 'youtube' or 'twitch'
+                        title TEXT,
+                        skipped_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        skipped_by BIGINT  -- Discord user ID who skipped it
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_skipped_vods_source ON skipped_vods(source);
+                    CREATE INDEX IF NOT EXISTS idx_skipped_vods_skipped_at ON skipped_vods(skipped_at);
+                """)
+                
                 conn.commit()
                 logger.info("✅ Database migrations complete")
         except Exception as e:
@@ -3427,6 +3441,66 @@ class GamesDatabase:
         return game.get('skip_igdb_enrichment', False)
 
     # --- Trivia System Methods ---
+
+    # --- Skipped VODs Management ---
+    
+    def add_skipped_vod(self, vod_url: str, source: str, title: str = "", skipped_by: int = 0) -> bool:
+        """Add a VOD to the skipped list"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO skipped_vods (vod_url, source, title, skipped_by)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (vod_url) DO NOTHING
+                """, (vod_url, source, title, skipped_by))
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Error adding skipped VOD: {e}")
+            conn.rollback()
+            return False
+    
+    def is_vod_skipped(self, vod_url: str) -> bool:
+        """Check if a VOD has been skipped"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM skipped_vods WHERE vod_url = %s", (vod_url,))
+                return cur.fetchone() is not None
+        except Exception as e:
+            logger.error(f"Error checking skipped VOD: {e}")
+            return False
+    
+    def get_skipped_vods(self, source: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get list of skipped VODs, optionally filtered by source"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        try:
+            with conn.cursor() as cur:
+                if source:
+                    cur.execute("""
+                        SELECT * FROM skipped_vods
+                        WHERE source = %s
+                        ORDER BY skipped_at DESC
+                        LIMIT %s
+                    """, (source, limit))
+                else:
+                    cur.execute("""
+                        SELECT * FROM skipped_vods
+                        ORDER BY skipped_at DESC
+                        LIMIT %s
+                    """, (limit,))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting skipped VODs: {e}")
+            return []
 
 
 # Export

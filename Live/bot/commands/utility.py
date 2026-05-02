@@ -632,6 +632,88 @@ class UtilityCommands(commands.Cog):
             traceback.print_exc()
             await ctx.send(f"❌ **System error occurred:** {str(e)}")
 
+    @commands.command(name="clearapprovals")
+    async def clear_approvals(self, ctx):
+        """
+        Clear stuck approval conversations (JAM only).
+        Use this if the approval system gets stuck and won't process new items.
+        """
+        # Only JAM can use this command
+        if ctx.author.id != JAM_USER_ID:
+            await ctx.send("❌ **Access denied.** This command is restricted to JAM only.")
+            return
+
+        try:
+            from ..handlers.conversation_handler import (
+                jam_approval_conversations,
+                weekly_announcement_approvals,
+                game_review_conversations,
+                sync_approval_conversations,
+                get_queue_length,
+                process_next_approval
+            )
+
+            # Count what we're clearing
+            cleared_count = 0
+            cleared_types = []
+
+            # Clear all conversation types for JAM
+            if JAM_USER_ID in jam_approval_conversations:
+                del jam_approval_conversations[JAM_USER_ID]
+                cleared_count += 1
+                cleared_types.append("trivia approval")
+
+            if JAM_USER_ID in weekly_announcement_approvals:
+                del weekly_announcement_approvals[JAM_USER_ID]
+                cleared_count += 1
+                cleared_types.append("weekly announcement")
+
+            if JAM_USER_ID in game_review_conversations:
+                del game_review_conversations[JAM_USER_ID]
+                cleared_count += 1
+                cleared_types.append("game review")
+
+            if JAM_USER_ID in sync_approval_conversations:
+                del sync_approval_conversations[JAM_USER_ID]
+                cleared_count += 1
+                cleared_types.append("sync approval")
+
+            # Check queue status
+            queue_length = get_queue_length()
+
+            if cleared_count > 0:
+                types_str = ", ".join(cleared_types)
+                await ctx.send(
+                    f"✅ **Approval Conversations Cleared**\n\n"
+                    f"Cleared {cleared_count} stuck conversation(s): {types_str}\n\n"
+                    f"📋 **Queue Status:** {queue_length} items pending\n\n"
+                    f"*The approval system is now reset and ready for new items.*"
+                )
+
+                # Auto-trigger queue processing if there are items
+                if queue_length > 0:
+                    await ctx.send(f"🔄 **Auto-processing queue** ({queue_length} items)...")
+                    await process_next_approval()
+            else:
+                await ctx.send(
+                    f"ℹ️ **No Stuck Conversations Found**\n\n"
+                    f"Your approval system is already clear.\n\n"
+                    f"📋 **Queue Status:** {queue_length} items pending"
+                )
+
+                # Still trigger queue processing if there are items
+                if queue_length > 0:
+                    await ctx.send(f"🔄 **Processing pending queue** ({queue_length} items)...")
+                    await process_next_approval()
+
+            print(f"✅ CLEARAPPROVALS: Cleared {cleared_count} conversations for JAM, queue: {queue_length}")
+
+        except Exception as e:
+            print(f"❌ Error in clearapprovals command: {e}")
+            import traceback
+            traceback.print_exc()
+            await ctx.send(f"❌ **Error clearing approvals:** {str(e)}")
+
 
 def setup(bot):
     """Add the UtilityCommands cog to the bot"""
