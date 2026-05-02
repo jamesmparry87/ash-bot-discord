@@ -2105,7 +2105,8 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                             # Update canonical name if IGDB provides better one
                             if igdb_data.get('canonical_name') and confidence >= 0.95:
                                 canonical_name = igdb_data['canonical_name']
-                                game_data['canonical_name'] = canonical_name  # ← FIX: Update game_data so approval shows IGDB name
+                                # ← FIX: Update game_data so approval shows IGDB name
+                                game_data['canonical_name'] = canonical_name
                                 print(f"📝 SYNC: Updated canonical name from IGDB: '{canonical_name}'")
 
                             # Enrich missing fields with IGDB data

@@ -147,7 +147,7 @@ class GamesDatabase:
                 # This catches "HITMAN World of Assassination" vs "HITMAN: World of Assassination"
                 cur.execute("SELECT * FROM played_games")
                 all_games = cur.fetchall()
-                
+
                 for game_row in all_games:
                     game_dict = dict(game_row)
                     canonical_name = game_dict.get('canonical_name', '')
@@ -189,7 +189,7 @@ class GamesDatabase:
                                 result_dict = self._convert_text_to_arrays(result_dict)
                                 logger.debug(f"Found game by alternative name match: {name} -> {alt_name}")
                                 return result_dict
-                            
+
                             # FIX #3: Try normalized matching on alternative names too
                             alt_normalized = self._normalize_for_matching(alt_name)
                             if alt_normalized == name_normalized:
@@ -562,7 +562,7 @@ class GamesDatabase:
     def _normalize_for_matching(self, name: str) -> str:
         """
         Normalize a game name for matching by removing/standardizing punctuation.
-        
+
         This helps match variations like:
         - "HITMAN: World of Assassination" vs "HITMAN World of Assassination"
         - "Resident Evil 2 - Remake" vs "Resident Evil 2 Remake"
