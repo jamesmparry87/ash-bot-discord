@@ -3114,40 +3114,60 @@ class GamesDatabase:
                     # FIX 6: Check if game already exists before adding
                     game_name = game_data.get('canonical_name')
                     existing_game = self.get_played_game(game_name)
-                    
+
                     if existing_game:
                         # Game exists - convert to update with aggregated data
                         logger.info(
                             f"FIX 6: Game '{game_name}' already exists (ID: {existing_game['id']}). "
                             f"Converting 'add' to 'update' with aggregated data."
                         )
-                        
+
                         # Aggregate numeric fields
                         update_params = {
-                            'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + game_data.get('total_playtime_minutes', 0),
-                            'total_episodes': existing_game.get('total_episodes', 0) + game_data.get('total_episodes', 0),
-                            'youtube_views': max(existing_game.get('youtube_views', 0), game_data.get('youtube_views', 0)),
-                            'twitch_views': existing_game.get('twitch_views', 0) + game_data.get('twitch_views', 0),
+                            'total_playtime_minutes': existing_game.get(
+                                'total_playtime_minutes',
+                                0) +
+                            game_data.get(
+                                'total_playtime_minutes',
+                                0),
+                            'total_episodes': existing_game.get(
+                                'total_episodes',
+                                0) +
+                            game_data.get(
+                                'total_episodes',
+                                0),
+                            'youtube_views': max(
+                                existing_game.get(
+                                    'youtube_views',
+                                    0),
+                                game_data.get(
+                                    'youtube_views',
+                                    0)),
+                            'twitch_views': existing_game.get(
+                                'twitch_views',
+                                0) +
+                            game_data.get(
+                                'twitch_views',
+                                0),
                         }
-                        
+
                         # Merge VOD URLs if present
                         if game_data.get('twitch_vod_urls'):
                             existing_vods = existing_game.get('twitch_vod_urls', [])
                             new_vods = game_data.get('twitch_vod_urls', [])
                             if isinstance(existing_vods, list) and isinstance(new_vods, list):
                                 update_params['twitch_vod_urls'] = list(set(existing_vods + new_vods))
-                        
+
                         # Use most recent completion status if provided
                         if game_data.get('completion_status'):
                             update_params['completion_status'] = game_data['completion_status']
-                        
+
                         success = self.update_played_game(existing_game['id'], **update_params)
                         if success:
                             counts['updated'] += 1
                             logger.info(
                                 f"FIX 6: Aggregated data for '{game_name}': "
-                                f"{existing_game.get('total_episodes', 0)} -> {update_params['total_episodes']} episodes"
-                            )
+                                f"{existing_game.get('total_episodes', 0)} -> {update_params['total_episodes']} episodes")
                         else:
                             counts['skipped'] += 1
                     else:
