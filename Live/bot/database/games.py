@@ -44,7 +44,7 @@ class GamesDatabase:
     def _run_migrations(self):
         """
         Run one-time database migrations on initialization.
-        
+
         This method is idempotent - it safely checks if migrations are needed
         before applying them, so it can run on every bot startup.
         """
@@ -52,21 +52,21 @@ class GamesDatabase:
         if not conn:
             logger.warning("Cannot run migrations - no database connection")
             return
-        
+
         try:
             with conn.cursor() as cur:
                 # Migration 1: Add skip_igdb_enrichment column
                 cur.execute("""
-                    DO $$ 
+                    DO $$
                     BEGIN
                         IF NOT EXISTS (
-                            SELECT 1 FROM information_schema.columns 
-                            WHERE table_name='played_games' 
+                            SELECT 1 FROM information_schema.columns
+                            WHERE table_name='played_games'
                             AND column_name='skip_igdb_enrichment'
                         ) THEN
-                            ALTER TABLE played_games 
+                            ALTER TABLE played_games
                             ADD COLUMN skip_igdb_enrichment BOOLEAN DEFAULT FALSE;
-                            
+
                             RAISE NOTICE '✅ Migration: Added skip_igdb_enrichment column to played_games';
                         ELSE
                             RAISE NOTICE '⏭️ Migration: skip_igdb_enrichment column already exists';
@@ -3317,11 +3317,11 @@ class GamesDatabase:
     def set_igdb_exclusion(self, game_name: str, exclude: bool = True) -> bool:
         """
         Set or unset IGDB exclusion flag for a game.
-        
+
         Args:
             game_name: Canonical name of the game
             exclude: True to exclude, False to re-enable IGDB enrichment
-            
+
         Returns:
             True if successful
         """
@@ -3329,20 +3329,20 @@ class GamesDatabase:
         if not game:
             logger.warning(f"Game '{game_name}' not found, cannot set IGDB exclusion")
             return False
-            
+
         return self.update_played_game(game['id'], skip_igdb_enrichment=exclude)
-    
+
     def get_igdb_excluded_games(self) -> List[Dict[str, Any]]:
         """
         Get list of games excluded from IGDB enrichment.
-        
+
         Returns:
             List of game dictionaries with exclusion flag set to True
         """
         conn = self.get_connection()
         if not conn:
             return []
-            
+
         try:
             with conn.cursor() as cur:
                 cur.execute("""
@@ -3356,14 +3356,14 @@ class GamesDatabase:
         except Exception as e:
             logger.error(f"Error getting IGDB excluded games: {e}")
             return []
-    
+
     def is_igdb_excluded(self, game_name: str) -> bool:
         """
         Check if a game is excluded from IGDB enrichment.
-        
+
         Args:
             game_name: Name of the game to check
-            
+
         Returns:
             True if excluded, False otherwise
         """
