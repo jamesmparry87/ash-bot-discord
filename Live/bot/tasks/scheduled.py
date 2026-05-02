@@ -2119,14 +2119,21 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                                 game_data['release_year'] = igdb_data['release_year']
                                 print(f"📅 SYNC: Added release year from IGDB: {igdb_data['release_year']}")
 
-                            # Merge alternative names
-                            existing_alt_names = game_data.get('alternative_names', [])
-                            igdb_alt_names = igdb_data.get('alternative_names', [])
-                            if igdb_alt_names:
-                                # Combine and deduplicate
-                                all_alt_names = list(set(existing_alt_names + igdb_alt_names))
-                                game_data['alternative_names'] = all_alt_names[:10]  # Limit to 10
-                                print(f"🔤 SYNC: Merged alternative names ({len(all_alt_names)} total)")
+                            # Merge alternative names (check exclusion flag first)
+                            # Check if this game is excluded from IGDB enrichment
+                            existing_game = db.games.get_played_game(canonical_name)
+                            skip_igdb = existing_game.get('skip_igdb_enrichment', False) if existing_game else False
+                            
+                            if skip_igdb:
+                                print(f"⏭️ SYNC: Skipping IGDB alternative names for '{canonical_name}' (user excluded)")
+                            else:
+                                existing_alt_names = game_data.get('alternative_names', [])
+                                igdb_alt_names = igdb_data.get('alternative_names', [])
+                                if igdb_alt_names:
+                                    # Combine and deduplicate
+                                    all_alt_names = list(set(existing_alt_names + igdb_alt_names))
+                                    game_data['alternative_names'] = all_alt_names[:10]  # Limit to 10
+                                    print(f"🔤 SYNC: Merged alternative names ({len(all_alt_names)} total)")
 
                             # Use IGDB series name if not present
                             if not series_name or series_name == canonical_name:
@@ -2610,7 +2617,7 @@ def start_all_scheduled_tasks(bot):
             (pre_trivia_preflight_check, "Pre-trivia pre-flight check task (10:45 AM UK time, Tuesdays)"),
             (trivia_tuesday, "Trivia Tuesday task (11:00 AM UK time, Tuesdays)"),
             (friday_community_analysis, "Friday Community Analysis (Friday 8.15am)"),
-            (friday_morning_greeting, "Friday morning greeting task (9:00 AM UK time, Fridays)"),
+l            (friday_morning_greeting, "Friday morning greeting task (9:00 AM UK time, Fridays)"),
             ## Daily ##
             (scheduled_midnight_restart, "Scheduled midnight restart task (00:00 PT daily)"),
             (scheduled_ai_refresh, "AI module refresh task (8:15 AM UK time daily)"),

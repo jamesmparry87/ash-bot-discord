@@ -38,6 +38,46 @@ class GamesDatabase:
             db_manager: DatabaseManager instance for connection access
         """
         self.db = db_manager
+        # Run one-time database migrations on initialization
+        self._run_migrations()
+
+    def _run_migrations(self):
+        """
+        Run one-time database migrations on initialization.
+        
+        This method is idempotent - it safely checks if migrations are needed
+        before applying them, so it can run on every bot startup.
+        """
+        conn = self.get_connection()
+        if not conn:
+            logger.warning("Cannot run migrations - no database connection")
+            return
+        
+        try:
+            with conn.cursor() as cur:
+                # Migration 1: Add skip_igdb_enrichment column
+                cur.execute("""
+                    DO $$ 
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns 
+                            WHERE table_name='played_games' 
+                            AND column_name='skip_igdb_enrichment'
+                        ) THEN
+                            ALTER TABLE played_games 
+                            ADD COLUMN skip_igdb_enrichment BOOLEAN DEFAULT FALSE;
+                            
+                            RAISE NOTICE '✅ Migration: Added skip_igdb_enrichment column to played_games';
+                        ELSE
+                            RAISE NOTICE '⏭️ Migration: skip_igdb_enrichment column already exists';
+                        END IF;
+                    END $$;
+                """)
+                conn.commit()
+                logger.info("✅ Database migrations complete")
+        except Exception as e:
+            logger.error(f"❌ Migration error: {e}")
+            conn.rollback()
 
     def get_connection(self):
         """Get database connection from the database manager"""
@@ -65,7 +105,8 @@ class GamesDatabase:
                         twitch_vod_urls: Optional[List[str]] = None,
                         notes: Optional[str] = None,
                         youtube_views: int = 0,
-                        twitch_views: int = 0) -> bool:
+                        twitch_views: int = 0,
+                        skip_igdb_enrichment: bool = False) -> bool:
         """Add a played game to the database"""
         conn = self.get_connection()
         if not conn:
@@ -91,8 +132,8 @@ class GamesDatabase:
                         canonical_name, alternative_names, series_name, genre,
                         release_year, first_played_date, completion_status, total_episodes,
                         total_playtime_minutes, youtube_playlist_url, twitch_vod_urls, notes, youtube_views, twitch_views,
-                        created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        skip_igdb_enrichment, created_at, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """, (
                     canonical_name,
                     alt_names_str,
@@ -107,7 +148,8 @@ class GamesDatabase:
                     vod_urls_str,
                     notes,
                     youtube_views,
-                    twitch_views
+                    twitch_views,
+                    skip_igdb_enrichment
                 ))
                 conn.commit()
                 logger.info(f"Added played game: {canonical_name}")
@@ -3249,6 +3291,66 @@ class GamesDatabase:
             'updates': updates,
             'low_confidence_games': low_confidence
         }
+
+    # --- IGDB Exclusion Management ---
+
+    def set_igdb_exclusion(self, game_name: str, exclude: bool = True) -> bool:
+        """
+        Set or unset IGDB exclusion flag for a game.
+        
+        Args:
+            game_name: Canonical name of the game
+            exclude: True to exclude, False to re-enable IGDB enrichment
+            
+        Returns:
+            True if successful
+        """
+        game = self.get_played_game(game_name)
+        if not game:
+            logger.warning(f"Game '{game_name}' not found, cannot set IGDB exclusion")
+            return False
+            
+        return self.update_played_game(game['id'], skip_igdb_enrichment=exclude)
+    
+    def get_igdb_excluded_games(self) -> List[Dict[str, Any]]:
+        """
+        Get list of games excluded from IGDB enrichment.
+        
+        Returns:
+            List of game dictionaries with exclusion flag set to True
+        """
+        conn = self.get_connection()
+        if not conn:
+            return []
+            
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT canonical_name, series_name, genre, release_year, skip_igdb_enrichment
+                    FROM played_games
+                    WHERE skip_igdb_enrichment = TRUE
+                    ORDER BY canonical_name ASC
+                """)
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting IGDB excluded games: {e}")
+            return []
+    
+    def is_igdb_excluded(self, game_name: str) -> bool:
+        """
+        Check if a game is excluded from IGDB enrichment.
+        
+        Args:
+            game_name: Name of the game to check
+            
+        Returns:
+            True if excluded, False otherwise
+        """
+        game = self.get_played_game(game_name)
+        if not game:
+            return False
+        return game.get('skip_igdb_enrichment', False)
 
     # --- Trivia System Methods ---
 

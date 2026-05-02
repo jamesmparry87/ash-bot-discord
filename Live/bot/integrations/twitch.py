@@ -108,6 +108,75 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
         cleaned = cleanup_game_name(cleaned)
         return cleaned
 
+    # NEW STRATEGY 0A: Asterisk-wrapped game names (*GAME*)
+    # Pattern: "Text *GAMENAME* more text" → Extract "GAMENAME"
+    asterisk_match = re.search(r'\*([A-Z][A-Za-z0-9\s:&\'-]+)\*', title)
+    if asterisk_match:
+        asterisk_game = asterisk_match.group(1).strip()
+        cleaned_asterisk = clean_title_part(asterisk_game)
+        
+        if len(cleaned_asterisk) >= 3 and not is_generic_term(cleaned_asterisk):
+            print(f"🔍 Validating '{cleaned_asterisk}' (asterisk-wrapped) with IGDB...")
+            igdb_result = await igdb.validate_and_enrich(cleaned_asterisk)
+            confidence = igdb_result.get('confidence', 0.0)
+            print(f"  → confidence: {confidence:.2f}")
+            
+            if confidence > best_confidence:
+                best_name = cleaned_asterisk
+                best_confidence = confidence
+                if confidence >= 0.75:
+                    return best_name, best_confidence
+    
+    # NEW STRATEGY 0B: Colon-based extraction (Game Name: Subtitle OR Title: Game Name)
+    # Pattern: "Creative Title: ACTUAL GAME" → Extract "ACTUAL GAME"
+    if ':' in title:
+        # Try extracting text AFTER the last colon (most common pattern)
+        colon_parts = title.split(':')
+        if len(colon_parts) >= 2:
+            after_colon = colon_parts[-1].strip()
+            cleaned_colon = clean_title_part(after_colon)
+            
+            if len(cleaned_colon) >= 3 and not is_generic_term(cleaned_colon):
+                print(f"🔍 Validating '{cleaned_colon}' (after colon) with IGDB...")
+                igdb_result = await igdb.validate_and_enrich(cleaned_colon)
+                confidence = igdb_result.get('confidence', 0.0)
+                print(f"  → confidence: {confidence:.2f}")
+                
+                if confidence > best_confidence:
+                    best_name = cleaned_colon
+                    best_confidence = confidence
+                    if confidence >= 0.75:
+                        return best_name, best_confidence
+    
+    # NEW STRATEGY 0C: All-caps word detection (find game names in ALL CAPS)
+    # Pattern: "Text GAMENAME text" → Extract "GAMENAME" if it's a known game
+    # Look for sequences of 2+ all-caps words (likely game names, not commentary)
+    all_caps_pattern = r'\b([A-Z][A-Z0-9]+(?:\s+[A-Z][A-Z0-9]+)*)\b'
+    all_caps_matches = re.findall(all_caps_pattern, title)
+    
+    for caps_match in all_caps_matches:
+        # Skip if it's a known non-game pattern
+        if caps_match in ['SPF', 'NEEDED', 'LET', 'FINISH', 'THIS', 'DAY', 'DROPS', 'LIVE']:
+            continue
+        
+        # Skip single letters or very short matches
+        if len(caps_match) < 4:
+            continue
+            
+        cleaned_caps = clean_title_part(caps_match)
+        
+        if len(cleaned_caps) >= 3 and not is_generic_term(cleaned_caps):
+            print(f"🔍 Validating '{cleaned_caps}' (all-caps detection) with IGDB...")
+            igdb_result = await igdb.validate_and_enrich(cleaned_caps)
+            confidence = igdb_result.get('confidence', 0.0)
+            print(f"  → confidence: {confidence:.2f}")
+            
+            if confidence > best_confidence:
+                best_name = cleaned_caps
+                best_confidence = confidence
+                if confidence >= 0.75:
+                    return best_name, best_confidence
+
     # PRIORITY Strategy 1: Handle "First Time Playing" and dash-separated titles
     if ' - ' in title or ' | ' in title:
         separator = ' - ' if ' - ' in title else ' | '
