@@ -116,7 +116,7 @@ class TestStrikesOperations:
 
         # Patch methods BEFORE creating DatabaseManager to prevent SQL during init
         with patch('bot.database.core.DatabaseManager.get_connection', return_value=mock_connection), \
-             patch('bot.database.games.GamesDatabase._run_migrations'):
+                patch('bot.database.games.GamesDatabase._run_migrations'):
             db = DatabaseManager()
             db.database_url = 'test_url'  # type: ignore
             mock_cursor.reset_mock()  # Clear any initialization calls
@@ -184,7 +184,7 @@ class TestGameRecommendations:
 
         # Patch methods BEFORE creating DatabaseManager to prevent SQL during init
         with patch('bot.database.core.DatabaseManager.get_connection', return_value=mock_connection), \
-             patch('bot.database.games.GamesDatabase._run_migrations'):
+                patch('bot.database.games.GamesDatabase._run_migrations'):
             db = DatabaseManager()
             db.database_url = 'test_url'  # type: ignore
             mock_cursor.reset_mock()  # Clear any initialization calls
@@ -262,7 +262,7 @@ class TestPlayedGames:
 
         # Patch methods BEFORE creating DatabaseManager to prevent SQL during init
         with patch('bot.database.core.DatabaseManager.get_connection', return_value=mock_connection), \
-             patch('bot.database.games.GamesDatabase._run_migrations'):
+                patch('bot.database.games.GamesDatabase._run_migrations'):
             db = DatabaseManager()
             db.database_url = 'test_url'  # type: ignore
             mock_cursor.reset_mock()  # Clear any initialization calls
@@ -376,7 +376,7 @@ class TestConfigOperations:
 
         # Patch methods BEFORE creating DatabaseManager to prevent SQL during init
         with patch('bot.database.core.DatabaseManager.get_connection', return_value=mock_connection), \
-             patch('bot.database.games.GamesDatabase._run_migrations'):
+                patch('bot.database.games.GamesDatabase._run_migrations'):
             db = DatabaseManager()
             db.database_url = 'test_url'  # type: ignore
             mock_cursor.reset_mock()  # Clear any initialization calls
@@ -421,7 +421,7 @@ class TestBulkOperations:
 
         # Patch methods BEFORE creating DatabaseManager to prevent SQL during init
         with patch('bot.database.core.DatabaseManager.get_connection', return_value=mock_connection), \
-             patch('bot.database.games.GamesDatabase._run_migrations'):
+                patch('bot.database.games.GamesDatabase._run_migrations'):
             db = DatabaseManager()
             db.database_url = 'test_url'  # type: ignore
             mock_cursor.reset_mock()  # Clear any initialization calls
@@ -482,7 +482,7 @@ class TestStatisticsAndQueries:
 
         # Patch methods BEFORE creating DatabaseManager to prevent SQL during init
         with patch('bot.database.core.DatabaseManager.get_connection', return_value=mock_connection), \
-             patch('bot.database.games.GamesDatabase._run_migrations'):
+                patch('bot.database.games.GamesDatabase._run_migrations'):
             db = DatabaseManager()
             db.database_url = 'test_url'  # type: ignore
             mock_cursor.reset_mock()  # Clear any initialization calls
