@@ -645,12 +645,12 @@ class UtilityCommands(commands.Cog):
 
         try:
             from ..handlers.conversation_handler import (
-                jam_approval_conversations,
-                weekly_announcement_approvals,
                 game_review_conversations,
-                sync_approval_conversations,
                 get_queue_length,
-                process_next_approval
+                jam_approval_conversations,
+                process_next_approval,
+                sync_approval_conversations,
+                weekly_announcement_approvals,
             )
 
             # Count what we're clearing
