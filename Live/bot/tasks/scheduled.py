@@ -2008,7 +2008,7 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
     - Updates or adds games to the database with full metadata
     - Deduplicates and aggregates statistics
     - Returns analysis dictionary for Monday morning message
-    
+
     Args:
         start_sync_time: Start time for content sync window
         is_scheduled: True if called from automated scheduled task (enables longer manual input timeout)
@@ -2364,9 +2364,9 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                 # Low confidence - request manual input
                 if not extracted_name or confidence < 0.65:
                     print(f"⚠️ SYNC: Low confidence ({confidence:.2f}) for Twitch title - requesting manual input")
-                    
+
                     from ..handlers.manual_game_input import request_manual_game_name
-                    
+
                     vod_data = {
                         'title': title,
                         'url': vod_url,
@@ -2374,10 +2374,10 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                         'extracted_name': extracted_name or '',
                         'confidence': confidence
                     }
-                    
+
                     # Request manual input (blocks until response)
                     manual_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
-                    
+
                     if manual_response == "skip":
                         # Add to skipped list
                         if db:
