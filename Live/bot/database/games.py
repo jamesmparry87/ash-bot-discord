@@ -44,7 +44,7 @@ class GamesDatabase:
     def _run_migrations(self):
         """
         Run one-time database migrations on initialization.
-        
+
         This method is idempotent - it safely checks if migrations are needed
         before applying them, so it can run on every bot startup.
         """
@@ -52,27 +52,41 @@ class GamesDatabase:
         if not conn:
             logger.warning("Cannot run migrations - no database connection")
             return
-        
+
         try:
             with conn.cursor() as cur:
                 # Migration 1: Add skip_igdb_enrichment column
                 cur.execute("""
-                    DO $$ 
+                    DO $$
                     BEGIN
                         IF NOT EXISTS (
-                            SELECT 1 FROM information_schema.columns 
-                            WHERE table_name='played_games' 
+                            SELECT 1 FROM information_schema.columns
+                            WHERE table_name='played_games'
                             AND column_name='skip_igdb_enrichment'
                         ) THEN
-                            ALTER TABLE played_games 
+                            ALTER TABLE played_games
                             ADD COLUMN skip_igdb_enrichment BOOLEAN DEFAULT FALSE;
-                            
+
                             RAISE NOTICE '✅ Migration: Added skip_igdb_enrichment column to played_games';
                         ELSE
                             RAISE NOTICE '⏭️ Migration: skip_igdb_enrichment column already exists';
                         END IF;
                     END $$;
                 """)
+
+                # Migration 2: Create skipped_vods table for sync title review
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS skipped_vods (
+                        vod_url TEXT PRIMARY KEY,
+                        source TEXT NOT NULL,  -- 'youtube' or 'twitch'
+                        title TEXT,
+                        skipped_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        skipped_by BIGINT  -- Discord user ID who skipped it
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_skipped_vods_source ON skipped_vods(source);
+                    CREATE INDEX IF NOT EXISTS idx_skipped_vods_skipped_at ON skipped_vods(skipped_at);
+                """)
+
                 conn.commit()
                 logger.info("✅ Database migrations complete")
         except Exception as e:
@@ -299,13 +313,13 @@ class GamesDatabase:
     def get_played_games_batch(self, game_names: List[str]) -> Dict[str, Dict[str, Any]]:
         """
         Fetch multiple played games in a single query (PERFORMANCE OPTIMIZATION).
-        
+
         This method solves the N+1 query problem by fetching all games at once
         instead of calling get_played_game() in a loop.
-        
+
         Args:
             game_names: List of canonical game names to fetch
-            
+
         Returns:
             Dictionary mapping lowercase game name to game record
             Example: {"game name": {id: 1, canonical_name: "Game Name", ...}}
@@ -313,7 +327,7 @@ class GamesDatabase:
         conn = self.get_connection()
         if not conn or not game_names:
             return {}
-        
+
         try:
             with conn.cursor() as cur:
                 # Use parameterized query with IN clause for batch lookup
@@ -322,12 +336,12 @@ class GamesDatabase:
                     SELECT * FROM played_games
                     WHERE LOWER(TRIM(canonical_name)) IN ({placeholders})
                 """
-                
+
                 # Pass lowercase names for case-insensitive matching
                 lowercase_names = [name.lower().strip() for name in game_names]
                 cur.execute(query, lowercase_names)
                 results = cur.fetchall()
-                
+
                 # Build dictionary mapping lowercase name to game record
                 games_dict = {}
                 for row in results:
@@ -337,10 +351,10 @@ class GamesDatabase:
                     # Use lowercase canonical name as key for case-insensitive lookups
                     canonical_lower = game_dict.get('canonical_name', '').lower().strip()
                     games_dict[canonical_lower] = game_dict
-                    
+
                 logger.debug(f"Batch fetched {len(games_dict)} games from {len(game_names)} requested names")
                 return games_dict
-                
+
         except Exception as e:
             logger.error(f"Error in batch game lookup: {e}")
             return {}
@@ -3191,7 +3205,7 @@ class GamesDatabase:
 
         # Get all approved staged games
         staged_games = self.get_staged_games(sync_session_id, reviewed_only=False)
-        
+
         # PERFORMANCE OPTIMIZATION: Batch fetch all games at once to avoid N+1 query problem
         game_names = [g['game_data'].get('canonical_name') for g in staged_games if g.get('approved')]
         existing_games_map = self.get_played_games_batch(game_names)
@@ -3371,11 +3385,11 @@ class GamesDatabase:
     def set_igdb_exclusion(self, game_name: str, exclude: bool = True) -> bool:
         """
         Set or unset IGDB exclusion flag for a game.
-        
+
         Args:
             game_name: Canonical name of the game
             exclude: True to exclude, False to re-enable IGDB enrichment
-            
+
         Returns:
             True if successful
         """
@@ -3383,20 +3397,20 @@ class GamesDatabase:
         if not game:
             logger.warning(f"Game '{game_name}' not found, cannot set IGDB exclusion")
             return False
-            
+
         return self.update_played_game(game['id'], skip_igdb_enrichment=exclude)
-    
+
     def get_igdb_excluded_games(self) -> List[Dict[str, Any]]:
         """
         Get list of games excluded from IGDB enrichment.
-        
+
         Returns:
             List of game dictionaries with exclusion flag set to True
         """
         conn = self.get_connection()
         if not conn:
             return []
-            
+
         try:
             with conn.cursor() as cur:
                 cur.execute("""
@@ -3410,14 +3424,14 @@ class GamesDatabase:
         except Exception as e:
             logger.error(f"Error getting IGDB excluded games: {e}")
             return []
-    
+
     def is_igdb_excluded(self, game_name: str) -> bool:
         """
         Check if a game is excluded from IGDB enrichment.
-        
+
         Args:
             game_name: Name of the game to check
-            
+
         Returns:
             True if excluded, False otherwise
         """
@@ -3427,6 +3441,66 @@ class GamesDatabase:
         return game.get('skip_igdb_enrichment', False)
 
     # --- Trivia System Methods ---
+
+    # --- Skipped VODs Management ---
+
+    def add_skipped_vod(self, vod_url: str, source: str, title: str = "", skipped_by: int = 0) -> bool:
+        """Add a VOD to the skipped list"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO skipped_vods (vod_url, source, title, skipped_by)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (vod_url) DO NOTHING
+                """, (vod_url, source, title, skipped_by))
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Error adding skipped VOD: {e}")
+            conn.rollback()
+            return False
+
+    def is_vod_skipped(self, vod_url: str) -> bool:
+        """Check if a VOD has been skipped"""
+        conn = self.get_connection()
+        if not conn:
+            return False
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM skipped_vods WHERE vod_url = %s", (vod_url,))
+                return cur.fetchone() is not None
+        except Exception as e:
+            logger.error(f"Error checking skipped VOD: {e}")
+            return False
+
+    def get_skipped_vods(self, source: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get list of skipped VODs, optionally filtered by source"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        try:
+            with conn.cursor() as cur:
+                if source:
+                    cur.execute("""
+                        SELECT * FROM skipped_vods
+                        WHERE source = %s
+                        ORDER BY skipped_at DESC
+                        LIMIT %s
+                    """, (source, limit))
+                else:
+                    cur.execute("""
+                        SELECT * FROM skipped_vods
+                        ORDER BY skipped_at DESC
+                        LIMIT %s
+                    """, (limit,))
+                results = cur.fetchall()
+                return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"Error getting skipped VODs: {e}")
+            return []
 
 
 # Export

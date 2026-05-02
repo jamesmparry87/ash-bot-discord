@@ -403,7 +403,7 @@ async def monday_content_sync():
         for attempt in range(max_retries):
             try:
                 print(f"🔄 SYNC & DEBRIEF (Monday): Attempt {attempt + 1}/{max_retries}...")
-                analysis_results = await perform_full_content_sync(start_sync_time)
+                analysis_results = await perform_full_content_sync(start_sync_time, is_scheduled=True)
                 break  # Success!
             except Exception as sync_error:
                 last_error = sync_error
@@ -1994,7 +1994,7 @@ def map_genre_to_standard(igdb_genre: str) -> str:
     return DEFAULT_GENRE
 
 
-async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]:
+async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: bool = False) -> Dict[str, Any]:
     """
     Performs a full sync of new content from YouTube and Twitch with IGDB enrichment.
 
@@ -2008,6 +2008,10 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
     - Updates or adds games to the database with full metadata
     - Deduplicates and aggregates statistics
     - Returns analysis dictionary for Monday morning message
+
+    Args:
+        start_sync_time: Start time for content sync window
+        is_scheduled: True if called from automated scheduled task (enables longer manual input timeout)
     """
     if not db:
         raise RuntimeError("Database not available for sync.")
@@ -2124,9 +2128,10 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
                             # PERFORMANCE FIX: Look up game once and reuse (was also done at line 2173)
                             existing_game = db.games.get_played_game(canonical_name)
                             skip_igdb = existing_game.get('skip_igdb_enrichment', False) if existing_game else False
-                            
+
                             if skip_igdb:
-                                print(f"⏭️ SYNC: Skipping IGDB alternative names for '{canonical_name}' (user excluded)")
+                                print(
+                                    f"⏭️ SYNC: Skipping IGDB alternative names for '{canonical_name}' (user excluded)")
                             else:
                                 existing_alt_names = game_data.get('alternative_names', [])
                                 igdb_alt_names = igdb_data.get('alternative_names', [])
@@ -2345,20 +2350,56 @@ async def perform_full_content_sync(start_sync_time: datetime) -> Dict[str, Any]
             is_low_confidence = False
             confidence = 0.0
 
+            # Check if VOD was previously skipped
+            vod_url = vod.get('url', '')
+            if vod_url and db and db.games.is_vod_skipped(vod_url):
+                print(f"⏭️ SYNC: Skipping previously ignored VOD: {title[:50]}")
+                continue
+
             # Use smart extraction with IGDB validation (Phase 1.2) for single-game streams
             try:
                 from ..integrations.twitch import smart_extract_with_validation
                 extracted_name, confidence = await smart_extract_with_validation(title)
 
-                if not extracted_name or confidence < 0.5:
-                    print(f"⚠️ SYNC: Very low confidence ({confidence:.2f}) for Twitch title: '{title}' - skipping")
-                    continue
+                # Low confidence - request manual input
+                if not extracted_name or confidence < 0.65:
+                    print(f"⚠️ SYNC: Low confidence ({confidence:.2f}) for Twitch title - requesting manual input")
 
-                # Low-confidence games (0.5-0.85) will be shown with ⚠️ warning in final approval summary
-                game_name = extracted_name
-                is_low_confidence = confidence < 0.5
-                print(
-                    f"✅ SYNC: Extracted '{game_name}' from Twitch with {confidence:.2f} confidence{' (LOW - needs review)' if is_low_confidence else ''}")
+                    from ..handlers.manual_game_input import request_manual_game_name
+
+                    vod_data = {
+                        'title': title,
+                        'url': vod_url,
+                        'source': 'twitch',
+                        'extracted_name': extracted_name or '',
+                        'confidence': confidence
+                    }
+
+                    # Request manual input (blocks until response)
+                    manual_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
+
+                    if manual_response == "skip":
+                        # Add to skipped list
+                        if db:
+                            db.games.add_skipped_vod(vod_url, 'twitch', title, JAM_USER_ID)
+                        print(f"⏭️ User skipped VOD: {title[:50]}")
+                        continue
+                    elif manual_response:
+                        # Use manual name
+                        game_name = manual_response
+                        confidence = 1.0  # High confidence for manual input
+                        is_low_confidence = False
+                        print(f"✅ SYNC: Using manual name '{game_name}' from user input")
+                    else:
+                        # Timeout or error - skip
+                        print(f"⏭️ Manual input timeout/error - skipping: {title[:50]}")
+                        continue
+                else:
+                    # Good confidence - use extracted name
+                    game_name = extracted_name
+                    is_low_confidence = confidence < 0.85
+                    print(
+                        f"✅ SYNC: Extracted '{game_name}' from Twitch with {confidence:.2f} confidence{' (medium - review recommended)' if is_low_confidence else ''}")
 
             except ImportError:
                 # Fallback to basic extraction if smart extraction not available

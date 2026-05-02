@@ -2173,6 +2173,14 @@ async def handle_dm_conversations(message: discord.Message) -> bool:
 
         user_id = message.author.id
 
+        # PRIORITY 0: Handle manual game input for sync (blocking operation)
+        try:
+            from .manual_game_input import handle_manual_input_response
+            if await handle_manual_input_response(message):
+                return True
+        except ImportError:
+            pass  # Manual input handler not available
+
         # Import conversation handlers
         try:
             from .conversation_handler import (
