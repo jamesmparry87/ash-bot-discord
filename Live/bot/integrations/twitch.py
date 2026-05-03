@@ -708,7 +708,11 @@ def detect_multiple_games_in_title(title: str) -> List[str]:
 
     # Common multi-game separators
     # NOTE: Removed ' & ' because it's commonly used IN game titles (e.g., "Banjo & Kazooie")
-    separators = [' + ', ' and ', ' - ']
+    # NOTE: Removed ' - ' because it is used as general punctuation in stream titles
+    #       (e.g., "Game Name - !Fractal", "Context - Game - More context") and is NOT
+    #       a reliable indicator of multiple games. Use ' + ' or ' and ' for genuine
+    #       multi-game streams.
+    separators = [' + ', ' and ']
 
     for sep in separators:
         if sep in title.lower():

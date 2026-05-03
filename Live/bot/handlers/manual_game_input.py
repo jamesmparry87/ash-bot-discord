@@ -131,13 +131,15 @@ async def handle_manual_input_response(message: discord.Message):
 
     # Handle special responses
     if response == "skip":
+        # Send confirmation BEFORE resolving the future to prevent the next
+        # VOD's DM from appearing before this acknowledgement.
+        await message.add_reaction("⏭️")
         future.set_result("skip")
-        await message.add_reaction("✅")
         return True
     elif response == "accept" and guess:
-        future.set_result(guess)
         await message.add_reaction("✅")
         await message.channel.send(f"✅ Using: `{guess}`")
+        future.set_result(guess)  # Resolve AFTER sending confirmation
         return True
     elif response == "accept" and not guess:
         await message.channel.send("❌ No guess available - please provide the game name or use `skip`")
@@ -146,9 +148,9 @@ async def handle_manual_input_response(message: discord.Message):
         # Treat as game name
         game_name = message.content.strip()
         if len(game_name) > 0 and len(game_name) < 200:
-            future.set_result(game_name)
             await message.add_reaction("✅")
             await message.channel.send(f"✅ Using: `{game_name}`")
+            future.set_result(game_name)  # Resolve AFTER sending confirmation
             return True
         else:
             await message.channel.send("❌ Invalid game name - try again or use `skip`")
