@@ -929,9 +929,10 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
 
             else:
                 # Game not in DB — stage it for approval via the sync session mechanism
-                from ..tasks.scheduled import perform_full_content_sync
                 import uuid
                 from zoneinfo import ZoneInfo
+
+                from ..tasks.scheduled import perform_full_content_sync
 
                 sync_session_id = str(uuid.uuid4())
                 db_module = database  # alias for clarity
