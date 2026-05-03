@@ -2101,7 +2101,17 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
             print(f"✅ SYNC: Processing '{canonical_name}' ({completion_status})")
 
             # IGDB Enrichment - validate and enrich game data
-            if igdb_available:
+            # Skip if this is an existing game whose metadata is already complete (saves API quota)
+            _existing_for_igdb = db.games.get_played_game(canonical_name) if db else None
+            _igdb_metadata_complete = bool(
+                _existing_for_igdb and
+                _existing_for_igdb.get('genre') and
+                _existing_for_igdb.get('release_year') and
+                _existing_for_igdb.get('alternative_names')
+            )
+            if _igdb_metadata_complete:
+                print(f"⏭️ SYNC: Skipping IGDB for '{canonical_name}' - metadata already complete")
+            if igdb_available and not _igdb_metadata_complete:
                 try:
                     print(f"🔍 SYNC: Querying IGDB for '{canonical_name}'...")
                     igdb_data = await validate_and_enrich(canonical_name)
@@ -2131,8 +2141,8 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
 
                             # Merge alternative names (check exclusion flag first)
                             # Check if this game is excluded from IGDB enrichment
-                            # PERFORMANCE FIX: Look up game once and reuse (was also done at line 2173)
-                            existing_game = db.games.get_played_game(canonical_name)
+                            # Reuse the lookup already done above to avoid a second DB call
+                            existing_game = _existing_for_igdb
                             skip_igdb = existing_game.get('skip_igdb_enrichment', False) if existing_game else False
 
                             if skip_igdb:
