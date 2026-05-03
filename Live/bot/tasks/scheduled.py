@@ -2285,7 +2285,160 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
             duration_minutes = vod.get('duration_seconds', 0) // 60
             view_count = vod.get('view_count', 0)  # NEW: Capture Twitch views from VOD
 
-            # Initialize variables early to avoid unbound variable errors
+            # Phase 2.2: Check for multi-game streams
+            try:
+                potential_games = detect_multiple_games_in_title(title)
+
+                if len(potential_games) >= 2:
+                    print(f"🔍 SYNC: Multi-game stream detected in '{title}'")
+                    print(f"   Games found: {potential_games}")
+
+                    # Split playtime equally between games
+                    fractional_duration = duration_minutes // len(potential_games)
+
+                    # Process each game separately
+                    for game_name in potential_games:
+                        try:
+                            from ..integrations.twitch import smart_extract_with_validation
+                            extracted_name, confidence = await smart_extract_with_validation(game_name)
+
+                            if extracted_name and confidence >= 0.7:
+                                print(
+                                    f"   ✅ Processing '{extracted_name}' ({fractional_duration} mins, {confidence:.2f} confidence)")
+
+                                # Check if game exists
+                                existing_game = db.get_played_game(extracted_name)
+
+                                if existing_game:
+                                    # Stage multi-game update
+                                    update_data = {
+                                        'canonical_name': extracted_name,
+                                        'total_playtime_minutes': existing_game.get(
+                                            'total_playtime_minutes',
+                                            0) + fractional_duration,
+                                        'total_episodes': existing_game.get(
+                                            'total_episodes',
+                                            0) + 1}
+                                    db.games.stage_game_for_approval(
+                                        sync_session_id=sync_session_id,
+                                        game_data=update_data,
+                                        action_type='update',
+                                        confidence_score=confidence,
+                                        source_platform='twitch'
+                                    )
+                                    print(f"   ✅ Staged update for '{extracted_name}' with {fractional_duration} mins")
+                                    games_updated += 1
+                                else:
+                                    # Stage new multi-game entry
+                                    game_data = {
+                                        'canonical_name': extracted_name,
+                                        'series_name': extracted_name,
+                                        'total_playtime_minutes': fractional_duration,
+                                        'total_episodes': 1,
+                                        'first_played_date': vod['published_at'].date(),
+                                        'notes': f"Auto-synced from multi-game Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
+                                    if vod_url:
+                                        game_data['twitch_vod_urls'] = [vod_url]
+
+                                    db.games.stage_game_for_approval(
+                                        sync_session_id=sync_session_id,
+                                        game_data=game_data,
+                                        action_type='add',
+                                        confidence_score=confidence,
+                                        source_platform='twitch'
+                                    )
+                                    print(f"   ✅ Staged new game '{extracted_name}' with {fractional_duration} mins")
+                                    games_added += 1
+
+                                total_new_minutes += fractional_duration
+                            else:
+                                # Low confidence - request manual input instead of skipping
+                                print(f"   ⚠️ Low confidence for '{game_name}' ({confidence:.2f}) - requesting manual input")
+                                
+                                from ..handlers.manual_game_input import request_manual_game_name
+                                
+                                vod_data = {
+                                    'title': f"{game_name} (from multi-game stream: {title})",
+                                    'url': vod_url,
+                                    'source': 'twitch',
+                                    'extracted_name': game_name,
+                                    'confidence': confidence
+                                }
+                                
+                                # Request manual input (blocks until response)
+                                manual_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
+                                
+                                if manual_response == "skip":
+                                    # Add to skipped list
+                                    if db:
+                                        db.games.add_skipped_vod(vod_url, 'twitch', title, JAM_USER_ID)
+                                    print(f"   ⏭️ User skipped multi-game entry: {game_name}")
+                                elif manual_response:
+                                    # Use manual name and process this game
+                                    extracted_name = manual_response
+                                    confidence = 1.0  # High confidence for manual input
+                                    print(f"   ✅ Using manual name '{extracted_name}' from user input")
+                                    
+                                    # Check if game exists
+                                    existing_game = db.get_played_game(extracted_name)
+                                    
+                                    if existing_game:
+                                        # Stage multi-game update
+                                        update_data = {
+                                            'canonical_name': extracted_name,
+                                            'total_playtime_minutes': existing_game.get(
+                                                'total_playtime_minutes',
+                                                0) + fractional_duration,
+                                            'total_episodes': existing_game.get(
+                                                'total_episodes',
+                                                0) + 1}
+                                        db.games.stage_game_for_approval(
+                                            sync_session_id=sync_session_id,
+                                            game_data=update_data,
+                                            action_type='update',
+                                            confidence_score=confidence,
+                                            source_platform='twitch'
+                                        )
+                                        print(f"   ✅ Staged update for '{extracted_name}' with {fractional_duration} mins")
+                                        games_updated += 1
+                                    else:
+                                        # Stage new multi-game entry
+                                        game_data = {
+                                            'canonical_name': extracted_name,
+                                            'series_name': extracted_name,
+                                            'total_playtime_minutes': fractional_duration,
+                                            'total_episodes': 1,
+                                            'first_played_date': vod['published_at'].date(),
+                                            'notes': f"Auto-synced from multi-game Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
+                                        if vod_url:
+                                            game_data['twitch_vod_urls'] = [vod_url]
+                                        
+                                        db.games.stage_game_for_approval(
+                                            sync_session_id=sync_session_id,
+                                            game_data=game_data,
+                                            action_type='add',
+                                            confidence_score=confidence,
+                                            source_platform='twitch'
+                                        )
+                                        print(f"   ✅ Staged new game '{extracted_name}' with {fractional_duration} mins")
+                                        games_added += 1
+                                    
+                                    total_new_minutes += fractional_duration
+                                else:
+                                    # Timeout - skip this game
+                                    print(f"   ⏭️ Manual input timeout - skipping multi-game entry: {game_name}")
+
+                        except Exception as multi_game_error:
+                            print(f"   ❌ Error processing multi-game entry '{game_name}': {multi_game_error}")
+
+                    # Skip normal processing for this VOD since we handled all games
+                    continue
+
+            except Exception as detection_error:
+                print(f"⚠️ SYNC: Multi-game detection failed for '{title}': {detection_error}")
+                # Fall through to normal single-game processing
+
+            # Initialize variables early to avoid unbound variable errors (single-game processing)
             is_low_confidence = False
             confidence = 0.0
 
