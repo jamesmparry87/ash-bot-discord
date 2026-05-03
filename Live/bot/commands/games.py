@@ -797,13 +797,21 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 return
 
             start_time = datetime.now(ZoneInfo("Europe/London")) - timedelta(days=days)
-            await ctx.send(f"🔍 **Time-Range Sync Initiated.** Scanning content from the last **{days} days** ({start_time.strftime('%Y-%m-%d')} to now).")
+            await ctx.send(
+                f"🔍 **Time-Range Sync Initiated.** Scanning content from the last **{days} days** "
+                f"({start_time.strftime('%Y-%m-%d')} to now).\n"
+                f"⚠️ *Watch your DMs — any Twitch VODs that need manual naming will arrive there during the sync.*"
+            )
         except ValueError:
             # Not a number, check for other modes
             if mode.lower() == 'full':
                 # A full rescan ignores the last sync time and goes back a long time (e.g., years)
                 start_time = datetime.now(ZoneInfo("Europe/London")) - timedelta(days=365 * 5)  # 5 years
-                await ctx.send(f"🚀 **Full Content Sync Initiated.** Re-scanning all content from the last 5 years. This may take several minutes.")
+                await ctx.send(
+                    f"🚀 **Full Content Sync Initiated.** Re-scanning all content from the last 5 years. "
+                    f"This may take several minutes.\n"
+                    f"⚠️ *Watch your DMs — any Twitch VODs that need manual naming will arrive there during the sync.*"
+                )
             else:
                 # Standard sync uses the most recent update timestamp
                 start_time = database.get_latest_game_update_timestamp()
@@ -813,13 +821,175 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 # Make timezone-aware if it's naive (fix for datetime comparison)
                 elif start_time.tzinfo is None:
                     start_time = start_time.replace(tzinfo=ZoneInfo("Europe/London"))
-                await ctx.send(f"🚀 **Standard Content Sync Initiated.** Scanning for new content since {start_time.strftime('%Y-%m-%d')}.")
+                await ctx.send(
+                    f"🚀 **Standard Content Sync Initiated.** Scanning for new content since {start_time.strftime('%Y-%m-%d')}.\n"
+                    f"⚠️ *Watch your DMs — any Twitch VODs that need manual naming will arrive there during the sync.*"
+                )
 
         try:
-            results = await perform_full_content_sync(start_time)
-            await ctx.send(f"✅ **Sync Complete.**\n- Status: {results.get('status')}\n- New Content Found: {results.get('new_content_count', 0)}")
+            results = await perform_full_content_sync(start_time, is_scheduled=False)
+            skipped = results.get('skipped_vods', [])
+            timed_out_count = sum(1 for v in skipped if v['reason'] == 'timed_out')
+            skipped_count = sum(1 for v in skipped if v['reason'] == 'skipped')
+            skipped_msg = ""
+            if timed_out_count:
+                skipped_msg += f"\n- ⏱️ Timed-out VODs (will retry next sync): **{timed_out_count}**"
+            if skipped_count:
+                skipped_msg += f"\n- ⏭️ Permanently skipped VODs: **{skipped_count}**"
+            await ctx.send(
+                f"✅ **Sync Complete.**\n"
+                f"- Status: `{results.get('status')}`\n"
+                f"- Games staged for approval: **{results.get('games_staged', 0)}** "
+                f"({results.get('games_added', 0)} new, {results.get('games_updated', 0)} updated)\n"
+                f"- New content items found: **{results.get('new_content_count', 0)}**"
+                f"{skipped_msg}"
+            )
         except Exception as e:
             await ctx.send(f"❌ **Sync Failed:** {str(e)}")
+
+    @commands.command(name="namevod")
+    async def name_vod(self, ctx, vod_url_or_id: str = "", *, game_name: str = ""):
+        """
+        Retroactively assign a game name to a Twitch VOD that timed out during sync.
+        Usage: !namevod <twitch_url_or_vod_id> <game name>
+        Example: !namevod https://www.twitch.tv/videos/12345678 Mouse: PI for Hire
+        Example: !namevod 12345678 Mouse: PI for Hire
+        """
+        if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
+            return  # Silent ignore for unauthorized users
+
+        # Validate arguments
+        if not vod_url_or_id or not game_name:
+            await ctx.send(
+                "❌ **Missing arguments.**\n"
+                "Usage: `!namevod <twitch_url_or_vod_id> <game name>`\n\n"
+                "**Examples:**\n"
+                "• `!namevod https://www.twitch.tv/videos/12345678 Mouse: PI for Hire`\n"
+                "• `!namevod 12345678 Mouse: PI for Hire`"
+            )
+            return
+
+        # Extract VOD ID from URL if a full URL was given
+        import re
+        vod_id_match = re.search(r'(?:twitch\.tv/videos/|^)(\d+)', vod_url_or_id)
+        if not vod_id_match:
+            await ctx.send(
+                f"❌ **Could not parse VOD URL/ID:** `{vod_url_or_id}`\n"
+                "Please use a Twitch video URL (e.g. `https://www.twitch.tv/videos/12345678`) "
+                "or just the numeric VOD ID (e.g. `12345678`)."
+            )
+            return
+
+        vod_id = vod_id_match.group(1)
+        vod_url_canonical = f"https://www.twitch.tv/videos/{vod_id}"
+
+        await ctx.send(f"🔍 Looking up `{game_name}` for VOD `{vod_id}`...")
+
+        try:
+            database = self._get_db()
+
+            # Remove from permanent skip list if it was explicitly skipped
+            if hasattr(database.games, 'remove_skipped_vod'):
+                was_skipped = database.games.remove_skipped_vod(vod_url_canonical)
+                if was_skipped:
+                    print(f"✅ NAMEVOD: Removed '{vod_url_canonical}' from permanent skip list")
+
+            # Check if game already exists in DB
+            existing_game = database.get_played_game(game_name)
+
+            if existing_game:
+                canonical_name = existing_game.get('canonical_name', game_name)
+
+                # Build the update: +1 episode, add VOD URL
+                existing_vods = existing_game.get('twitch_vod_urls', [])
+                if isinstance(existing_vods, str):
+                    existing_vods = [v.strip() for v in existing_vods.split(',') if v.strip()]
+                elif not isinstance(existing_vods, list):
+                    existing_vods = []
+
+                if vod_url_canonical not in existing_vods:
+                    existing_vods.append(vod_url_canonical)
+
+                success = database.update_played_game(
+                    existing_game['id'],
+                    total_episodes=existing_game.get('total_episodes', 0) + 1,
+                    twitch_vod_urls=existing_vods[-10:]  # Keep last 10
+                )
+
+                if success:
+                    await ctx.send(
+                        f"✅ **VOD named and applied directly.**\n"
+                        f"• Game: **{canonical_name}**\n"
+                        f"• VOD: {vod_url_canonical}\n"
+                        f"• Episodes updated: {existing_game.get('total_episodes', 0)} → "
+                        f"{existing_game.get('total_episodes', 0) + 1}"
+                    )
+                else:
+                    await ctx.send(f"❌ **Database update failed** for `{canonical_name}`. Check bot logs.")
+
+            else:
+                # Game not in DB — stage it for approval via the sync session mechanism
+                from ..tasks.scheduled import perform_full_content_sync
+                import uuid
+                from zoneinfo import ZoneInfo
+
+                sync_session_id = str(uuid.uuid4())
+                db_module = database  # alias for clarity
+
+                db_module.games.create_staging_table_if_not_exists()
+
+                game_data = {
+                    'canonical_name': game_name,
+                    'series_name': game_name,
+                    'total_playtime_minutes': 0,  # Unknown without fetching VOD data
+                    'total_episodes': 1,
+                    'youtube_views': 0,
+                    'twitch_vod_urls': [vod_url_canonical],
+                    'notes': (
+                        f"Manually named via !namevod on "
+                        f"{datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"
+                    )
+                }
+
+                db_module.games.stage_game_for_approval(
+                    sync_session_id=sync_session_id,
+                    game_data=game_data,
+                    action_type='add',
+                    confidence_score=1.0,
+                    source_platform='twitch'
+                )
+
+                # Trigger approval queue
+                try:
+                    from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
+                    from ..tasks.scheduled import get_bot_instance
+
+                    summary = db_module.games.get_staging_session_summary(sync_session_id)
+                    bot = get_bot_instance()
+                    if bot:
+                        add_to_approval_queue(
+                            item_type='sync_approval',
+                            data={'sync_session_id': sync_session_id, 'summary': summary},
+                            priority=7,
+                            source='namevod_command'
+                        )
+                        await process_next_approval()
+                        await ctx.send(
+                            f"📋 **New game staged for approval.**\n"
+                            f"• Game: **{game_name}**\n"
+                            f"• VOD: {vod_url_canonical}\n"
+                            f"• You'll receive a DM to approve this new entry."
+                        )
+                    else:
+                        await ctx.send(f"⚠️ **Game staged but bot DM unavailable.** Manual approval required.")
+                except Exception as queue_err:
+                    await ctx.send(f"⚠️ **Game staged but approval queue failed:** {queue_err}")
+
+        except RuntimeError:
+            await ctx.send("❌ Database unavailable")
+        except Exception as e:
+            print(f"❌ Error in namevod command: {e}")
+            await ctx.send(f"❌ **Error:** {str(e)}")
 
     async def _verify_youtube_episodes(self, ctx, fix_discrepancies: bool = False):
         """Verify episode counts against YouTube playlists and optionally fix discrepancies."""

@@ -2478,6 +2478,43 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
     # NOTE: Last sync timestamp will be updated AFTER approval in conversation_handler
     # This ensures timestamp only advances when changes are actually committed
 
+    # --- Post-sync summary DM to JAM ---
+    if bot and skipped_vods:
+        try:
+            from ..config import JAM_USER_ID
+            user = await bot.fetch_user(JAM_USER_ID)
+            if user:
+                timed_out = [v for v in skipped_vods if v['reason'] == 'timed_out']
+                explicitly_skipped = [v for v in skipped_vods if v['reason'] == 'skipped']
+
+                dm_lines = [
+                    f"📋 **Sync complete** — {summary['total_count']} game(s) staged for approval "
+                    f"({games_added} new, {games_updated} updated)."
+                ]
+
+                if timed_out:
+                    dm_lines.append(
+                        f"\n⏱️ **{len(timed_out)} VOD(s) timed out** (no name provided — will be offered again next sync):"
+                    )
+                    for v in timed_out:
+                        dm_lines.append(f"  • {v['title'][:80]}")
+
+                if explicitly_skipped:
+                    dm_lines.append(
+                        f"\n⏭️ **{len(explicitly_skipped)} VOD(s) permanently skipped:**"
+                    )
+                    for v in explicitly_skipped:
+                        dm_lines.append(f"  • {v['title'][:80]}")
+
+                dm_lines.append(
+                    "\n*Use `!namevod <url_or_id> <game name>` to retroactively name a timed-out VOD.*"
+                )
+
+                await user.send("\n".join(dm_lines))
+                print(f"📬 SYNC: Post-sync summary DM sent to JAM ({len(skipped_vods)} skipped VOD(s) noted)")
+        except Exception as dm_err:
+            print(f"⚠️ SYNC: Could not send post-sync summary DM: {dm_err}")
+
     # --- Enhanced Reporting ---
     total_content_count = sum(game.get('total_episodes', 0) for game in playlist_games) + len(twitch_vods)
 
@@ -2490,7 +2527,8 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
         "games_staged": summary['total_count'],
         "games_added": games_added,
         "games_updated": games_updated,
-        "completed_games": completed_games
+        "completed_games": completed_games,
+        "skipped_vods": skipped_vods
     }
 
 
