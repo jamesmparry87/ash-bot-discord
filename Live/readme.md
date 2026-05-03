@@ -17,6 +17,7 @@ Science Officer Ash at your service. This guide covers everything you need for d
 - `!ashstatus` - Bot status and diagnostics
 - `!remind me in 5 minutes <message>` - Set reminder
 - `!addtriviaquestion` - Start trivia question submission (DM-based)
+- `!synchelp` - **Full content sync command reference** (see below)
 
 ### **📊 Database Queries (Natural Language)**
 
@@ -121,6 +122,60 @@ Weekly trivia runs Tuesdays at 11am UK time - just participate when questions ar
 - **Reply-based system**: Users reply to trivia messages instead of using commands
 - Advanced answer matching with fuzzy logic for variations and typos
 - AI question generation with JAM approval workflow for quality control
+
+---
+
+## 🔄 Content Sync System
+
+> **Quick reference: `!synchelp`** — Ask the bot in any channel for the full command reference.
+
+### **Running a Sync**
+
+| Command | What it does |
+|---------|-------------|
+| `!syncgames` | Standard sync — picks up new YouTube playlists and Twitch VODs since the last run |
+| `!syncgames <days>` | Time-range sync — e.g. `!syncgames 8` scans the last 8 days |
+| `!syncgames full` | Full rescan — re-processes all content from the last 5 years |
+
+⚠️ **During any sync:** Watch your DMs. Twitch VODs where Ash can't extract a game name from the title will be sent to you there for manual naming. You'll have a short window to respond or skip each one.
+
+### **Handling Unnamed VODs**
+
+If a VOD's naming window times out (e.g. you were AFK during the sync), use `!namevod` afterwards:
+
+```
+!namevod <twitch_url_or_id> <game name>
+```
+
+- If the game **already exists** in the database → updated directly, no approval needed
+- If it's a **new game** → staged and you'll receive a DM approval request
+
+**Examples:**
+```
+!namevod https://www.twitch.tv/videos/12345678 Mouse: PI for Hire
+!namevod 12345678 Mouse: PI for Hire
+```
+
+### **Post-Sync Summary DM**
+
+After every sync completes you'll receive a DM listing:
+- Games staged for approval (new vs updated)
+- Any VODs that timed out *(will be offered again next sync)*
+- Any VODs you permanently skipped
+
+### **Verifying Episode Counts**
+
+```
+!syncgames verify          → check DB counts against live YouTube data
+!syncgames verify --fix    → find AND fix any discrepancies
+```
+
+### **One-Time / Maintenance**
+
+```
+!enrichallgames    → bulk-enrich all games with IGDB metadata (run once after a big import)
+!deduplicategames  → merge duplicate game entries
+```
 
 ---
 

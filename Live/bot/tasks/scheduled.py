@@ -19,7 +19,14 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import tasks
 
-from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID, GUILD_ID, JONESY_USER_ID, MEMBERS_CHANNEL_ID
+from ..config import (
+    CHIT_CHAT_CHANNEL_ID,
+    GAME_RECOMMENDATION_CHANNEL_ID,
+    GUILD_ID,
+    JAM_USER_ID,
+    JONESY_USER_ID,
+    MEMBERS_CHANNEL_ID,
+)
 
 # Data quality utilities
 try:
@@ -44,7 +51,6 @@ except Exception as db_error:
 
 # Import integrations
 try:
-    from ..integrations.twitch import detect_multiple_games_in_title
     from ..integrations.twitch import extract_game_name_from_title as extract_game_from_twitch
     from ..integrations.twitch import fetch_new_vods_since, smart_extract_with_validation
     from ..integrations.youtube import execute_youtube_auto_post
@@ -2102,7 +2108,17 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
             print(f"✅ SYNC: Processing '{canonical_name}' ({completion_status})")
 
             # IGDB Enrichment - validate and enrich game data
-            if igdb_available:
+            # Skip if this is an existing game whose metadata is already complete (saves API quota)
+            _existing_for_igdb = db.games.get_played_game(canonical_name) if db else None
+            _igdb_metadata_complete = bool(
+                _existing_for_igdb and
+                _existing_for_igdb.get('genre') and
+                _existing_for_igdb.get('release_year') and
+                _existing_for_igdb.get('alternative_names')
+            )
+            if _igdb_metadata_complete:
+                print(f"⏭️ SYNC: Skipping IGDB for '{canonical_name}' - metadata already complete")
+            if igdb_available and not _igdb_metadata_complete:
                 try:
                     print(f"🔍 SYNC: Querying IGDB for '{canonical_name}'...")
                     igdb_data = await validate_and_enrich(canonical_name)
@@ -2132,8 +2148,8 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
 
                             # Merge alternative names (check exclusion flag first)
                             # Check if this game is excluded from IGDB enrichment
-                            # PERFORMANCE FIX: Look up game once and reuse (was also done at line 2173)
-                            existing_game = db.games.get_played_game(canonical_name)
+                            # Reuse the lookup already done above to avoid a second DB call
+                            existing_game = _existing_for_igdb
                             skip_igdb = existing_game.get('skip_igdb_enrichment', False) if existing_game else False
 
                             if skip_igdb:
@@ -2267,6 +2283,8 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
             continue
 
     # Process Twitch VODs with smart extraction and IGDB enrichment
+    bot = get_bot_instance()
+    skipped_vods = []  # Track VODs that couldn't be named this run (timed out or explicitly skipped)
     for vod in twitch_vods:
         try:
             title = vod['title']
@@ -2342,10 +2360,11 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                                 total_new_minutes += fractional_duration
                             else:
                                 # Low confidence - request manual input instead of skipping
-                                print(f"   ⚠️ Low confidence for '{game_name}' ({confidence:.2f}) - requesting manual input")
-                                
+                                print(
+                                    f"   ⚠️ Low confidence for '{game_name}' ({confidence:.2f}) - requesting manual input")
+
                                 from ..handlers.manual_game_input import request_manual_game_name
-                                
+
                                 vod_data = {
                                     'title': f"{game_name} (from multi-game stream: {title})",
                                     'url': vod_url,
@@ -2353,10 +2372,10 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                                     'extracted_name': game_name,
                                     'confidence': confidence
                                 }
-                                
+
                                 # Request manual input (blocks until response)
                                 manual_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
-                                
+
                                 if manual_response == "skip":
                                     # Add to skipped list
                                     if db:
@@ -2367,10 +2386,10 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                                     extracted_name = manual_response
                                     confidence = 1.0  # High confidence for manual input
                                     print(f"   ✅ Using manual name '{extracted_name}' from user input")
-                                    
+
                                     # Check if game exists
                                     existing_game = db.get_played_game(extracted_name)
-                                    
+
                                     if existing_game:
                                         # Stage multi-game update
                                         update_data = {
@@ -2388,7 +2407,8 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                                             confidence_score=confidence,
                                             source_platform='twitch'
                                         )
-                                        print(f"   ✅ Staged update for '{extracted_name}' with {fractional_duration} mins")
+                                        print(
+                                            f"   ✅ Staged update for '{extracted_name}' with {fractional_duration} mins")
                                         games_updated += 1
                                     else:
                                         # Stage new multi-game entry
@@ -2401,7 +2421,7 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                                             'notes': f"Auto-synced from multi-game Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
                                         if vod_url:
                                             game_data['twitch_vod_urls'] = [vod_url]
-                                        
+
                                         db.games.stage_game_for_approval(
                                             sync_session_id=sync_session_id,
                                             game_data=game_data,
@@ -2409,9 +2429,10 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                                             confidence_score=confidence,
                                             source_platform='twitch'
                                         )
-                                        print(f"   ✅ Staged new game '{extracted_name}' with {fractional_duration} mins")
+                                        print(
+                                            f"   ✅ Staged new game '{extracted_name}' with {fractional_duration} mins")
                                         games_added += 1
-                                    
+
                                     total_new_minutes += fractional_duration
                                 else:
                                     # Timeout - skip this game
@@ -2432,7 +2453,6 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
             confidence = 0.0
 
             # Check if VOD was previously skipped
-            vod_url = vod.get('url', '')
             if vod_url and db and db.games.is_vod_skipped(vod_url):
                 print(f"⏭️ SYNC: Skipping previously ignored VOD: {title[:50]}")
                 continue
@@ -2460,9 +2480,10 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                     manual_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
 
                     if manual_response == "skip":
-                        # Add to skipped list
+                        # Add to permanent skip list so it won't be offered again
                         if db:
                             db.games.add_skipped_vod(vod_url, 'twitch', title, JAM_USER_ID)
+                        skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'skipped'})
                         print(f"⏭️ User skipped VOD: {title[:50]}")
                         continue
                     elif manual_response:
@@ -2472,8 +2493,9 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                         is_low_confidence = False
                         print(f"✅ SYNC: Using manual name '{game_name}' from user input")
                     else:
-                        # Timeout or error - skip
-                        print(f"⏭️ Manual input timeout/error - skipping: {title[:50]}")
+                        # Timeout - VOD not named this run; will be offered again on next sync
+                        skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'timed_out'})
+                        print(f"⏭️ Manual input timed out - skipping: {title[:50]}")
                         continue
                 else:
                     # Good confidence - use extracted name
@@ -2516,39 +2538,13 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                 else:
                     updated_alt_names = existing_alt_names
 
-                # Update existing game - add to totals
-                update_params = {
-                    'canonical_name': canonical_name,  # Use DB canonical name, not extracted
-                    'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + duration_minutes,
-                    'total_episodes': existing_game.get('total_episodes', 0) + 1,
-                    'twitch_views': existing_game.get('twitch_views', 0) + view_count,  # NEW: Aggregate Twitch views
-                    'alternative_names': updated_alt_names  # FIX 4: Include updated aliases
-                }
-
-                # Phase 1.3: Store VOD URLs
-                if vod_url:
-                    # Get existing VOD URLs (handle both list and text formats)
-                    existing_vods = existing_game.get('twitch_vod_urls', [])
-                    if isinstance(existing_vods, str):
-                        # Parse comma-separated string
-                        existing_vods = [v.strip() for v in existing_vods.split(',') if v.strip()]
-                    elif not isinstance(existing_vods, list):
-                        existing_vods = []
-
-                    # Add new VOD if not already present
-                    if vod_url not in existing_vods:
-                        existing_vods.append(vod_url)
-                        # Keep only last 10 VODs to avoid bloat
-                        existing_vods = existing_vods[-10:]
-                        update_params['twitch_vod_urls'] = existing_vods
-                        print(f"📎 SYNC: Added VOD URL to '{game_name}' ({len(existing_vods)} total)")
-
-                # Stage single-game Twitch update
+                # Stage single-game Twitch update (use DB canonical name, not extracted)
                 update_data = {
-                    'canonical_name': game_name,
+                    'canonical_name': canonical_name,
                     'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + duration_minutes,
                     'total_episodes': existing_game.get('total_episodes', 0) + 1,
-                    'twitch_views': existing_game.get('twitch_views', 0) + view_count
+                    'twitch_views': existing_game.get('twitch_views', 0) + view_count,
+                    'alternative_names': updated_alt_names
                 }
                 if vod_url:
                     existing_vods = existing_game.get('twitch_vod_urls', [])
@@ -2559,6 +2555,7 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                     if vod_url not in existing_vods:
                         existing_vods.append(vod_url)
                         update_data['twitch_vod_urls'] = existing_vods[-10:]
+                        print(f"📎 SYNC: Added VOD URL to '{canonical_name}' ({len(existing_vods)} total)")
 
                 db.games.stage_game_for_approval(
                     sync_session_id=sync_session_id,
@@ -2622,7 +2619,6 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
     # --- Trigger Approval Conversation via Queue System ---
     from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
 
-    bot = get_bot_instance()
     if bot:
         try:
             # Add to approval queue with appropriate priority
@@ -2645,6 +2641,43 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
     # NOTE: Last sync timestamp will be updated AFTER approval in conversation_handler
     # This ensures timestamp only advances when changes are actually committed
 
+    # --- Post-sync summary DM to JAM ---
+    if bot and skipped_vods:
+        try:
+            from ..config import JAM_USER_ID
+            user = await bot.fetch_user(JAM_USER_ID)
+            if user:
+                timed_out = [v for v in skipped_vods if v['reason'] == 'timed_out']
+                explicitly_skipped = [v for v in skipped_vods if v['reason'] == 'skipped']
+
+                dm_lines = [
+                    f"📋 **Sync complete** — {summary['total_count']} game(s) staged for approval "
+                    f"({games_added} new, {games_updated} updated)."
+                ]
+
+                if timed_out:
+                    dm_lines.append(
+                        f"\n⏱️ **{len(timed_out)} VOD(s) timed out** (no name provided — will be offered again next sync):"
+                    )
+                    for v in timed_out:
+                        dm_lines.append(f"  • {v['title'][:80]}")
+
+                if explicitly_skipped:
+                    dm_lines.append(
+                        f"\n⏭️ **{len(explicitly_skipped)} VOD(s) permanently skipped:**"
+                    )
+                    for v in explicitly_skipped:
+                        dm_lines.append(f"  • {v['title'][:80]}")
+
+                dm_lines.append(
+                    "\n*Use `!namevod <url_or_id> <game name>` to retroactively name a timed-out VOD.*"
+                )
+
+                await user.send("\n".join(dm_lines))
+                print(f"📬 SYNC: Post-sync summary DM sent to JAM ({len(skipped_vods)} skipped VOD(s) noted)")
+        except Exception as dm_err:
+            print(f"⚠️ SYNC: Could not send post-sync summary DM: {dm_err}")
+
     # --- Enhanced Reporting ---
     total_content_count = sum(game.get('total_episodes', 0) for game in playlist_games) + len(twitch_vods)
 
@@ -2657,7 +2690,8 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
         "games_staged": summary['total_count'],
         "games_added": games_added,
         "games_updated": games_updated,
-        "completed_games": completed_games
+        "completed_games": completed_games,
+        "skipped_vods": skipped_vods
     }
 
 
