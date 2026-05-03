@@ -885,3 +885,104 @@ Original content: "{user_content}"
 - **Maintainability** - Document complex logic and use clear naming
 
 This guide should serve as your primary reference for understanding and extending the Ash bot codebase. When in doubt, follow the established patterns and always prioritize code clarity and user experience.
+
+---
+
+## Developer Tools
+
+### Live → Staging Database Sync (`database_sync.py`)
+
+Copies live production data into the Rook staging database for local testing. Run from the `Live/` directory.
+
+**Prerequisites:** Set `LIVE_DATABASE_URL` (production) and `DATABASE_URL` (staging) as env vars.
+
+```bash
+# Recommended — uses sync_staging.sh wrapper
+./sync_staging.sh             # Sync all default tables (interactive confirmation)
+./sync_staging.sh --dry-run   # Preview changes without applying
+./sync_staging.sh --force     # Sync without confirmation prompt
+./sync_staging.sh --tables played_games,trivia_questions  # Specific tables only
+
+# Or call Python directly
+python database_sync.py --dry-run
+python database_sync.py --force
+```
+
+**Default tables synced (in dependency order):**
+1. `played_games` — main gaming database
+2. `game_recommendations` — community suggestions
+3. `trivia_questions` — trivia question bank
+4. `trivia_sessions` — active/completed sessions
+5. `trivia_answers` — user responses
+
+**Safety:** always does a dry run first; requires `yes` confirmation before deleting staging data (unless `--force`); uses transaction rollback on failure.
+
+**Security:** never commit database URLs to version control; consider read-only credentials for the live DB.
+
+---
+
+### `!testreminder` — Scheduled Messaging Test
+
+Tests the bot's scheduled message delivery infrastructure by creating a temporary timed message to the Newt Mods channel.
+
+```
+!testreminder           # Default: 2-minute test
+!testreminder 30s       # 30 seconds
+!testreminder 5m        # 5 minutes
+!testreminder 1h        # 1 hour (maximum for testing)
+```
+
+- **Permissions:** Moderators only (`manage_messages`)
+- **Target:** Always delivers to **Newt Mods** channel (ID: `1213488470798893107`), regardless of where the command is run
+- **Time formats:** `s` (seconds, min 10s), `m` (minutes), `h` (hours, max 1h)
+- **Uses the same scheduling mechanism as:** Monday 9 AM greetings, Friday 9 AM messages, Trivia Tuesday automation
+
+If `!testreminder` delivers successfully, all other scheduled/automated messages should be working correctly.
+
+---
+
+## Announcement System
+
+### Access
+
+Restricted to two users only — silently ignored for anyone else:
+- `JAM_USER_ID: 337833732901961729` (Sir Decent Jam)
+- `JONESY_USER_ID: 651329927895056384` (Captain Jonesy)
+
+### Commands
+
+| Command | Where | What it does |
+|---------|-------|--------------|
+| `!announce <message>` | Any channel | Simple announcement embed |
+| `!emergency <message>` | Any channel | Emergency announcement with @everyone ping |
+| `!announceupdate` | Any channel | Starts interactive DM-based announcement creation |
+| `!createannouncement` | Any channel | Alias for `!announceupdate` |
+
+### Natural Language Triggers (DM only)
+
+When an authorized user sends any of these phrases in a DM, the interactive announcement workflow starts automatically:
+
+> "make an announcement", "create an announcement", "post an announcement", "need to announce", "want to announce", "announce something", "server update", "community update", "bot update", "new features", "feature update"
+
+### Interactive Workflow (6 steps)
+
+1. **Channel selection** — Moderator channel (technical) or Community Announcements (user-facing)
+2. **Content input** — User provides raw message content
+3. **AI enhancement** — Content is rewritten in Ash's analytical voice (style varies by channel type)
+4. **Preview & editing** — Options: ✅ Post / ✏️ Edit / 📝 Add notes / ❌ Cancel
+5. **Creator notes** (optional) — Personal notes from the creator, integrated into formatting
+6. **Deploy** — Message posted to selected channel
+
+---
+
+## Planned Features
+
+### Raid Briefing System *(specification drafted, not yet built)*
+
+A Discord-based raid coordination system triggered by Twitch EventSub webhooks. Planned for Q1-Q2 2026 as a Priority 4 feature. Key elements:
+- Twitch EventSub webhook integration to detect incoming raids
+- Automated embed messages in a designated raid-briefing channel
+- Ash persona briefing cards with raider stats
+- Configuration via environment variables
+
+Full specification is in git history at `Live/documentation/RAID_BRIEFING_SPEC.md` (commit before documentation cleanup).
