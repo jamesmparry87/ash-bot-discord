@@ -3502,6 +3502,39 @@ class GamesDatabase:
             logger.error(f"Error getting skipped VODs: {e}")
             return []
 
+    def get_game_by_vod_url(self, vod_url: str) -> Optional[Dict[str, Any]]:
+        """
+        Find a played game that already contains this Twitch VOD URL.
+        Used during sync to prevent re-staging VODs that are already in the database
+        under a manually-assigned game name (e.g. after using !namevod).
+        Returns a minimal dict with 'id' and 'canonical_name' if found, None otherwise.
+        """
+        conn = self.get_connection()
+        if not conn:
+            return None
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, canonical_name
+                    FROM played_games
+                    WHERE twitch_vod_urls LIKE %s
+                    AND twitch_vod_urls IS NOT NULL
+                    AND twitch_vod_urls != ''
+                    AND twitch_vod_urls != '[]'
+                    LIMIT 1
+                    """,
+                    (f'%{vod_url}%',)
+                )
+                row = cur.fetchone()
+                if row:
+                    row_dict = dict(row)
+                    return {'id': row_dict['id'], 'canonical_name': row_dict['canonical_name']}
+                return None
+        except Exception as e:
+            logger.error(f"Error in get_game_by_vod_url: {e}")
+            return None
+
     def remove_skipped_vod(self, vod_url: str) -> bool:
         """
         Remove a VOD from the permanent skip list.
@@ -3526,7 +3559,3 @@ class GamesDatabase:
             logger.error(f"Error removing skipped VOD: {e}")
             conn.rollback()
             return False
-
-
-# Export
-__all__ = ['GamesDatabase']
