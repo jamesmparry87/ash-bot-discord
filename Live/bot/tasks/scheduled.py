@@ -51,7 +51,8 @@ except Exception as db_error:
 
 # Import integrations
 try:
-    from ..integrations.twitch import detect_multiple_games_in_title, extract_game_name_from_title as extract_game_from_twitch
+    from ..integrations.twitch import detect_multiple_games_in_title
+    from ..integrations.twitch import extract_game_name_from_title as extract_game_from_twitch
     from ..integrations.twitch import fetch_new_vods_since, smart_extract_with_validation
     from ..integrations.youtube import execute_youtube_auto_post
     from ..integrations.youtube import extract_game_name_from_title as extract_game_from_youtube
@@ -2467,7 +2468,8 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                 if vod_url:
                     _existing_owner = db.games.get_game_by_vod_url(vod_url)
                     if _existing_owner:
-                        print(f"⏭️ SYNC: Skipping '{game_name}' — VOD URL already recorded under '{_existing_owner['canonical_name']}'")
+                        print(
+                            f"⏭️ SYNC: Skipping '{game_name}' — VOD URL already recorded under '{_existing_owner['canonical_name']}'")
                         continue
 
                 # Stage new Twitch game
