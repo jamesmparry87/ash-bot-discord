@@ -2267,6 +2267,7 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
 
     # Process Twitch VODs with smart extraction and IGDB enrichment
     bot = get_bot_instance()
+    skipped_vods = []  # Track VODs that couldn't be named this run (timed out or explicitly skipped)
     for vod in twitch_vods:
         try:
             title = vod['title']
@@ -2306,9 +2307,10 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                     manual_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
 
                     if manual_response == "skip":
-                        # Add to skipped list
+                        # Add to permanent skip list so it won't be offered again
                         if db:
                             db.games.add_skipped_vod(vod_url, 'twitch', title, JAM_USER_ID)
+                        skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'skipped'})
                         print(f"⏭️ User skipped VOD: {title[:50]}")
                         continue
                     elif manual_response:
@@ -2318,8 +2320,9 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                         is_low_confidence = False
                         print(f"✅ SYNC: Using manual name '{game_name}' from user input")
                     else:
-                        # Timeout or error - skip
-                        print(f"⏭️ Manual input timeout/error - skipping: {title[:50]}")
+                        # Timeout - VOD not named this run; will be offered again on next sync
+                        skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'timed_out'})
+                        print(f"⏭️ Manual input timed out - skipping: {title[:50]}")
                         continue
                 else:
                     # Good confidence - use extracted name
