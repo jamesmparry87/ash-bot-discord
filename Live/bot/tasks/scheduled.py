@@ -2468,7 +2468,8 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                 if vod_url:
                     _existing_owner = db.games.get_game_by_vod_url(vod_url)
                     if _existing_owner:
-                        print(f"⏭️ SYNC: Skipping '{game_name}' — VOD URL already recorded under '{_existing_owner['canonical_name']}'")
+                        print(
+                            f"⏭️ SYNC: Skipping '{game_name}' — VOD URL already recorded under '{_existing_owner['canonical_name']}'")
                         continue
 
                 # Stage new Twitch game
