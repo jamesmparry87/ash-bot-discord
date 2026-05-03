@@ -19,6 +19,17 @@ This guide provides step-by-step instructions for deploying the IGDB integration
 - Estimated runtime: ~13-15 minutes for 200 games
 - Provides real-time progress updates every 10 games
 
+### 3. New Command: `!namevod`
+- Retroactively name a Twitch VOD whose game couldn't be extracted during sync
+- If the game already exists in the DB → updated directly, no approval needed
+- If it's a new game → staged and you'll receive a DM to approve it
+- Usage: `!namevod <twitch_url_or_id> <game name>`
+
+### 4. New Command: `!synchelp`
+- Displays the full content sync command reference directly in Discord
+- Covers all sync modes, !namevod, post-sync DM summary, verify, and maintenance commands
+- Use any time you need a quick reminder of sync options
+
 ## Pre-Deployment Checklist
 
 Before deploying these changes, verify:
@@ -37,7 +48,7 @@ Before deploying these changes, verify:
 **Files Modified:**
 - `Live/bot/config.py` - Added STANDARD_GENRES mapping
 - `Live/bot/tasks/scheduled.py` - Enhanced sync with IGDB integration
-- `Live/bot/commands/games.py` - Added `!enrichallgames` command
+- `Live/bot/commands/games.py` - Added `!enrichallgames`, `!namevod`, `!synchelp` commands
 
 **Commands:**
 ```bash
@@ -234,6 +245,14 @@ After this one-time enrichment, future syncs will be automatic:
 - Useful if YouTube/Twitch data changed
 - Automatically enriches all games found
 
+### Handling Unnamed VODs
+If a Twitch VOD's naming window times out during a sync, use `!namevod` afterwards:
+```
+!namevod <twitch_url_or_id> <game name>
+```
+- Example: `!namevod 12345678 Mouse: PI for Hire`
+- Example: `!namevod https://www.twitch.tv/videos/12345678 Mouse: PI for Hire`
+
 ### Do NOT Run `!enrichallgames` Again
 After the initial bulk enrichment, you don't need to run this command again unless:
 - You manually add many games without IGDB data
@@ -250,7 +269,7 @@ After the initial bulk enrichment, you don't need to run this command again unle
 
 ### Issue: High Error Count (>20)
 **Symptoms:** Many games showing errors in enrichment
-**Solution:** 
+**Solution:**
 1. Check specific error messages in logs
 2. Verify IGDB API credentials are valid
 3. Check if certain game names are causing issues
@@ -270,6 +289,13 @@ After the initial bulk enrichment, you don't need to run this command again unle
 2. IGDB queries can occasionally be slow
 3. Wait up to 5 minutes before assuming failure
 4. If truly stuck, restart bot and re-run command
+
+### Issue: VOD Named During Sync but No DM Received
+**Symptoms:** A Twitch VOD with a non-standard title wasn't flagged for manual naming
+**Solution:**
+1. Use `!namevod <url_or_id> <game name>` to assign the game retroactively
+2. Use `!syncgames <days>` to re-scan the relevant period if you want the bot to re-attempt detection
+3. Check bot logs for "timed_out" entries referencing the VOD
 
 ---
 
@@ -291,6 +317,7 @@ After the initial bulk enrichment, you don't need to run this command again unle
 1. Regular sync: !syncgames
    OR
 2. Full resync: !syncgames full
+3. If a VOD was missed: !namevod <url_or_id> <game name>
 ```
 
 ### Never Run Again (Unless Necessary):
@@ -304,9 +331,14 @@ After the initial bulk enrichment, you don't need to run this command again unle
 
 | Command | When to Use | Frequency |
 |---------|-------------|-----------|
-| `!syncgames` | Sync new content | Weekly or as needed |
+| `!synchelp` | Full sync command reference in Discord | Any time you need a reminder |
+| `!syncgames` | Sync new content since last run | Weekly or as needed |
+| `!syncgames <days>` | Time-range sync (e.g. `!syncgames 8`) | After a gap or AFK period |
 | `!syncgames full` | Full rescan (5 years) | Monthly or when data issues suspected |
-| `!enrichallgames` | **ONE-TIME ONLY** | After deployment, then never again |
+| `!syncgames verify` | Check episode counts vs YouTube | When counts look wrong |
+| `!syncgames verify --fix` | Check AND fix discrepancies | When verify finds problems |
+| `!namevod <url_or_id> <game>` | Retroactively name a timed-out VOD | After any sync where a VOD was missed |
+| `!enrichallgames` | **ONE-TIME ONLY** — bulk IGDB enrichment | After deployment, then never again |
 | `!deduplicategames` | Clean duplicates | After enrichment, or when suspected |
 | `!gameinfo <name>` | Check specific game | Anytime for verification |
 
@@ -323,5 +355,7 @@ After completing all steps, you should have:
 ✅ Alternative names added from IGDB  
 ✅ Future syncs automatically enriching new content  
 ✅ No manual enrichment needed going forward  
+✅ `!namevod` available for any VODs missed during a sync  
+✅ `!synchelp` available for instant command reference  
 
 **Deployment Status: Complete** ✅

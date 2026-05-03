@@ -3502,6 +3502,31 @@ class GamesDatabase:
             logger.error(f"Error getting skipped VODs: {e}")
             return []
 
+    def remove_skipped_vod(self, vod_url: str) -> bool:
+        """
+        Remove a VOD from the permanent skip list.
+        Used by !namevod to allow a previously-skipped VOD to be retroactively named.
+        Returns True if a row was deleted, False if it wasn't in the list or on error.
+        """
+        conn = self.get_connection()
+        if not conn:
+            return False
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM skipped_vods WHERE vod_url = %s",
+                    (vod_url,)
+                )
+                deleted = cur.rowcount > 0
+                conn.commit()
+                if deleted:
+                    logger.info(f"Removed '{vod_url}' from skipped_vods")
+                return deleted
+        except Exception as e:
+            logger.error(f"Error removing skipped VOD: {e}")
+            conn.rollback()
+            return False
+
 
 # Export
 __all__ = ['GamesDatabase']

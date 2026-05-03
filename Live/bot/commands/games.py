@@ -991,6 +991,61 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             print(f"❌ Error in namevod command: {e}")
             await ctx.send(f"❌ **Error:** {str(e)}")
 
+    @commands.command(name="synchelp")
+    async def sync_help(self, ctx):
+        """Display a full reference for all content sync commands (moderators only)."""
+        if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
+            return  # Silent ignore for unauthorized users
+
+        help_text = (
+            "🔄 **Content Sync — Full Command Reference**\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**Running a Sync**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "`!syncgames` — Standard sync: picks up new content since the last sync run.\n"
+            "`!syncgames <days>` — Time-range sync, e.g. `!syncgames 8` to scan the last 8 days.\n"
+            "`!syncgames full` — Full rescan: re-processes all content from the last 5 years.\n\n"
+
+            "⚠️ *During any sync, watch your DMs — Twitch VODs whose game name can't be "
+            "extracted from the title will be sent to you there for manual naming.*\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**Handling Unnamed VODs**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "`!namevod <twitch_url_or_id> <game name>` — Retroactively name a VOD that "
+            "timed out during a sync.\n"
+            "  • If the game already exists in the DB, it's updated directly (no approval needed).\n"
+            "  • If it's a new game, it's staged and you'll receive a DM to approve it.\n\n"
+            "**Examples:**\n"
+            "  `!namevod https://www.twitch.tv/videos/12345678 Mouse: PI for Hire`\n"
+            "  `!namevod 12345678 Mouse: PI for Hire`\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**After a Sync Completes**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "You'll receive a DM with:\n"
+            "  • How many games were staged for approval (new vs updated)\n"
+            "  • Any VODs that timed out (will be offered again next sync)\n"
+            "  • Any VODs you permanently skipped\n\n"
+            "The approval flow is handled via DM as usual.\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**Verifying Episode Counts**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "`!syncgames verify` — Check episode counts in the DB against live YouTube data.\n"
+            "`!syncgames verify --fix` — Find *and* fix any discrepancies using fresh YouTube data.\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**One-Time & Maintenance Commands**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "`!enrichallgames` — Bulk-enrich ALL games with IGDB data (genre, release year, "
+            "alt names). Run once after a major import; not needed for routine syncs.\n"
+            "`!deduplicategames` — Merge duplicate game entries in the database.\n"
+        )
+
+        await ctx.send(help_text)
+
     async def _verify_youtube_episodes(self, ctx, fix_discrepancies: bool = False):
         """Verify episode counts against YouTube playlists and optionally fix discrepancies."""
         import os

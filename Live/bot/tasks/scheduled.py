@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import tasks
 
-from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID, GUILD_ID, JONESY_USER_ID, MEMBERS_CHANNEL_ID
+from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID, GUILD_ID, JAM_USER_ID, JONESY_USER_ID, MEMBERS_CHANNEL_ID
 
 # Data quality utilities
 try:
