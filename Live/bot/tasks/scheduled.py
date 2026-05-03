@@ -51,7 +51,7 @@ except Exception as db_error:
 
 # Import integrations
 try:
-    from ..integrations.twitch import extract_game_name_from_title as extract_game_from_twitch
+    from ..integrations.twitch import detect_multiple_games_in_title, extract_game_name_from_title as extract_game_from_twitch
     from ..integrations.twitch import fetch_new_vods_since, smart_extract_with_validation
     from ..integrations.youtube import execute_youtube_auto_post
     from ..integrations.youtube import extract_game_name_from_title as extract_game_from_youtube
@@ -2292,157 +2292,44 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
             duration_minutes = vod.get('duration_seconds', 0) // 60
             view_count = vod.get('view_count', 0)  # NEW: Capture Twitch views from VOD
 
-            # Phase 2.2: Check for multi-game streams
+            # Phase 2.2: Check for multi-game streams.
+            # _manual_game_name: if set by the DM below, single-game processing
+            # uses it directly and skips smart_extract_with_validation.
+            _manual_game_name = None
             try:
                 potential_games = detect_multiple_games_in_title(title)
 
                 if len(potential_games) >= 2:
-                    print(f"🔍 SYNC: Multi-game stream detected in '{title}'")
-                    print(f"   Games found: {potential_games}")
+                    print(f"🔍 SYNC: Ambiguous multi-game title — requesting manual confirmation")
+                    print(f"   Detected candidates: {potential_games}")
 
-                    # Split playtime equally between games
-                    fractional_duration = duration_minutes // len(potential_games)
+                    from ..handlers.manual_game_input import request_manual_game_name
 
-                    # Process each game separately
-                    for game_name in potential_games:
-                        try:
-                            from ..integrations.twitch import smart_extract_with_validation
-                            extracted_name, confidence = await smart_extract_with_validation(game_name)
+                    vod_data = {
+                        'title': title,
+                        'url': vod_url,
+                        'source': 'twitch',
+                        'extracted_name': ', '.join(potential_games),
+                        'confidence': 0.5  # Force DM path; user decides which game to credit
+                    }
 
-                            if extracted_name and confidence >= 0.7:
-                                print(
-                                    f"   ✅ Processing '{extracted_name}' ({fractional_duration} mins, {confidence:.2f} confidence)")
+                    multi_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
 
-                                # Check if game exists
-                                existing_game = db.get_played_game(extracted_name)
-
-                                if existing_game:
-                                    # Stage multi-game update
-                                    update_data = {
-                                        'canonical_name': extracted_name,
-                                        'total_playtime_minutes': existing_game.get(
-                                            'total_playtime_minutes',
-                                            0) + fractional_duration,
-                                        'total_episodes': existing_game.get(
-                                            'total_episodes',
-                                            0) + 1}
-                                    db.games.stage_game_for_approval(
-                                        sync_session_id=sync_session_id,
-                                        game_data=update_data,
-                                        action_type='update',
-                                        confidence_score=confidence,
-                                        source_platform='twitch'
-                                    )
-                                    print(f"   ✅ Staged update for '{extracted_name}' with {fractional_duration} mins")
-                                    games_updated += 1
-                                else:
-                                    # Stage new multi-game entry
-                                    game_data = {
-                                        'canonical_name': extracted_name,
-                                        'series_name': extracted_name,
-                                        'total_playtime_minutes': fractional_duration,
-                                        'total_episodes': 1,
-                                        'first_played_date': vod['published_at'].date(),
-                                        'notes': f"Auto-synced from multi-game Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
-                                    if vod_url:
-                                        game_data['twitch_vod_urls'] = [vod_url]
-
-                                    db.games.stage_game_for_approval(
-                                        sync_session_id=sync_session_id,
-                                        game_data=game_data,
-                                        action_type='add',
-                                        confidence_score=confidence,
-                                        source_platform='twitch'
-                                    )
-                                    print(f"   ✅ Staged new game '{extracted_name}' with {fractional_duration} mins")
-                                    games_added += 1
-
-                                total_new_minutes += fractional_duration
-                            else:
-                                # Low confidence - request manual input instead of skipping
-                                print(
-                                    f"   ⚠️ Low confidence for '{game_name}' ({confidence:.2f}) - requesting manual input")
-
-                                from ..handlers.manual_game_input import request_manual_game_name
-
-                                vod_data = {
-                                    'title': f"{game_name} (from multi-game stream: {title})",
-                                    'url': vod_url,
-                                    'source': 'twitch',
-                                    'extracted_name': game_name,
-                                    'confidence': confidence
-                                }
-
-                                # Request manual input (blocks until response)
-                                manual_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
-
-                                if manual_response == "skip":
-                                    # Add to skipped list
-                                    if db:
-                                        db.games.add_skipped_vod(vod_url, 'twitch', title, JAM_USER_ID)
-                                    print(f"   ⏭️ User skipped multi-game entry: {game_name}")
-                                elif manual_response:
-                                    # Use manual name and process this game
-                                    extracted_name = manual_response
-                                    confidence = 1.0  # High confidence for manual input
-                                    print(f"   ✅ Using manual name '{extracted_name}' from user input")
-
-                                    # Check if game exists
-                                    existing_game = db.get_played_game(extracted_name)
-
-                                    if existing_game:
-                                        # Stage multi-game update
-                                        update_data = {
-                                            'canonical_name': extracted_name,
-                                            'total_playtime_minutes': existing_game.get(
-                                                'total_playtime_minutes',
-                                                0) + fractional_duration,
-                                            'total_episodes': existing_game.get(
-                                                'total_episodes',
-                                                0) + 1}
-                                        db.games.stage_game_for_approval(
-                                            sync_session_id=sync_session_id,
-                                            game_data=update_data,
-                                            action_type='update',
-                                            confidence_score=confidence,
-                                            source_platform='twitch'
-                                        )
-                                        print(
-                                            f"   ✅ Staged update for '{extracted_name}' with {fractional_duration} mins")
-                                        games_updated += 1
-                                    else:
-                                        # Stage new multi-game entry
-                                        game_data = {
-                                            'canonical_name': extracted_name,
-                                            'series_name': extracted_name,
-                                            'total_playtime_minutes': fractional_duration,
-                                            'total_episodes': 1,
-                                            'first_played_date': vod['published_at'].date(),
-                                            'notes': f"Auto-synced from multi-game Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
-                                        if vod_url:
-                                            game_data['twitch_vod_urls'] = [vod_url]
-
-                                        db.games.stage_game_for_approval(
-                                            sync_session_id=sync_session_id,
-                                            game_data=game_data,
-                                            action_type='add',
-                                            confidence_score=confidence,
-                                            source_platform='twitch'
-                                        )
-                                        print(
-                                            f"   ✅ Staged new game '{extracted_name}' with {fractional_duration} mins")
-                                        games_added += 1
-
-                                    total_new_minutes += fractional_duration
-                                else:
-                                    # Timeout - skip this game
-                                    print(f"   ⏭️ Manual input timeout - skipping multi-game entry: {game_name}")
-
-                        except Exception as multi_game_error:
-                            print(f"   ❌ Error processing multi-game entry '{game_name}': {multi_game_error}")
-
-                    # Skip normal processing for this VOD since we handled all games
-                    continue
+                    if multi_response == "skip":
+                        if db:
+                            db.games.add_skipped_vod(vod_url, 'twitch', title, JAM_USER_ID)
+                        skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'skipped'})
+                        print(f"⏭️ SYNC: User skipped ambiguous multi-game VOD: {title[:50]}")
+                        continue
+                    elif multi_response:
+                        # Store name; fall through to single-game processing below (no continue)
+                        _manual_game_name = multi_response
+                        print(f"✅ SYNC: Manual name '{multi_response}' received for ambiguous multi-game VOD")
+                    else:
+                        # Timeout — offer again on next sync
+                        skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'timed_out'})
+                        print(f"⏭️ SYNC: Multi-game DM timed out for: {title[:50]}")
+                        continue
 
             except Exception as detection_error:
                 print(f"⚠️ SYNC: Multi-game detection failed for '{title}': {detection_error}")
@@ -2457,63 +2344,70 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                 print(f"⏭️ SYNC: Skipping previously ignored VOD: {title[:50]}")
                 continue
 
-            # Use smart extraction with IGDB validation (Phase 1.2) for single-game streams
-            try:
-                from ..integrations.twitch import smart_extract_with_validation
-                extracted_name, confidence = await smart_extract_with_validation(title)
+            if _manual_game_name:
+                # Name provided via multi-game DM — skip extraction entirely
+                game_name = _manual_game_name
+                confidence = 1.0
+                is_low_confidence = False
+                print(f"✅ SYNC: Using manual name '{game_name}' (from multi-game DM, skipping extraction)")
+            else:
+                # Use smart extraction with IGDB validation (Phase 1.2) for single-game streams
+                try:
+                    from ..integrations.twitch import smart_extract_with_validation
+                    extracted_name, confidence = await smart_extract_with_validation(title)
 
-                # Low confidence - request manual input
-                if not extracted_name or confidence < 0.65:
-                    print(f"⚠️ SYNC: Low confidence ({confidence:.2f}) for Twitch title - requesting manual input")
+                    # Low confidence - request manual input
+                    if not extracted_name or confidence < 0.65:
+                        print(f"⚠️ SYNC: Low confidence ({confidence:.2f}) for Twitch title - requesting manual input")
 
-                    from ..handlers.manual_game_input import request_manual_game_name
+                        from ..handlers.manual_game_input import request_manual_game_name
 
-                    vod_data = {
-                        'title': title,
-                        'url': vod_url,
-                        'source': 'twitch',
-                        'extracted_name': extracted_name or '',
-                        'confidence': confidence
-                    }
+                        vod_data = {
+                            'title': title,
+                            'url': vod_url,
+                            'source': 'twitch',
+                            'extracted_name': extracted_name or '',
+                            'confidence': confidence
+                        }
 
-                    # Request manual input (blocks until response)
-                    manual_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
+                        # Request manual input (blocks until response)
+                        manual_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
 
-                    if manual_response == "skip":
-                        # Add to permanent skip list so it won't be offered again
-                        if db:
-                            db.games.add_skipped_vod(vod_url, 'twitch', title, JAM_USER_ID)
-                        skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'skipped'})
-                        print(f"⏭️ User skipped VOD: {title[:50]}")
-                        continue
-                    elif manual_response:
-                        # Use manual name
-                        game_name = manual_response
-                        confidence = 1.0  # High confidence for manual input
-                        is_low_confidence = False
-                        print(f"✅ SYNC: Using manual name '{game_name}' from user input")
+                        if manual_response == "skip":
+                            # Add to permanent skip list so it won't be offered again
+                            if db:
+                                db.games.add_skipped_vod(vod_url, 'twitch', title, JAM_USER_ID)
+                            skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'skipped'})
+                            print(f"⏭️ User skipped VOD: {title[:50]}")
+                            continue
+                        elif manual_response:
+                            # Use manual name
+                            game_name = manual_response
+                            confidence = 1.0  # High confidence for manual input
+                            is_low_confidence = False
+                            print(f"✅ SYNC: Using manual name '{game_name}' from user input")
+                        else:
+                            # Timeout - VOD not named this run; will be offered again on next sync
+                            skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'timed_out'})
+                            print(f"⏭️ Manual input timed out - skipping: {title[:50]}")
+                            continue
                     else:
-                        # Timeout - VOD not named this run; will be offered again on next sync
-                        skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'timed_out'})
-                        print(f"⏭️ Manual input timed out - skipping: {title[:50]}")
+                        # Good confidence - use extracted name
+                        game_name = extracted_name
+                        is_low_confidence = confidence < 0.85
+                        print(
+                            f"✅ SYNC: Extracted '{game_name}' from Twitch with {confidence:.2f} confidence{' (medium - review recommended)' if is_low_confidence else ''}")
+
+                except ImportError:
+                    # Fallback to basic extraction if smart extraction not available
+                    print("⚠️ SYNC: Smart extraction not available, falling back to basic extraction")
+                    game_name = extract_game_from_twitch(title)
+                    confidence = 0.0
+                    is_low_confidence = False  # Reset for fallback case
+
+                    if not game_name:
+                        print(f"⚠️ SYNC: Could not extract game from Twitch title: '{title}'")
                         continue
-                else:
-                    # Good confidence - use extracted name
-                    game_name = extracted_name
-                    is_low_confidence = confidence < 0.85
-                    print(
-                        f"✅ SYNC: Extracted '{game_name}' from Twitch with {confidence:.2f} confidence{' (medium - review recommended)' if is_low_confidence else ''}")
-
-            except ImportError:
-                # Fallback to basic extraction if smart extraction not available
-                print("⚠️ SYNC: Smart extraction not available, falling back to basic extraction")
-                game_name = extract_game_from_twitch(title)
-                confidence = 0.0
-                is_low_confidence = False  # Reset for fallback case
-
-                if not game_name:
-                    print(f"⚠️ SYNC: Could not extract game from Twitch title: '{title}'")
-                    continue
 
             print(f"✅ SYNC: Processing Twitch VOD '{game_name}'")
 

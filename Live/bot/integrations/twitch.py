@@ -58,6 +58,7 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
     title = re.sub(r'\s*DROPS?\s*[-:]?\s*', '', title, flags=re.IGNORECASE)  # Remove standalone DROPS
     title = re.sub(r'\s*\[SPONSORED\]', '', title, flags=re.IGNORECASE)  # Remove [SPONSORED]
     title = title.strip()
+    title = re.sub(r'[\s\-–—]+$', '', title).strip()  # Remove trailing dashes left after !command removal
 
     if title != original_title:
         print(f"🧹 FIX 5: Cleaned stream commands from title")
