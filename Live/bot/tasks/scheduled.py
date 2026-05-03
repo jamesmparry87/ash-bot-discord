@@ -2360,10 +2360,11 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                                 total_new_minutes += fractional_duration
                             else:
                                 # Low confidence - request manual input instead of skipping
-                                print(f"   ⚠️ Low confidence for '{game_name}' ({confidence:.2f}) - requesting manual input")
-                                
+                                print(
+                                    f"   ⚠️ Low confidence for '{game_name}' ({confidence:.2f}) - requesting manual input")
+
                                 from ..handlers.manual_game_input import request_manual_game_name
-                                
+
                                 vod_data = {
                                     'title': f"{game_name} (from multi-game stream: {title})",
                                     'url': vod_url,
@@ -2371,10 +2372,10 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                                     'extracted_name': game_name,
                                     'confidence': confidence
                                 }
-                                
+
                                 # Request manual input (blocks until response)
                                 manual_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
-                                
+
                                 if manual_response == "skip":
                                     # Add to skipped list
                                     if db:
@@ -2385,10 +2386,10 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                                     extracted_name = manual_response
                                     confidence = 1.0  # High confidence for manual input
                                     print(f"   ✅ Using manual name '{extracted_name}' from user input")
-                                    
+
                                     # Check if game exists
                                     existing_game = db.get_played_game(extracted_name)
-                                    
+
                                     if existing_game:
                                         # Stage multi-game update
                                         update_data = {
@@ -2406,7 +2407,8 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                                             confidence_score=confidence,
                                             source_platform='twitch'
                                         )
-                                        print(f"   ✅ Staged update for '{extracted_name}' with {fractional_duration} mins")
+                                        print(
+                                            f"   ✅ Staged update for '{extracted_name}' with {fractional_duration} mins")
                                         games_updated += 1
                                     else:
                                         # Stage new multi-game entry
@@ -2419,7 +2421,7 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                                             'notes': f"Auto-synced from multi-game Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
                                         if vod_url:
                                             game_data['twitch_vod_urls'] = [vod_url]
-                                        
+
                                         db.games.stage_game_for_approval(
                                             sync_session_id=sync_session_id,
                                             game_data=game_data,
@@ -2427,9 +2429,10 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                                             confidence_score=confidence,
                                             source_platform='twitch'
                                         )
-                                        print(f"   ✅ Staged new game '{extracted_name}' with {fractional_duration} mins")
+                                        print(
+                                            f"   ✅ Staged new game '{extracted_name}' with {fractional_duration} mins")
                                         games_added += 1
-                                    
+
                                     total_new_minutes += fractional_duration
                                 else:
                                     # Timeout - skip this game
