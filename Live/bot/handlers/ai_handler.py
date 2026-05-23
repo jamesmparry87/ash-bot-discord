@@ -2713,233 +2713,269 @@ async def generate_ai_trivia_question(context: str = "trivia",
         if avoid_game_ids:
             print(f"   Avoiding {len(avoid_game_ids)} recent game(s)")
 
-        # === TRIVIA DIRECTOR: Category Selection ===
+        # === NEW "ANSWER FIRST" TRIVIA DIRECTOR ===
+        # Bot computes the correct answer from the database FIRST,
+        # then asks the AI to write only the question text around it.
+        # This prevents hallucinated lore/release-date questions entirely.
         TRIVIA_CATEGORIES = {
-            # Reduced weight - lore questions feel niche and repetitive
-            'Single_Game_Lore': {'weight': 0.5, 'min_games': 1},
-            'Franchise_Connection': {'weight': 1.5, 'min_games': 2},
-            # Increased weight - channel-stats questions are more fun/accessible
-            'Genre_Knowledge': {'weight': 2.0, 'min_games': 3},
-            # Reduced weight - "which came first" feels repetitive
-            'Timeline_Challenge': {'weight': 0.6, 'min_games': 2},
+            'Episode_Champion':  {'weight': 2.0},  # Most episodes in a genre
+            'Channel_Timeline':  {'weight': 2.0},  # Which game Jonesy played first
+            'Genre_Census':      {'weight': 1.5},  # How many games of a genre
+            'Series_Comparison': {'weight': 1.5},  # Which series game had most episodes
+            'Franchise_Lore':    {'weight': 0.5},  # Occasional lore question (AI-driven)
         }
 
-        # Weighted random selection
         import random
+        from collections import defaultdict
+
         categories = list(TRIVIA_CATEGORIES.keys())
-        weights = [TRIVIA_CATEGORIES[c]['weight'] for c in categories]
+        cat_weights = [TRIVIA_CATEGORIES[c]['weight'] for c in categories]
 
-        max_category_attempts = 3
-        used_categories = set()
-        selected_category = None
-        curated_data = None
-
-        for cat_attempt in range(max_category_attempts):
-            # Select category (avoid recently tried ones)
-            available_cats = [c for c in categories if c not in used_categories]
-            if not available_cats:
-                used_categories.clear()
-                available_cats = categories
-
-            available_weights = [TRIVIA_CATEGORIES[c]['weight'] for c in available_cats]
-            selected_category = random.choices(available_cats, weights=available_weights, k=1)[0]
-            used_categories.add(selected_category)
-
-            print(
-                f"🎬 TRIVIA DIRECTOR: Attempt {cat_attempt+1}/{max_category_attempts} - Selected category '{selected_category}'")
-
-            # Get curated games for this category
-            curated_data = current_db.trivia.get_trivia_curated_games(
-                selected_category,
-                avoid_game_ids=avoid_game_ids or []
-            )
-
-            # Check if we got valid data
-            if curated_data and curated_data.get('games') and len(curated_data['games']) > 0:
-                print(f"✅ TRIVIA DIRECTOR: Got {len(curated_data['games'])} game(s) for '{selected_category}'")
-                break
-            else:
-                print(f"⚠️ TRIVIA DIRECTOR: No games available for '{selected_category}', trying another category")
-                curated_data = None
-
-        if not curated_data or not curated_data.get('games'):
-            print("❌ TRIVIA DIRECTOR: Failed to curate games for any category")
+        # Get all games - we compute answers ourselves from real data
+        all_games = current_db.get_all_played_games()
+        if not all_games:
+            print("❌ TRIVIA DIRECTOR: No games in database")
             return None
 
-        games = curated_data['games']
-        metadata = curated_data.get('metadata', {})
-        fallback_used = curated_data.get('fallback_used', False)
+        # Filter out avoided game IDs
+        if avoid_game_ids:
+            all_games = [g for g in all_games if g.get('id') not in avoid_game_ids]
 
-        print(f"🎮 TRIVIA DIRECTOR: Curated {len(games)} game(s) - {[g['canonical_name'] for g in games]}")
-        if fallback_used:
-            print(f"   ⚠️ Fallback was used during curation")
+        # Try up to 3 categories until one has sufficient data
+        selected_category = None
+        category_prompt = None
+        correct_answer = None
+        source_games: List[Dict] = []
+        is_json_response = False  # True only for Franchise_Lore (AI provides answer)
 
-        # === BUILD CATEGORY-SPECIFIC PROMPTS ===
+        tried_categories: set = set()
+        for cat_attempt in range(3):
+            remaining = [c for c in categories if c not in tried_categories]
+            if not remaining:
+                break
+            remaining_weights = [TRIVIA_CATEGORIES[c]['weight'] for c in remaining]
+            cat = random.choices(remaining, weights=remaining_weights, k=1)[0]
+            tried_categories.add(cat)
 
-        # Build game details for prompt
-        game_details = []
-        for game in games:
-            name = game['canonical_name']
-            genre = game.get('genre', 'Unknown')
-            year = game.get('release_year', 'Unknown')
-            status = game.get('completion_status', 'Unknown')
-            game_details.append(f"{name} ({genre}, {year}, {status})")
+            print(f"🎬 TRIVIA DIRECTOR: Attempt {cat_attempt+1}/3 - Trying category '{cat}'")
 
-        # Category-specific prompt generation
-        if selected_category == 'Single_Game_Lore':
-            game = games[0]
-            category_prompt = f"""
-CATEGORY: Single Game Lore Test
-GAME: {game['canonical_name']} ({game.get('release_year', 'Unknown')})
-GENRE: {game.get('genre', 'Unknown')}
-STATUS: Captain Jonesy {game.get('completion_status', 'played')} this game
+            if cat == 'Episode_Champion':
+                # Find a genre with 2+ games that have episode data
+                games_with_eps = [g for g in all_games
+                                  if g.get('total_episodes', 0) > 0 and g.get('genre')]
+                if len(games_with_eps) < 2:
+                    print("⚠️ TRIVIA DIRECTOR: Not enough episode data for Episode_Champion")
+                    continue
 
-REQUIREMENT: Generate a trivia question that tests knowledge of THIS specific game's:
-- Characters, plot, or story elements
-- Gameplay mechanics or features
-- Historical facts or development trivia
-- Easter eggs or hidden content
+                genre_groups_ep: Dict[str, List[Dict]] = defaultdict(list)
+                for g in games_with_eps:
+                    genre_groups_ep[g['genre']].append(g)
 
-🚫 CRITICAL RESTRICTION:
-- ONLY ask about {game['canonical_name']} - the exact game listed above
-- DO NOT reference DLC, expansions, sequels, or prequels unless they are the same title
-- DO NOT assume knowledge from related games in the franchise
-- Use ONLY information about this specific game title
+                eligible_ep = [(genre, gs) for genre, gs in genre_groups_ep.items() if len(gs) >= 2]
+                if not eligible_ep:
+                    continue
 
-The question must be about the GAME ITSELF, not about Jonesy's stream.
-Frame it as: "Captain Jonesy played {game['canonical_name']}. [Question about game]?"
-"""
+                chosen_genre_ep, genre_games_ep = random.choice(eligible_ep)
+                winner_ep = max(genre_games_ep, key=lambda x: x.get('total_episodes', 0))
+                correct_answer = winner_ep['canonical_name']
+                source_games = sorted(genre_games_ep,
+                                      key=lambda x: x.get('total_episodes', 0),
+                                      reverse=True)[:5]
 
-        elif selected_category == 'Franchise_Connection':
-            series_name = metadata.get('series_name', 'Unknown')
-            game_names = [g['canonical_name'] for g in games]
-            category_prompt = f"""
-CATEGORY: Franchise Connection
-SERIES: {series_name}
-GAMES PLAYED BY JONESY: {', '.join(game_names)}
+                game_lines_ep = '\n'.join([
+                    f"  - {g['canonical_name']}: {g.get('total_episodes', 0)} episodes"
+                    for g in source_games
+                ])
+                print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Episode_Champion'")
+                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
+Jonesy uses she/her pronouns.
 
-REQUIREMENT: Generate a trivia question about this FRANCHISE that:
-- Connects multiple games in the series
-- Tests knowledge of franchise lore or timeline
-- Asks about recurring characters or themes
-- Compares gameplay evolution across entries
+REAL DATA - Jonesy's {chosen_genre_ep} games (episode counts from our database):
+{game_lines_ep}
 
-🚫 CRITICAL RESTRICTION:
-- DO NOT mention specific game titles that Jonesy hasn't played
-- ONLY reference the games listed above: {', '.join(game_names)}
-- You may use general franchise knowledge (publisher, genre, main protagonist)
-- BUT you must NOT fabricate details about sequels or prequels not in the played list
+THE CORRECT ANSWER IS: {correct_answer}
 
-Frame it as: "Captain Jonesy has played multiple {series_name} games. [Question about the series or the games she played]?"
-"""
+Write a short question (under 120 characters) asking which of Jonesy's {chosen_genre_ep} games she played the most episodes of.
+Do NOT ask about release dates, game lore, or in-game characters.
+Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                selected_category = cat
+                break
 
-        elif selected_category == 'Genre_Knowledge':
-            genre = metadata.get('genre', 'Unknown')
-            game_names = [g['canonical_name'] for g in games]
-            category_prompt = f"""
-CATEGORY: Genre Knowledge
-GENRE: {genre}
-GAMES PLAYED BY JONESY: {', '.join(game_names)}
+            elif cat == 'Channel_Timeline':
+                # Pick 2 random games with known first_played_date
+                dated_games = [g for g in all_games if g.get('first_played_date')]
+                if len(dated_games) < 2:
+                    print("⚠️ TRIVIA DIRECTOR: Not enough date data for Channel_Timeline")
+                    continue
 
-REQUIREMENT: Generate a trivia question about Jonesy's CHANNEL EXPERIENCE with {genre} games:
-- Ask about episode counts, completion status, or when Jonesy played these games
-- Compare these specific games to each other (e.g. which took more episodes, which was completed)
-- Ask how many {genre} games Jonesy has played, or which he played first/last
-- DO NOT ask about in-game story, characters, lore, or mechanics
+                game1_tl, game2_tl = random.sample(dated_games, 2)
+                date1 = str(game1_tl.get('first_played_date', ''))
+                date2 = str(game2_tl.get('first_played_date', ''))
+                correct_answer = game1_tl['canonical_name'] if date1 <= date2 else game2_tl['canonical_name']
+                source_games = [game1_tl, game2_tl]
 
-🚫 CRITICAL RESTRICTION:
-- ONLY reference the {genre} games that Jonesy has played: {', '.join(game_names)}
-- DO NOT ask about in-game story, plot, lore, characters, or game mechanics
-- Focus on Jonesy's experience (when played, how long, completion status)
+                print(f"✅ TRIVIA DIRECTOR: Got 2 game(s) for 'Channel_Timeline'")
+                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
+Jonesy uses she/her pronouns.
 
-Jonesy has played these {genre} games: {', '.join(game_names[:2])}
-"""
+REAL DATA from our database:
+  - {game1_tl['canonical_name']}: Jonesy first played this on {date1}
+  - {game2_tl['canonical_name']}: Jonesy first played this on {date2}
 
-        elif selected_category == 'Timeline_Challenge':
-            game1 = games[0]
-            game2 = games[1] if len(games) > 1 else games[0]
+THE CORRECT ANSWER IS: {correct_answer}
 
-            # Extract play dates and release years for context
-            game1_played = metadata.get('date1', game1.get('first_played_date', 'Unknown'))
-            game2_played = metadata.get('date2', game2.get('first_played_date', 'Unknown'))
-            game1_released = game1.get('release_year', 'Unknown')
-            game2_released = game2.get('release_year', 'Unknown')
+Write a short question (under 120 characters) asking which of these two games Jonesy played FIRST on her channel.
+Do NOT ask about release dates - ask about when Jonesy played them on her channel.
+Good phrasing: "Which game did Jonesy play first on her channel - X or Y?"
+Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                selected_category = cat
+                break
 
-            category_prompt = f"""
-CATEGORY: Timeline Challenge
-GAME 1: {game1['canonical_name']}
-  - Jonesy first played: {game1_played}
-  - Original release year: {game1_released}
+            elif cat == 'Genre_Census':
+                # Count games per genre
+                genre_counts_gc: Dict[str, int] = {}
+                genre_game_names_gc: Dict[str, List[str]] = {}
+                for g in all_games:
+                    genre = g.get('genre')
+                    if genre:
+                        genre_counts_gc[genre] = genre_counts_gc.get(genre, 0) + 1
+                        if genre not in genre_game_names_gc:
+                            genre_game_names_gc[genre] = []
+                        genre_game_names_gc[genre].append(g['canonical_name'])
 
-GAME 2: {game2['canonical_name']}
-  - Jonesy first played: {game2_played}
-  - Original release year: {game2_released}
+                eligible_gc = [(genre, count) for genre, count in genre_counts_gc.items() if count >= 2]
+                if not eligible_gc:
+                    eligible_gc = list(genre_counts_gc.items())
+                if not eligible_gc:
+                    continue
 
-REQUIREMENT: Generate a chronological trivia question that:
-- Asks about WHEN JONESY PLAYED each game, not about release dates
-- Compares the play dates to test knowledge of Jonesy's personal gaming history
-- Makes it clear you are asking about when Jonesy streamed them, not release years
+                chosen_genre_gc, count_gc = random.choice(eligible_gc)
+                correct_answer = str(count_gc)
+                source_games = [g for g in all_games if g.get('genre') == chosen_genre_gc]
+                game_list_gc = ', '.join(genre_game_names_gc[chosen_genre_gc][:8])
 
-EXAMPLE FORMAT:
-"Which game did Jonesy play first on his channel - {game1['canonical_name']} or {game2['canonical_name']}?"
+                print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Genre_Census'")
+                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
+Jonesy uses she/her pronouns.
 
-🚫 DO NOT ask "which was released first" - that is boring and repetitive
-🚫 DO NOT ask about release dates or publication history
-✅ DO ask about the order in which Jonesy personally played the games
-✅ DO use the first_played dates as the basis for the correct answer
+REAL DATA from our database:
+Jonesy has played exactly {count_gc} {chosen_genre_gc} game(s) on her channel: {game_list_gc}
 
-Must be factual and verifiable from the provided first-played date data.
-"""
+THE CORRECT ANSWER IS: {count_gc}
 
-        else:
-            # Fallback to generic
-            category_prompt = f"""
-CATEGORY: General Gaming Knowledge
-GAMES: {', '.join([g['canonical_name'] for g in games])}
+Write a short question (under 120 characters) asking how many {chosen_genre_gc} games Jonesy has played on her channel.
+Good phrasing: "How many {chosen_genre_gc} games has Jonesy played on her channel?"
+Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                selected_category = cat
+                break
 
-Generate a question about Captain Jonesy's gaming experiences with these titles.
-"""
+            elif cat == 'Series_Comparison':
+                # Find a series with 2+ games that have episode data
+                series_groups_sc: Dict[str, List[Dict]] = defaultdict(list)
+                for g in all_games:
+                    series = g.get('series_name')
+                    if series and g.get('total_episodes', 0) > 0:
+                        series_groups_sc[series].append(g)
 
-        # Build complete AI prompt
-        avoid_text = ""
+                eligible_sc = [(s, gs) for s, gs in series_groups_sc.items() if len(gs) >= 2]
+                if not eligible_sc:
+                    print("⚠️ TRIVIA DIRECTOR: Not enough series data for Series_Comparison")
+                    continue
+
+                chosen_series_sc, series_games_sc = random.choice(eligible_sc)
+                winner_sc = max(series_games_sc, key=lambda x: x.get('total_episodes', 0))
+                correct_answer = winner_sc['canonical_name']
+                source_games = sorted(series_games_sc,
+                                      key=lambda x: x.get('total_episodes', 0),
+                                      reverse=True)
+
+                game_lines_sc = '\n'.join([
+                    f"  - {g['canonical_name']}: {g.get('total_episodes', 0)} episodes"
+                    for g in source_games
+                ])
+                print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Series_Comparison'")
+                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
+Jonesy uses she/her pronouns.
+
+REAL DATA - Jonesy's {chosen_series_sc} games (episode counts from our database):
+{game_lines_sc}
+
+THE CORRECT ANSWER IS: {correct_answer}
+
+Write a short question (under 120 characters) asking which {chosen_series_sc} game Jonesy spent the most episodes on.
+Good phrasing: "Which {chosen_series_sc} game did Jonesy play the most episodes of?"
+Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                selected_category = cat
+                break
+
+            elif cat == 'Franchise_Lore':
+                # AI-driven franchise question kept for variety - but fix pronouns
+                series_groups_fl: Dict[str, List[Dict]] = defaultdict(list)
+                for g in all_games:
+                    series = g.get('series_name')
+                    if series:
+                        series_groups_fl[series].append(g)
+
+                eligible_fl = [(s, gs) for s, gs in series_groups_fl.items() if len(gs) >= 2]
+                if eligible_fl:
+                    chosen_series_fl, series_games_fl = random.choice(eligible_fl)
+                    game_names_fl = [g['canonical_name'] for g in series_games_fl]
+                    source_games = series_games_fl
+                    correct_answer = None  # AI determines this
+                    is_json_response = True
+
+                    print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Franchise_Lore'")
+                    category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
+Jonesy uses she/her pronouns. Always refer to Jonesy as "she/her".
+
+Jonesy has played these {chosen_series_fl} games: {', '.join(game_names_fl)}
+
+Write ONE engaging trivia question about the {chosen_series_fl} franchise that tests knowledge of recurring characters, themes, or mechanics.
+Does NOT ask about release dates.
+Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_answer": "answer here"}}"""
+                elif all_games:
+                    game_fl = random.choice(all_games)
+                    source_games = [game_fl]
+                    correct_answer = None
+                    is_json_response = True
+
+                    print(f"✅ TRIVIA DIRECTOR: Got 1 game for 'Franchise_Lore' (fallback)")
+                    category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
+Jonesy uses she/her pronouns. Always refer to Jonesy as "she/her".
+
+Jonesy has played: {game_fl['canonical_name']} ({game_fl.get('genre', 'Unknown')})
+
+Write ONE engaging trivia question about {game_fl['canonical_name']} that tests memorable game knowledge.
+Does NOT ask about release dates.
+Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_answer": "answer here"}}"""
+                else:
+                    continue
+
+                selected_category = cat
+                break
+
+        if not selected_category or not category_prompt:
+            print("❌ TRIVIA DIRECTOR: Could not build a viable category prompt")
+            return None
+
+        print(f"🎮 TRIVIA DIRECTOR: Selected '{selected_category}' | Answer: {correct_answer or 'AI-determined'}")
+        print(f"   Source games: {[g['canonical_name'] for g in source_games[:3]]}")
+
+        # Append avoid-questions hint to prompt
         if avoid_questions:
-            avoid_text = f"""
+            avoid_text = "\n\n🚫 AVOID questions similar to:\n"
+            avoid_text += "\n".join([f"  - {q[:60]}..." for q in avoid_questions[-5:]])
+            category_prompt = category_prompt + avoid_text
 
-🚫 AVOID THESE RECENT PATTERNS:
-{chr(10).join([f"   ❌ {q[:60]}..." for q in avoid_questions[-5:]])}
-"""
-
-        full_prompt = f"""{category_prompt}{avoid_text}
-
-🎯 CRITICAL RULES:
-🚫 DO NOT reference games not explicitly listed in the category section above
-🚫 question_text MUST be under 150 characters, on a SINGLE LINE, with NO inner double-quote characters
-🚫 DO NOT use apostrophes or double-quotes inside JSON string values - they break JSON parsing
-✅ DO follow the specific REQUIREMENT in the category section above (it overrides these general rules)
-✅ DO frame questions as being about Jonesy's specific games listed above
-✅ DO ground all questions in the games explicitly listed in the category requirements
-
-AUDIENCE: You are asking the CREW (not Jonesy directly)
-PHRASING: "Captain Jonesy played [game]..." or "Which of Jonesy's games..."
-
-RETURN ONLY valid JSON, no other text before or after:
-{{
-    "question_text": "Short question under 150 chars here?",
-    "question_type": "single_answer",
-    "correct_answer": "Short answer",
-    "category": "{selected_category}"
-}}
-
-Keep question_text short and complete. Output ONLY the JSON object."""
-
-        prompt = full_prompt
+        prompt = category_prompt
 
         # === CALL AI WITH CATEGORY-SPECIFIC TEMPERATURE ===
         CATEGORY_TEMPERATURES = {
-            'Single_Game_Lore': 0.9,       # High creativity for unique questions
-            'Franchise_Connection': 0.85,  # Moderate-high for connections
-            'Genre_Knowledge': 0.85,       # Moderate-high for variety
-            'Timeline_Challenge': 0.7,     # Lower for factual accuracy
+            'Episode_Champion':  0.8,   # Creative phrasing, factual answer
+            'Channel_Timeline':  0.7,   # Simple factual question (which game first)
+            'Genre_Census':      0.8,   # Varied phrasing for count questions
+            'Series_Comparison': 0.8,   # Creative phrasing, factual answer
+            'Franchise_Lore':    0.9,   # Most creative - AI provides answer
         }
 
         temperature = CATEGORY_TEMPERATURES.get(selected_category, 0.9)
@@ -2971,7 +3007,25 @@ Keep question_text short and complete. Output ONLY the JSON object."""
                     f"✅ TRIVIA DIRECTOR: AI response received: {len(response_text)} characters (attempt {ai_attempt+1}/{max_ai_attempts})")
 
                 # Parse AI response
-                ai_question = robust_json_parse(response_text)
+                # Data-driven categories: AI returns plain question text only (we have the answer)
+                # Franchise_Lore: AI returns JSON with both question and answer
+                if is_json_response:
+                    ai_question = robust_json_parse(response_text)
+                    if ai_question:
+                        ai_question["question_type"] = ai_question.get("question_type", "single_answer")
+                else:
+                    q_text = response_text.strip().strip('"').strip("'").strip()
+                    for prefix in ['Question:', 'Here is a question:', "Here's a question:",
+                                   'Trivia question:', 'Here you go:']:
+                        if q_text.lower().startswith(prefix.lower()):
+                            q_text = q_text[len(prefix):].strip()
+                    if q_text and not q_text.endswith('?'):
+                        q_text += '?'
+                    ai_question = {
+                        "question_text": q_text,
+                        "question_type": "single_answer",
+                        "correct_answer": correct_answer
+                    } if (10 <= len(q_text) <= 250) else None
 
                 if ai_question and all(
                     key in ai_question for key in [
@@ -3006,16 +3060,15 @@ Keep question_text short and complete. Output ONLY the JSON object."""
                                     'name': g['canonical_name'],
                                     'genre': g.get('genre'),
                                     'year': g.get('release_year')
-                                } for g in games
+                                } for g in source_games
                             ],
                             "temperature": temperature,
-                            "fallback_used": fallback_used,
                             "generation_timestamp": datetime.now(ZoneInfo('Europe/London')).isoformat()
                         })
 
                         print(f"✅ TRIVIA DIRECTOR: Question generated successfully!")
                         print(f"   Category: {selected_category}")
-                        print(f"   Games: {[g['canonical_name'] for g in games]}")
+                        print(f"   Games: {[g['canonical_name'] for g in source_games[:3]]}")
                         print(f"   Question: {ai_question['question_text'][:60]}...")
                         return ai_question
                 else:
