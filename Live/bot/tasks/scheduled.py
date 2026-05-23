@@ -948,8 +948,14 @@ async def check_stale_trivia_sessions():
             return
 
         # Ensure timezone awareness
+        # IMPORTANT: PostgreSQL stores CURRENT_TIMESTAMP as UTC (naive).
+        # We must label it as UTC first, then compare to the UK-aware cutoff_time.
+        # Using ZoneInfo("Europe/London") here would incorrectly shift the time
+        # by 1 hour during BST, making the session appear to have started 1 hour
+        # earlier than it did - causing the auto-close to trigger after only 1 hour.
         if session_started.tzinfo is None:
-            session_started = session_started.replace(tzinfo=ZoneInfo("Europe/London"))
+            from datetime import timezone as _tz
+            session_started = session_started.replace(tzinfo=_tz.utc)
 
         # Check if session is older than 2 hours
         if session_started < cutoff_time:

@@ -2715,10 +2715,13 @@ async def generate_ai_trivia_question(context: str = "trivia",
 
         # === TRIVIA DIRECTOR: Category Selection ===
         TRIVIA_CATEGORIES = {
-            'Single_Game_Lore': {'weight': 2.0, 'min_games': 1},
+            # Reduced weight - lore questions feel niche and repetitive
+            'Single_Game_Lore': {'weight': 0.5, 'min_games': 1},
             'Franchise_Connection': {'weight': 1.5, 'min_games': 2},
-            'Genre_Knowledge': {'weight': 1.5, 'min_games': 3},
-            'Timeline_Challenge': {'weight': 1.2, 'min_games': 2},
+            # Increased weight - channel-stats questions are more fun/accessible
+            'Genre_Knowledge': {'weight': 2.0, 'min_games': 3},
+            # Reduced weight - "which came first" feels repetitive
+            'Timeline_Challenge': {'weight': 0.6, 'min_games': 2},
         }
 
         # Weighted random selection
@@ -2838,19 +2841,18 @@ CATEGORY: Genre Knowledge
 GENRE: {genre}
 GAMES PLAYED BY JONESY: {', '.join(game_names)}
 
-REQUIREMENT: Generate a trivia question about {genre} games that:
-- Tests knowledge of genre-defining mechanics
-- Asks about common tropes or themes
-- Compares different games' approaches
-- Tests historical knowledge of the genre
+REQUIREMENT: Generate a trivia question about Jonesy's CHANNEL EXPERIENCE with {genre} games:
+- Ask about episode counts, completion status, or when Jonesy played these games
+- Compare these specific games to each other (e.g. which took more episodes, which was completed)
+- Ask how many {genre} games Jonesy has played, or which he played first/last
+- DO NOT ask about in-game story, characters, lore, or mechanics
 
 🚫 CRITICAL RESTRICTION:
 - ONLY reference the {genre} games that Jonesy has played: {', '.join(game_names)}
-- DO NOT mention other {genre} games that aren't in the list above
-- You may use general genre knowledge (mechanics, history, conventions)
-- BUT you must NOT fabricate questions about specific {genre} titles not in the played list
+- DO NOT ask about in-game story, plot, lore, characters, or game mechanics
+- Focus on Jonesy's experience (when played, how long, completion status)
 
-Reference that Jonesy has played these {genre} games: {', '.join(game_names[:2])}
+Jonesy has played these {genre} games: {', '.join(game_names[:2])}
 """
 
         elif selected_category == 'Timeline_Challenge':
@@ -2874,18 +2876,19 @@ GAME 2: {game2['canonical_name']}
   - Original release year: {game2_released}
 
 REQUIREMENT: Generate a chronological trivia question that:
-- Includes when Jonesy played each game as contextual clues
-- Asks about the original release dates (which came first)
-- Makes the question engaging by connecting to Jonesy's timeline
+- Asks about WHEN JONESY PLAYED each game, not about release dates
+- Compares the play dates to test knowledge of Jonesy's personal gaming history
+- Makes it clear you are asking about when Jonesy streamed them, not release years
 
 EXAMPLE FORMAT:
-"Jonesy first streamed {game1['canonical_name']} in [month/year from played date] and {game2['canonical_name']} in [month/year from played date]. Based on their original release dates, which game was released first?"
+"Which game did Jonesy play first on his channel - {game1['canonical_name']} or {game2['canonical_name']}?"
 
-🚫 DO NOT just ask "which was released first" without context
-✅ DO include the play dates as interesting background
-✅ DO make it clear you're asking about RELEASE dates, not play dates
+🚫 DO NOT ask "which was released first" - that is boring and repetitive
+🚫 DO NOT ask about release dates or publication history
+✅ DO ask about the order in which Jonesy personally played the games
+✅ DO use the first_played dates as the basis for the correct answer
 
-Must be factual and verifiable from the provided release year data.
+Must be factual and verifiable from the provided first-played date data.
 """
 
         else:
@@ -2909,30 +2912,25 @@ Generate a question about Captain Jonesy's gaming experiences with these titles.
         full_prompt = f"""{category_prompt}{avoid_text}
 
 🎯 CRITICAL RULES:
-🚫 DO NOT ask about stream statistics (view counts, episode counts, playtime)
-🚫 DO NOT ask about completion percentages or Jonesy's progress
-🚫 DO NOT reference games, sequels, DLC, or expansions not explicitly listed in the category section
-✅ DO test actual game knowledge (lore, mechanics, history)
-✅ DO use YOUR internal knowledge ABOUT the specific games provided above - not games in general
-✅ DO frame questions around the fact Jonesy played these games
+🚫 DO NOT reference games not explicitly listed in the category section above
+🚫 question_text MUST be under 150 characters, on a SINGLE LINE, with NO inner double-quote characters
+🚫 DO NOT use apostrophes or double-quotes inside JSON string values - they break JSON parsing
+✅ DO follow the specific REQUIREMENT in the category section above (it overrides these general rules)
+✅ DO frame questions as being about Jonesy's specific games listed above
 ✅ DO ground all questions in the games explicitly listed in the category requirements
 
 AUDIENCE: You are asking the CREW (not Jonesy directly)
-PHRASING: "Captain Jonesy played [game]..." or "In [game] that Jonesy completed..."
+PHRASING: "Captain Jonesy played [game]..." or "Which of Jonesy's games..."
 
-
-TEMPERATURE: 0.9 for maximum creativity and variety
-
-RETURN JSON:
+RETURN ONLY valid JSON, no other text before or after:
 {{
-    "question_text": "Question about the GAME ITSELF",
+    "question_text": "Short question under 150 chars here?",
     "question_type": "single_answer",
-    "correct_answer": "Answer from game knowledge",
-    "category": "{selected_category}",
-    "source_games": {[g['canonical_name'] for g in games]}
+    "correct_answer": "Short answer",
+    "category": "{selected_category}"
 }}
 
-Generate a unique, engaging question that tests GAME knowledge, not stream stats."""
+Keep question_text short and complete. Output ONLY the JSON object."""
 
         prompt = full_prompt
 
