@@ -2718,11 +2718,11 @@ async def generate_ai_trivia_question(context: str = "trivia",
         # then asks the AI to write only the question text around it.
         # This prevents hallucinated lore/release-date questions entirely.
         TRIVIA_CATEGORIES = {
-            'Episode_Champion':  {'weight': 2.0},  # Most episodes in a genre
-            'Channel_Timeline':  {'weight': 2.0},  # Which game Jonesy played first
-            'Genre_Census':      {'weight': 1.5},  # How many games of a genre
+            'Episode_Champion': {'weight': 2.0},  # Most episodes in a genre
+            'Channel_Timeline': {'weight': 2.0},  # Which game Jonesy played first
+            'Genre_Census': {'weight': 1.5},  # How many games of a genre
             'Series_Comparison': {'weight': 1.5},  # Which series game had most episodes
-            'Franchise_Lore':    {'weight': 0.5},  # Occasional lore question (AI-driven)
+            'Franchise_Lore': {'weight': 0.5},  # Occasional lore question (AI-driven)
         }
 
         import random
@@ -2971,11 +2971,11 @@ Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_a
 
         # === CALL AI WITH CATEGORY-SPECIFIC TEMPERATURE ===
         CATEGORY_TEMPERATURES = {
-            'Episode_Champion':  0.8,   # Creative phrasing, factual answer
-            'Channel_Timeline':  0.7,   # Simple factual question (which game first)
-            'Genre_Census':      0.8,   # Varied phrasing for count questions
+            'Episode_Champion': 0.8,   # Creative phrasing, factual answer
+            'Channel_Timeline': 0.7,   # Simple factual question (which game first)
+            'Genre_Census': 0.8,   # Varied phrasing for count questions
             'Series_Comparison': 0.8,   # Creative phrasing, factual answer
-            'Franchise_Lore':    0.9,   # Most creative - AI provides answer
+            'Franchise_Lore': 0.9,   # Most creative - AI provides answer
         }
 
         temperature = CATEGORY_TEMPERATURES.get(selected_category, 0.9)
