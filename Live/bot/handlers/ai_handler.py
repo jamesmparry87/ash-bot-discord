@@ -2970,7 +2970,7 @@ Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_a
                 # Fewest episodes to complete a game, within a genre
                 completed_with_eps = [g for g in all_games
                                       if g.get('completion_status') == 'completed' and
-                                      g.get('total_episodes', 0) > 0 and
+                                      (g.get('total_episodes') or 0) > 0 and
                                       g.get('genre')]
                 if len(completed_with_eps) < 2:
                     print("⚠️ TRIVIA DIRECTOR: Not enough completed game data for Quickest_Completion")
@@ -2985,9 +2985,9 @@ Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_a
                     continue
 
                 chosen_genre_qc, genre_games_qc = random.choice(eligible_qc)
-                winner_qc = min(genre_games_qc, key=lambda x: x.get('total_episodes', 0))
+                winner_qc = min(genre_games_qc, key=lambda x: x.get('total_episodes') or 0)
                 correct_answer = winner_qc['canonical_name']
-                source_games = sorted(genre_games_qc, key=lambda x: x.get('total_episodes', 0))[:5]
+                source_games = sorted(genre_games_qc, key=lambda x: x.get('total_episodes') or 0)[:5]
 
                 game_lines_qc = '\n'.join([
                     f"  - {g['canonical_name']}: {g.get('total_episodes', 0)} episodes to complete"
@@ -3067,7 +3067,7 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                 series_groups_ste: Dict[str, List[Dict]] = defaultdict(list)
                 for g in all_games:
                     series = g.get('series_name')
-                    if series and g.get('total_episodes', 0) > 0:
+                    if series and (g.get('total_episodes') or 0) > 0:
                         series_groups_ste[series].append(g)
 
                 eligible_ste = [(s, gs) for s, gs in series_groups_ste.items() if len(gs) >= 2]
@@ -3076,7 +3076,7 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                     continue
 
                 chosen_series_ste, series_games_ste = random.choice(eligible_ste)
-                total_eps_ste = sum(g.get('total_episodes', 0) for g in series_games_ste)
+                total_eps_ste = sum(g.get('total_episodes') or 0 for g in series_games_ste)
                 correct_answer = str(total_eps_ste)
                 source_games = series_games_ste
 
@@ -3108,14 +3108,14 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
 
             elif cat == 'Playtime_Battle':
                 # Compare 2 games by total playtime hours
-                games_with_time = [g for g in all_games if g.get('total_playtime_minutes', 0) > 0]
+                games_with_time = [g for g in all_games if (g.get('total_playtime_minutes') or 0) > 0]
                 if len(games_with_time) < 2:
                     print("⚠️ TRIVIA DIRECTOR: Not enough playtime data for Playtime_Battle")
                     continue
 
                 game1_pb, game2_pb = random.sample(games_with_time, 2)
-                hours1 = round(game1_pb.get('total_playtime_minutes', 0) / 60, 1)
-                hours2 = round(game2_pb.get('total_playtime_minutes', 0) / 60, 1)
+                hours1 = round((game1_pb.get('total_playtime_minutes') or 0) / 60, 1)
+                hours2 = round((game2_pb.get('total_playtime_minutes') or 0) / 60, 1)
                 correct_answer = game1_pb['canonical_name'] if hours1 >= hours2 else game2_pb['canonical_name']
                 source_games = [game1_pb, game2_pb]
 
@@ -3175,20 +3175,20 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
 
             elif cat == 'YouTube_Views_Champ':
                 # Which of 3 games has the most YouTube views? (YouTube-only, like-for-like)
-                yt_games = [g for g in all_games if g.get('youtube_views', 0) > 0]
+                yt_games = [g for g in all_games if (g.get('youtube_views') or 0) > 0]
                 if len(yt_games) < 3:
                     print("⚠️ TRIVIA DIRECTOR: Not enough YouTube view data for YouTube_Views_Champ")
                     continue
 
                 # Pick top candidate + 2 random others for a 3-way comparison
-                top_yt = max(yt_games, key=lambda x: x.get('youtube_views', 0))
+                top_yt = max(yt_games, key=lambda x: x.get('youtube_views') or 0)
                 others_yt = [g for g in yt_games if g != top_yt]
                 choices_yt = [top_yt] + random.sample(others_yt, min(2, len(others_yt)))
                 correct_answer = top_yt['canonical_name']
                 source_games = choices_yt
 
                 game_lines_yt = '\n'.join([
-                    f"  - {g['canonical_name']}: {g.get('youtube_views', 0):,} YouTube views"
+                    f"  - {g['canonical_name']}: {(g.get('youtube_views') or 0):,} YouTube views"
                     for g in choices_yt
                 ])
                 names_yt = [g['canonical_name'] for g in choices_yt]
