@@ -1824,20 +1824,12 @@ class TriviaDatabase:
 
                         # Check if answers match
                         if normalized_new_answer == normalized_existing_answer:
-                            # Same answer as RETIRED question - very strict (auto-reject territory)
+                            # ✅ FIX: Skip retired questions for answer-based duplicate check.
+                            # Retired questions have been used and are done - their answers should be
+                            # recyclable. The Trivia Director generates questions based on real DB answers,
+                            # so blocking by answer of a retired question starves the question pool.
                             if existing_status == 'retired':
-                                logger.warning(
-                                    f"⚠️ ANSWER DUPLICATE (RETIRED): New question has same answer '{question_answer}' as retired question #{existing_dict['id']}")
-                                return {
-                                    'duplicate_id': existing_dict['id'],
-                                    'duplicate_text': existing_dict.get('question_text', ''),
-                                    'similarity_score': 1.0,  # Perfect match on answer
-                                    'status': existing_status,
-                                    'created_at': existing_dict.get('created_at'),
-                                    'match_type': 'answer_retired',
-                                    'is_retired': True,
-                                    'duplicate_reason': f"Same answer as retired question: '{question_answer}'"
-                                }
+                                continue  # Don't block new generation due to retired answer match
 
                             # Same answer as recently ANSWERED question - warn with medium strictness
                             elif existing_status == 'answered':
@@ -1895,9 +1887,14 @@ class TriviaDatabase:
                     # ✅ FIX #2: Use combined similarity score
                     combined_similarity = max(text_similarity, concept_similarity)
 
-                    # ✅ FIX #2: Lower threshold for retired questions (be stricter)
-                    # Changed from 0.85 to 0.65 to catch more semantic variations (e.g., "most views" questions)
-                    effective_threshold = similarity_threshold * 0.65 if existing_status == 'retired' else similarity_threshold
+                    # ✅ FIX: Retired questions use a HIGHER threshold (harder to trigger as duplicate).
+                    # Retired = previously used, not bad. The same topic should be recyclable.
+                    # Using 1.25x multiplier (capped at 0.97) means retired questions need near-exact
+                    # text match to block, preventing the pool from being starved by old questions.
+                    if existing_status == 'retired':
+                        effective_threshold = min(similarity_threshold * 1.25, 0.97)
+                    else:
+                        effective_threshold = similarity_threshold
 
                     if combined_similarity >= effective_threshold:
                         match_type = "semantic" if concept_similarity > text_similarity else "text"
