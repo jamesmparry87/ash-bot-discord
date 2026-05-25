@@ -3267,8 +3267,9 @@ async def _background_question_generation(current_question_count: int):
                 print(f"❌ BACKGROUND GENERATION: Error generating question {i+1}: {generation_error}")
                 failed_generations += 1
 
-            # Small delay between generations to avoid overwhelming systems
-            await asyncio.sleep(2)
+            # Delay between generations to respect Gemini free tier rate limit (5 RPM).
+            # 15 seconds ensures we stay safely under 4 calls/minute for a 4-question batch.
+            await asyncio.sleep(15)
 
         print(f"🧠 BACKGROUND GENERATION: Complete - {successful_generations} questions added to approval queue")
         print(

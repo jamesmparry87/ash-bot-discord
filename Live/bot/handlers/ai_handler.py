@@ -2741,15 +2741,20 @@ async def generate_ai_trivia_question(context: str = "trivia",
         if avoid_game_ids:
             all_games = [g for g in all_games if g.get('id') not in avoid_game_ids]
 
-        # Try up to 3 categories until one has sufficient data
-        selected_category = None
-        category_prompt = None
-        correct_answer = None
-        source_games: List[Dict] = []
-        is_json_response = False  # True only for Franchise_Lore (AI provides answer)
+        # === UNIFIED ATTEMPT LOOP ===
+        # Each attempt: pick a new category, build its prompt, call AI once.
+        # On duplicate: continue → picks a DIFFERENT category next iteration.
+        # On API failure: break → stops immediately to preserve quota.
+        # Max 3 API calls total (one per attempt), vs old max of 9 (3 cats × 3 AI retries).
 
         tried_categories: set = set()
-        for cat_attempt in range(3):
+        for overall_attempt in range(3):
+            selected_category = None
+            category_prompt = None
+            correct_answer = None
+            source_games: List[Dict] = []
+            is_json_response = False
+
             remaining = [c for c in categories if c not in tried_categories]
             if not remaining:
                 break
@@ -2757,7 +2762,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
             cat = random.choices(remaining, weights=remaining_weights, k=1)[0]
             tried_categories.add(cat)
 
-            print(f"🎬 TRIVIA DIRECTOR: Attempt {cat_attempt+1}/3 - Trying category '{cat}'")
+            print(f"🎬 TRIVIA DIRECTOR: Attempt {overall_attempt+1}/3 - Trying category '{cat}'")
 
             if cat == 'Episode_Champion':
                 # Find a genre with 2+ games that have episode data
@@ -2799,7 +2804,7 @@ Write a short question (under 120 characters) asking which of Jonesy's {chosen_g
 Do NOT ask about release dates, game lore, or in-game characters.
 Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                 selected_category = cat
-                break
+                # No break - fall through to AI call section below
 
             elif cat == 'Channel_Timeline':
                 # Pick 2 random games with known first_played_date
@@ -2829,7 +2834,7 @@ Do NOT ask about release dates - ask about when Jonesy played them on her channe
 Good phrasing: "Which game did Jonesy play first on her channel - X or Y?"
 Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                 selected_category = cat
-                break
+                # No break - fall through to AI call section below
 
             elif cat == 'Genre_Census':
                 # Count games per genre
@@ -2867,7 +2872,7 @@ Write a short question (under 120 characters) asking how many {chosen_genre_gc} 
 Good phrasing: "How many {chosen_genre_gc} games has Jonesy played on her channel?"
 Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                 selected_category = cat
-                break
+                # No break - fall through to AI call section below
 
             elif cat == 'Series_Comparison':
                 # Find a series with 2+ games that have episode data
@@ -2906,7 +2911,7 @@ Write a short question (under 120 characters) asking which {chosen_series_sc} ga
 Good phrasing: "Which {chosen_series_sc} game did Jonesy play the most episodes of?"
 Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                 selected_category = cat
-                break
+                # No break - fall through to AI call section below
 
             elif cat == 'Franchise_Lore':
                 # AI-driven franchise question kept for variety - but fix pronouns
@@ -2949,135 +2954,116 @@ Write ONE engaging trivia question about {game_fl['canonical_name']} that tests 
 Does NOT ask about release dates.
 Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_answer": "answer here"}}"""
                 else:
-                    continue
+                    continue  # Not enough data for Franchise_Lore, try next category
 
                 selected_category = cat
-                break
 
-        if not selected_category or not category_prompt:
-            print("❌ TRIVIA DIRECTOR: Could not build a viable category prompt")
-            return None
+            # --- If we couldn't build a prompt for this category, skip it ---
+            if not selected_category or not category_prompt:
+                continue
 
-        print(f"🎮 TRIVIA DIRECTOR: Selected '{selected_category}' | Answer: {correct_answer or 'AI-determined'}")
-        print(f"   Source games: {[g['canonical_name'] for g in source_games[:3]]}")
+            # === PROMPT IS READY: LOG SELECTION AND CALL AI ===
+            print(f"🎮 TRIVIA DIRECTOR: Selected '{selected_category}' | Answer: {correct_answer or 'AI-determined'}")
+            print(f"   Source games: {[g['canonical_name'] for g in source_games[:3]]}")
 
-        # Append avoid-questions hint to prompt
-        if avoid_questions:
-            avoid_text = "\n\n🚫 AVOID questions similar to:\n"
-            avoid_text += "\n".join([f"  - {q[:60]}..." for q in avoid_questions[-5:]])
-            category_prompt = category_prompt + avoid_text
+            # Append avoid-questions hint to prompt
+            prompt = category_prompt
+            if avoid_questions:
+                avoid_text = "\n\n🚫 AVOID questions similar to:\n"
+                avoid_text += "\n".join([f"  - {q[:60]}..." for q in avoid_questions[-5:]])
+                prompt = prompt + avoid_text
 
-        prompt = category_prompt
+            # === CALL AI WITH CATEGORY-SPECIFIC TEMPERATURE ===
+            CATEGORY_TEMPERATURES = {
+                'Episode_Champion': 0.8,   # Creative phrasing, factual answer
+                'Channel_Timeline': 0.7,   # Simple factual question (which game first)
+                'Genre_Census': 0.8,   # Varied phrasing for count questions
+                'Series_Comparison': 0.8,   # Creative phrasing, factual answer
+                'Franchise_Lore': 0.9,   # Most creative - AI provides answer
+            }
 
-        # === CALL AI WITH CATEGORY-SPECIFIC TEMPERATURE ===
-        CATEGORY_TEMPERATURES = {
-            'Episode_Champion': 0.8,   # Creative phrasing, factual answer
-            'Channel_Timeline': 0.7,   # Simple factual question (which game first)
-            'Genre_Census': 0.8,   # Varied phrasing for count questions
-            'Series_Comparison': 0.8,   # Creative phrasing, factual answer
-            'Franchise_Lore': 0.9,   # Most creative - AI provides answer
-        }
+            temperature = CATEGORY_TEMPERATURES.get(selected_category, 0.9)
+            print(f"🌡️ TRIVIA DIRECTOR: Using temperature {temperature} for '{selected_category}'")
 
-        temperature = CATEGORY_TEMPERATURES.get(selected_category, 0.9)
-        print(f"🌡️ TRIVIA DIRECTOR: Using temperature {temperature} for '{selected_category}'")
-
-        # Call AI with rate limiting and retries
-        max_ai_attempts = 3
-        failed_questions = []  # Track failed attempts to avoid repeating
-
-        for ai_attempt in range(max_ai_attempts):
-            # Add failed attempts to avoid list
-            if failed_questions:
-                avoid_failed = "\n\n🔄 PREVIOUS ATTEMPTS (do NOT repeat):\n"
-                avoid_failed += "\n".join([f"   ❌ Attempt {i+1}: {q[:60]}..." for i, q in enumerate(failed_questions)])
-                current_prompt = prompt + avoid_failed
-            else:
-                current_prompt = prompt
-
-            # Use lightweight generation function instead of full conversational AI
-            # This avoids bloating the prompt with Ash's persona, examples, and operational context
+            # === SINGLE AI CALL PER CATEGORY ===
+            # If this produces a duplicate, we try a DIFFERENT category next iteration.
+            # This is more API-quota-friendly (max 3 calls total) and actually diversifies output.
             response_text, status_message = await call_ai_for_generation(
-                current_prompt,
+                prompt,
                 context=context,
                 temperature=temperature
             )
 
-            if response_text:
-                print(
-                    f"✅ TRIVIA DIRECTOR: AI response received: {len(response_text)} characters (attempt {ai_attempt+1}/{max_ai_attempts})")
+            if not response_text:
+                print(f"❌ TRIVIA DIRECTOR: AI call failed (attempt {overall_attempt+1}): {status_message}")
+                break  # API failure - don't retry, preserve quota
 
-                # Parse AI response
-                # Data-driven categories: AI returns plain question text only (we have the answer)
-                # Franchise_Lore: AI returns JSON with both question and answer
-                if is_json_response:
-                    ai_question = robust_json_parse(response_text)
-                    if ai_question:
-                        ai_question["question_type"] = ai_question.get("question_type", "single_answer")
-                else:
-                    q_text = response_text.strip().strip('"').strip("'").strip()
-                    for prefix in ['Question:', 'Here is a question:', "Here's a question:",
-                                   'Trivia question:', 'Here you go:']:
-                        if q_text.lower().startswith(prefix.lower()):
-                            q_text = q_text[len(prefix):].strip()
-                    if q_text and not q_text.endswith('?'):
-                        q_text += '?'
-                    ai_question = {
-                        "question_text": q_text,
-                        "question_type": "single_answer",
-                        "correct_answer": correct_answer
-                    } if (10 <= len(q_text) <= 250) else None
+            print(f"✅ TRIVIA DIRECTOR: AI response received: {len(response_text)} characters (attempt {overall_attempt+1}/3)")
 
-                if ai_question and all(
-                    key in ai_question for key in [
-                        "question_text",
-                        "question_type",
-                        "correct_answer"]):
-
-                    # Check for duplicates before accepting
-                    duplicate_info = current_db.check_question_duplicate(
-                        ai_question["question_text"],
-                        similarity_threshold=0.8
-                    )
-
-                    if duplicate_info:
-                        print(
-                            f"🔍 TRIVIA DIRECTOR: Duplicate detected (attempt {ai_attempt+1}/{max_ai_attempts}): {duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']}")
-
-                        # Track this failed question
-                        failed_questions.append(ai_question["question_text"])
-
-                        if ai_attempt < max_ai_attempts - 1:
-                            print(f"🔄 TRIVIA DIRECTOR: Retrying with different category on next attempt...")
-                            continue  # Try again with modified prompt
-                    else:
-                        # === SUCCESS - ADD METADATA ===
-                        ai_question.update({
-                            "generation_method": "trivia_director",
-                            "director_category": selected_category,
-                            "source_games": [
-                                {
-                                    'id': g.get('id'),
-                                    'name': g['canonical_name'],
-                                    'genre': g.get('genre'),
-                                    'year': g.get('release_year')
-                                } for g in source_games
-                            ],
-                            "temperature": temperature,
-                            "generation_timestamp": datetime.now(ZoneInfo('Europe/London')).isoformat()
-                        })
-
-                        print(f"✅ TRIVIA DIRECTOR: Question generated successfully!")
-                        print(f"   Category: {selected_category}")
-                        print(f"   Games: {[g['canonical_name'] for g in source_games[:3]]}")
-                        print(f"   Question: {ai_question['question_text'][:60]}...")
-                        return ai_question
-                else:
-                    print(f"⚠️ TRIVIA DIRECTOR: AI response missing required fields (attempt {ai_attempt+1})")
+            # Parse AI response
+            # Data-driven categories: AI returns plain question text only (we have the answer)
+            # Franchise_Lore: AI returns JSON with both question and answer
+            if is_json_response:
+                ai_question = robust_json_parse(response_text)
+                if ai_question:
+                    ai_question["question_type"] = ai_question.get("question_type", "single_answer")
             else:
-                print(f"❌ TRIVIA DIRECTOR: AI call failed (attempt {ai_attempt+1}): {status_message}")
-                break  # Don't retry on rate limits or API failures
+                q_text = response_text.strip().strip('"').strip("'").strip()
+                for prefix in ['Question:', 'Here is a question:', "Here's a question:",
+                               'Trivia question:', 'Here you go:']:
+                    if q_text.lower().startswith(prefix.lower()):
+                        q_text = q_text[len(prefix):].strip()
+                if q_text and not q_text.endswith('?'):
+                    q_text += '?'
+                ai_question = {
+                    "question_text": q_text,
+                    "question_type": "single_answer",
+                    "correct_answer": correct_answer
+                } if (10 <= len(q_text) <= 250) else None
 
-        print(f"❌ TRIVIA DIRECTOR: All {max_ai_attempts} generation attempts failed")
+            if not ai_question or not all(
+                key in ai_question for key in ["question_text", "question_type", "correct_answer"]
+            ):
+                print(f"⚠️ TRIVIA DIRECTOR: AI response missing required fields (attempt {overall_attempt+1})")
+                continue  # Try different category
+
+            # Check for duplicates before accepting
+            duplicate_info = current_db.check_question_duplicate(
+                ai_question["question_text"],
+                similarity_threshold=0.8
+            )
+
+            if duplicate_info:
+                print(
+                    f"🔍 TRIVIA DIRECTOR: Duplicate detected (attempt {overall_attempt+1}/3): "
+                    f"{duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']} "
+                    f"- switching to different category..."
+                )
+                continue  # Try a genuinely different category on next iteration
+
+            # === SUCCESS - ADD METADATA ===
+            ai_question.update({
+                "generation_method": "trivia_director",
+                "director_category": selected_category,
+                "source_games": [
+                    {
+                        'id': g.get('id'),
+                        'name': g['canonical_name'],
+                        'genre': g.get('genre'),
+                        'year': g.get('release_year')
+                    } for g in source_games
+                ],
+                "temperature": temperature,
+                "generation_timestamp": datetime.now(ZoneInfo('Europe/London')).isoformat()
+            })
+
+            print(f"✅ TRIVIA DIRECTOR: Question generated successfully!")
+            print(f"   Category: {selected_category}")
+            print(f"   Games: {[g['canonical_name'] for g in source_games[:3]]}")
+            print(f"   Question: {ai_question['question_text'][:60]}...")
+            return ai_question
+
+        print(f"❌ TRIVIA DIRECTOR: All 3 generation attempts failed")
         return None
 
     except Exception as e:
