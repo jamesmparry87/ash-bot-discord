@@ -2719,18 +2719,18 @@ async def generate_ai_trivia_question(context: str = "trivia",
         # This prevents hallucinated lore/release-date questions entirely.
         TRIVIA_CATEGORIES = {
             # --- Channel stats (factual, answer-first) ---
-            'Episode_Champion':     {'weight': 2.0},  # Most episodes in a genre
-            'Quickest_Completion':  {'weight': 1.5},  # Fewest episodes to finish in a genre
-            'Channel_Timeline':     {'weight': 2.0},  # Which game Jonesy played first
-            'Genre_Census':         {'weight': 1.5},  # How many games of a genre
-            'Genre_Pioneer':        {'weight': 1.5},  # First game in a genre by play date
-            'Series_Comparison':    {'weight': 1.5},  # Which series game had most episodes
-            'Series_Total_Episodes':{'weight': 1.5},  # Total episodes across a whole franchise
-            'Playtime_Battle':      {'weight': 1.5},  # Which of 2 games has more playtime hours
-            'Release_Year':         {'weight': 1.5},  # What year was a specific game released?
-            'YouTube_Views_Champ':  {'weight': 1.0},  # Most YouTube views (YouTube-only)
+            'Episode_Champion': {'weight': 2.0},  # Most episodes in a genre
+            'Quickest_Completion': {'weight': 1.5},  # Fewest episodes to finish in a genre
+            'Channel_Timeline': {'weight': 2.0},  # Which game Jonesy played first
+            'Genre_Census': {'weight': 1.5},  # How many games of a genre
+            'Genre_Pioneer': {'weight': 1.5},  # First game in a genre by play date
+            'Series_Comparison': {'weight': 1.5},  # Which series game had most episodes
+            'Series_Total_Episodes': {'weight': 1.5},  # Total episodes across a whole franchise
+            'Playtime_Battle': {'weight': 1.5},  # Which of 2 games has more playtime hours
+            'Release_Year': {'weight': 1.5},  # What year was a specific game released?
+            'YouTube_Views_Champ': {'weight': 1.0},  # Most YouTube views (YouTube-only)
             # --- AI-creative (low weight - occasional variety) ---
-            'Franchise_Lore':       {'weight': 0.5},  # Lore question, AI provides answer
+            'Franchise_Lore': {'weight': 0.5},  # Lore question, AI provides answer
         }
 
         import random
@@ -2969,9 +2969,9 @@ Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_a
             elif cat == 'Quickest_Completion':
                 # Fewest episodes to complete a game, within a genre
                 completed_with_eps = [g for g in all_games
-                                      if g.get('completion_status') == 'completed'
-                                      and g.get('total_episodes', 0) > 0
-                                      and g.get('genre')]
+                                      if g.get('completion_status') == 'completed' and
+                                      g.get('total_episodes', 0) > 0 and
+                                      g.get('genre')]
                 if len(completed_with_eps) < 2:
                     print("⚠️ TRIVIA DIRECTOR: Not enough completed game data for Quickest_Completion")
                     continue
@@ -3231,17 +3231,17 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
 
             # === CALL AI WITH CATEGORY-SPECIFIC TEMPERATURE ===
             CATEGORY_TEMPERATURES = {
-                'Episode_Champion':      0.8,  # Creative phrasing, factual answer
-                'Quickest_Completion':   0.8,  # Creative phrasing, factual answer (inverse)
-                'Channel_Timeline':      0.7,  # Simple factual question (which game first)
-                'Genre_Census':          0.8,  # Varied phrasing for count questions
-                'Genre_Pioneer':         0.8,  # First game in genre - clear factual
-                'Series_Comparison':     0.8,  # Creative phrasing, factual answer
+                'Episode_Champion': 0.8,  # Creative phrasing, factual answer
+                'Quickest_Completion': 0.8,  # Creative phrasing, factual answer (inverse)
+                'Channel_Timeline': 0.7,  # Simple factual question (which game first)
+                'Genre_Census': 0.8,  # Varied phrasing for count questions
+                'Genre_Pioneer': 0.8,  # First game in genre - clear factual
+                'Series_Comparison': 0.8,  # Creative phrasing, factual answer
                 'Series_Total_Episodes': 0.8,  # Sum question - clear factual
-                'Playtime_Battle':       0.8,  # Head-to-head comparison
-                'Release_Year':          0.7,  # Simple factual (a year)
-                'YouTube_Views_Champ':   0.8,  # Names specific games - stays focused
-                'Franchise_Lore':        0.9,  # Most creative - AI provides answer
+                'Playtime_Battle': 0.8,  # Head-to-head comparison
+                'Release_Year': 0.7,  # Simple factual (a year)
+                'YouTube_Views_Champ': 0.8,  # Names specific games - stays focused
+                'Franchise_Lore': 0.9,  # Most creative - AI provides answer
             }
 
             temperature = CATEGORY_TEMPERATURES.get(selected_category, 0.9)
@@ -3260,7 +3260,8 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                 print(f"❌ TRIVIA DIRECTOR: AI call failed (attempt {overall_attempt+1}): {status_message}")
                 break  # API failure - don't retry, preserve quota
 
-            print(f"✅ TRIVIA DIRECTOR: AI response received: {len(response_text)} characters (attempt {overall_attempt+1}/3)")
+            print(
+                f"✅ TRIVIA DIRECTOR: AI response received: {len(response_text)} characters (attempt {overall_attempt+1}/3)")
 
             # Parse AI response
             # Data-driven categories: AI returns plain question text only (we have the answer)
@@ -3299,8 +3300,7 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                 print(
                     f"🔍 TRIVIA DIRECTOR: Duplicate detected (attempt {overall_attempt+1}/3): "
                     f"{duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']} "
-                    f"- switching to different category..."
-                )
+                    f"- switching to different category...")
                 continue  # Try a genuinely different category on next iteration
 
             # === SUCCESS - ADD METADATA ===
