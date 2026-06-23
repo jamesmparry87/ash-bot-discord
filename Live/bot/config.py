@@ -72,12 +72,33 @@ ANNOUNCEMENTS_CHANNEL_ID = 869526826148585533  # Announcements
 YOUTUBE_UPLOADS_CHANNEL_ID = 869527363594121226  # YouTube Uploads
 GAME_RECOMMENDATION_CHANNEL_ID = 1271568447108550687  # Game Recommendations
 CHIT_CHAT_CHANNEL_ID = 869528946725748766  # Chit Chat - for scheduled greetings
+MEMBER_LOGS_CHANNEL_ID = 1303788504144285798  # Member Logs - where Carl-bot logs role changes
 
 # Member Role Configuration
 MEMBER_ROLE_IDS = [
     869526205166702652,  # Senior Officers
     888820289776013444,  # Members
 ]
+
+# ============================================================================
+# TRAINEE PROMOTION SYSTEM
+# ============================================================================
+# Ash monitors member interactions and automatically promotes users who are
+# still on the Trainee role after their first 24 hours in the server.
+#
+# How it works:
+# - Carl-bot assigns Trainee Space Cadet when a member joins (spam protection)
+# - Carl-bot is supposed to promote to Spacecat after 24 hours automatically
+# - In cases where that didn't happen, Ash will promote on first interaction
+# - "Interaction" = sending a message OR adding a reaction
+#
+# ⚠️ IMPORTANT: Ash's role in the server hierarchy MUST be ranked ABOVE both
+#    "Trainee Space Cadet" and "Spacecat" for role assignments to succeed.
+#    If Ash's role is lower, all attempts will silently fail with Forbidden.
+#
+TRAINEE_ROLE_ID = 1134082966570668142   # Trainee Space Cadet (Carl-bot assigns on join)
+SPACECAT_ROLE_ID = 1393685422323929270  # Spacecat (full server member role)
+# ============================================================================
 
 # Moderator channel IDs where sensitive functions can be discussed
 MODERATOR_CHANNEL_IDS = [

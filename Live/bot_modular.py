@@ -255,6 +255,15 @@ except ImportError as e:
     start_trivia_conversation = None
 
 
+# Import role handler for trainee promotion system
+try:
+    from bot.handlers.role_handler import check_trainee_promotion
+    print("✅ Role handler imported successfully (trainee promotion system active)")
+except ImportError as e:
+    print(f"⚠️ Role handler not available: {e}")
+    check_trainee_promotion = None  # type: ignore
+
+
 async def initialize_modular_components():
     """
     Initialize all modular components of the bot system
@@ -1095,6 +1104,16 @@ async def on_message(message):
         print(f"⚠️ STAGING: Error checking staging restrictions: {staging_error}")
         # Continue processing if check fails
 
+    # TRAINEE PROMOTION CHECK: Run for all guild messages before anything else.
+    # Lightweight — exits immediately if the member has no Trainee role.
+    # Catches overdue promotions (Carl-bot missed the 24h auto-promote) and
+    # cleans up members who have both Trainee + Spacecat simultaneously.
+    if message.guild and isinstance(message.author, discord.Member) and check_trainee_promotion:
+        try:
+            await check_trainee_promotion(message.author, message.guild)
+        except Exception as role_error:
+            print(f"⚠️ ROLE HANDLER: Unexpected error in trainee check: {role_error}")
+
     # PRIORITY 1: Process traditional commands first
     if message.content.strip().startswith('!'):
         print(f"🔧 Traditional command detected (priority): {message.content[:50]}...")
@@ -1159,6 +1178,35 @@ async def on_message(message):
         print(f"❌ CRITICAL Error in on_message handler: {e}")
         import traceback
         traceback.print_exc()
+
+
+@bot.event
+async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
+    """
+    Handle raw reaction events for the trainee promotion system.
+
+    Uses on_raw_reaction_add instead of on_reaction_add so that reactions
+    on older or uncached messages (e.g. pinned rules, announcement posts)
+    are also captured. on_reaction_add only fires for messages currently
+    in the bot's internal message cache (~1,000 most recent messages).
+
+    Bots and DM reactions are automatically filtered out: payload.member
+    is None for DM reactions and is always a discord.Member for guild ones.
+    """
+    # payload.member is None for DMs — guild reactions always provide it
+    member = payload.member
+    if not member or member.bot:
+        return
+
+    guild = bot.get_guild(payload.guild_id) if payload.guild_id else None
+    if not guild:
+        return
+
+    if check_trainee_promotion:
+        try:
+            await check_trainee_promotion(member, guild)
+        except Exception as role_error:
+            print(f"⚠️ ROLE HANDLER: Unexpected error in trainee check (raw reaction): {role_error}")
 
 
 def is_casual_conversation_not_query(content: str) -> bool:
