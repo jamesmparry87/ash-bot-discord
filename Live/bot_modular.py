@@ -255,6 +255,15 @@ except ImportError as e:
     start_trivia_conversation = None
 
 
+# Import role handler for trainee promotion system
+try:
+    from bot.handlers.role_handler import check_trainee_promotion
+    print("✅ Role handler imported successfully (trainee promotion system active)")
+except ImportError as e:
+    print(f"⚠️ Role handler not available: {e}")
+    check_trainee_promotion = None  # type: ignore
+
+
 async def initialize_modular_components():
     """
     Initialize all modular components of the bot system
@@ -1095,6 +1104,16 @@ async def on_message(message):
         print(f"⚠️ STAGING: Error checking staging restrictions: {staging_error}")
         # Continue processing if check fails
 
+    # TRAINEE PROMOTION CHECK: Run for all guild messages before anything else.
+    # Lightweight — exits immediately if the member has no Trainee role.
+    # Catches overdue promotions (Carl-bot missed the 24h auto-promote) and
+    # cleans up members who have both Trainee + Spacecat simultaneously.
+    if message.guild and isinstance(message.author, discord.Member) and check_trainee_promotion:
+        try:
+            await check_trainee_promotion(message.author, message.guild)
+        except Exception as role_error:
+            print(f"⚠️ ROLE HANDLER: Unexpected error in trainee check: {role_error}")
+
     # PRIORITY 1: Process traditional commands first
     if message.content.strip().startswith('!'):
         print(f"🔧 Traditional command detected (priority): {message.content[:50]}...")
@@ -1159,6 +1178,37 @@ async def on_message(message):
         print(f"❌ CRITICAL Error in on_message handler: {e}")
         import traceback
         traceback.print_exc()
+
+
+@bot.event
+async def on_reaction_add(reaction, user):
+    """
+    Handle reaction events for the trainee promotion system.
+
+    When a member adds a reaction to any message, check if they still have
+    the Trainee role and promote them if eligible. This catches passive
+    engagers who never send messages but do interact via reactions.
+
+    Bots and DM reactions are ignored automatically.
+    """
+    # Ignore bots
+    if user.bot:
+        return
+
+    # Reactions in DMs give a discord.User, not a discord.Member.
+    # Only guild members have roles, so skip anything that isn't a Member.
+    if not isinstance(user, discord.Member):
+        return
+
+    guild = reaction.message.guild
+    if not guild:
+        return
+
+    if check_trainee_promotion:
+        try:
+            await check_trainee_promotion(user, guild)
+        except Exception as role_error:
+            print(f"⚠️ ROLE HANDLER: Unexpected error in trainee check (reaction): {role_error}")
 
 
 def is_casual_conversation_not_query(content: str) -> bool:

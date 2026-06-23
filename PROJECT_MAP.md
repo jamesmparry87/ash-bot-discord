@@ -182,6 +182,16 @@ This document provides an at-a-glance reference for understanding which files to
 - Jonesy disambiguation (User vs Cat)
 - Conversation context tracking
 
+### `Live/bot/handlers/role_handler.py`
+
+**Purpose**: Automated member role management
+**Edit for**:
+
+- Trainee Space Cadet → Spacecat promotion (triggered on interaction)
+- Duplicate role cleanup (member has both Trainee + Spacecat)
+- Role change logging to #member-logs channel
+- Future role management requirements
+
 ### `Live/bot/handlers/twitch_view_response.py`
 
 **Purpose**: Twitch view count response handling
@@ -394,6 +404,7 @@ This document provides an at-a-glance reference for understanding which files to
 | Data Cleanup | `bot/commands/data_cleanup.py` | `bot/utils/data_quality.py` |
 | IGDB Integration | `bot/integrations/igdb.py` | - |
 | Context/NLP | `bot/handlers/context_manager.py` | `bot/handlers/conversation_handler.py` |
+| Role management | `bot/handlers/role_handler.py` | `bot/config.py` |
 
 ## Development Workflow
 
