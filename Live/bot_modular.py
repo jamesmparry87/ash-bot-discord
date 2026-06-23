@@ -1181,34 +1181,32 @@ async def on_message(message):
 
 
 @bot.event
-async def on_reaction_add(reaction, user):
+async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     """
-    Handle reaction events for the trainee promotion system.
+    Handle raw reaction events for the trainee promotion system.
 
-    When a member adds a reaction to any message, check if they still have
-    the Trainee role and promote them if eligible. This catches passive
-    engagers who never send messages but do interact via reactions.
+    Uses on_raw_reaction_add instead of on_reaction_add so that reactions
+    on older or uncached messages (e.g. pinned rules, announcement posts)
+    are also captured. on_reaction_add only fires for messages currently
+    in the bot's internal message cache (~1,000 most recent messages).
 
-    Bots and DM reactions are ignored automatically.
+    Bots and DM reactions are automatically filtered out: payload.member
+    is None for DM reactions and is always a discord.Member for guild ones.
     """
-    # Ignore bots
-    if user.bot:
+    # payload.member is None for DMs — guild reactions always provide it
+    member = payload.member
+    if not member or member.bot:
         return
 
-    # Reactions in DMs give a discord.User, not a discord.Member.
-    # Only guild members have roles, so skip anything that isn't a Member.
-    if not isinstance(user, discord.Member):
-        return
-
-    guild = reaction.message.guild
+    guild = bot.get_guild(payload.guild_id) if payload.guild_id else None
     if not guild:
         return
 
     if check_trainee_promotion:
         try:
-            await check_trainee_promotion(user, guild)
+            await check_trainee_promotion(member, guild)
         except Exception as role_error:
-            print(f"⚠️ ROLE HANDLER: Unexpected error in trainee check (reaction): {role_error}")
+            print(f"⚠️ ROLE HANDLER: Unexpected error in trainee check (raw reaction): {role_error}")
 
 
 def is_casual_conversation_not_query(content: str) -> bool:

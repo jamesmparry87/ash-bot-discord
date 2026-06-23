@@ -27,8 +27,9 @@ if _live_dir not in sys.path:
     sys.path.insert(0, _live_dir)
 
 # ---------------------------------------------------------------------------
-# Import the function under test
+# Import the function under test and the module-level guard set
 # ---------------------------------------------------------------------------
+import bot.handlers.role_handler as _role_handler_module  # noqa: E402
 from bot.handlers.role_handler import check_trainee_promotion  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -228,3 +229,43 @@ async def test_spacecat_only_no_action(trainee_role, spacecat_role, guild):
     # No log message
     log_channel = guild.get_channel(MEMBER_LOGS_CHANNEL_ID)
     log_channel.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_concurrency_guard_skips_duplicate(trainee_role, spacecat_role, guild):
+    """
+    Case 5: Concurrency guard — member ID already in _processing_members.
+
+    Simulates a second promotion call arriving while the first is still
+    awaiting the Discord API. The second call must exit immediately without
+    making any role API calls.
+
+    Expected: No role changes (guarded exit), guard set is clean after the call.
+    """
+    DUPLICATE_MEMBER_ID = 99999999
+
+    member = make_member(
+        roles=[trainee_role],
+        joined_ago=timedelta(days=5),
+        member_id=DUPLICATE_MEMBER_ID,
+    )
+
+    # Simulate the first call being in-flight: pre-populate the guard set
+    _role_handler_module._processing_members.add(DUPLICATE_MEMBER_ID)
+
+    try:
+        await check_trainee_promotion(member, guild)
+    finally:
+        # Always clean up the guard set so other tests are unaffected
+        _role_handler_module._processing_members.discard(DUPLICATE_MEMBER_ID)
+
+    # The second call should have done nothing
+    member.add_roles.assert_not_called()
+    member.remove_roles.assert_not_called()
+
+    log_channel = guild.get_channel(MEMBER_LOGS_CHANNEL_ID)
+    log_channel.send.assert_not_called()
+
+    # Guard set should be clean (our finally above cleaned it up,
+    # and the function itself should not have removed it since it exited early)
+    assert DUPLICATE_MEMBER_ID not in _role_handler_module._processing_members

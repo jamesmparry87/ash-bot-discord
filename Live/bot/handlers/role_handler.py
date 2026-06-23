@@ -36,6 +36,24 @@ import discord
 
 from ..config import MEMBER_LOGS_CHANNEL_ID, SPACECAT_ROLE_ID, TRAINEE_ROLE_ID
 
+# ---------------------------------------------------------------------------
+# Concurrency guard
+# ---------------------------------------------------------------------------
+# Python's asyncio is single-threaded but cooperative: code between two
+# `await` points runs without interruption, but two coroutines can be
+# in-flight simultaneously if one yields mid-execution.
+#
+# Without this guard, a user who sends several messages in quick succession
+# could trigger multiple concurrent promotion checks. All of them would pass
+# the initial `has_trainee` check before any of them complete the role
+# removal API call, resulting in duplicate Discord API requests.
+#
+# The set stores member IDs that are currently being processed. If a second
+# call arrives for the same member while the first is still awaiting the
+# Discord API, it exits immediately. The `try/finally` in the function body
+# guarantees the ID is always removed, even if the API call raises.
+_processing_members: set[int] = set()
+
 
 async def check_trainee_promotion(member: discord.Member, guild: discord.Guild) -> None:
     """
@@ -67,17 +85,26 @@ async def check_trainee_promotion(member: discord.Member, guild: discord.Guild) 
     if not has_trainee:
         return
 
-    has_spacecat = any(role.id == SPACECAT_ROLE_ID for role in member.roles)
-
-    trainee_role = guild.get_role(TRAINEE_ROLE_ID)
-    spacecat_role = guild.get_role(SPACECAT_ROLE_ID)
-
-    if not trainee_role:
-        # Role not found in this guild — configuration issue, bail out
-        print(f"⚠️ ROLE HANDLER: Trainee role ID {TRAINEE_ROLE_ID} not found in guild '{guild.name}'")
+    # --- Concurrency guard: skip if this member is already being processed ---
+    # Prevents duplicate API calls when a user sends several messages rapidly
+    # before the first promotion's await chain completes.
+    if member.id in _processing_members:
         return
+    _processing_members.add(member.id)
 
+    # OUTER try/finally — guarantees the guard is always released, even if
+    # an unexpected exception bypasses the inner discord error handling.
     try:
+        has_spacecat = any(role.id == SPACECAT_ROLE_ID for role in member.roles)
+
+        trainee_role = guild.get_role(TRAINEE_ROLE_ID)
+        spacecat_role = guild.get_role(SPACECAT_ROLE_ID)
+
+        if not trainee_role:
+            # Role not found in this guild — configuration issue, bail out
+            print(f"⚠️ ROLE HANDLER: Trainee role ID {TRAINEE_ROLE_ID} not found in guild '{guild.name}'")
+            return
+
         # ------------------------------------------------------------------
         # Case 2: Duplicate roles — member already has Spacecat
         # Just strip the leftover Trainee role silently
@@ -148,6 +175,9 @@ async def check_trainee_promotion(member: discord.Member, guild: discord.Guild) 
         )
     except discord.HTTPException as e:
         print(f"❌ ROLE HANDLER: Discord API error updating roles for {member.name} (ID: {member.id}): {e}")
+    finally:
+        # Always release the concurrency guard, regardless of what happened above
+        _processing_members.discard(member.id)
 
 
 async def _log_to_member_logs(guild: discord.Guild, message: str) -> None:
