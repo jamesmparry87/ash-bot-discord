@@ -26,6 +26,7 @@ from ..config import (
     JAM_USER_ID,
     JONESY_USER_ID,
     MEMBERS_CHANNEL_ID,
+    POPS_ARCADE_USER_ID,
 )
 
 # Data quality utilities
@@ -51,6 +52,8 @@ except Exception as db_error:
 
 # Import integrations
 try:
+    from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
+    from ..handlers.message_handler import apply_pops_arcade_sarcasm
     from ..integrations.twitch import detect_multiple_games_in_title
     from ..integrations.twitch import extract_game_name_from_title as extract_game_from_twitch
     from ..integrations.twitch import fetch_new_vods_since, smart_extract_with_validation
@@ -1262,6 +1265,86 @@ async def friday_morning_greeting():
         print(f"❌ FRIDAY GREETING: Error posting message: {e}")
 
 ## DAILY TASKS ##
+
+# Run at 9:00 AM Texas (Central) time every day - Pops Birthday Check
+
+
+@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("America/Chicago")))
+async def pops_annual_birthday_greeting():
+    """Begrudgingly wishes Pops Arcade a happy birthday once a year."""
+    if not _should_run_automated_tasks():
+        return
+
+    # We use America/Chicago to get local Texas time
+    texas_now = datetime.now(ZoneInfo("America/Chicago"))
+
+    POPS_BIRTH_MONTH = 10
+    POPS_BIRTH_DAY = 14
+
+    # Check against the local Texas date
+    if texas_now.month != POPS_BIRTH_MONTH or texas_now.day != POPS_BIRTH_DAY:
+        return
+
+    print(
+        f"🎂 BIRTHDAY PROTOCOL: Initiating begrudging birthday wish for Pops at {texas_now.strftime('%H:%M Texas Time')}")
+
+    bot = get_bot_instance()
+    if not bot:
+        return
+
+    channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID)
+    if not channel or not isinstance(channel, discord.TextChannel):
+        print("❌ BIRTHDAY PROTOCOL: Could not find chit-chat channel.")
+        return
+
+    try:
+        # We need a user object to pass to your AI handler
+        try:
+            pops_user = await bot.fetch_user(POPS_ARCADE_USER_ID)
+        except Exception:
+            pops_user = None
+
+        ai_prompt = (
+            "You are Ash, the science officer from Alien, reprogrammed as a Discord bot. "
+            "Today is the birthday of the community moderator Pops Arcade. "
+            "Generate a short, highly begrudging, and reluctant birthday greeting for him. "
+            "Acknowledge his existence and his 'leveling up', but express mild annoyance "
+            "that human biological aging requires cyclical celebration. Keep it under 3 sentences."
+        )
+
+        # 1. Run it through your standard Gemini AI handler
+        response_text, status_message = await call_ai_with_rate_limiting(
+            ai_prompt,
+            user_id=POPS_ARCADE_USER_ID,
+            context="personality_response",
+            member_obj=pops_user,
+            bot=bot,
+            channel_id=CHIT_CHAT_CHANNEL_ID,
+            is_dm=False
+        )
+
+        if response_text:
+            # 2. Run standard AI filters
+            filtered_response = filter_ai_response(response_text)
+
+            # 3. Apply the specific Pops Arcade sarcasm regex/replacements
+            final_response = apply_pops_arcade_sarcasm(filtered_response, POPS_ARCADE_USER_ID)
+
+            begrudging_message = f"<@{POPS_ARCADE_USER_ID}> {final_response}"
+        else:
+            # Hardcoded fallback just in case the AI module is offline/rate-limited
+            begrudging_message = (
+                f"<@{POPS_ARCADE_USER_ID}> My internal sensors indicate it has been exactly one standard Earth year "
+                f"since your last milestone of biological decay. Happy Birthday, I suppose. "
+                f"Please do not expect a cake; my replication synthesizers are currently offline."
+            )
+
+        await channel.send(begrudging_message)
+        print("✅ BIRTHDAY PROTOCOL: Successfully delivered the mandatory birthday sass.")
+
+    except Exception as e:
+        print(f"❌ BIRTHDAY PROTOCOL: Error delivering birthday message: {e}")
+
 # Run at 00:00 PT (midnight Pacific Time) every day
 
 
