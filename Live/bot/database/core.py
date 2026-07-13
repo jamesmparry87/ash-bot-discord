@@ -721,6 +721,10 @@ class DatabaseManager:
         """Delegate to games module - get series games"""
         return self.games.get_series_games(series_name)
 
+    def get_games_by_series_organized(self):
+        """Delegate to games module - get games by series organized"""
+        return self.games.get_games_by_series_organized()
+
     def get_ranking_context(self, game_name, context_type='all'):
         """Delegate to games module - get ranking context"""
         return self.games.get_ranking_context(game_name, context_type)

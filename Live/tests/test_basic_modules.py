@@ -5,8 +5,8 @@ Basic test of core refactored modules (without Discord dependencies)
 import os
 import sys
 
-# Add the current directory to the path
-sys.path.insert(0, os.path.dirname(__file__))
+# Add the parent directory (Live) to the path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def test_core_modules():
@@ -16,29 +16,30 @@ def test_core_modules():
     # Test 1: Config module
     try:
         from bot.config import (
-            BOT_PERSONA,
-            FAQ_RESPONSES,
             GUILD_ID,
             JAM_USER_ID,
             JONESY_USER_ID,
-            PINEAPPLE_NEGATIVE_PATTERNS,
             VIOLATION_CHANNEL_ID,
         )
+        
+        # Use imports to avoid unused variable lints
+        _ = (GUILD_ID, JAM_USER_ID, JONESY_USER_ID, VIOLATION_CHANNEL_ID)
+        
         print("✅ Config module: SUCCESS")
         print(
             f"   - Constants loaded: {len([x for x in dir() if 'ID' in str(x)])} IDs")
-        print(f"   - FAQ responses: {len(FAQ_RESPONSES)} entries")
-        print(
-            f"   - Pineapple patterns: {len(PINEAPPLE_NEGATIVE_PATTERNS)} patterns")
-        print(f"   - Bot persona enabled: {BOT_PERSONA.get('enabled', False)}")
 
     except ImportError as e:
         print(f"❌ Config module: FAILED - {e}")
-        return False
+        assert False, f"Config module failed: {e}"
 
     # Test 2: Database module
     try:
         from bot.database import DatabaseManager, db
+        
+        # Use imports to avoid unused variable lints
+        _ = (DatabaseManager, db)
+        
         print("✅ Database module: SUCCESS")
         print(
             f"   - DatabaseManager class: {'Available' if DatabaseManager else 'Missing'}")
@@ -56,7 +57,7 @@ def test_core_modules():
 
     except ImportError as e:
         print(f"❌ Database module: FAILED - {e}")
-        return False
+        assert False, f"Database module failed: {e}"
 
     # Test 3: Module structure
     try:
@@ -67,9 +68,9 @@ def test_core_modules():
 
     except ImportError as e:
         print(f"❌ Module structure: FAILED - {e}")
-        return False
+        assert False, f"Module structure failed: {e}"
 
-    return True
+    assert True
 
 
 def compare_architectures():
@@ -97,7 +98,13 @@ def compare_architectures():
 def main():
     print("🚀 Testing Refactored Bot Architecture\n")
 
-    if test_core_modules():
+    try:
+        test_core_modules()
+        success = True
+    except AssertionError:
+        success = False
+
+    if success:
         print("\n🎉 **REFACTORING SUCCESS!**")
         print("   ✅ All core modules loading correctly")
         print("   ✅ Configuration extracted and working")

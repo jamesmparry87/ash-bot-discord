@@ -6,10 +6,9 @@ Main entry point for the refactored modular Discord bot with deployment blocker 
 
 import asyncio
 import os
-import re
 import sys
 from datetime import datetime, timedelta
-from typing import Any, Optional, Union
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import discord
@@ -66,18 +65,11 @@ db: Any = None
 
 # Import the NEW modular database system
 try:
-    from bot.database import DatabaseManager, get_database
+    from bot.database import get_database
     db = get_database()
     print("✅ Database manager loaded successfully (MODULAR)")
 except ImportError as e:
     print(f"❌ Failed to import modular database manager: {e}")
-    # Fallback to old structure if new one fails
-    try:
-        from bot.database_module import DatabaseManager, get_database
-        db = get_database()
-        print("⚠️ Using legacy database_module (fallback)")
-    except ImportError as e2:
-        print(f"❌ Both database imports failed: {e2}")
 
 # Import ModeratorFAQHandler system
 try:
