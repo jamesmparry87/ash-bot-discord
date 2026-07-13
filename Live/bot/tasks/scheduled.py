@@ -1268,6 +1268,8 @@ async def friday_morning_greeting():
 ## DAILY TASKS ##
 
 # Run at 9:00 AM Texas (Central) time every day - Pops Birthday Check
+
+
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("America/Chicago")))
 async def pops_annual_birthday_greeting():
     """Begrudgingly wishes Pops Arcade a happy birthday once a year."""
@@ -1276,15 +1278,16 @@ async def pops_annual_birthday_greeting():
 
     # We use America/Chicago to get local Texas time
     texas_now = datetime.now(ZoneInfo("America/Chicago"))
-    
-    POPS_BIRTH_MONTH = 10 
+
+    POPS_BIRTH_MONTH = 10
     POPS_BIRTH_DAY = 14
 
     # Check against the local Texas date
     if texas_now.month != POPS_BIRTH_MONTH or texas_now.day != POPS_BIRTH_DAY:
         return
 
-    print(f"🎂 BIRTHDAY PROTOCOL: Initiating begrudging birthday wish for Pops at {texas_now.strftime('%H:%M Texas Time')}")
+    print(
+        f"🎂 BIRTHDAY PROTOCOL: Initiating begrudging birthday wish for Pops at {texas_now.strftime('%H:%M Texas Time')}")
 
     bot = get_bot_instance()
     if not bot:
@@ -1328,10 +1331,10 @@ async def pops_annual_birthday_greeting():
         if response_text:
             # 2. Run standard AI filters
             filtered_response = filter_ai_response(response_text)
-            
+
             # 3. Apply the specific Pops Arcade sarcasm regex/replacements
             final_response = apply_pops_arcade_sarcasm(filtered_response, POPS_ARCADE_USER_ID)
-            
+
             begrudging_message = f"<@{POPS_ARCADE_USER_ID}> {final_response}"
         else:
             # Hardcoded fallback just in case the AI module is offline/rate-limited
@@ -1348,6 +1351,8 @@ async def pops_annual_birthday_greeting():
         print(f"❌ BIRTHDAY PROTOCOL: Error delivering birthday message: {e}")
 
 # Run at 00:00 PT (midnight Pacific Time) every day
+
+
 @tasks.loop(time=time(0, 0, tzinfo=ZoneInfo("US/Pacific")))
 async def scheduled_midnight_restart():
     """Automatically restart the bot at midnight Pacific Time to reset daily limits"""
