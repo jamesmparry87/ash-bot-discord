@@ -50,10 +50,11 @@ except Exception as db_error:
     print(f"⚠️ Scheduled tasks: Database not available - {db_error}")
     db = None
 
+from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
+from ..handlers.message_handler import apply_pops_arcade_sarcasm
+
 # Import integrations
 try:
-    from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
-    from ..handlers.message_handler import apply_pops_arcade_sarcasm
     from ..integrations.twitch import detect_multiple_games_in_title
     from ..integrations.twitch import extract_game_name_from_title as extract_game_from_twitch
     from ..integrations.twitch import fetch_new_vods_since, smart_extract_with_validation
@@ -1313,15 +1314,19 @@ async def pops_annual_birthday_greeting():
         )
 
         # 1. Run it through your standard Gemini AI handler
-        response_text, status_message = await call_ai_with_rate_limiting(
-            ai_prompt,
-            user_id=POPS_ARCADE_USER_ID,
-            context="personality_response",
-            member_obj=pops_user,
-            bot=bot,
-            channel_id=CHIT_CHAT_CHANNEL_ID,
-            is_dm=False
-        )
+        try:
+            response_text, status_message = await call_ai_with_rate_limiting(
+                ai_prompt,
+                user_id=POPS_ARCADE_USER_ID,
+                context="personality_response",
+                member_obj=pops_user,
+                bot=bot,
+                channel_id=CHIT_CHAT_CHANNEL_ID,
+                is_dm=False
+            )
+        except Exception as ai_err:
+            print(f"⚠️ BIRTHDAY PROTOCOL: AI generation failed, using fallback: {ai_err}")
+            response_text = None
 
         if response_text:
             # 2. Run standard AI filters
