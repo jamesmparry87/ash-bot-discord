@@ -20,8 +20,7 @@ from ..config import (
 from ..database import get_database
 from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
 from ..handlers.message_handler import apply_pops_arcade_sarcasm
-from .scheduled import =, _should_run_automated_tasks, db, get_database, getget_bot_instance
-
+from .scheduled import = , _should_run_automated_tasks, db, get_database, getget_bot_instance
 
 
 async def monday_morning_greeting():
@@ -66,6 +65,7 @@ async def monday_morning_greeting():
 
     except Exception as e:
         print(f"❌ MONDAY GREETING: Error posting message: {e}")
+
 
 async def tuesday_trivia_greeting():
     """Send Tuesday morning greeting with trivia reminder to members channel"""
@@ -112,6 +112,7 @@ async def tuesday_trivia_greeting():
     except Exception as e:
         print(f"❌ Error in tuesday_trivia_greeting: {e}")
 
+
 async def friday_morning_greeting():
     """Posts the approved Friday morning community report."""
     if not _should_run_automated_tasks():
@@ -153,6 +154,7 @@ async def friday_morning_greeting():
 
     except Exception as e:
         print(f"❌ FRIDAY GREETING: Error posting message: {e}")
+
 
 async def pops_annual_birthday_greeting():
     """Begrudgingly wishes Pops Arcade a happy birthday once a year."""

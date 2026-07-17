@@ -394,31 +394,16 @@ async def safe_send_message(channel, content, mention_user_id=None):
 
 
 @tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))
-
 # Run at 9:00 AM UK time every Monday
-
-
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-
 # Run at 9:00 AM UK time every Tuesday - Trivia reminder
-
-
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-
 # Run at 9:00 AM UK time every Tuesday - Trivia question pre-approval
 # ✅ FIX #2: Moved from 10:00 to 9:00 to give JAM 2 hours for approval instead of 1
-
-
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-
 # Run at 10:45 AM UK time every Tuesday - Pre-flight check
-
-
 @tasks.loop(time=time(10, 45, tzinfo=ZoneInfo("Europe/London")))
-
 # Run at 11:00 AM UK time every Tuesday - Trivia Tuesday question posting
-
-
 @tasks.loop(time=time(11, 0, tzinfo=ZoneInfo("Europe/London")))
 async def trivia_tuesday():
     """Posts the approved Trivia Tuesday question and starts a persistent database session."""
@@ -862,17 +847,10 @@ async def friday_community_analysis():
 
 
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-
 ## DAILY TASKS ##
-
 # Run at 9:00 AM Texas (Central) time every day - Pops Birthday Check
-
-
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("America/Chicago")))
-
 # Run at 00:00 PT (midnight Pacific Time) every day
-
-
 @tasks.loop(time=time(0, 0, tzinfo=ZoneInfo("US/Pacific")))
 async def scheduled_midnight_restart():
     """Automatically restart the bot at midnight Pacific Time to reset daily limits"""
@@ -1588,16 +1566,6 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         raise
 
 
-
-
-
-
-
-
-
-
-
-
 def start_all_scheduled_tasks(bot):
     """Start all scheduled tasks with enhanced monitoring"""
     try:
@@ -1736,11 +1704,3 @@ def stop_all_scheduled_tasks():
 
     except Exception as e:
         print(f"❌ Error stopping scheduled tasks: {e}")
-
-
-
-
-
-
-
-

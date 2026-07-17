@@ -20,7 +20,7 @@ from ..config import (
 from ..database import get_database
 from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
 from ..handlers.message_handler import apply_pops_arcade_sarcasm
-from .scheduled import =, _should_run_automated_tasks, db, get_database, getget_bot_instance
+from .scheduled import = , _should_run_automated_tasks, db, get_database, getget_bot_instance
 
 from ..handlers.trivia.generator import generate_ai_trivia_question, generate_trivia_batch
 
@@ -136,6 +136,7 @@ async def pre_trivia_approval():
         except Exception:
             pass
 
+
 async def pre_trivia_preflight_check():
     """Verify approved question exists 15 minutes before trivia"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
@@ -215,6 +216,7 @@ async def pre_trivia_preflight_check():
     except Exception as e:
         print(f"❌ PRE-FLIGHT CHECK: Error during check: {e}")
 
+
 async def schedule_delayed_trivia_validation():
     """Schedule trivia validation to run 2 minutes after bot startup completion"""
     try:
@@ -227,6 +229,7 @@ async def schedule_delayed_trivia_validation():
 
     except Exception as e:
         print(f"❌ Error scheduling delayed trivia validation: {e}")
+
 
 async def _delayed_trivia_validation():
     """Internal function to handle the 2-minute delay and execute trivia validation"""
@@ -274,6 +277,7 @@ async def _delayed_trivia_validation():
         except Exception:
             print("❌ DELAYED TRIVIA VALIDATION: Failed to send error notification to JAM")
 
+
 async def check_emergency_trivia_approval():
     """Check if emergency approval is needed for build day scenarios"""
     try:
@@ -308,6 +312,7 @@ async def check_emergency_trivia_approval():
         print(f"❌ EMERGENCY APPROVAL CHECK: Error during emergency approval check: {e}")
         import traceback
         traceback.print_exc()
+
 
 async def trigger_emergency_trivia_approval(minutes_remaining: float):
     """Trigger emergency approval process for build day scenarios"""
@@ -426,6 +431,7 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
         print(f"❌ EMERGENCY APPROVAL: Critical error in emergency approval: {e}")
         import traceback
         traceback.print_exc()
+
 
 async def validate_startup_trivia_questions():
     """Check that there are at least 5 active questions available on startup with non-blocking execution"""
@@ -572,6 +578,7 @@ async def validate_startup_trivia_questions():
         _startup_validation_completed = True
         _startup_validation_lock = False
         print("🔓 STARTUP TRIVIA VALIDATION: Lock released, validation marked as completed")
+
 
 async def _background_question_generation(current_question_count: int):
     """Background task for generating trivia questions using the approval queue system"""
