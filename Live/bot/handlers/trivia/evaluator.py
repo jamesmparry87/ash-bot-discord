@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from ..ai_handler import _get_db, pacific_tz
 
+
 def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template: Dict[str, Any]) -> Dict[str, Any]:
     """Execute the answer logic and return question data"""
     import random
@@ -432,6 +433,7 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
 
     # Fallback - return empty dict if logic couldn't execute
     return {}
+
 
 def update_question_history(question_data: Dict[str, Any], category: str):
     """Update question history to track usage and implement cooldowns"""

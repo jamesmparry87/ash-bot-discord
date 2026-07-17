@@ -6,8 +6,16 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from ...config import JONESY_USER_ID, TRIVIA_CATEGORIES, CATEGORY_TEMPERATURES
-from ..ai_handler import call_ai_for_generation, call_ai_with_rate_limiting, _get_db, ai_enabled, robust_json_parse, pacific_tz
+from ...config import CATEGORY_TEMPERATURES, JONESY_USER_ID, TRIVIA_CATEGORIES
+from ..ai_handler import (
+    _get_db,
+    ai_enabled,
+    call_ai_for_generation,
+    call_ai_with_rate_limiting,
+    pacific_tz,
+    robust_json_parse,
+)
+
 
 def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
     """Get diverse question templates organized by category - IMPROVED for variety!"""
@@ -200,6 +208,7 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
         ]
     }
 
+
 def calculate_template_weights(templates: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
     """Calculate dynamic weights based on usage history and cooldowns"""
     current_time = datetime.now(pacific_tz)
@@ -224,6 +233,7 @@ def calculate_template_weights(templates: Dict[str, List[Dict[str, Any]]]) -> Di
                 template["weight"] *= penalty
 
     return templates
+
 
 def select_best_template(games_data: List[Dict[str, Any]],
                          avoid_templates: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
@@ -273,6 +283,7 @@ def select_best_template(games_data: List[Dict[str, Any]],
     template, category = random.choice(viable_templates)
     return {**template, "category": category}
 
+
 def is_template_viable(template: Dict[str, Any], games_data: List[Dict[str, Any]]) -> bool:
     """Check if template can be answered with available data"""
     answer_logic = template.get("answer_logic", "")
@@ -301,6 +312,7 @@ def is_template_viable(template: Dict[str, Any], games_data: List[Dict[str, Any]
             return False
 
     return True
+
 
 async def generate_ai_trivia_question(context: str = "trivia",
                                       avoid_questions: Optional[List[str]] = None,
@@ -959,6 +971,7 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
         print(f"❌ Error in diverse trivia generation: {e}")
         traceback.print_exc()
         return None
+
 
 async def generate_trivia_batch(batch_size: int = 10, context: str = "batch_generation") -> Dict[str, Any]:
     """
