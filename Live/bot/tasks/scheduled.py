@@ -1,7 +1,21 @@
 
+from .greetings import (
+    friday_morning_greeting,
+    monday_morning_greeting,
+    pops_annual_birthday_greeting,
+    tuesday_trivia_greeting,
+)
 from .sync_vods import monday_content_sync
-from .greetings import monday_morning_greeting, tuesday_trivia_greeting, friday_morning_greeting, pops_annual_birthday_greeting
-from .trivia_preflight import pre_trivia_approval, pre_trivia_preflight_check, check_emergency_trivia_approval, trigger_emergency_trivia_approval, validate_startup_trivia_questions, _background_question_generation, schedule_delayed_trivia_validation, _delayed_trivia_validation
+from .trivia_preflight import (
+    _background_question_generation,
+    _delayed_trivia_validation,
+    check_emergency_trivia_approval,
+    pre_trivia_approval,
+    pre_trivia_preflight_check,
+    schedule_delayed_trivia_validation,
+    trigger_emergency_trivia_approval,
+    validate_startup_trivia_questions,
+)
 
 """
 Scheduled Tasks Module
@@ -946,8 +960,8 @@ async def scheduled_ai_refresh():
                     print(f"🔄 TRIVIA POOL: Generating {needed} questions...")
 
                     try:
-                        from ..handlers.trivia.generator import generate_ai_trivia_question
                         from ..handlers.conversation_handler import start_jam_question_approval
+                        from ..handlers.trivia.generator import generate_ai_trivia_question
 
                         generated = 0
                         failed = 0

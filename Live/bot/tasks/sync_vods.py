@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, time, timedelta
 from typing import TYPE_CHECKING, Any, Dict, Optional, cast
 from zoneinfo import ZoneInfo
+
 import discord
 from discord.ext import tasks
 
@@ -17,7 +18,6 @@ from ..config import (
     POPS_ARCADE_USER_ID,
 )
 from ..database import get_database
-
 from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
 from ..handlers.message_handler import apply_pops_arcade_sarcasm
 
@@ -29,7 +29,9 @@ except ImportError:
     GameDataValidator = None
 
 try:
-    from ..integrations.twitch import detect_multiple_games_in_title, extract_game_name_from_title as extract_game_from_twitch, fetch_new_vods_since
+    from ..integrations.twitch import detect_multiple_games_in_title
+    from ..integrations.twitch import extract_game_name_from_title as extract_game_from_twitch
+    from ..integrations.twitch import fetch_new_vods_since
     from ..integrations.youtube import fetch_playlist_based_content_since
 except ImportError:
     pass
@@ -39,8 +41,7 @@ try:
 except ImportError:
     pass
 
-from .scheduled import getget_bot_instance(), _should_run_automated_tasks
-db = get_database()
+from .scheduled import =, _should_run_automated_tasks, db, get_database, getget_bot_instance
 
 
 
