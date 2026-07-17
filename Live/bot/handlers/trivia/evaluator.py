@@ -434,6 +434,7 @@ def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template:
     # Fallback - return empty dict if logic couldn't execute
     return {}
 
+
 def update_question_history(question_data: Dict[str, Any], category: str):
     """Update question history to track usage and implement cooldowns"""
     current_time = datetime.now(pacific_tz)

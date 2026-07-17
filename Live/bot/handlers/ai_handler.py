@@ -1925,20 +1925,6 @@ question_history = {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 async def create_ai_announcement_content(
         user_content: str,
         target_channel: str,
@@ -2161,8 +2147,6 @@ async def safe_initialize_ai_async():
         ai_enabled = False
         ai_status_message = "Async AI initialization failed (safe mode)"
         return False
-
-
 
 
 # Export list for proper module interface
