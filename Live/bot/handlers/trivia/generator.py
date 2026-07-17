@@ -6,8 +6,16 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from ...config import JONESY_USER_ID, TRIVIA_CATEGORIES, CATEGORY_TEMPERATURES
-from ..ai_handler import call_ai_for_generation, call_ai_with_rate_limiting, _get_db, ai_enabled, robust_json_parse, pacific_tz
+from ...config import CATEGORY_TEMPERATURES, JONESY_USER_ID, TRIVIA_CATEGORIES
+from ..ai_handler import (
+    _get_db,
+    ai_enabled,
+    call_ai_for_generation,
+    call_ai_with_rate_limiting,
+    pacific_tz,
+    robust_json_parse,
+)
+
 
 def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
     """Get diverse question templates organized by category - IMPROVED for variety!"""

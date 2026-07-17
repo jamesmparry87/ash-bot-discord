@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from ..ai_handler import _get_db, pacific_tz
 
+
 def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template: Dict[str, Any]) -> Dict[str, Any]:
     """Execute the answer logic and return question data"""
     import random
