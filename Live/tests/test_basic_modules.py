@@ -21,10 +21,10 @@ def test_core_modules():
             JONESY_USER_ID,
             VIOLATION_CHANNEL_ID,
         )
-        
+
         # Use imports to avoid unused variable lints
         _ = (GUILD_ID, JAM_USER_ID, JONESY_USER_ID, VIOLATION_CHANNEL_ID)
-        
+
         print("✅ Config module: SUCCESS")
         print(
             f"   - Constants loaded: {len([x for x in dir() if 'ID' in str(x)])} IDs")
@@ -36,10 +36,10 @@ def test_core_modules():
     # Test 2: Database module
     try:
         from bot.database import DatabaseManager, db
-        
+
         # Use imports to avoid unused variable lints
         _ = (DatabaseManager, db)
-        
+
         print("✅ Database module: SUCCESS")
         print(
             f"   - DatabaseManager class: {'Available' if DatabaseManager else 'Missing'}")
