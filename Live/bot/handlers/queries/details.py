@@ -186,7 +186,7 @@ async def handle_game_status_query(
             games_list = ", ".join(series_games_formatted)
 
             # Set disambiguation state in conversation context
-            from .context_manager import get_or_create_context
+            from ..context_manager import get_or_create_context
             context = get_or_create_context(message.author.id, message.channel.id)
             context.set_disambiguation_state(game_name.title(), "game_status", available_game_names)
 
@@ -323,7 +323,7 @@ async def handle_game_details_query(
             games_list = ", ".join(series_games_formatted)
 
             # Set disambiguation state in conversation context
-            from .context_manager import get_or_create_context
+            from ..context_manager import get_or_create_context
             context = get_or_create_context(message.author.id, message.channel.id)
             context.set_disambiguation_state(game_name.title(), "game_details", available_game_names)
 

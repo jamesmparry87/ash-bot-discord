@@ -57,7 +57,7 @@ async def handle_statistical_query(
                     await message.reply(response)
             else:
                 # Handle individual game playtime query - USE ALL GAMES, not just completed
-                games_by_playtime = db.get_games_by_playtime('DESC')  # type: ignore - FIXED: now uses all games
+                games_by_playtime = db.get_games_by_playtime('DESC')  # type: ignore
                 if games_by_playtime:
                     top_game = games_by_playtime[0]
                     total_hours = round(

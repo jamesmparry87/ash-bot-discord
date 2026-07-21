@@ -20,8 +20,9 @@ from ..config import (
 from ..database import get_database
 from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
 from ..handlers.message_handler import apply_pops_arcade_sarcasm
-from .scheduled import = , _should_run_automated_tasks, db, get_database, getget_bot_instance
+from .scheduled import _should_run_automated_tasks, get_bot_instance
 
+db = get_database()
 
 async def monday_morning_greeting():
     """Posts the approved Monday morning debrief to the chit-chat channel."""
@@ -42,7 +43,7 @@ async def monday_morning_greeting():
             print("✅ MONDAY GREETING: No approved message found. Task complete.")
             return
 
-        bot = getget_bot_instance()()
+        bot = get_bot_instance()
         if not bot:
             return
 
@@ -132,7 +133,7 @@ async def friday_morning_greeting():
             print("✅ FRIDAY GREETING: No approved message found. Task complete.")
             return
 
-        bot = getget_bot_instance()()
+        bot = get_bot_instance()
         if not bot:
             return
 
@@ -174,7 +175,7 @@ async def pops_annual_birthday_greeting():
     print(
         f"🎂 BIRTHDAY PROTOCOL: Initiating begrudging birthday wish for Pops at {texas_now.strftime('%H:%M Texas Time')}")
 
-    bot = getget_bot_instance()()
+    bot = get_bot_instance()
     if not bot:
         return
 
