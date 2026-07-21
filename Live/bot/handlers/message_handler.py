@@ -14,12 +14,6 @@ from typing import Any, Dict, Match, Optional, Tuple
 
 import discord
 from discord.ext import commands
-from ..persona.sarcasm import apply_pops_arcade_sarcasm
-from .queries.statistical import handle_statistical_query
-from .queries.comparisons import handle_comparison_query, handle_platform_comparison_query
-from .queries.details import handle_genre_query, handle_year_query, handle_game_status_query, handle_game_details_query, handle_recommendation_query
-from .queries.views import handle_youtube_views_query, handle_twitch_views_query, handle_total_views_query, handle_engagement_rate_query
-from .queries.context import handle_context_aware_query, _handle_ranking_follow_up
 
 from ..config import (
     BUSY_MESSAGE,
@@ -33,6 +27,7 @@ from ..config import (
 from ..database import DatabaseManager, get_database
 from ..persona.faq_handler import check_faq_match, get_role_aware_faq_response
 from ..persona.faqs import ASH_FAQ_RESPONSES
+from ..persona.sarcasm import apply_pops_arcade_sarcasm
 from ..utils.permissions import (
     cleanup_expired_aliases_sync,
     get_member_conversation_count,
@@ -51,6 +46,22 @@ from .context_manager import (
     get_or_create_context,
 )
 from .conversation_handler import start_announcement_conversation
+from .queries.comparisons import handle_comparison_query, handle_platform_comparison_query
+from .queries.context import _handle_ranking_follow_up, handle_context_aware_query
+from .queries.details import (
+    handle_game_details_query,
+    handle_game_status_query,
+    handle_genre_query,
+    handle_recommendation_query,
+    handle_year_query,
+)
+from .queries.statistical import handle_statistical_query
+from .queries.views import (
+    handle_engagement_rate_query,
+    handle_total_views_query,
+    handle_twitch_views_query,
+    handle_youtube_views_query,
+)
 
 db: DatabaseManager = get_database()
 
@@ -118,7 +129,8 @@ def smart_truncate_response(response: str, max_length: int = MAX_DISCORD_LENGTH,
 
         for sentence in sentences:
             # Check if adding the next sentence would exceed the limit
-            potential_length = len(truncated_response) + (len(sentence) if not truncated_response else len(sentence) + 1)
+            potential_length = len(truncated_response) + (len(sentence)
+                                                          if not truncated_response else len(sentence) + 1)
             if potential_length > available_length:
                 break
 
@@ -522,6 +534,7 @@ async def analyze_database_popularity() -> Optional[Dict[str, Any]]:
     except Exception as e:
         print(f"❌ Error analyzing database popularity: {e}")
         return None
+
 
 async def handle_trivia_reply(message: discord.Message) -> bool:
     """

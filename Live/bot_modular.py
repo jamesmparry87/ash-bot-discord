@@ -6,11 +6,11 @@ Main entry point for the refactored modular Discord bot with deployment blocker 
 
 import asyncio
 import os
+import re
 import sys
 from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
-import re
 
 import discord
 from discord.ext import commands
