@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, time, timedelta
 from typing import TYPE_CHECKING, Any, Dict, Optional, cast
 from zoneinfo import ZoneInfo
+
 import discord
 from discord.ext import tasks
 
@@ -17,15 +18,11 @@ from ..config import (
     POPS_ARCADE_USER_ID,
 )
 from ..database import get_database
-
 from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
 from ..handlers.message_handler import apply_pops_arcade_sarcasm
-
-from .scheduled import getget_bot_instance(), _should_run_automated_tasks
-db = get_database()
+from .scheduled import = , _should_run_automated_tasks, db, get_database, getget_bot_instance
 
 from ..handlers.trivia.generator import generate_ai_trivia_question, generate_trivia_batch
-
 
 
 async def pre_trivia_approval():
@@ -58,8 +55,8 @@ async def pre_trivia_approval():
 
             # Try to generate an emergency question
             try:
-                from ..handlers.trivia.generator import generate_ai_trivia_question
                 from ..handlers.conversation_handler import start_jam_question_approval
+                from ..handlers.trivia.generator import generate_ai_trivia_question
 
                 print("🔄 Attempting to generate emergency question for today's trivia")
                 emergency_question = await generate_ai_trivia_question()
@@ -138,6 +135,7 @@ async def pre_trivia_approval():
                 )
         except Exception:
             pass
+
 
 async def pre_trivia_preflight_check():
     """Verify approved question exists 15 minutes before trivia"""
@@ -218,6 +216,7 @@ async def pre_trivia_preflight_check():
     except Exception as e:
         print(f"❌ PRE-FLIGHT CHECK: Error during check: {e}")
 
+
 async def schedule_delayed_trivia_validation():
     """Schedule trivia validation to run 2 minutes after bot startup completion"""
     try:
@@ -230,6 +229,7 @@ async def schedule_delayed_trivia_validation():
 
     except Exception as e:
         print(f"❌ Error scheduling delayed trivia validation: {e}")
+
 
 async def _delayed_trivia_validation():
     """Internal function to handle the 2-minute delay and execute trivia validation"""
@@ -277,6 +277,7 @@ async def _delayed_trivia_validation():
         except Exception:
             print("❌ DELAYED TRIVIA VALIDATION: Failed to send error notification to JAM")
 
+
 async def check_emergency_trivia_approval():
     """Check if emergency approval is needed for build day scenarios"""
     try:
@@ -312,6 +313,7 @@ async def check_emergency_trivia_approval():
         import traceback
         traceback.print_exc()
 
+
 async def trigger_emergency_trivia_approval(minutes_remaining: float):
     """Trigger emergency approval process for build day scenarios"""
     try:
@@ -330,8 +332,8 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
 
                 # Try to generate an emergency question
                 try:
-                    from ..handlers.trivia.generator import generate_ai_trivia_question
                     from ..handlers.conversation_handler import start_jam_question_approval
+                    from ..handlers.trivia.generator import generate_ai_trivia_question
 
                     print("🔄 EMERGENCY APPROVAL: Generating emergency question")
                     emergency_question = await generate_ai_trivia_question("emergency_approval")
@@ -429,6 +431,7 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
         print(f"❌ EMERGENCY APPROVAL: Critical error in emergency approval: {e}")
         import traceback
         traceback.print_exc()
+
 
 async def validate_startup_trivia_questions():
     """Check that there are at least 5 active questions available on startup with non-blocking execution"""
@@ -576,6 +579,7 @@ async def validate_startup_trivia_questions():
         _startup_validation_lock = False
         print("🔓 STARTUP TRIVIA VALIDATION: Lock released, validation marked as completed")
 
+
 async def _background_question_generation(current_question_count: int):
     """Background task for generating trivia questions using the approval queue system"""
     try:
@@ -586,8 +590,8 @@ async def _background_question_generation(current_question_count: int):
         # Check if AI handler is available
         try:
             from ..config import JAM_USER_ID
-            from ..handlers.trivia.generator import generate_ai_trivia_question
             from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
+            from ..handlers.trivia.generator import generate_ai_trivia_question
             print("✅ BACKGROUND GENERATION: AI handler and conversation handler loaded")
         except ImportError as import_error:
             print(f"❌ BACKGROUND GENERATION: Failed to import required modules - {import_error}")

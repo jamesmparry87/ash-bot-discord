@@ -1,7 +1,21 @@
 
+from .greetings import (
+    friday_morning_greeting,
+    monday_morning_greeting,
+    pops_annual_birthday_greeting,
+    tuesday_trivia_greeting,
+)
 from .sync_vods import monday_content_sync
-from .greetings import monday_morning_greeting, tuesday_trivia_greeting, friday_morning_greeting, pops_annual_birthday_greeting
-from .trivia_preflight import pre_trivia_approval, pre_trivia_preflight_check, check_emergency_trivia_approval, trigger_emergency_trivia_approval, validate_startup_trivia_questions, _background_question_generation, schedule_delayed_trivia_validation, _delayed_trivia_validation
+from .trivia_preflight import (
+    _background_question_generation,
+    _delayed_trivia_validation,
+    check_emergency_trivia_approval,
+    pre_trivia_approval,
+    pre_trivia_preflight_check,
+    schedule_delayed_trivia_validation,
+    trigger_emergency_trivia_approval,
+    validate_startup_trivia_questions,
+)
 
 """
 Scheduled Tasks Module
@@ -380,31 +394,16 @@ async def safe_send_message(channel, content, mention_user_id=None):
 
 
 @tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))
-
 # Run at 9:00 AM UK time every Monday
-
-
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-
 # Run at 9:00 AM UK time every Tuesday - Trivia reminder
-
-
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-
 # Run at 9:00 AM UK time every Tuesday - Trivia question pre-approval
 # ✅ FIX #2: Moved from 10:00 to 9:00 to give JAM 2 hours for approval instead of 1
-
-
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-
 # Run at 10:45 AM UK time every Tuesday - Pre-flight check
-
-
 @tasks.loop(time=time(10, 45, tzinfo=ZoneInfo("Europe/London")))
-
 # Run at 11:00 AM UK time every Tuesday - Trivia Tuesday question posting
-
-
 @tasks.loop(time=time(11, 0, tzinfo=ZoneInfo("Europe/London")))
 async def trivia_tuesday():
     """Posts the approved Trivia Tuesday question and starts a persistent database session."""
@@ -848,17 +847,10 @@ async def friday_community_analysis():
 
 
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-
 ## DAILY TASKS ##
-
 # Run at 9:00 AM Texas (Central) time every day - Pops Birthday Check
-
-
 @tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("America/Chicago")))
-
 # Run at 00:00 PT (midnight Pacific Time) every day
-
-
 @tasks.loop(time=time(0, 0, tzinfo=ZoneInfo("US/Pacific")))
 async def scheduled_midnight_restart():
     """Automatically restart the bot at midnight Pacific Time to reset daily limits"""
@@ -946,8 +938,8 @@ async def scheduled_ai_refresh():
                     print(f"🔄 TRIVIA POOL: Generating {needed} questions...")
 
                     try:
-                        from ..handlers.trivia.generator import generate_ai_trivia_question
                         from ..handlers.conversation_handler import start_jam_question_approval
+                        from ..handlers.trivia.generator import generate_ai_trivia_question
 
                         generated = 0
                         failed = 0
@@ -1574,16 +1566,6 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         raise
 
 
-
-
-
-
-
-
-
-
-
-
 def start_all_scheduled_tasks(bot):
     """Start all scheduled tasks with enhanced monitoring"""
     try:
@@ -1722,11 +1704,3 @@ def stop_all_scheduled_tasks():
 
     except Exception as e:
         print(f"❌ Error stopping scheduled tasks: {e}")
-
-
-
-
-
-
-
-
