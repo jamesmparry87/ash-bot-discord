@@ -1,9 +1,15 @@
-import discord
 import re
-from typing import Dict, Any
+from typing import Any, Dict
+
+import discord
 
 from ..config import POPS_ARCADE_USER_ID
-from ..handlers.message_handler import smart_truncate_response, cleanup_expired_aliases_sync, get_user_communication_tier
+from ..handlers.message_handler import (
+    cleanup_expired_aliases_sync,
+    get_user_communication_tier,
+    smart_truncate_response,
+)
+
 
 def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
     """Apply sarcastic modifications to responses for Pops Arcade (Robust Version)"""

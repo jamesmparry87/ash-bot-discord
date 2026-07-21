@@ -19,12 +19,6 @@ import discord
 from discord.ext import commands
 
 from ..config import (
-from ..persona.sarcasm import apply_pops_arcade_sarcasm, handle_pineapple_pizza_enforcement
-from .queries.statistical import handle_statistical_query
-from .queries.comparisons import handle_comparison_query, handle_platform_comparison_query
-from .queries.details import handle_genre_query, handle_year_query, handle_game_status_query, handle_game_details_query, handle_recommendation_query
-from .queries.views import handle_youtube_views_query, handle_twitch_views_query, handle_total_views_query, handle_engagement_rate_query
-from .queries.context import handle_context_aware_query, _handle_ranking_follow_up
     BUSY_MESSAGE,
     ERROR_MESSAGE,
     JAM_USER_ID,
@@ -33,6 +27,30 @@ from .queries.context import handle_context_aware_query, _handle_ranking_follow_
     MOD_ALERT_CHANNEL_ID,
     POPS_ARCADE_USER_ID,
     VIOLATION_CHANNEL_ID,
+    ..persona.sarcasm,
+    .queries.comparisons,
+    .queries.context,
+    .queries.details,
+    .queries.statistical,
+    .queries.views,
+    _handle_ranking_follow_up,
+    apply_pops_arcade_sarcasm,
+    from,
+    handle_comparison_query,
+    handle_context_aware_query,
+    handle_engagement_rate_query,
+    handle_game_details_query,
+    handle_game_status_query,
+    handle_genre_query,
+    handle_pineapple_pizza_enforcement,
+    handle_platform_comparison_query,
+    handle_recommendation_query,
+    handle_statistical_query,
+    handle_total_views_query,
+    handle_twitch_views_query,
+    handle_year_query,
+    handle_youtube_views_query,
+    import,
 )
 from ..database import DatabaseManager, get_database
 from ..persona.faq_handler import check_faq_match, get_role_aware_faq_response

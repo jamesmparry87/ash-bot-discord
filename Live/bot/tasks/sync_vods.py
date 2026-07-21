@@ -41,7 +41,7 @@ try:
 except ImportError:
     pass
 
-from .scheduled import = , _should_run_automated_tasks, db, get_database, getget_bot_instance
+from .scheduled import =, _should_run_automated_tasks, db, get_database, getget_bot_instance
 
 
 async def monday_content_sync():

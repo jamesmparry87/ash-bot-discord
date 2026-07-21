@@ -20,9 +20,8 @@ from ..config import (
 from ..database import get_database
 from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
 from ..handlers.message_handler import apply_pops_arcade_sarcasm
-from .scheduled import = , _should_run_automated_tasks, db, get_database, getget_bot_instance
-
 from ..handlers.trivia.generator import generate_ai_trivia_question, generate_trivia_batch
+from .scheduled import =, _should_run_automated_tasks, db, get_database, getget_bot_instance
 
 
 async def pre_trivia_approval():
