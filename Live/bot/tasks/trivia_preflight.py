@@ -1,3 +1,4 @@
+from ..handlers.trivia.generator import generate_ai_trivia_question, generate_trivia_batch
 import asyncio
 import json
 import uuid
@@ -23,7 +24,6 @@ from ..handlers.message_handler import apply_pops_arcade_sarcasm
 from .scheduled import _should_run_automated_tasks, get_bot_instance
 
 db = get_database()
-from ..handlers.trivia.generator import generate_ai_trivia_question, generate_trivia_batch
 
 
 async def pre_trivia_approval():

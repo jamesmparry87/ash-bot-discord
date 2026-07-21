@@ -129,7 +129,8 @@ def smart_truncate_response(response: str, max_length: int = MAX_DISCORD_LENGTH,
 
         for sentence in sentences:
             # Check if adding the next sentence would exceed the limit
-            potential_length = len(truncated_response) + (len(sentence) if not truncated_response else len(sentence) + 1)
+            potential_length = len(truncated_response) + (len(sentence)
+                                                          if not truncated_response else len(sentence) + 1)
             if potential_length > available_length:
                 break
 
@@ -533,6 +534,7 @@ async def analyze_database_popularity() -> Optional[Dict[str, Any]]:
     except Exception as e:
         print(f"❌ Error analyzing database popularity: {e}")
         return None
+
 
 async def handle_trivia_reply(message: discord.Message) -> bool:
     """

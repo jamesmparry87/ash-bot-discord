@@ -24,6 +24,7 @@ from .scheduled import _should_run_automated_tasks, get_bot_instance
 
 db = get_database()
 
+
 async def monday_morning_greeting():
     """Posts the approved Monday morning debrief to the chit-chat channel."""
     if not _should_run_automated_tasks():

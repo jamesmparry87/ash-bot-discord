@@ -46,6 +46,7 @@ from .scheduled import _should_run_automated_tasks, get_bot_instance
 
 db = get_database()
 
+
 async def monday_content_sync():
     """Syncs new content and generates a debrief for approval."""
     if not _should_run_automated_tasks():
