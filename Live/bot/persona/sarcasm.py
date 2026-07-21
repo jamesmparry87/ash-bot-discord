@@ -4,10 +4,9 @@ from typing import Any, Dict
 import discord
 
 from ..config import POPS_ARCADE_USER_ID
-from ..handlers.message_handler import (
+from ..utils.permissions import (
     cleanup_expired_aliases_sync,
     get_user_communication_tier,
-    smart_truncate_response,
 )
 
 
@@ -73,6 +72,7 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
                 modified_response += " *[Processing reluctantly...]*"
 
     # Use the existing smart truncation function with custom suffix
+    from ..handlers.message_handler import smart_truncate_response
     modified_response = smart_truncate_response(
         modified_response,
         truncation_suffix=" *[Response truncated for efficiency...]*"

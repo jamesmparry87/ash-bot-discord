@@ -654,7 +654,11 @@ async def on_ready():
     # Send deployment success notification
     await send_deployment_success_dm(status_report)
 
-    print(f"\n🎉 Ash Bot modular architecture fully operational!")
+    has_issues = len(status_report.get("errors", [])) > 0 or len(status_report.get("command_failures", [])) > 0
+    if has_issues:
+        print(f"\n⚠️ Ash Bot modular architecture started with issues/degraded mode!")
+    else:
+        print(f"\n🎉 Ash Bot modular architecture fully operational!")
 
 
 @bot.event
