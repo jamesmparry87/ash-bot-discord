@@ -1,10 +1,11 @@
-import discord
 import re
-from typing import Match, Optional, Tuple, Any
+from typing import Any, Match, Optional, Tuple
 
+import discord
+
+from ...config import GAME_RECOMMENDATION_CHANNEL_ID, POPS_ARCADE_USER_ID
 from ...database import get_database
-from ...config import POPS_ARCADE_USER_ID, GAME_RECOMMENDATION_CHANNEL_ID
-from ..message_handler import smart_truncate_response, get_user_communication_tier
+from ..message_handler import get_user_communication_tier, smart_truncate_response
 
 db = get_database()
 
@@ -81,6 +82,7 @@ async def handle_youtube_views_query(message: discord.Message) -> None:
         print(f"❌ Error in YouTube views query: {e}")
         await message.reply("Database analysis encountered an anomaly during popularity assessment. Analytics systems require recalibration.")
 
+
 async def handle_twitch_views_query(message: discord.Message) -> None:
     """Handle Twitch view count queries."""
     try:
@@ -114,6 +116,7 @@ async def handle_twitch_views_query(message: discord.Message) -> None:
     except Exception as e:
         print(f"❌ Error in Twitch views query: {e}")
         await message.reply("Database analysis encountered an anomaly during Twitch engagement assessment.")
+
 
 async def handle_total_views_query(message: discord.Message) -> None:
     """Handle combined YouTube + Twitch view queries."""
@@ -157,6 +160,7 @@ async def handle_total_views_query(message: discord.Message) -> None:
     except Exception as e:
         print(f"❌ Error in total views query: {e}")
         await message.reply("Database analysis encountered an anomaly during cross-platform assessment.")
+
 
 async def handle_engagement_rate_query(message: discord.Message) -> None:
     """Handle engagement rate/efficiency queries."""

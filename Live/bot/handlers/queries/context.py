@@ -1,10 +1,11 @@
-import discord
 import re
-from typing import Match, Optional, Tuple, Any
+from typing import Any, Match, Optional, Tuple
 
+import discord
+
+from ...config import GAME_RECOMMENDATION_CHANNEL_ID, POPS_ARCADE_USER_ID
 from ...database import get_database
-from ...config import POPS_ARCADE_USER_ID, GAME_RECOMMENDATION_CHANNEL_ID
-from ..message_handler import smart_truncate_response, get_user_communication_tier
+from ..message_handler import get_user_communication_tier, smart_truncate_response
 
 db = get_database()
 
@@ -58,6 +59,7 @@ async def _handle_ranking_follow_up(message: discord.Message, context: 'Conversa
     full_response = "Continuing analysis of YouTube engagement data:\n\n" + "\n".join(response_parts)
     await message.reply(full_response)
     return True
+
 
 async def handle_context_aware_query(message: discord.Message) -> bool:
     """

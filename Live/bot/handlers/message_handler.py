@@ -22,6 +22,9 @@ from .queries.views import handle_youtube_views_query, handle_twitch_views_query
 from .queries.context import handle_context_aware_query, _handle_ranking_follow_up
 
 from ..config import (
+    BUSY_MESSAGE,
+    ERROR_MESSAGE,
+    JAM_USER_ID,
     JONESY_USER_ID,
     MEMBERS_CHANNEL_ID,
     MOD_ALERT_CHANNEL_ID,
@@ -81,8 +84,6 @@ def initialize_series_list():
 # Initialize NLTK components with robust error handling
 
 
-
-
 # Initialize NLTK resources on module load
 # Constants for response handling
 
@@ -136,10 +137,6 @@ def smart_truncate_response(response: str, max_length: int = MAX_DISCORD_LENGTH,
         return response[:available_length].rstrip() + "..."
 
 
-
-
-
-
 async def handle_strike_detection(
         message: discord.Message,
         bot: commands.Bot) -> bool:
@@ -189,8 +186,6 @@ async def handle_strike_detection(
             traceback.print_exc()
 
     return strikes_processed
-
-
 
 
 def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
@@ -390,32 +385,6 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
                 return query_type, match
 
     return "unknown", None
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 async def attempt_youtube_api_analysis(
