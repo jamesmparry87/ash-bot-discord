@@ -82,6 +82,7 @@ async def handle_youtube_views_query(message: discord.Message) -> None:
         print(f"❌ Error in YouTube views query: {e}")
         await message.reply("Database analysis encountered an anomaly during popularity assessment. Analytics systems require recalibration.")
 
+
 async def handle_twitch_views_query(message: discord.Message) -> None:
     """Handle Twitch view count queries."""
     try:
@@ -115,6 +116,7 @@ async def handle_twitch_views_query(message: discord.Message) -> None:
     except Exception as e:
         print(f"❌ Error in Twitch views query: {e}")
         await message.reply("Database analysis encountered an anomaly during Twitch engagement assessment.")
+
 
 async def handle_total_views_query(message: discord.Message) -> None:
     """Handle combined YouTube + Twitch view queries."""
@@ -158,6 +160,7 @@ async def handle_total_views_query(message: discord.Message) -> None:
     except Exception as e:
         print(f"❌ Error in total views query: {e}")
         await message.reply("Database analysis encountered an anomaly during cross-platform assessment.")
+
 
 async def handle_engagement_rate_query(message: discord.Message) -> None:
     """Handle engagement rate/efficiency queries."""

@@ -96,6 +96,7 @@ async def handle_genre_query(
         except Exception as e:
             print(f"Error in series query: {e}")
 
+
 async def handle_year_query(
         message: discord.Message,
         match: Match[str]) -> None:
@@ -137,6 +138,7 @@ async def handle_year_query(
             await message.reply(f"Database scan complete. No games from {year} found in Captain Jonesy's gaming archives.")
     except Exception as e:
         print(f"Error in year query: {e}")
+
 
 async def handle_game_status_query(
         message: discord.Message,
@@ -278,6 +280,7 @@ async def handle_game_status_query(
         game_title = game_name.title()
         await message.reply(f"Database analysis complete. No records of Captain Jonesy engaging '{game_title}' found in gaming archives. Mission parameters indicate this title has not been processed.")
 
+
 async def handle_game_details_query(
         message: discord.Message,
         match: Match[str]) -> None:
@@ -379,6 +382,7 @@ async def handle_game_details_query(
         # Game not found in played games database
         game_title = game_name.title()
         await message.reply(f"Database scan complete. No records of Captain Jonesy engaging '{game_title}' found in gaming archives. Temporal analysis unavailable for unprocessed titles.")
+
 
 async def handle_recommendation_query(
         message: discord.Message,

@@ -80,6 +80,7 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
 
     return modified_response
 
+
 async def handle_pineapple_pizza_enforcement(message: discord.Message) -> bool:
     """Handle pineapple pizza enforcement. Returns True if enforcement was triggered."""
     pineapple_negative_patterns = [

@@ -60,6 +60,7 @@ async def _handle_ranking_follow_up(message: discord.Message, context: 'Conversa
     await message.reply(full_response)
     return True
 
+
 async def handle_context_aware_query(message: discord.Message) -> bool:
     """
     Handle queries with conversation context awareness.

@@ -75,6 +75,7 @@ async def handle_comparison_query(message: discord.Message, match: Match[str]) -
 
     await message.reply(embed=embed)
 
+
 async def handle_platform_comparison_query(message: discord.Message) -> None:
     """Handle platform comparison queries."""
     try:

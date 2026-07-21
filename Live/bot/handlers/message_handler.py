@@ -35,7 +35,7 @@ from ..config import (
     .queries.views,
     _handle_ranking_follow_up,
     apply_pops_arcade_sarcasm,
-    from,
+    from ,
     handle_comparison_query,
     handle_context_aware_query,
     handle_engagement_rate_query,
@@ -50,7 +50,7 @@ from ..config import (
     handle_twitch_views_query,
     handle_year_query,
     handle_youtube_views_query,
-    import,
+    import ,
 )
 from ..database import DatabaseManager, get_database
 from ..persona.faq_handler import check_faq_match, get_role_aware_faq_response
@@ -109,8 +109,6 @@ def initialize_series_list():
     print(f"✅ Series list initialized with {len(_known_game_series)} unique series.")
 
 # Initialize NLTK components with robust error handling
-
-
 
 
 # Initialize NLTK resources on module load
@@ -172,10 +170,6 @@ def smart_truncate_response(response: str, max_length: int = MAX_DISCORD_LENGTH,
         return response[:available_length].rstrip() + "..."
 
 
-
-
-
-
 async def handle_strike_detection(
         message: discord.Message,
         bot: commands.Bot) -> bool:
@@ -225,8 +219,6 @@ async def handle_strike_detection(
             traceback.print_exc()
 
     return strikes_processed
-
-
 
 
 def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
@@ -434,32 +426,6 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
                 return query_type, match
 
     return "unknown", None
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 async def attempt_youtube_api_analysis(
