@@ -1,9 +1,10 @@
-from bot.handlers import ai_handler
-from bot.config import GEMINI_MODEL_CASCADE
 import asyncio
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock
+
+from bot.config import GEMINI_MODEL_CASCADE
+from bot.handlers import ai_handler
 
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

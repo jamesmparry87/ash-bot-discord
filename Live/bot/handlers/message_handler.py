@@ -9,44 +9,12 @@ Handles the main message processing logic for the Discord bot, including:
 - FAQ responses and user tier detection
 """
 
-from .queries.views import (
-    handle_engagement_rate_query,
-    handle_total_views_query,
-    handle_twitch_views_query,
-    handle_youtube_views_query,
-)
-from .queries.statistical import handle_statistical_query
-from .queries.details import (
-    handle_game_details_query,
-    handle_game_status_query,
-    handle_genre_query,
-    handle_recommendation_query,
-    handle_year_query,
-)
-from .queries.context import _handle_ranking_follow_up, handle_context_aware_query
-from .queries.comparisons import handle_comparison_query, handle_platform_comparison_query
-from .conversation_handler import start_announcement_conversation
-from .context_manager import (
-    detect_follow_up_intent,
-    get_or_create_context,
-)
-from .ai_handler import (
-    ai_enabled,
-    call_ai_with_rate_limiting,
-    filter_ai_response,
-)
-from ..utils.permissions import (
-    cleanup_expired_aliases_sync,
-    get_member_conversation_count,
-    get_user_communication_tier,
-    increment_member_conversation_count,
-    should_limit_member_conversation,
-    user_is_mod_by_id,
-)
-from ..persona.sarcasm import apply_pops_arcade_sarcasm
-from ..persona.faqs import ASH_FAQ_RESPONSES
-from ..persona.faq_handler import check_faq_match, get_role_aware_faq_response
-from ..database import DatabaseManager, get_database
+import re
+from typing import Any, Dict, Match, Optional, Tuple
+
+import discord
+from discord.ext import commands
+
 from ..config import (
     BUSY_MESSAGE,
     ERROR_MESSAGE,
@@ -56,11 +24,44 @@ from ..config import (
     MOD_ALERT_CHANNEL_ID,
     VIOLATION_CHANNEL_ID,
 )
-import re
-from typing import Any, Dict, Match, Optional, Tuple
-
-import discord
-from discord.ext import commands
+from ..database import DatabaseManager, get_database
+from ..persona.faq_handler import check_faq_match, get_role_aware_faq_response
+from ..persona.faqs import ASH_FAQ_RESPONSES
+from ..persona.sarcasm import apply_pops_arcade_sarcasm
+from ..utils.permissions import (
+    cleanup_expired_aliases_sync,
+    get_member_conversation_count,
+    get_user_communication_tier,
+    increment_member_conversation_count,
+    should_limit_member_conversation,
+    user_is_mod_by_id,
+)
+from .ai_handler import (
+    ai_enabled,
+    call_ai_with_rate_limiting,
+    filter_ai_response,
+)
+from .context_manager import (
+    detect_follow_up_intent,
+    get_or_create_context,
+)
+from .conversation_handler import start_announcement_conversation
+from .queries.comparisons import handle_comparison_query, handle_platform_comparison_query
+from .queries.context import _handle_ranking_follow_up, handle_context_aware_query
+from .queries.details import (
+    handle_game_details_query,
+    handle_game_status_query,
+    handle_genre_query,
+    handle_recommendation_query,
+    handle_year_query,
+)
+from .queries.statistical import handle_statistical_query
+from .queries.views import (
+    handle_engagement_rate_query,
+    handle_total_views_query,
+    handle_twitch_views_query,
+    handle_youtube_views_query,
+)
 
 # Constants for response handling
 MAX_DISCORD_LENGTH = 2000
