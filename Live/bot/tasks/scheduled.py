@@ -1,6 +1,5 @@
 
 
-
 """
 Scheduled Tasks Module
 
@@ -12,6 +11,24 @@ Handles all background scheduled tasks including:
 - Trivia Tuesday automation
 """
 
+from .trivia_preflight import (
+    _background_question_generation,
+    _delayed_trivia_validation,
+    check_emergency_trivia_approval,
+    pre_trivia_approval,
+    pre_trivia_preflight_check,
+    schedule_delayed_trivia_validation,
+    trigger_emergency_trivia_approval,
+    validate_startup_trivia_questions,
+)
+from .sync_vods import monday_content_sync
+from .greetings import (
+    friday_morning_greeting,
+    monday_morning_greeting,
+    pops_annual_birthday_greeting,
+    tuesday_trivia_greeting,
+)
+from datetime import time
 import asyncio
 import json
 import uuid
@@ -348,29 +365,12 @@ def get_bot_instance():
     print("❌ Bot instance not available for scheduled tasks.")
     return None
 
+
 # Apply schedules to the imported task functions
-from datetime import time
 
 # ---------------------------------------------------------
 # IMPORT TASK MODULES HERE TO AVOID CIRCULAR IMPORTS
 # ---------------------------------------------------------
-from .greetings import (
-    friday_morning_greeting,
-    monday_morning_greeting,
-    pops_annual_birthday_greeting,
-    tuesday_trivia_greeting,
-)
-from .sync_vods import monday_content_sync
-from .trivia_preflight import (
-    _background_question_generation,
-    _delayed_trivia_validation,
-    check_emergency_trivia_approval,
-    pre_trivia_approval,
-    pre_trivia_preflight_check,
-    schedule_delayed_trivia_validation,
-    trigger_emergency_trivia_approval,
-    validate_startup_trivia_questions,
-)
 
 monday_content_sync = tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))(monday_content_sync)
 monday_morning_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(monday_morning_greeting)
@@ -378,7 +378,9 @@ tuesday_trivia_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/Lon
 pre_trivia_approval = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(pre_trivia_approval)
 pre_trivia_preflight_check = tasks.loop(time=time(10, 45, tzinfo=ZoneInfo("Europe/London")))(pre_trivia_preflight_check)
 friday_morning_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(friday_morning_greeting)
-pops_annual_birthday_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("America/Chicago")))(pops_annual_birthday_greeting)
+pops_annual_birthday_greeting = tasks.loop(
+    time=time(9, 0, tzinfo=ZoneInfo("America/Chicago")))(pops_annual_birthday_greeting)
+
 
 async def safe_send_message(channel, content, mention_user_id=None):
     """Safely send a message with error handling and retries"""
@@ -407,6 +409,8 @@ async def safe_send_message(channel, content, mention_user_id=None):
 
 ## WEEKLY TASKS ##
 # Run at 11:00 AM UK time every Tuesday - Trivia Tuesday question posting
+
+
 @tasks.loop(time=time(11, 0, tzinfo=ZoneInfo("Europe/London")))
 async def trivia_tuesday():
     """Posts the approved Trivia Tuesday question and starts a persistent database session."""
@@ -848,6 +852,8 @@ async def friday_community_analysis():
 
 ## DAILY TASKS ##
 # Run at 00:00 PT (midnight Pacific Time) every day
+
+
 @tasks.loop(time=time(0, 0, tzinfo=ZoneInfo("US/Pacific")))
 async def scheduled_midnight_restart():
     """Automatically restart the bot at midnight Pacific Time to reset daily limits"""

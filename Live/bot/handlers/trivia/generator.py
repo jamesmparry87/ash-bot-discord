@@ -207,6 +207,8 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
             }
         ]
     }
+
+
 # Global history tracking for weights
 question_history: Dict[str, Dict[str, Any]] = {
     "category_cooldowns": {},
