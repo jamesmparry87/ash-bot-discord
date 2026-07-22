@@ -72,7 +72,7 @@ def apply_pops_arcade_sarcasm(response: str, user_id: int) -> str:
                 modified_response += " *[Processing reluctantly...]*"
 
     # Use the existing smart truncation function with custom suffix
-    from ..handlers.message_handler import smart_truncate_response
+    from ..utils.text_processing import smart_truncate_response
     modified_response = smart_truncate_response(
         modified_response,
         truncation_suffix=" *[Response truncated for efficiency...]*"

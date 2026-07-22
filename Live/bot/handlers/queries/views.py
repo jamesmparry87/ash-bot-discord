@@ -5,7 +5,8 @@ import discord
 
 from ...config import GAME_RECOMMENDATION_CHANNEL_ID, POPS_ARCADE_USER_ID
 from ...database import get_database
-from ..message_handler import get_user_communication_tier, smart_truncate_response
+from ..message_handler import get_user_communication_tier
+from ...utils.text_processing import smart_truncate_response
 
 db = get_database()
 

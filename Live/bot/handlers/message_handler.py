@@ -67,50 +67,6 @@ MAX_DISCORD_LENGTH = 2000
 TRUNCATION_BUFFER = 80  # Buffer for truncation message
 
 
-def smart_truncate_response(response: str, max_length: int = MAX_DISCORD_LENGTH,
-                            truncation_suffix: str = " *[Response truncated for message limits...]*") -> str:
-    """
-    Intelligently truncate a response using regex sentence tokenization.
-    Preserves sentence boundaries to avoid cutting off mid-sentence.
-    """
-    if len(response) <= max_length:
-        return response
-
-    # Calculate available space after accounting for truncation message
-    available_length = max_length - len(truncation_suffix)
-
-    if available_length <= 0:
-        return truncation_suffix[:max_length]
-
-    try:
-        # Use regex to split into sentences
-        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', response) if s.strip()]
-
-        truncated_response = ""
-        kept_sentences = []
-
-        for sentence in sentences:
-            # Check if adding the next sentence would exceed the limit
-            potential_length = len(truncated_response) + (len(sentence)
-                                                          if not truncated_response else len(sentence) + 1)
-            if potential_length > available_length:
-                break
-
-            kept_sentences.append(sentence)
-            truncated_response = " ".join(kept_sentences)
-
-        if not kept_sentences:
-            # If even the first sentence is too long, do a hard truncation
-            return response[:available_length].rstrip() + "..."
-
-        return truncated_response + truncation_suffix
-
-    except Exception as e:
-        print(f"Error in smart truncation: {e}")
-        # Fall back to simple truncation
-        return response[:available_length].rstrip() + "..."
-
-
 db: DatabaseManager = get_database()
 
 # This will hold our dynamic and static series names
