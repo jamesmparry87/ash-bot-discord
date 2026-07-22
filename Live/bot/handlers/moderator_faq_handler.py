@@ -7,7 +7,7 @@ the hardcoded if/elif chain in the main bot file.
 
 from typing import Any, Dict, List, Optional
 
-from moderator_faq_data import FAQ_DATA
+from bot.data.moderator_faq_data import FAQ_DATA
 
 
 class ModeratorFAQHandler:

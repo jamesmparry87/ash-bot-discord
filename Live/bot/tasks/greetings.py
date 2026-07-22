@@ -80,17 +80,18 @@ async def tuesday_trivia_greeting():
     print(f"🧠 Tuesday trivia greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
 
     try:
-        if not get_bot_instance():
+        bot = get_bot_instance()
+        if not bot:
             print("❌ Bot instance not available for Tuesday trivia greeting")
             return
 
-        guild = get_bot_instance().get_guild(GUILD_ID)
+        guild = bot.get_guild(GUILD_ID)
         if not guild:
             print("❌ Guild not found for Tuesday trivia greeting")
             return
 
         # Find members channel
-        members_channel = get_bot_instance().get_channel(MEMBERS_CHANNEL_ID)
+        members_channel = bot.get_channel(MEMBERS_CHANNEL_ID)
         if not members_channel or not isinstance(members_channel, discord.TextChannel):
             print("❌ Members channel not found for Tuesday trivia greeting")
             return

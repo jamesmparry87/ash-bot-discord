@@ -14,7 +14,7 @@ Usage:
 import os
 import sys
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 # Load environment variables from .env file
@@ -41,7 +41,7 @@ except Exception as e:
     print(f"⚠️ Could not load .env file: {e}")
 
 try:
-    import google.generativeai as genai
+    import google.generativeai as genai  # type: ignore
     GENAI_AVAILABLE = True
 except ImportError:
     GENAI_AVAILABLE = False
@@ -49,11 +49,8 @@ except ImportError:
     sys.exit(1)
 
 
-# Models to test (in priority order)
-GEMINI_MODELS_TO_TEST = [
-    'gemini-2.5-flash',       # Primary: Latest, fastest
-    'gemini-2.0-flash-001',   # Backup: Stable, reliable
-]
+# Import the single source of truth from config
+from bot.config import GEMINI_MODEL_CASCADE as GEMINI_MODELS_TO_TEST  # type: ignore
 
 
 def configure_api():

@@ -15,9 +15,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from ..config import (
+    ERROR_MESSAGE,
     FALLBACK_GREETINGS,
     FALLBACK_STATUS_RESPONSES,
     FALLBACK_WELCOME_RESPONSES,
+    GEMINI_MODEL_CASCADE,
     GUILD_ID,
     JAM_USER_ID,
     JONESY_USER_ID,
@@ -90,28 +92,28 @@ for logger_name in ["google_genai.models", "httpx"]:
 
 # LAZY DATABASE INITIALIZATION - Prevent blocking during module import
 # Database connection is established on first use, not at import time
-db = None  # type: ignore
+db: Any = None
 
 
 def _get_db():
     """Lazy database initialization - only connect when first needed"""
     global db
     if db is None:
-        db = get_database()  # type: ignore
+        db = get_database()
     return db
 
 
 # Import cache system
 CACHE_AVAILABLE = False
-get_cache = None  # type: ignore
+get_cache: Any = None
 
 
 def _init_cache():
     """Initialize cache system at runtime"""
     global CACHE_AVAILABLE, get_cache
     try:
-        from . import ai_cache as _ai_cache_module  # type: ignore
-        get_cache = _ai_cache_module.get_cache  # type: ignore
+        from . import ai_cache as _ai_cache_module
+        get_cache = _ai_cache_module.get_cache
         CACHE_AVAILABLE = True
         print("✅ AI cache system loaded")
     except ImportError as e:
@@ -132,7 +134,7 @@ except ImportError:
 
 # Try to import AI modules
 try:
-    from google import genai
+    from google import genai  # type: ignore
     GENAI_AVAILABLE = True
 except ImportError:
     genai = None
@@ -141,15 +143,8 @@ except ImportError:
 # AI Configuration
 GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
 
-# Gemini model cascade configuration (priority order)
-# These models are tested on startup and used with automatic fallback
-GEMINI_MODEL_CASCADE = [
-    'gemini-2.5-flash',       # Primary: Latest, fastest (PROVEN)
-    'gemini-2.5-pro',   # Backup: Stable, reliable
-]
-
 # AI instances (google-genai v1.56+ API)
-gemini_client = None  # Client instance with API key
+gemini_client: Any = None  # Client instance with API key
 ai_enabled = False
 ai_status_message = "Offline"
 primary_ai = None
@@ -1190,15 +1185,13 @@ async def call_ai_with_rate_limiting(prompt: str,
                     model_failure_counts[model_key] = model_failure_counts.get(model_key, 0) + 1
                     print(
                         f"📊 Model failure count for {model_key}: {model_failure_counts[model_key]}")
+                # Phase 3: Check for model-specific errors that warrant switching
+                should_switch_model = False
 
                 # Check if this is a quota exhaustion error
                 if check_quota_exhaustion(error_str):
-                    handle_quota_exhaustion()
-                    # Don't attempt backup for deployment safety
-                    return None, "quota_exhausted_no_backup"
-
-                # Phase 3: Check for model-specific errors that warrant switching
-                should_switch_model = False
+                    print("⚠️ Quota exhausted on current model. Allowing cascade to backup models.")
+                    should_switch_model = True
                 error_lower = error_str.lower()
 
                 # Errors that indicate model-specific issues
@@ -1778,7 +1771,7 @@ def setup_ai_provider(
             return False
 
         if name == "gemini":
-            global gemini_client, gemini_model
+            global gemini_client
             # New SDK uses client-based architecture
             gemini_client = module.Client(api_key=api_key)
             print(f"✅ Gemini client created (testing deferred to async initialization)")

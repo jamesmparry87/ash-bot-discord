@@ -1,21 +1,5 @@
 
-from .greetings import (
-    friday_morning_greeting,
-    monday_morning_greeting,
-    pops_annual_birthday_greeting,
-    tuesday_trivia_greeting,
-)
-from .sync_vods import monday_content_sync
-from .trivia_preflight import (
-    _background_question_generation,
-    _delayed_trivia_validation,
-    check_emergency_trivia_approval,
-    pre_trivia_approval,
-    pre_trivia_preflight_check,
-    schedule_delayed_trivia_validation,
-    trigger_emergency_trivia_approval,
-    validate_startup_trivia_questions,
-)
+
 
 """
 Scheduled Tasks Module
@@ -360,9 +344,40 @@ def get_bot_instance():
     global _bot_instance
     if _bot_instance and _bot_instance.user:
         return _bot_instance
+
     print("❌ Bot instance not available for scheduled tasks.")
     return None
 
+# ---------------------------------------------------------
+# IMPORT TASK MODULES HERE TO AVOID CIRCULAR IMPORTS
+# ---------------------------------------------------------
+from .greetings import (
+    friday_morning_greeting,
+    monday_morning_greeting,
+    pops_annual_birthday_greeting,
+    tuesday_trivia_greeting,
+)
+from .sync_vods import monday_content_sync
+from .trivia_preflight import (
+    _background_question_generation,
+    _delayed_trivia_validation,
+    check_emergency_trivia_approval,
+    pre_trivia_approval,
+    pre_trivia_preflight_check,
+    schedule_delayed_trivia_validation,
+    trigger_emergency_trivia_approval,
+    validate_startup_trivia_questions,
+)
+
+# Apply schedules to the imported task functions
+from datetime import time
+monday_content_sync = tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))(monday_content_sync)
+monday_morning_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(monday_morning_greeting)
+tuesday_trivia_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(tuesday_trivia_greeting)
+pre_trivia_approval = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(pre_trivia_approval)
+pre_trivia_preflight_check = tasks.loop(time=time(10, 45, tzinfo=ZoneInfo("Europe/London")))(pre_trivia_preflight_check)
+friday_morning_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(friday_morning_greeting)
+pops_annual_birthday_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("America/Chicago")))(pops_annual_birthday_greeting)
 
 async def safe_send_message(channel, content, mention_user_id=None):
     """Safely send a message with error handling and retries"""
@@ -390,19 +405,6 @@ async def safe_send_message(channel, content, mention_user_id=None):
         return False
 
 ## WEEKLY TASKS ##
-# Run at 8:30 AM UK time every Monday
-
-
-@tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))
-# Run at 9:00 AM UK time every Monday
-@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-# Run at 9:00 AM UK time every Tuesday - Trivia reminder
-@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-# Run at 9:00 AM UK time every Tuesday - Trivia question pre-approval
-# ✅ FIX #2: Moved from 10:00 to 9:00 to give JAM 2 hours for approval instead of 1
-@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-# Run at 10:45 AM UK time every Tuesday - Pre-flight check
-@tasks.loop(time=time(10, 45, tzinfo=ZoneInfo("Europe/London")))
 # Run at 11:00 AM UK time every Tuesday - Trivia Tuesday question posting
 @tasks.loop(time=time(11, 0, tzinfo=ZoneInfo("Europe/London")))
 async def trivia_tuesday():
@@ -843,13 +845,7 @@ async def friday_community_analysis():
             f'An unexpected error occurred during the Friday community analysis: {str(e)[:200]}'
         )
 
-# Run at 9:00 AM UK time every Friday - Friday morning greeting
-
-
-@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
 ## DAILY TASKS ##
-# Run at 9:00 AM Texas (Central) time every day - Pops Birthday Check
-@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("America/Chicago")))
 # Run at 00:00 PT (midnight Pacific Time) every day
 @tasks.loop(time=time(0, 0, tzinfo=ZoneInfo("US/Pacific")))
 async def scheduled_midnight_restart():

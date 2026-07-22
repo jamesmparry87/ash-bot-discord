@@ -465,7 +465,7 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
             continue
 
     # Process Twitch VODs with smart extraction and IGDB enrichment
-    bot = getget_bot_instance()()
+    bot = get_bot_instance()
     skipped_vods = []  # Track VODs that couldn't be named this run (timed out or explicitly skipped)
     for vod in twitch_vods:
         try:

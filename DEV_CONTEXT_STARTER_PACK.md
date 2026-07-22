@@ -849,11 +849,11 @@ model = genai.GenerativeModel('gemini-pro')
 ```python
 from google import genai
 client = genai.Client(api_key=KEY)
-response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+response = client.models.generate_content(model='gemini-3.6-flash', contents=prompt)
 ```
 
 **Active Models:**
-- Primary: `gemini-2.5-flash`
+- Primary: `gemini-3.6-flash`
 - Backup: `gemini-2.0-flash-001`
 
 **Key Changes:**

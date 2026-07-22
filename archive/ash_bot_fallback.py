@@ -749,7 +749,7 @@ def setup_ai_provider(
         if name == "gemini":
             global gemini_model
             module.configure(api_key=api_key)
-            gemini_model = module.GenerativeModel('gemini-1.5-flash')
+            gemini_model = module.GenerativeModel('gemini-3.6-flash')
             test_response = gemini_model.generate_content("Test")
             if test_response and hasattr(
                     test_response, 'text') and test_response.text:

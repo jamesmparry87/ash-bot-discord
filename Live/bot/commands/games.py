@@ -13,7 +13,7 @@ from discord.ext import commands
 
 from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..database import get_database
-from ..tasks.scheduled import perform_full_content_sync
+from ..tasks.sync_vods import perform_full_content_sync
 
 # Get database instance
 db = get_database()
@@ -1399,7 +1399,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             # Import IGDB integration and helper functions
             try:
                 from ..integrations.igdb import should_use_igdb_data, validate_and_enrich
-                from ..tasks.scheduled import clean_series_name, map_genre_to_standard
+                from ..tasks.sync_vods import clean_series_name, map_genre_to_standard
                 igdb_available = True
             except ImportError as import_error:
                 await ctx.send(f"❌ **IGDB integration not available:** {str(import_error)}\n\n*Cannot proceed without IGDB module.*")

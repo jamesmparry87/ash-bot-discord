@@ -45,7 +45,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 # --- Gemini AI Setup ---
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-3.6-flash')
     print("✅ Gemini AI configured successfully")
 else:
     model = None

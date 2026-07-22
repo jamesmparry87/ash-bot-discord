@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from ...config import CATEGORY_TEMPERATURES, JONESY_USER_ID, TRIVIA_CATEGORIES
+from ...config import JONESY_USER_ID
 from ..ai_handler import (
     _get_db,
     ai_enabled,
@@ -207,6 +207,11 @@ def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
             }
         ]
     }
+# Global history tracking for weights
+question_history: Dict[str, Dict[str, Any]] = {
+    "category_cooldowns": {},
+    "template_usage": {}
+}
 
 
 def calculate_template_weights(templates: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
