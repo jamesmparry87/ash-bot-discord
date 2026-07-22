@@ -9,6 +9,7 @@ from typing import Optional
 
 MAX_DISCORD_LENGTH = 2000
 
+
 def smart_truncate_response(response: str, max_length: int = MAX_DISCORD_LENGTH,
                             truncation_suffix: str = " *[Response truncated for message limits...]*") -> str:
     """
@@ -51,6 +52,7 @@ def smart_truncate_response(response: str, max_length: int = MAX_DISCORD_LENGTH,
         print(f"Error in smart truncation: {e}")
         # Fall back to simple truncation
         return response[:available_length].rstrip() + "..."
+
 
 def cleanup_game_name(name: str) -> str:
     """
