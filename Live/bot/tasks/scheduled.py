@@ -348,6 +348,9 @@ def get_bot_instance():
     print("❌ Bot instance not available for scheduled tasks.")
     return None
 
+# Apply schedules to the imported task functions
+from datetime import time
+
 # ---------------------------------------------------------
 # IMPORT TASK MODULES HERE TO AVOID CIRCULAR IMPORTS
 # ---------------------------------------------------------
@@ -369,8 +372,6 @@ from .trivia_preflight import (
     validate_startup_trivia_questions,
 )
 
-# Apply schedules to the imported task functions
-from datetime import time
 monday_content_sync = tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))(monday_content_sync)
 monday_morning_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(monday_morning_greeting)
 tuesday_trivia_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(tuesday_trivia_greeting)

@@ -1,14 +1,15 @@
 import asyncio
 import os
 import sys
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from bot.handlers import ai_handler
 from bot.config import GEMINI_MODEL_CASCADE
+from bot.handlers import ai_handler
+
 
 async def run_test():
     print("🚀 Starting Gemini Model Fallback / Cascade Logic Test\n")
