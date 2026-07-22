@@ -11,24 +11,6 @@ Handles all background scheduled tasks including:
 - Trivia Tuesday automation
 """
 
-from .trivia_preflight import (
-    _background_question_generation,
-    _delayed_trivia_validation,
-    check_emergency_trivia_approval,
-    pre_trivia_approval,
-    pre_trivia_preflight_check,
-    schedule_delayed_trivia_validation,
-    trigger_emergency_trivia_approval,
-    validate_startup_trivia_questions,
-)
-from .sync_vods import monday_content_sync
-from .greetings import (
-    friday_morning_greeting,
-    monday_morning_greeting,
-    pops_annual_birthday_greeting,
-    tuesday_trivia_greeting,
-)
-from datetime import time
 import asyncio
 import json
 import uuid
@@ -47,6 +29,23 @@ from ..config import (
     JONESY_USER_ID,
     MEMBERS_CHANNEL_ID,
     POPS_ARCADE_USER_ID,
+)
+from .greetings import (
+    friday_morning_greeting,
+    monday_morning_greeting,
+    pops_annual_birthday_greeting,
+    tuesday_trivia_greeting,
+)
+from .sync_vods import monday_content_sync
+from .trivia_preflight import (
+    _background_question_generation,
+    _delayed_trivia_validation,
+    check_emergency_trivia_approval,
+    pre_trivia_approval,
+    pre_trivia_preflight_check,
+    schedule_delayed_trivia_validation,
+    trigger_emergency_trivia_approval,
+    validate_startup_trivia_questions,
 )
 
 # Data quality utilities
