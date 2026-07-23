@@ -181,16 +181,16 @@ async def retry_with_timeout(
     return None
 
 
+# Need these directly imported since they are accessed globally in the file
 # Global state for trivia and bot instance
 from .utils import (
-    initialize_bot_instance,
-    get_bot_instance,
-    _should_run_automated_tasks,
     _detect_bot_environment,
+    _should_run_automated_tasks,
+    get_bot_instance,
+    initialize_bot_instance,
+    is_bot_ready,
 )
 
-# Need these directly imported since they are accessed globally in the file
-from .utils import is_bot_ready
 _startup_validation_lock = False
 _startup_validation_completed = False
 

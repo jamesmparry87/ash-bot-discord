@@ -1,15 +1,15 @@
 import re
+from datetime import datetime, timedelta
 from typing import Any, Match, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 import discord
 
 from ...config import GAME_RECOMMENDATION_CHANNEL_ID, POPS_ARCADE_USER_ID
 from ...database import get_database
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
-from ..message_handler import get_user_communication_tier, apply_pops_arcade_sarcasm, attempt_youtube_api_analysis
 from ...utils.text_processing import smart_truncate_response
 from ..context_manager import get_or_create_context
+from ..message_handler import apply_pops_arcade_sarcasm, attempt_youtube_api_analysis, get_user_communication_tier
 
 db = get_database()
 
