@@ -5,6 +5,7 @@ db = get_database()
 # This will hold our dynamic and static series names
 _known_game_series: set[str] = set()
 
+
 def initialize_series_list():
     """Fetches series from the DB and merges them with a static list."""
     global _known_game_series
@@ -27,6 +28,7 @@ def initialize_series_list():
     # Combine them
     _known_game_series = db_series_names.union(static_series_keywords)
     print(f"✅ Series list initialized with {len(_known_game_series)} unique series.")
+
 
 def get_known_game_series() -> set[str]:
     """Returns the set of known game series."""
