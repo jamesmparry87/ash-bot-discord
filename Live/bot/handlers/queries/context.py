@@ -78,7 +78,7 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
         handle_year_query,
     )
     from .statistical import handle_statistical_query
-    
+
     try:
         # Clean up expired contexts periodically
         cleanup_expired_contexts()
@@ -365,7 +365,7 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
                 handle_year_query,
             )
             from .statistical import handle_statistical_query
-            
+
             query_type, match = route_query(resolved_content)
 
             if query_type != "unknown" and match:

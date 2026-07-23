@@ -11,6 +11,13 @@ Handles all background scheduled tasks including:
 - Trivia Tuesday automation
 """
 
+from .utils import (
+    _detect_bot_environment,
+    _should_run_automated_tasks,
+    get_bot_instance,
+    initialize_bot_instance,
+    is_bot_ready,
+)
 import asyncio
 import json
 import uuid
@@ -183,13 +190,6 @@ async def retry_with_timeout(
 
 # Need these directly imported since they are accessed globally in the file
 # Global state for trivia and bot instance
-from .utils import (
-    _detect_bot_environment,
-    _should_run_automated_tasks,
-    get_bot_instance,
-    initialize_bot_instance,
-    is_bot_ready,
-)
 
 _startup_validation_lock = False
 _startup_validation_completed = False

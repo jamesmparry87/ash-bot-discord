@@ -17,6 +17,7 @@ _bot_ready = False  # Track if bot is fully ready
 # Environment detection for staging vs live bot
 _is_live_bot = None  # Cache the environment detection
 
+
 def _detect_bot_environment():
     """
     Detect if this is the live bot or staging bot.
