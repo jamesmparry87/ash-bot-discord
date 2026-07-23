@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional
 
+
 async def attempt_youtube_api_analysis(
         game_name: Optional[str] = None, query_type: str = "general") -> Optional[Dict[str, Any]]:
     """Attempt to use YouTube API for real view count data with intelligent context awareness."""
