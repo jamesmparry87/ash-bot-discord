@@ -5,10 +5,10 @@ import discord
 
 from ...config import GAME_RECOMMENDATION_CHANNEL_ID, POPS_ARCADE_USER_ID
 from ...database import get_database
-from ..message_handler import get_user_communication_tier
 from ...utils.text_processing import smart_truncate_response
 from ...persona.sarcasm import apply_pops_arcade_sarcasm
 from ..context_manager import get_or_create_context, cleanup_expired_contexts, ConversationContext
+from ..message_handler import get_user_communication_tier
 
 db = get_database()
 
@@ -69,6 +69,10 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
     Handle queries with conversation context awareness.
     Returns True if query was processed, False if it should fall back to normal processing.
     """
+    from ..message_handler import route_query, should_use_context, detect_follow_up_intent, resolve_context_references
+    from .details import handle_game_status_query, handle_game_details_query, handle_genre_query, handle_year_query, handle_recommendation_query
+    from .statistical import handle_statistical_query
+    
     try:
         # Clean up expired contexts periodically
         cleanup_expired_contexts()
