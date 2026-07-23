@@ -71,7 +71,6 @@ TRUNCATION_BUFFER = 80  # Buffer for truncation message
 db: DatabaseManager = get_database()
 
 
-
 # Initialize NLTK components with robust error handling
 
 

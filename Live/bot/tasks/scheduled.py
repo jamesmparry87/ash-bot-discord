@@ -11,13 +11,6 @@ Handles all background scheduled tasks including:
 - Trivia Tuesday automation
 """
 
-from .utils import (
-    _detect_bot_environment,
-    _should_run_automated_tasks,
-    get_bot_instance,
-    initialize_bot_instance,
-    is_bot_ready,
-)
 import asyncio
 import json
 import uuid
@@ -53,6 +46,13 @@ from .trivia_preflight import (
     schedule_delayed_trivia_validation,
     trigger_emergency_trivia_approval,
     validate_startup_trivia_questions,
+)
+from .utils import (
+    _detect_bot_environment,
+    _should_run_automated_tasks,
+    get_bot_instance,
+    initialize_bot_instance,
+    is_bot_ready,
 )
 
 # Data quality utilities
