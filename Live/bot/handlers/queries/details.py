@@ -5,8 +5,9 @@ import discord
 
 from ...config import GAME_RECOMMENDATION_CHANNEL_ID, POPS_ARCADE_USER_ID
 from ...database import get_database
-from ..message_handler import get_user_communication_tier
+from ..message_handler import get_user_communication_tier, get_known_game_series
 from ...utils.text_processing import smart_truncate_response
+from ..context_manager import get_or_create_context
 
 db = get_database()
 
@@ -156,7 +157,7 @@ async def handle_game_status_query(
     # Check if the query matches a known series from our dynamic list
     is_series_query = False
     if not any(char.isdigit() for char in game_name):  # Don't trigger for "GTA 5"
-        for series in _known_game_series:
+        for series in get_known_game_series():
             if series in game_name_lower:
                 is_series_query = True
                 break
@@ -297,7 +298,7 @@ async def handle_game_details_query(
     # Check if the query matches a known series from our dynamic list
     is_series_query = False
     if not any(char.isdigit() for char in game_name):  # Don't trigger for "GTA 5"
-        for series in _known_game_series:
+        for series in get_known_game_series():
             if series in game_name_lower:
                 is_series_query = True
                 break

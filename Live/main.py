@@ -412,10 +412,10 @@ async def initialize_modular_components():
         from bot.handlers.message_handler import (
             handle_dm_conversations,
             handle_general_conversation,
-            handle_pineapple_pizza_enforcement,
             handle_strike_detection,
             process_gaming_query_with_context,
         )
+        from bot.persona.sarcasm import handle_pineapple_pizza_enforcement
 
         message_handler_functions = {
             'handle_strike_detection': handle_strike_detection,
@@ -1080,7 +1080,7 @@ async def on_message(message):
     # STAGING BOT RESTRICTION: Only allow Discord Mods channel + DMs to James
     try:
         # Import staging detection
-        from bot.tasks.scheduled import _detect_bot_environment
+        from bot.tasks.utils import _detect_bot_environment
 
         is_live = _detect_bot_environment()
         if is_live is False:  # Explicitly check for staging bot

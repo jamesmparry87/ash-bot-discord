@@ -7,6 +7,8 @@ from ...config import GAME_RECOMMENDATION_CHANNEL_ID, POPS_ARCADE_USER_ID
 from ...database import get_database
 from ..message_handler import get_user_communication_tier
 from ...utils.text_processing import smart_truncate_response
+from ...persona.sarcasm import apply_pops_arcade_sarcasm
+from ..context_manager import get_or_create_context, cleanup_expired_contexts, ConversationContext
 
 db = get_database()
 
@@ -344,6 +346,10 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
             print(f"Context info: {context_info}")
 
             # Route the resolved query through normal processing
+            from ..message_handler import route_query
+            from .details import handle_game_status_query, handle_game_details_query, handle_genre_query, handle_year_query, handle_recommendation_query
+            from .statistical import handle_statistical_query
+            
             query_type, match = route_query(resolved_content)
 
             if query_type != "unknown" and match:
@@ -389,6 +395,7 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
                 return True
 
         # If we detected ambiguous content but couldn't resolve it
+        from ..message_handler import should_use_context
         if should_use_context(message.content):
             # Provide helpful error message indicating missing context
             await message.reply(f"Sir Decent Jam, accessing player data. insufficient information provided. Please specify the \"she\" and the game title for accurate playtime retrieval.")

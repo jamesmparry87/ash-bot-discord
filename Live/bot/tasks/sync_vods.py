@@ -34,15 +34,19 @@ try:
     from ..integrations.twitch import fetch_new_vods_since
     from ..integrations.youtube import fetch_playlist_based_content_since
 except ImportError:
-    pass
+    detect_multiple_games_in_title = None
+    extract_game_from_twitch = None
+    fetch_new_vods_since = None
+    fetch_playlist_based_content_since = None
 
 try:
     from ..handlers.conversation_handler import notify_jam_weekly_message_failure, start_weekly_announcement_approval
 except ImportError:
-    pass
+    notify_jam_weekly_message_failure = None
+    start_weekly_announcement_approval = None
 
 from ..database import get_database
-from .scheduled import _should_run_automated_tasks, get_bot_instance
+from .utils import _should_run_automated_tasks, get_bot_instance
 
 db = get_database()
 

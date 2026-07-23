@@ -20,7 +20,7 @@ from ..config import (
 from ..database import get_database
 from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
 from ..handlers.message_handler import apply_pops_arcade_sarcasm
-from .scheduled import _should_run_automated_tasks, get_bot_instance
+from .utils import _should_run_automated_tasks, get_bot_instance
 
 db = get_database()
 
