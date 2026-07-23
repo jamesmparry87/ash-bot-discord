@@ -12,6 +12,7 @@ question_history = {
     "category_cooldowns": {}
 }
 
+
 def execute_answer_logic(logic: str, games_data: List[Dict[str, Any]], template: Dict[str, Any]) -> Dict[str, Any]:
     """Execute the answer logic and return question data"""
     import random

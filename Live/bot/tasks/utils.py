@@ -5,8 +5,10 @@ Contains state management for the bot instance and environment detection.
 
 import asyncio
 import os
+
 import discord
-from ..config import GUILD_ID, CHIT_CHAT_CHANNEL_ID, MEMBERS_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID
+
+from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID, GUILD_ID, MEMBERS_CHANNEL_ID
 
 # Global state for trivia and bot instance
 _bot_instance = None  # Store the bot instance globally
@@ -14,6 +16,7 @@ _bot_ready = False  # Track if bot is fully ready
 
 # Environment detection for staging vs live bot
 _is_live_bot = None  # Cache the environment detection
+
 
 def _detect_bot_environment():
     """
