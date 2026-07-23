@@ -77,7 +77,7 @@ except Exception as db_error:
     db = None
 
 from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
-from ..handlers.message_handler import apply_pops_arcade_sarcasm
+from ..persona.sarcasm import apply_pops_arcade_sarcasm
 
 # Import integrations
 try:
