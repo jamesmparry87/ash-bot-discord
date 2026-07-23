@@ -647,7 +647,8 @@ async def on_ready():
 
     try:
         from bot.handlers import message_handler
-        message_handler.initialize_series_list()
+        from bot.utils.game_series import initialize_series_list
+        initialize_series_list()
     except Exception as e:
         print(f"⚠️ Failed to initialize dynamic series list: {e}")
 
