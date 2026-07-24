@@ -69,8 +69,8 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
     Handle queries with conversation context awareness.
     Returns True if query was processed, False if it should fall back to normal processing.
     """
-    from ..message_handler import route_query
     from ..context_manager import detect_follow_up_intent, resolve_context_references, should_use_context
+    from ..message_handler import route_query
     from .details import (
         handle_game_details_query,
         handle_game_status_query,
