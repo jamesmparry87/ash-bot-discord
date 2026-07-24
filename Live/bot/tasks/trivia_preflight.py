@@ -1,4 +1,8 @@
 import asyncio
+
+_startup_validation_lock = False
+_startup_validation_completed = False
+
 import json
 import uuid
 from datetime import datetime, time, timedelta

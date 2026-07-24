@@ -133,7 +133,6 @@ RATE_LIMIT_COOLDOWN = 30
 GEMINI_MODEL_CASCADE = [
     'gemini-3.6-flash',       # Primary: Latest, fastest
     'gemini-3.5-flash',       # Backup: Stable, reliable
-    'gemini-3-flash',         # Legacy: Standard, basic
 ]
 
 # Enhanced Standard Messages with Ash Character Voice
