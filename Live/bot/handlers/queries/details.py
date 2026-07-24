@@ -189,7 +189,8 @@ async def handle_game_status_query(
                 series_games_formatted = []
                 available_game_names = []
                 for game in series_games_data:
-                    episodes = f" ({game.get('total_episodes', 0)} episodes)" if game.get("total_episodes", 0) > 0 else ""
+                    episodes = f" ({game.get('total_episodes', 0)} episodes)" if game.get(
+                        "total_episodes", 0) > 0 else ""
                     status = game.get("completion_status", "unknown")
                     series_games_formatted.append(f"'{game['canonical_name']}'{episodes} - {status}")
                     available_game_names.append(game['canonical_name'])
