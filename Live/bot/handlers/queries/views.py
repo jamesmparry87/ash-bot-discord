@@ -7,11 +7,11 @@ import discord
 
 from ...config import GAME_RECOMMENDATION_CHANNEL_ID, POPS_ARCADE_USER_ID
 from ...database import get_database
+from ...persona.sarcasm import apply_pops_arcade_sarcasm
 from ...utils.text_processing import smart_truncate_response
+from ...utils.youtube_helpers import attempt_youtube_api_analysis
 from ..context_manager import get_or_create_context
 from ..message_handler import get_user_communication_tier
-from ...persona.sarcasm import apply_pops_arcade_sarcasm
-from ...utils.youtube_helpers import attempt_youtube_api_analysis
 
 db = get_database()
 

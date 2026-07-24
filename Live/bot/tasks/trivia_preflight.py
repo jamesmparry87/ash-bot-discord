@@ -23,8 +23,8 @@ from ..config import (
 )
 from ..database import get_database
 from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
-from ..persona.sarcasm import apply_pops_arcade_sarcasm
 from ..handlers.trivia.generator import generate_ai_trivia_question, generate_trivia_batch
+from ..persona.sarcasm import apply_pops_arcade_sarcasm
 from .utils import _should_run_automated_tasks, get_bot_instance
 
 db = get_database()
