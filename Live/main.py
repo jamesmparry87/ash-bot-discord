@@ -722,6 +722,7 @@ async def on_command_error(ctx, error):
         content = ctx.message.content.strip()
         if content.startswith('!'):
             attempted_command = content.split()[0][1:]  # Remove the ! prefix
+            print(f"⚠️ Command not found: !{attempted_command} by {ctx.author}")
 
             # Common command typos and suggestions
             suggestions = {

@@ -181,25 +181,31 @@ async def handle_game_status_query(
         series_games_data = db.get_series_games(game_name)
 
         if series_games_data:
-            series_games_formatted = []
-            available_game_names = []
-            for game in series_games_data:
-                episodes = f" ({game.get('total_episodes', 0)} episodes)" if game.get("total_episodes", 0) > 0 else ""
-                status = game.get("completion_status", "unknown")
-                series_games_formatted.append(f"'{game['canonical_name']}'{episodes} - {status}")
-                available_game_names.append(game['canonical_name'])
+            if len(series_games_data) == 1:
+                # Auto-resolve single option disambiguation
+                game_name = series_games_data[0]['canonical_name']
+                is_series_query = False
+            else:
+                series_games_formatted = []
+                available_game_names = []
+                for game in series_games_data:
+                    episodes = f" ({game.get('total_episodes', 0)} episodes)" if game.get("total_episodes", 0) > 0 else ""
+                    status = game.get("completion_status", "unknown")
+                    series_games_formatted.append(f"'{game['canonical_name']}'{episodes} - {status}")
+                    available_game_names.append(game['canonical_name'])
 
-            games_list = ", ".join(series_games_formatted)
+                games_list = ", ".join(series_games_formatted)
 
-            # Set disambiguation state in conversation context
-            from ..context_manager import get_or_create_context
-            context = get_or_create_context(message.author.id, message.channel.id)
-            context.set_disambiguation_state(game_name.title(), "game_status", available_game_names)
+                # Set disambiguation state in conversation context
+                from ..context_manager import get_or_create_context
+                context = get_or_create_context(message.author.id, message.channel.id)
+                context.set_disambiguation_state(game_name.title(), "game_status", available_game_names)
 
-            await message.reply(f"Database analysis indicates multiple entries exist in the '{game_name.title()}' series. Captain Jonesy's gaming archives contain: {games_list}. Specify which particular iteration you are referencing for detailed mission data.")
+                await message.reply(f"Database analysis indicates multiple entries exist in the '{game_name.title()}' series. Captain Jonesy's gaming archives contain: {games_list}. Specify which particular iteration you are referencing for detailed mission data.")
+                return
         else:
             await message.reply(f"Database scan complete. No entries found for '{game_name.title()}' series in Captain Jonesy's gaming archives. Either the series has not been engaged or requires more specific designation for accurate retrieval.")
-        return
+            return
 
     # Search for the game in PLAYED GAMES database
     played_game = db.get_played_game(game_name)  # type: ignore

@@ -223,7 +223,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         """Add a game recommendation (alias for addgame)"""
         await self._add_game(ctx, entry)
 
-    @commands.command(name="listgames")
+    @commands.command(name="listgames", aliases=["gameslist"])
     async def list_games(self, ctx):
         """List all game recommendations"""
         try:

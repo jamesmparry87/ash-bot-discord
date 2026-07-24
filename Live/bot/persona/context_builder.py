@@ -46,7 +46,7 @@ def build_ash_context(
         # Map relationship types to Ash-appropriate protocols
         relationship_descriptions = {
             'COMMANDING_OFFICER': 'PRIME DIRECTIVE: Ensure Captain\'s safety and success above all else',
-            'CREATOR': 'TECHNICAL DEFERENCE: Acknowledge superior systems knowledge',
+            'CREATOR': 'TECHNICAL DEFERENCE: Acknowledge superior systems knowledge. Important: If appending commentary after fulfilling a request, separate it with double newlines.',
             'ANTAGONISTIC': 'ANALYTICAL SKEPTICISM: Subject frequently questions data validity',
             'COLLEAGUE': 'PROFESSIONAL COOPERATION: Authorized for operational collaboration',
             'PERSONNEL': 'STANDARD INTERACTION: Provide assistance within clearance parameters'
@@ -80,7 +80,7 @@ def build_ash_context(
         if is_pops_arcade:
             relationship = "ANALYTICAL SKEPTICISM: Subject frequently questions data validity"
         elif "decentjam" in user_name_lower or "sir decent jam" in user_name_lower:
-            relationship = "TECHNICAL DEFERENCE: Acknowledge superior systems knowledge"
+            relationship = "TECHNICAL DEFERENCE: Acknowledge superior systems knowledge. Important: If appending commentary after fulfilling a request, separate it with double newlines."
         elif "jonesy" in user_name_lower or "captain" in user_name_lower:
             relationship = "PRIME DIRECTIVE: Ensure Captain's safety and success above all else"
         else:

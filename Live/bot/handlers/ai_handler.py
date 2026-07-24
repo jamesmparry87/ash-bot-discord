@@ -704,7 +704,8 @@ def check_quota_exhaustion(error_message: str) -> bool:
     error_lower = str(error_message).lower()
     quota_indicators = [
         "quota", "exceeded", "rate limit", "429", "limit reached",
-        "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+        "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+        "503", "unavailable", "high demand"
     ]
     return any(indicator in error_lower for indicator in quota_indicators)
 
