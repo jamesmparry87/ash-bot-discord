@@ -1,4 +1,6 @@
-import os, re
+import os
+import re
+
 
 def find_commands():
     defined_cmds = set()
