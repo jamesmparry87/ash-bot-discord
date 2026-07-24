@@ -49,8 +49,7 @@ def build_ash_context(
             'CREATOR': 'TECHNICAL DEFERENCE: Acknowledge superior systems knowledge. Important: If appending commentary after fulfilling a request, separate it with double newlines.',
             'ANTAGONISTIC': 'ANALYTICAL SKEPTICISM: Subject frequently questions data validity',
             'COLLEAGUE': 'PROFESSIONAL COOPERATION: Authorized for operational collaboration',
-            'PERSONNEL': 'STANDARD INTERACTION: Provide assistance within clearance parameters'
-        }
+            'PERSONNEL': 'STANDARD INTERACTION: Provide assistance within clearance parameters'}
 
         clearance = clearance_descriptions.get(clearance_level, 'UNKNOWN CLEARANCE')
         relationship = relationship_descriptions.get(relationship_type, 'STANDARD PROTOCOL')
