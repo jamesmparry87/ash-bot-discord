@@ -733,7 +733,6 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
     # --- Post-sync summary DM to JAM ---
     if bot and skipped_vods:
         try:
-            from ..config import JAM_USER_ID
             user = await bot.fetch_user(JAM_USER_ID)
             if user:
                 timed_out = [v for v in skipped_vods if v['reason'] == 'timed_out']

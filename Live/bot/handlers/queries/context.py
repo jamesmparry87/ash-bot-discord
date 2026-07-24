@@ -412,7 +412,7 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
                 return True
 
         # If we detected ambiguous content but couldn't resolve it
-        from ..message_handler import should_use_context
+        from ..context_manager import should_use_context
         if should_use_context(message.content):
             # Provide helpful error message indicating missing context
             await message.reply(f"Sir Decent Jam, accessing player data. insufficient information provided. Please specify the \"she\" and the game title for accurate playtime retrieval.")
