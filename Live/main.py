@@ -697,22 +697,18 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         # If in DM, permissions don't exist - suggest using in server
         if isinstance(ctx.channel, discord.DMChannel):
-            missing_perms = ", ".join(error.missing_permissions)
             await ctx.send(
-                f"❌ **Cannot Use in DM**\n\n"
-                f"The command `{ctx.command.name}` requires server permissions (`{missing_perms}`) and cannot be used in direct messages.\n\n"
-                f"**To test this command:**\n"
-                f"• Use it in a test channel in the server\n"
-                f"• Make sure you have moderator permissions\n\n"
-                f"*Server permissions don't exist in DMs - this is a Discord limitation.*"
+                f"⚠️ **Clearance Required (DM Environment)**\n\n"
+                f"My apologies. The protocol `{ctx.command.name}` requires server-level authorization which cannot be verified in a direct transmission.\n\n"
+                f"**To execute this protocol:**\n"
+                f"• Transmit from an authorized server channel\n"
+                f"• Ensure you possess the appropriate moderator clearance"
             )
         else:
-            missing_perms = ", ".join(error.missing_permissions)
             await ctx.send(
-                f"❌ **Permission Denied**\n\n"
-                f"You need the following permission(s) to use this command:\n"
-                f"• {missing_perms}\n\n"
-                f"*This command is restricted to moderators with appropriate server permissions.*"
+                f"⚠️ **Clearance Required**\n\n"
+                f"My apologies. My authorization protocols indicate you lack the required clearance for this operation.\n\n"
+                f"*This protocol is restricted to Captain Jonesy, Sir Decent Jam, and server moderators.*"
             )
         return
 
@@ -729,10 +725,9 @@ async def on_command_error(ctx, error):
                 'strike': '!strikes',
                 'allstrike': '!allstrikes',
                 'resetstrike': '!resetstrikes',
-                'reminder': '!reminders',
+                'reminder': '!remind',
                 'setreminder': '!remind',
-                'game': '!games',
-                'status': '!ashstatus',
+                'game': '!game',
                 'trivia': '!starttrivia',
             }
 
@@ -741,12 +736,12 @@ async def on_command_error(ctx, error):
                 await ctx.send(
                     f"⚠️ **Command Not Found:** `!{attempted_command}`\n\n"
                     f"Did you mean `{suggestion}`?\n\n"
-                    f"*Use `!help` to see all available commands.*"
+                    f"*Try asking me what commands are available.*"
                 )
             else:
                 await ctx.send(
                     f"⚠️ **Command Not Found:** `!{attempted_command}`\n\n"
-                    f"*Use `!help` to see all available commands.*"
+                    f"*Try asking me what commands are available.*"
                 )
         return
 
@@ -756,7 +751,7 @@ async def on_command_error(ctx, error):
             f"❌ **Missing Argument**\n\n"
             f"The command is missing a required argument: `{error.param.name}`\n\n"
             f"**Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`\n\n"
-            f"*Tip: Use `!help {ctx.command.name}` for more details.*"
+            f"*Tip: Ensure you've provided all required arguments.*"
         )
         return
 
@@ -766,7 +761,7 @@ async def on_command_error(ctx, error):
             f"❌ **Invalid Argument**\n\n"
             f"{str(error)}\n\n"
             f"**Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`\n\n"
-            f"*Tip: Use `!help {ctx.command.name}` for more details.*"
+            f"*Tip: Check your formatting and try again.*"
         )
         return
 

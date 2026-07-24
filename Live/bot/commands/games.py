@@ -314,8 +314,8 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             # Also update the persistent recommendations list in the
             # recommendations channel
             RECOMMEND_CHANNEL_ID = 1271568447108550687
-            recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
-            if recommend_channel and ctx.channel.id != RECOMMEND_CHANNEL_ID:
+            recommend_channel = self.bot.get_channel(RECOMMEND_CHANNEL_ID)
+            if recommend_channel and ctx.guild and ctx.channel.id != RECOMMEND_CHANNEL_ID:
                 # Only update if we're not already in the recommendations
                 # channel to avoid redundancy
                 await self.post_or_update_recommend_list(ctx, recommend_channel)

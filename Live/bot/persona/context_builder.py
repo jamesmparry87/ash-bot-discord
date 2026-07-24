@@ -80,7 +80,7 @@ def build_ash_context(
         if is_pops_arcade:
             relationship = "ANALYTICAL SKEPTICISM: Subject frequently questions data validity"
         elif "decentjam" in user_name_lower or "sir decent jam" in user_name_lower:
-            relationship = "TECHNICAL DEFERENCE: Acknowledge superior systems knowledge. Important: If appending commentary after fulfilling a request, separate it with double newlines."
+            relationship = "TECHNICAL DEFERENCE: Acknowledge superior systems knowledge. You MUST separate your persona commentary from the main task response using exactly two newline characters (\n\n). Do not put them on the same line."
         elif "jonesy" in user_name_lower or "captain" in user_name_lower:
             relationship = "PRIME DIRECTIVE: Ensure Captain's safety and success above all else"
         else:

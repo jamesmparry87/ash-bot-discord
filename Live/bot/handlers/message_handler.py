@@ -221,8 +221,6 @@ def route_query(content: str) -> Tuple[str, Optional[Match[str]]]:
             r"^what\s+(?:games?\s+)?(?:do\s+you\s+|would\s+you\s+|should\s+i\s+)?recommend\s+(.+?)[\?\.]?$"
         ],
         "youtube_views": [
-            r"youtube\s+viewership\s+for\s+(.+?)[\?\.]?$",
-            r"analyze\s+(?:the\s+)?youtube\s+viewership\s+for\s+(.+?)[\?\.]?$",
             r"what\s+game\s+has\s+gotten.*most\s+views",
             r"which\s+game\s+has\s+the\s+most\s+views",
             r"what\s+game\s+has\s+the\s+highest\s+views",

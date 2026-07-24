@@ -87,6 +87,30 @@ class GamesDatabase:
                     CREATE INDEX IF NOT EXISTS idx_skipped_vods_skipped_at ON skipped_vods(skipped_at);
                 """)
 
+                # Migration 3: Add analytics columns to played_games
+                cur.execute("""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns
+                            WHERE table_name='played_games'
+                            AND column_name='youtube_views'
+                        ) THEN
+                            ALTER TABLE played_games
+                            ADD COLUMN youtube_views INTEGER DEFAULT 0,
+                            ADD COLUMN twitch_views INTEGER DEFAULT 0,
+                            ADD COLUMN youtube_playlist_url TEXT,
+                            ADD COLUMN twitch_vod_urls TEXT,
+                            ADD COLUMN last_youtube_sync TIMESTAMP WITH TIME ZONE,
+                            ADD COLUMN last_twitch_sync TIMESTAMP WITH TIME ZONE;
+
+                            RAISE NOTICE '✅ Migration: Added analytics columns to played_games';
+                        ELSE
+                            RAISE NOTICE '⏭️ Migration: analytics columns already exist';
+                        END IF;
+                    END $$;
+                """)
+
                 conn.commit()
                 logger.info("✅ Database migrations complete")
         except Exception as e:

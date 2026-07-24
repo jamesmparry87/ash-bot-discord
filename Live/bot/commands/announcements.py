@@ -44,7 +44,7 @@ class AnnouncementsCommands(commands.Cog):
                     "• Special embed formatting with authority indicators\n"
                     "• Database logging for audit trail\n\n"
                     "**Also Available:**\n"
-                    "• `!scheduleannouncement <time> <message>` - Schedule for later\n"
+                    "• `!announceupdate` - Interactive announcement scheduling process\n"
                     "• `!emergency <message>` - Emergency @everyone alert")
                 await ctx.send(help_text)
                 return

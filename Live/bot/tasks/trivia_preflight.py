@@ -185,9 +185,9 @@ async def pre_trivia_preflight_check():
                     f"**Problem:** No approved question found for today's Trivia Tuesday!\n"
                     f"**Time Until Trivia:** 15 minutes (11:00 AM UK)\n"
                     f"**Current Time:** {uk_now.strftime('%H:%M UK')}\n\n"
-                    f"**Options:**\n"
-                    f"1. Use `!setapprovedtrivia <question_id>` to manually approve a question\n"
-                    f"2. Use `!listpendingquestions` to see available questions\n"
+                    f"**Next Steps:**\n"
+                    f"1. Use `!approvequestion <question_id>` to manually approve a question\n"
+                    f"2. Use `!generatequestions 1` to add more to the pool\n"
                     f"3. Use `!disabletrivia` if you want to skip trivia today\n\n"
                     f"**Without action, trivia will NOT run automatically.**"
                 )
@@ -211,7 +211,7 @@ async def pre_trivia_preflight_check():
                         f"⚠️ **Trivia Pre-Flight Check Warning**\n\n"
                         f"**Problem:** Approved question #{approved_question_id} was deleted or not found!\n"
                         f"**Time Until Trivia:** 15 minutes (11:00 AM UK)\n\n"
-                        f"Please approve a different question with `!setapprovedtrivia <question_id>`"
+                        f"Please approve a different question with `!approvequestion <question_id>`"
                     )
                     await user.send(alert_message)
                     print("✅ PRE-FLIGHT CHECK: Warning sent to JAM")

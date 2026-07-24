@@ -3730,7 +3730,7 @@ async def handle_sync_approval_conversation(message: discord.Message) -> bool:
         print(f"❌ SYNC APPROVAL: Error handling conversation: {e}")
         await message.channel.send(
             f"❌ Error processing your response: {str(e)}\n"
-            f"Use **!cancelsync** to restart."
+            f"Type **cancel** to abort this session."
         )
         return True
 
