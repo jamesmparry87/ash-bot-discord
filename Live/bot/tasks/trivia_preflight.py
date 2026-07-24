@@ -1,8 +1,13 @@
-from .utils import _should_run_automated_tasks, get_bot_instance
-from ..persona.sarcasm import apply_pops_arcade_sarcasm
-from ..handlers.trivia.generator import generate_ai_trivia_question, generate_trivia_batch
-from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
-from ..database import get_database
+import asyncio
+import json
+import uuid
+from datetime import datetime, time, timedelta
+from typing import TYPE_CHECKING, Any, Dict, Optional, cast
+from zoneinfo import ZoneInfo
+
+import discord
+from discord.ext import tasks
+
 from ..config import (
     CHIT_CHAT_CHANNEL_ID,
     GAME_RECOMMENDATION_CHANNEL_ID,
@@ -12,14 +17,11 @@ from ..config import (
     MEMBERS_CHANNEL_ID,
     POPS_ARCADE_USER_ID,
 )
-from discord.ext import tasks
-import discord
-from zoneinfo import ZoneInfo
-from typing import TYPE_CHECKING, Any, Dict, Optional, cast
-from datetime import datetime, time, timedelta
-import uuid
-import json
-import asyncio
+from ..database import get_database
+from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
+from ..handlers.trivia.generator import generate_ai_trivia_question, generate_trivia_batch
+from ..persona.sarcasm import apply_pops_arcade_sarcasm
+from .utils import _should_run_automated_tasks, get_bot_instance
 
 _startup_validation_lock = False
 _startup_validation_completed = False
