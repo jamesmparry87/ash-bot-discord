@@ -91,23 +91,15 @@ class GamesDatabase:
                 cur.execute("""
                     DO $$
                     BEGIN
-                        IF NOT EXISTS (
-                            SELECT 1 FROM information_schema.columns
-                            WHERE table_name='played_games'
-                            AND column_name='youtube_views'
-                        ) THEN
-                            ALTER TABLE played_games
-                            ADD COLUMN youtube_views INTEGER DEFAULT 0,
-                            ADD COLUMN twitch_views INTEGER DEFAULT 0,
-                            ADD COLUMN youtube_playlist_url TEXT,
-                            ADD COLUMN twitch_vod_urls TEXT,
-                            ADD COLUMN last_youtube_sync TIMESTAMP WITH TIME ZONE,
-                            ADD COLUMN last_twitch_sync TIMESTAMP WITH TIME ZONE;
-
-                            RAISE NOTICE '✅ Migration: Added analytics columns to played_games';
-                        ELSE
-                            RAISE NOTICE '⏭️ Migration: analytics columns already exist';
-                        END IF;
+                        ALTER TABLE played_games
+                        ADD COLUMN IF NOT EXISTS youtube_views INTEGER DEFAULT 0,
+                        ADD COLUMN IF NOT EXISTS twitch_views INTEGER DEFAULT 0,
+                        ADD COLUMN IF NOT EXISTS youtube_playlist_url TEXT,
+                        ADD COLUMN IF NOT EXISTS twitch_vod_urls TEXT,
+                        ADD COLUMN IF NOT EXISTS last_youtube_sync TIMESTAMP WITH TIME ZONE,
+                        ADD COLUMN IF NOT EXISTS last_twitch_sync TIMESTAMP WITH TIME ZONE;
+                        
+                        RAISE NOTICE '✅ Migration: Verified analytics columns on played_games';
                     END $$;
                 """)
 
