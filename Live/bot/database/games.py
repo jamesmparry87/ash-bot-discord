@@ -98,7 +98,7 @@ class GamesDatabase:
                         ADD COLUMN IF NOT EXISTS twitch_vod_urls TEXT,
                         ADD COLUMN IF NOT EXISTS last_youtube_sync TIMESTAMP WITH TIME ZONE,
                         ADD COLUMN IF NOT EXISTS last_twitch_sync TIMESTAMP WITH TIME ZONE;
-                        
+
                         RAISE NOTICE '✅ Migration: Verified analytics columns on played_games';
                     END $$;
                 """)
