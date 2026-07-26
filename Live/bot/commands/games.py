@@ -791,16 +791,16 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         if mode.lower() == 'verify':
             await self._verify_youtube_episodes(ctx, fix_discrepancies=(option.lower() == '--fix'))
             return
-            
+
         # Handle new modes
         if mode.lower() == 'dedupe':
             await self._deduplicate_games(ctx)
             return
-            
+
         if mode.lower() == 'enrich':
             await self._enrich_all_games(ctx)
             return
-            
+
         if mode.lower() == 'audit':
             await self._audit_games(ctx)
             return
@@ -1243,9 +1243,9 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         try:
             database = self._get_db()
             all_games = database.get_all_played_games()
-            
+
             anomalies = []
-            
+
             for game in all_games:
                 name = game.get('canonical_name', 'Unknown')
                 episodes = game.get('total_episodes', 0)
@@ -1256,43 +1256,43 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 status = game.get('completion_status', '')
                 genre = game.get('genre', '')
                 year = game.get('release_year')
-                
+
                 issues = []
-                
+
                 # 1. Extreme Episodes
                 if episodes > 150:
                     issues.append(f"Extreme episodes: {episodes}")
-                    
+
                 # 2. Extreme Playtime
-                if playtime > 9000: # 150 hours
+                if playtime > 9000:  # 150 hours
                     issues.append(f"Extreme playtime: {playtime//60}h")
-                    
+
                 # 3. Missing Metrics on Completion
                 if status == 'completed':
                     if episodes == 0:
                         issues.append("Completed but 0 episodes")
                     if playtime == 0:
                         issues.append("Completed but 0 playtime")
-                        
+
                 # 4. Phantom Views
                 if episodes > 0 and total_views == 0:
                     issues.append("Has episodes but 0 views")
-                    
+
                 # 5. Missing Metadata
                 if not genre:
                     issues.append("Missing genre")
                 if not year:
                     issues.append("Missing release year")
-                    
+
                 if issues:
                     anomalies.append(f"⚠️ **{name}**\n" + "\n".join([f"   - {iss}" for iss in issues]))
-                    
+
             if not anomalies:
                 await ctx.send("✅ **Database Audit Complete:** No anomalies detected. The database is perfectly clean.")
                 return
-                
+
             report = f"🔍 **Database Audit Report**\n\nFound **{len(anomalies)}** games with anomalous or missing data:\n\n"
-            
+
             # Send in chunks if necessary
             for anom in anomalies:
                 if len(report) + len(anom) > 1900:
@@ -1300,10 +1300,10 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                     report = anom + "\n\n"
                 else:
                     report += anom + "\n\n"
-                    
+
             if report.strip():
                 await ctx.send(report)
-                
+
         except Exception as e:
             await ctx.send(f"❌ **Audit failed:** {str(e)}")
 
