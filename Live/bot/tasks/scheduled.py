@@ -641,15 +641,28 @@ async def friday_community_analysis():
             )
             return
 
-        # --- 3. Content Generation ---
         import random
         chosen_moment = random.choice(analysis_modules)  # Choose one random module to report on for variance
 
+        intros = [
+            "Good morning, personnel. My analysis of the past week's crew engagement is complete.",
+            "Attention crew. I have processed the weekly communication logs. The results are... as expected.",
+            "Greetings. I have concluded my scheduled Friday assessment of your interpersonal data exchanges.",
+            "Weekly diagnostic complete. I have evaluated the crew's recent communication patterns for optimal efficiency."
+        ]
+        
+        outros = [
+            "Weekend operational pause is now in effect.",
+            "You are now authorized to commence your weekend operational pause. Please ensure your biological functions remain intact until Monday.",
+            "I recommend using the next 48 hours for biological rest. Operational pause is active.",
+            "End of report. Please return to your designated leisure activities."
+        ]
+
         debrief = (
             f"📅 **Friday Protocol Assessment**\n\n"
-            f"Good morning, personnel. My analysis of the past week's crew engagement is complete.\n\n"
+            f"{random.choice(intros)}\n\n"
             f"{chosen_moment['content']}\n\n"
-            f"Weekend operational pause is now in effect."
+            f"{random.choice(outros)}"
         )
 
         # Debug: Verify newlines are present in the generated content
@@ -760,12 +773,12 @@ async def scheduled_ai_refresh():
 
                 print(f"🧠 TRIVIA POOL CHECK (8:15 AM): {pool_count} questions available")
 
-                if pool_count >= 5:
+                if pool_count >= 3:
                     pool_status_message = f"✅ Trivia Pool: {pool_count} questions available"
                 else:
                     pool_status_message = f"⚠️ Trivia Pool: {pool_count}/5 questions (LOW)"
 
-                    # Auto-generate needed questions
+                    # Auto-generate needed questions (always aim to fill back to 5)
                     needed = 5 - pool_count
                     print(f"🔄 TRIVIA POOL: Generating {needed} questions...")
 

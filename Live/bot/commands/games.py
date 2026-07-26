@@ -770,13 +770,16 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
     @commands.command(name="syncgames")
     async def sync_games(self, ctx, mode: str = "standard", option: str = ""):
         """
-        Triggers a content sync. Use `full` to re-scan all content, or specify days to scan.
+        Triggers database maintenance or content sync.
         Usage:
         - `!syncgames` (syncs new content since last sync)
         - `!syncgames 30` (syncs content from last 30 days)
         - `!syncgames full` (full rescan - last 5 years)
         - `!syncgames verify` (check episode counts against YouTube)
         - `!syncgames verify --fix` (fix discrepancies with fresh YouTube data)
+        - `!syncgames dedupe` (merge duplicate game entries)
+        - `!syncgames enrich` (fetch missing IGDB metadata)
+        - `!syncgames audit` (scan for internal data anomalies)
         """
         # Strict access control - only Captain Jonesy and Sir Decent Jam
         if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
@@ -787,6 +790,19 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         # Handle verify mode
         if mode.lower() == 'verify':
             await self._verify_youtube_episodes(ctx, fix_discrepancies=(option.lower() == '--fix'))
+            return
+            
+        # Handle new modes
+        if mode.lower() == 'dedupe':
+            await self._deduplicate_games(ctx)
+            return
+            
+        if mode.lower() == 'enrich':
+            await self._enrich_all_games(ctx)
+            return
+            
+        if mode.lower() == 'audit':
+            await self._audit_games(ctx)
             return
 
         # Handle numeric days mode (e.g., !syncgames 30)
@@ -1222,8 +1238,76 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             remaining = report[2000:]
             await ctx.send(remaining[:2000])
 
-    @commands.command(name="deduplicategames")
-    async def deduplicate_games(self, ctx):
+    async def _audit_games(self, ctx):
+        """Scans the database for internal data anomalies (extreme counts, missing data)."""
+        try:
+            database = self._get_db()
+            all_games = database.get_all_played_games()
+            
+            anomalies = []
+            
+            for game in all_games:
+                name = game.get('canonical_name', 'Unknown')
+                episodes = game.get('total_episodes', 0)
+                playtime = game.get('total_playtime_minutes', 0)
+                youtube_views = game.get('youtube_views', 0)
+                twitch_views = game.get('twitch_views', 0)
+                total_views = youtube_views + twitch_views
+                status = game.get('completion_status', '')
+                genre = game.get('genre', '')
+                year = game.get('release_year')
+                
+                issues = []
+                
+                # 1. Extreme Episodes
+                if episodes > 150:
+                    issues.append(f"Extreme episodes: {episodes}")
+                    
+                # 2. Extreme Playtime
+                if playtime > 9000: # 150 hours
+                    issues.append(f"Extreme playtime: {playtime//60}h")
+                    
+                # 3. Missing Metrics on Completion
+                if status == 'completed':
+                    if episodes == 0:
+                        issues.append("Completed but 0 episodes")
+                    if playtime == 0:
+                        issues.append("Completed but 0 playtime")
+                        
+                # 4. Phantom Views
+                if episodes > 0 and total_views == 0:
+                    issues.append("Has episodes but 0 views")
+                    
+                # 5. Missing Metadata
+                if not genre:
+                    issues.append("Missing genre")
+                if not year:
+                    issues.append("Missing release year")
+                    
+                if issues:
+                    anomalies.append(f"⚠️ **{name}**\n" + "\n".join([f"   - {iss}" for iss in issues]))
+                    
+            if not anomalies:
+                await ctx.send("✅ **Database Audit Complete:** No anomalies detected. The database is perfectly clean.")
+                return
+                
+            report = f"🔍 **Database Audit Report**\n\nFound **{len(anomalies)}** games with anomalous or missing data:\n\n"
+            
+            # Send in chunks if necessary
+            for anom in anomalies:
+                if len(report) + len(anom) > 1900:
+                    await ctx.send(report)
+                    report = anom + "\n\n"
+                else:
+                    report += anom + "\n\n"
+                    
+            if report.strip():
+                await ctx.send(report)
+                
+        except Exception as e:
+            await ctx.send(f"❌ **Audit failed:** {str(e)}")
+
+    async def _deduplicate_games(self, ctx):
         """Manually triggers the game deduplication process."""
         # Strict access control - only Captain Jonesy and Sir Decent Jam
         if ctx.author.id not in [JONESY_USER_ID, JAM_USER_ID]:
@@ -1383,8 +1467,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             print(f"❌ Error in game stats command: {e}")
             await ctx.send(f"❌ Error retrieving game statistics: {str(e)}")
 
-    @commands.command(name="enrichallgames")
-    async def enrich_all_games(self, ctx):
+    async def _enrich_all_games(self, ctx):
         """
         One-time bulk enrichment of ALL games in database with IGDB data.
         Cleans series names, standardizes genres, adds missing metadata.

@@ -17,310 +17,6 @@ from ..ai_handler import (
 )
 
 
-def get_question_templates() -> Dict[str, List[Dict[str, Any]]]:
-    """Get diverse question templates organized by category - IMPROVED for variety!"""
-    return {
-        # REMOVED: "most played" pattern (redundant and ambiguous)
-        # Users found this question uninteresting and potentially confusing
-
-        # ENHANCED: More genre variety
-        "genre_insights": [
-            {
-                "template": "What horror game did Jonesy play most recently?",
-                "answer_logic": "latest_genre_game",
-                "type": "single_answer",
-                "weight": 1.4,
-                "genre_filter": "horror"
-            },
-            {
-                "template": "Which RPG took Jonesy the most episodes to complete?",
-                "answer_logic": "longest_episodes_by_genre",
-                "type": "single_answer",
-                "weight": 1.3,
-                "genre_filter": "rpg"
-            },
-            {
-                "template": "How many different horror games has Jonesy played?",
-                "answer_logic": "count_games_by_genre",
-                "type": "single_answer",
-                "weight": 1.3,
-                "genre_filter": "horror"
-            },
-            {
-                "template": "What genre has Jonesy played the most games in?",
-                "answer_logic": "most_common_genre",
-                "type": "single_answer",
-                "weight": 1.4
-            }
-        ],
-
-        # NEW: Platform distinction (YouTube vs Twitch)
-        "platform_detective": [
-            {
-                "template": "Which game has the most YouTube views?",
-                "answer_logic": "most_youtube_views",
-                "type": "single_answer",
-                "weight": 1.5  # High engagement - real metrics
-            },
-            {
-                "template": "What's Jonesy's longest YouTube playthrough by episodes?",
-                "answer_logic": "most_youtube_episodes",
-                "type": "single_answer",
-                "weight": 1.3
-            },
-            {
-                "template": "How many games has Jonesy played on both YouTube and Twitch?",
-                "answer_logic": "count_both_platforms",
-                "type": "single_answer",
-                "weight": 1.2
-            }
-        ],
-
-        # NEW: Temporal questions using release_year and first_played_date
-        "temporal_gaming": [
-            {
-                "template": "What's the oldest game (by release year) that Jonesy has played?",
-                "answer_logic": "oldest_game_by_release",
-                "type": "single_answer",
-                "weight": 1.4
-            },
-            {
-                "template": "What's the newest game in Jonesy's collection?",
-                "answer_logic": "newest_game_by_release",
-                "type": "single_answer",
-                "weight": 1.3
-            },
-            {
-                "template": "Which game did Jonesy play first chronologically?",
-                "answer_logic": "first_played_game",
-                "type": "single_answer",
-                "weight": 1.2
-            }
-        ],
-
-        # NEW: Completion status focus
-        "completion_tracker": [
-            {
-                "template": "What percentage of Jonesy's games are completed?",
-                "answer_logic": "completion_percentage",
-                "type": "single_answer",
-                "weight": 1.3
-            },
-            {
-                "template": "What's Jonesy's longest abandoned game (by episodes)?",
-                "answer_logic": "longest_dropped_game",
-                "type": "single_answer",
-                "weight": 1.2
-            },
-            {
-                "template": "How many games are currently ongoing?",
-                "answer_logic": "count_ongoing_games",
-                "type": "single_answer",
-                "weight": 1.1
-            }
-        ],
-
-        # ENHANCED: Series questions with more depth
-        "series_master": [
-            {
-                "template": "Which series has Jonesy spent the most total time on?",
-                "answer_logic": "series_most_time",
-                "type": "single_answer",
-                "weight": 1.4
-            },
-            {
-                "template": "What series has the most games in Jonesy's collection?",
-                "answer_logic": "largest_series",
-                "type": "single_answer",
-                "weight": 1.3
-            },
-            {
-                "template": "How many different game series has Jonesy explored?",
-                "answer_logic": "unique_series_count",
-                "type": "single_answer",
-                "weight": 1.2
-            }
-        ],
-
-        # IMPROVED: Gaming milestones (no playtime redundancy)
-        "gaming_milestones": [
-            {
-                "template": "Which was Jonesy's first completed game?",
-                "answer_logic": "first_completed_game",
-                "type": "single_answer",
-                "weight": 1.4
-            },
-            {
-                "template": "What's the shortest completed game by playtime?",
-                "answer_logic": "shortest_completed_game",
-                "type": "single_answer",
-                "weight": 1.2
-            }
-        ],
-
-        # REFINED: Gaming stories (episode-focused, NOT playtime)
-        "gaming_stories": [
-            {
-                "template": "What game took Jonesy the most episodes to complete?",
-                "answer_logic": "max_episodes",
-                "type": "single_answer",
-                "weight": 1.3  # Clear distinction: episodes, not time
-            },
-            {
-                "template": "What's the most recent game Jonesy completed?",
-                "answer_logic": "most_recent_completion",
-                "type": "single_answer",
-                "weight": 1.4
-            }
-        ],
-
-        # KEPT: Timeline comparisons (still engaging)
-        "timeline_fun": [
-            {
-                "template": "Which game did Jonesy complete first - {game1} or {game2}?",
-                "answer_logic": "compare_completion_order",
-                "type": "single_answer",
-                "weight": 1.3
-            },
-            {
-                "template": "Did Jonesy play {game1} before or after {game2}?",
-                "answer_logic": "compare_play_order",
-                "type": "single_answer",
-                "weight": 1.2
-            }
-        ],
-
-        # KEPT: Multiple choice variety
-        "multiple_choice_fun": [
-            {
-                "template": "Which of these games did Jonesy complete?",
-                "answer_logic": "mc_completed_game",
-                "type": "multiple_choice",
-                "weight": 1.5
-            },
-            {
-                "template": "Which horror game has Jonesy played?",
-                "answer_logic": "mc_genre_game",
-                "type": "multiple_choice",
-                "weight": 1.4,
-                "genre_filter": "horror"
-            }
-        ]
-    }
-
-
-# Global history tracking for weights
-question_history: Dict[str, Dict[str, Any]] = {
-    "category_cooldowns": {},
-    "template_usage": {}
-}
-
-
-def calculate_template_weights(templates: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
-    """Calculate dynamic weights based on usage history and cooldowns"""
-    current_time = datetime.now(pacific_tz)
-
-    # Apply cooldowns and usage penalties
-    for category, template_list in templates.items():
-        # Category cooldown check
-        category_cooldown = question_history["category_cooldowns"].get(category, None)
-        if category_cooldown and current_time < category_cooldown:
-            # Reduce weights for category in cooldown
-            for template in template_list:
-                template["weight"] *= 0.3
-
-        # Individual template usage penalties
-        for template in template_list:
-            template_id = template.get("template", "")[:20]  # Use first 20 chars as ID
-            usage_count = question_history["template_usage"].get(template_id, 0)
-
-            # Apply usage penalty (more usage = lower weight)
-            if usage_count > 0:
-                penalty = max(0.2, 1.0 - (usage_count * 0.2))
-                template["weight"] *= penalty
-
-    return templates
-
-
-def select_best_template(games_data: List[Dict[str, Any]],
-                         avoid_templates: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
-    """Select the best template based on data availability and weights, avoiding recently used templates
-
-    Args:
-        games_data: List of game data dictionaries
-        avoid_templates: List of recently used template IDs to avoid in this batch
-    """
-    templates = get_question_templates()
-    weighted_templates = calculate_template_weights(templates)
-
-    viable_templates = []
-
-    # Check each template for data viability
-    for category, template_list in weighted_templates.items():
-        for template in template_list:
-            # Check if we have enough data for this template
-            if is_template_viable(template, games_data):
-                # ✅ FIX: Skip recently-used templates in this batch
-                template_id = template.get("template", "")[:20]
-                if avoid_templates and template_id in avoid_templates:
-                    print(f"⏭️ Skipping recently-used template: {template_id}")
-                    continue
-
-                viable_templates.append((template, category))
-
-    if not viable_templates:
-        print("⚠️ No viable templates found for current data")
-        return None
-
-    # Weight-based selection
-    total_weight = sum(template["weight"] for template, _ in viable_templates)
-    import random
-
-    if total_weight > 0:
-        # Weighted random selection
-        target = random.uniform(0, total_weight)
-        current_weight = 0
-
-        for template, category in viable_templates:
-            current_weight += template["weight"]
-            if current_weight >= target:
-                return {**template, "category": category}
-
-    # Fallback to random selection
-    template, category = random.choice(viable_templates)
-    return {**template, "category": category}
-
-
-def is_template_viable(template: Dict[str, Any], games_data: List[Dict[str, Any]]) -> bool:
-    """Check if template can be answered with available data"""
-    answer_logic = template.get("answer_logic", "")
-
-    # Comparison templates need at least 2 games
-    if answer_logic.startswith("compare_") and len(games_data) < 2:
-        return False
-
-    # Multiple choice needs at least 3 games for good options
-    if template.get("type") == "multiple_choice" and len(games_data) < 3:
-        return False
-
-    # Episode-based questions need games with episode data
-    if "episode" in answer_logic:
-        if not any(game.get("total_episodes", 0) > 0 for game in games_data):
-            return False
-
-    # Playtime questions need games with playtime data
-    if "playtime" in answer_logic or "hours" in answer_logic:
-        if not any(game.get("total_playtime_minutes", 0) > 0 for game in games_data):
-            return False
-
-    # Genre questions need games with genre data
-    if "genre" in answer_logic:
-        if not any(game.get("genre") for game in games_data):
-            return False
-
-    return True
-
-
 async def generate_ai_trivia_question(context: str = "trivia",
                                       avoid_questions: Optional[List[str]] = None,
                                       avoid_game_ids: Optional[List[int]] = None,
@@ -374,7 +70,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
             'Series_Total_Episodes': {'weight': 1.5},  # Total episodes across a whole franchise
             'Playtime_Battle': {'weight': 1.5},  # Which of 2 games has more playtime hours
             'Release_Year': {'weight': 1.5},  # What year was a specific game released?
-            'YouTube_Views_Champ': {'weight': 1.0},  # Most YouTube views (YouTube-only)
+            'YouTube_Views_Champ': {'weight': 0.2},  # Most YouTube views (YouTube-only, reduced weight to prevent repetition)
             # --- AI-creative (low weight - occasional variety) ---
             'Franchise_Lore': {'weight': 0.5},  # Lore question, AI provides answer
         }
@@ -402,8 +98,9 @@ async def generate_ai_trivia_question(context: str = "trivia",
         # Max 3 API calls total (one per attempt), vs old max of 9 (3 cats × 3 AI retries).
 
         tried_categories: set = set()
-        for overall_attempt in range(3):
+        while True:
             selected_category = None
+            final_question_text = None
             category_prompt = None
             correct_answer = None
             source_games: List[Dict] = []
@@ -446,17 +143,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
                     for g in source_games
                 ])
                 print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Episode_Champion'")
-                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
-Jonesy uses she/her pronouns.
-
-REAL DATA - Jonesy's {chosen_genre_ep} games (episode counts from our database):
-{game_lines_ep}
-
-THE CORRECT ANSWER IS: {correct_answer}
-
-Write a short question (under 120 characters) asking which of Jonesy's {chosen_genre_ep} games she played the most episodes of.
-Do NOT ask about release dates, game lore, or in-game characters.
-Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                final_question_text = phrasing_ep
                 selected_category = cat
                 # No break - fall through to AI call section below
 
@@ -474,19 +161,7 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                 source_games = [game1_tl, game2_tl]
 
                 print(f"✅ TRIVIA DIRECTOR: Got 2 game(s) for 'Channel_Timeline'")
-                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
-Jonesy uses she/her pronouns.
-
-REAL DATA from our database:
-  - {game1_tl['canonical_name']}: Jonesy first played this on {date1}
-  - {game2_tl['canonical_name']}: Jonesy first played this on {date2}
-
-THE CORRECT ANSWER IS: {correct_answer}
-
-Write a short question (under 120 characters) asking which of these two games Jonesy played FIRST on her channel.
-Do NOT ask about release dates - ask about when Jonesy played them on her channel.
-Good phrasing: "Which game did Jonesy play first on her channel - X or Y?"
-Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                final_question_text = f"Which game did Jonesy play first on her channel: {game1_tl['canonical_name']} or {game2_tl['canonical_name']}?"
                 selected_category = cat
                 # No break - fall through to AI call section below
 
@@ -646,18 +321,7 @@ Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_a
                     f"Jonesy's {chosen_genre_qc} completions — which game wrapped up in the least episodes?",
                     f"Among Jonesy's {chosen_genre_qc} games, which did she complete most quickly by episode count?",
                 ])
-                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
-Jonesy uses she/her pronouns.
-
-REAL DATA - Jonesy's completed {chosen_genre_qc} games (episode counts from our database):
-{game_lines_qc}
-
-THE CORRECT ANSWER IS: {correct_answer}
-
-Rephrase this question in your own words (under 120 characters):
-"{phrasing_qc}"
-
-Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                final_question_text = phrasing_qc
                 selected_category = cat
 
             elif cat == 'Genre_Pioneer':
@@ -693,19 +357,7 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                     f"Which {chosen_genre_gp} game kicked off Jonesy's journey in that genre?",
                     f"Of all Jonesy's {chosen_genre_gp} games, which did she play first on the channel?",
                 ])
-                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
-Jonesy uses she/her pronouns.
-
-REAL DATA - Jonesy's {chosen_genre_gp} games in order of when she first played them:
-{game_lines_gp}
-
-THE CORRECT ANSWER IS: {correct_answer}
-
-Rephrase this question in your own words (under 120 characters):
-"{phrasing_gp}"
-
-Do NOT ask about release dates — ask about when Jonesy first played on her channel.
-Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                final_question_text = phrasing_gp
                 selected_category = cat
 
             elif cat == 'Series_Total_Episodes':
@@ -737,19 +389,7 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                     f"Combined across every {chosen_series_ste} game, how many episodes has Jonesy recorded?",
                     f"What's the total episode count for Jonesy's entire {chosen_series_ste} playthrough series?",
                 ])
-                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
-Jonesy uses she/her pronouns.
-
-REAL DATA - Jonesy's {chosen_series_ste} games (individual episode counts from our database):
-{game_lines_ste}
-Combined total: {total_eps_ste} episodes
-
-THE CORRECT ANSWER IS: {total_eps_ste}
-
-Rephrase this question in your own words (under 120 characters):
-"{phrasing_ste}"
-
-Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                final_question_text = phrasing_ste
                 selected_category = cat
 
             elif cat == 'Playtime_Battle':
@@ -772,19 +412,7 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                     f"Total hours logged: did Jonesy put more time into {game1_pb['canonical_name']} or {game2_pb['canonical_name']}?",
                     f"{game1_pb['canonical_name']} vs {game2_pb['canonical_name']} — which has more of Jonesy's playtime hours?",
                 ])
-                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
-Jonesy uses she/her pronouns.
-
-REAL DATA from our database (total playtime recorded):
-  - {game1_pb['canonical_name']}: {hours1} hours
-  - {game2_pb['canonical_name']}: {hours2} hours
-
-THE CORRECT ANSWER IS: {correct_answer}
-
-Rephrase this question in your own words (under 120 characters):
-"{phrasing_pb}"
-
-Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                final_question_text = phrasing_pb
                 selected_category = cat
 
             elif cat == 'Release_Year':
@@ -805,18 +433,7 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                     f"When did {chosen_game_ry['canonical_name']} launch — what year was it released?",
                     f"What's the release year of {chosen_game_ry['canonical_name']}, one of Jonesy's games?",
                 ])
-                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
-Jonesy uses she/her pronouns.
-
-REAL DATA from our database:
-  - {chosen_game_ry['canonical_name']} was originally released in {chosen_game_ry['release_year']}
-
-THE CORRECT ANSWER IS: {chosen_game_ry['release_year']}
-
-Rephrase this question in your own words (under 100 characters):
-"{phrasing_ry}"
-
-Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                final_question_text = phrasing_ry
                 selected_category = cat
 
             elif cat == 'YouTube_Views_Champ':
@@ -845,95 +462,75 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                     f"On YouTube, which of these Jonesy playthroughs has the highest view count?",
                     f"Which game tops the YouTube view count on Jonesy's channel out of these options?",
                 ])
-                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
-Jonesy uses she/her pronouns.
-
-REAL DATA - YouTube view counts from our database (YouTube-only, not including Twitch):
-{game_lines_yt}
-
-THE CORRECT ANSWER IS: {correct_answer}
-
-Rephrase this question in your own words (under 120 characters), naming the specific games:
-"{phrasing_yt}"
-Games to mention: {', '.join(names_yt)}
-
-Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                final_question_text = f"{phrasing_yt} Options: {', '.join(names_yt)}"
                 selected_category = cat
 
             # --- If we couldn't build a prompt for this category, skip it ---
-            if not selected_category or not category_prompt:
+            if not selected_category or (not category_prompt and not final_question_text):
                 continue
 
-            # === PROMPT IS READY: LOG SELECTION AND CALL AI ===
+            # === PROMPT IS READY: LOG SELECTION AND CALL AI (IF LORE) ===
             print(f"🎮 TRIVIA DIRECTOR: Selected '{selected_category}' | Answer: {correct_answer or 'AI-determined'}")
-            print(f"   Source games: {[g['canonical_name'] for g in source_games[:3]]}")
 
-            # Append avoid-questions hint to prompt
-            prompt = category_prompt
-            if avoid_questions:
-                avoid_text = "\n\n🚫 AVOID questions similar to:\n"
-                avoid_text += "\n".join([f"  - {q[:60]}..." for q in avoid_questions[-5:]])
-                prompt = prompt + avoid_text
+            ai_question = None
 
-            # === CALL AI WITH CATEGORY-SPECIFIC TEMPERATURE ===
-            CATEGORY_TEMPERATURES = {
-                'Episode_Champion': 0.8,  # Creative phrasing, factual answer
-                'Quickest_Completion': 0.8,  # Creative phrasing, factual answer (inverse)
-                'Channel_Timeline': 0.7,  # Simple factual question (which game first)
-                'Genre_Census': 0.8,  # Varied phrasing for count questions
-                'Genre_Pioneer': 0.8,  # First game in genre - clear factual
-                'Series_Comparison': 0.8,  # Creative phrasing, factual answer
-                'Series_Total_Episodes': 0.8,  # Sum question - clear factual
-                'Playtime_Battle': 0.8,  # Head-to-head comparison
-                'Release_Year': 0.7,  # Simple factual (a year)
-                'YouTube_Views_Champ': 0.8,  # Names specific games - stays focused
-                'Franchise_Lore': 0.9,  # Most creative - AI provides answer
-            }
-
-            temperature = CATEGORY_TEMPERATURES.get(selected_category, 0.9)
-            print(f"🌡️ TRIVIA DIRECTOR: Using temperature {temperature} for '{selected_category}'")
-
-            # === SINGLE AI CALL PER CATEGORY ===
-            # If this produces a duplicate, we try a DIFFERENT category next iteration.
-            # This is more API-quota-friendly (max 3 calls total) and actually diversifies output.
-            response_text, status_message = await call_ai_for_generation(
-                prompt,
-                context=context,
-                temperature=temperature
-            )
-
-            if not response_text:
-                print(f"❌ TRIVIA DIRECTOR: AI call failed (attempt {overall_attempt+1}): {status_message}")
-                break  # API failure - don't retry, preserve quota
-
-            print(
-                f"✅ TRIVIA DIRECTOR: AI response received: {len(response_text)} characters (attempt {overall_attempt+1}/3)")
-
-            # Parse AI response
-            # Data-driven categories: AI returns plain question text only (we have the answer)
-            # Franchise_Lore: AI returns JSON with both question and answer
-            if is_json_response:
-                ai_question = robust_json_parse(response_text)
-                if ai_question:
-                    ai_question["question_type"] = ai_question.get("question_type", "single_answer")
-            else:
-                q_text = response_text.strip().strip('"').strip("'").strip()
-                for prefix in ['Question:', 'Here is a question:', "Here's a question:",
-                               'Trivia question:', 'Here you go:']:
-                    if q_text.lower().startswith(prefix.lower()):
-                        q_text = q_text[len(prefix):].strip()
+            if final_question_text and selected_category != 'Franchise_Lore':
+                # HYBRID APPROACH: Skip AI for statistical questions
+                print(f"✅ TRIVIA DIRECTOR: Using pre-generated phrasing for {selected_category}, skipping AI call.")
+                q_text = final_question_text
                 if q_text and not q_text.endswith('?'):
                     q_text += '?'
                 ai_question = {
                     "question_text": q_text,
                     "question_type": "single_answer",
                     "correct_answer": correct_answer
-                } if (10 <= len(q_text) <= 250) else None
+                }
+            else:
+                # FRANCHISE_LORE OR OTHER AI CATEGORY
+                prompt = category_prompt
+                if avoid_questions:
+                    avoid_text = "\\n\\n🚫 AVOID questions similar to:\\n"
+                    avoid_text += "\\n".join([f"  - {q[:60]}..." for q in avoid_questions[-5:]])
+                    prompt = prompt + avoid_text
+
+                CATEGORY_TEMPERATURES = {
+                    'Franchise_Lore': 0.9,
+                }
+                temperature = CATEGORY_TEMPERATURES.get(selected_category, 0.9)
+                print(f"🌡️ TRIVIA DIRECTOR: Using temperature {temperature} for '{selected_category}'")
+
+                response_text, status_message = await call_ai_for_generation(
+                    prompt,
+                    context=context,
+                    temperature=temperature
+                )
+
+                if not response_text:
+                    print(f"❌ TRIVIA DIRECTOR: AI call failed: {status_message}")
+                    break  # API failure - don't retry, preserve quota
+
+                if is_json_response:
+                    ai_question = robust_json_parse(response_text)
+                    if ai_question:
+                        ai_question["question_type"] = ai_question.get("question_type", "single_answer")
+                else:
+                    q_text = response_text.strip().strip('"').strip("'").strip()
+                    for prefix in ['Question:', 'Here is a question:', "Here's a question:",
+                                   'Trivia question:', 'Here you go:']:
+                        if q_text.lower().startswith(prefix.lower()):
+                            q_text = q_text[len(prefix):].strip()
+                    if q_text and not q_text.endswith('?'):
+                        q_text += '?'
+                    ai_question = {
+                        "question_text": q_text,
+                        "question_type": "single_answer",
+                        "correct_answer": correct_answer
+                    } if (10 <= len(q_text) <= 250) else None
 
             if not ai_question or not all(
                 key in ai_question for key in ["question_text", "question_type", "correct_answer"]
             ):
-                print(f"⚠️ TRIVIA DIRECTOR: AI response missing required fields (attempt {overall_attempt+1})")
+                print(f"⚠️ TRIVIA DIRECTOR: AI response missing required fields")
                 continue  # Try different category
 
             # Check for duplicates before accepting

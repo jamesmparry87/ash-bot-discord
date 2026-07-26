@@ -118,11 +118,20 @@ async def monday_content_sync():
             )
             return
 
+        import random
+        intros = [
+            "Analysis of the previous 168-hour operational cycle is complete.",
+            "I have compiled the latest broadcast analytics for the crew's review.",
+            "Data ingestion complete. The weekend's media transmissions have been cataloged.",
+            "Good morning. The weekly content synchronization protocol has finished processing."
+        ]
+
         # --- Content Generation ---
         debrief = (
             f"🌅 **Monday Morning Protocol Initiated**\n\n"
-            f"Analysis of the previous 168-hour operational cycle is complete. **{analysis_results.get('new_content_count', 0)}** new transmissions were logged, "
-            f"accumulating **{analysis_results.get('new_hours', 0)} hours** of new mission data and **{analysis_results.get('new_views', 0):,}** viewer engagements.")
+            f"{random.choice(intros)} **{analysis_results.get('new_content_count', 0)}** new transmissions were logged, "
+            f"accumulating **{analysis_results.get('new_hours', 0)} hours** of new mission data and **{analysis_results.get('new_views', 0):,}** viewer engagements."
+        )
 
         # Add completion status announcements
         completed_games = analysis_results.get('completed_games', [])
