@@ -336,8 +336,11 @@ class TestPlayedGames:
         sql_call = mock_cursor.execute.call_args[0][0]
         assert 'UPDATE played_games SET' in sql_call
 
-    def test_convert_text_to_arrays(self):
+    @patch('bot.database.core.DatabaseManager.get_connection')
+    @patch('bot.database.games.GamesDatabase._run_migrations')
+    def test_convert_text_to_arrays(self, mock_migrations, mock_get_connection):
         """Test conversion of TEXT fields to arrays."""
+        mock_get_connection.return_value = MagicMock()
         db = DatabaseManager()
 
         game_dict = {
@@ -352,8 +355,11 @@ class TestPlayedGames:
         assert result['twitch_vod_urls'] == ['url1', 'url2', 'url3']
         assert result['other_field'] == 'unchanged'
 
-    def test_convert_text_to_arrays_empty_fields(self):
+    @patch('bot.database.core.DatabaseManager.get_connection')
+    @patch('bot.database.games.GamesDatabase._run_migrations')
+    def test_convert_text_to_arrays_empty_fields(self, mock_migrations, mock_get_connection):
         """Test conversion with empty TEXT fields."""
+        mock_get_connection.return_value = MagicMock()
         db = DatabaseManager()
 
         game_dict = {"alternative_names": "", "twitch_vod_urls": None}
