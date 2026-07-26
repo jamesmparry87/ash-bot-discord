@@ -1248,10 +1248,10 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
 
             for game in all_games:
                 name = game.get('canonical_name', 'Unknown')
-                episodes = game.get('total_episodes', 0)
-                playtime = game.get('total_playtime_minutes', 0)
-                youtube_views = game.get('youtube_views', 0)
-                twitch_views = game.get('twitch_views', 0)
+                episodes = game.get('total_episodes') or 0
+                playtime = game.get('total_playtime_minutes') or 0
+                youtube_views = game.get('youtube_views') or 0
+                twitch_views = game.get('twitch_views') or 0
                 total_views = youtube_views + twitch_views
                 status = game.get('completion_status', '')
                 genre = game.get('genre', '')

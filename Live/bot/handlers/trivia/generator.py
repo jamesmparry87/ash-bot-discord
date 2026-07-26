@@ -76,11 +76,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
             'Franchise_Lore': {'weight': 0.5},  # Lore question, AI provides answer
         }
 
-        import random
-        from collections import defaultdict
-
         categories = list(TRIVIA_CATEGORIES.keys())
-        cat_weights = [TRIVIA_CATEGORIES[c]['weight'] for c in categories]
 
         # Get all games - we compute answers ourselves from real data
         all_games = current_db.get_all_played_games()
@@ -139,12 +135,13 @@ async def generate_ai_trivia_question(context: str = "trivia",
                                       key=lambda x: x.get('total_episodes', 0),
                                       reverse=True)[:5]
 
-                game_lines_ep = '\n'.join([
-                    f"  - {g['canonical_name']}: {g.get('total_episodes', 0)} episodes"
-                    for g in source_games
-                ])
                 print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Episode_Champion'")
-                final_question_text = phrasing_ep
+                names_ep = [g['canonical_name'] for g in source_games]
+                phrasing_ep = random.choice([
+                    f"Which of these {chosen_genre_ep} games did Jonesy play the most episodes of?",
+                    f"Out of these {chosen_genre_ep} games, which one has the highest episode count?"
+                ])
+                final_question_text = f"{phrasing_ep} Options: {', '.join(names_ep)}"
                 selected_category = cat
                 # No break - fall through to AI call section below
 
@@ -311,10 +308,6 @@ Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_a
                 correct_answer = winner_qc['canonical_name']
                 source_games = sorted(genre_games_qc, key=lambda x: x.get('total_episodes') or 0)[:5]
 
-                game_lines_qc = '\n'.join([
-                    f"  - {g['canonical_name']}: {g.get('total_episodes', 0)} episodes to complete"
-                    for g in source_games
-                ])
                 print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Quickest_Completion'")
 
                 phrasing_qc = random.choice([
@@ -347,10 +340,6 @@ Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_a
                 correct_answer = first_game_gp['canonical_name']
                 source_games = sorted(genre_games_gp, key=lambda x: str(x.get('first_played_date', '')))[:5]
 
-                game_lines_gp = '\n'.join([
-                    f"  - {g['canonical_name']}: first played {g.get('first_played_date', 'unknown')}"
-                    for g in source_games
-                ])
                 print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Genre_Pioneer'")
 
                 phrasing_gp = random.choice([
@@ -379,11 +368,7 @@ Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_a
                 correct_answer = str(total_eps_ste)
                 source_games = series_games_ste
 
-                game_lines_ste = '\n'.join([
-                    f"  - {g['canonical_name']}: {g.get('total_episodes', 0)} episodes"
-                    for g in series_games_ste
-                ])
-                print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Series_Total_Episodes'")
+                print(f"✅ TRIVIA DIRECTOR: Found {len(series_games_ste)} game(s) for 'Series_Total_Episodes'")
 
                 phrasing_ste = random.choice([
                     f"How many total episodes has Jonesy played across all her {chosen_series_ste} games?",
@@ -542,7 +527,7 @@ Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_a
 
             if duplicate_info:
                 print(
-                    f"🔍 TRIVIA DIRECTOR: Duplicate detected (attempt {overall_attempt+1}/3): "
+                    f"🔍 TRIVIA DIRECTOR: Duplicate detected (attempt {len(tried_categories)}/3): "
                     f"{duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']} "
                     f"- switching to different category...")
                 continue  # Try a genuinely different category on next iteration
