@@ -382,7 +382,7 @@ jobs:
       run: |
         required_files=(
           "Live/requirements.txt"
-          "Live/bot_modular.py"
+          "Live/main.py"
           "Live/bot/config.py"
           "Live/Procfile"
         )
