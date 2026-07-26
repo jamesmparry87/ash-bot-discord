@@ -130,8 +130,7 @@ async def monday_content_sync():
         debrief = (
             f"🌅 **Monday Morning Protocol Initiated**\n\n"
             f"{random.choice(intros)} **{analysis_results.get('new_content_count', 0)}** new transmissions were logged, "
-            f"accumulating **{analysis_results.get('new_hours', 0)} hours** of new mission data and **{analysis_results.get('new_views', 0):,}** viewer engagements."
-        )
+            f"accumulating **{analysis_results.get('new_hours', 0)} hours** of new mission data and **{analysis_results.get('new_views', 0):,}** viewer engagements.")
 
         # Add completion status announcements
         completed_games = analysis_results.get('completed_games', [])

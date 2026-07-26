@@ -70,7 +70,8 @@ async def generate_ai_trivia_question(context: str = "trivia",
             'Series_Total_Episodes': {'weight': 1.5},  # Total episodes across a whole franchise
             'Playtime_Battle': {'weight': 1.5},  # Which of 2 games has more playtime hours
             'Release_Year': {'weight': 1.5},  # What year was a specific game released?
-            'YouTube_Views_Champ': {'weight': 0.2},  # Most YouTube views (YouTube-only, reduced weight to prevent repetition)
+            # Most YouTube views (YouTube-only, reduced weight to prevent repetition)
+            'YouTube_Views_Champ': {'weight': 0.2},
             # --- AI-creative (low weight - occasional variety) ---
             'Franchise_Lore': {'weight': 0.5},  # Lore question, AI provides answer
         }

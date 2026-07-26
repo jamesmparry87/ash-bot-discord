@@ -648,15 +648,13 @@ async def friday_community_analysis():
             "Good morning, personnel. My analysis of the past week's crew engagement is complete.",
             "Attention crew. I have processed the weekly communication logs. The results are... as expected.",
             "Greetings. I have concluded my scheduled Friday assessment of your interpersonal data exchanges.",
-            "Weekly diagnostic complete. I have evaluated the crew's recent communication patterns for optimal efficiency."
-        ]
-        
+            "Weekly diagnostic complete. I have evaluated the crew's recent communication patterns for optimal efficiency."]
+
         outros = [
             "Weekend operational pause is now in effect.",
             "You are now authorized to commence your weekend operational pause. Please ensure your biological functions remain intact until Monday.",
             "I recommend using the next 48 hours for biological rest. Operational pause is active.",
-            "End of report. Please return to your designated leisure activities."
-        ]
+            "End of report. Please return to your designated leisure activities."]
 
         debrief = (
             f"📅 **Friday Protocol Assessment**\n\n"
