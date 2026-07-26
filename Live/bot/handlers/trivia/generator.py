@@ -113,7 +113,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
             cat = random.choices(remaining, weights=remaining_weights, k=1)[0]
             tried_categories.add(cat)
 
-            print(f"🎬 TRIVIA DIRECTOR: Attempt {overall_attempt+1}/3 - Trying category '{cat}'")
+            print(f"🎬 TRIVIA DIRECTOR: Attempt {len(tried_categories)} - Trying category '{cat}'")
 
             if cat == 'Episode_Champion':
                 # Find a genre with 2+ games that have episode data

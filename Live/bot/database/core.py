@@ -239,7 +239,7 @@ class DatabaseManager:
         try:
             # Always create a fresh connection for each operation to avoid stale connections
             self.connection = psycopg2.connect(
-                self.database_url, cursor_factory=RealDictCursor)
+                self.database_url, cursor_factory=RealDictCursor, connect_timeout=5)
             return self.connection
         except Exception as e:
             logger.error(f"Database connection failed: {e}")
