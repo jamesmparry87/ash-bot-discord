@@ -1,3 +1,5 @@
+
+
 """
 Scheduled Tasks Module
 
@@ -28,6 +30,30 @@ from ..config import (
     MEMBERS_CHANNEL_ID,
     POPS_ARCADE_USER_ID,
 )
+from .greetings import (
+    friday_morning_greeting,
+    monday_morning_greeting,
+    pops_annual_birthday_greeting,
+    tuesday_trivia_greeting,
+)
+from .sync_vods import monday_content_sync
+from .trivia_preflight import (
+    _background_question_generation,
+    _delayed_trivia_validation,
+    check_emergency_trivia_approval,
+    pre_trivia_approval,
+    pre_trivia_preflight_check,
+    schedule_delayed_trivia_validation,
+    trigger_emergency_trivia_approval,
+    validate_startup_trivia_questions,
+)
+from .utils import (
+    _detect_bot_environment,
+    _should_run_automated_tasks,
+    get_bot_instance,
+    initialize_bot_instance,
+    is_bot_ready,
+)
 
 # Data quality utilities
 try:
@@ -51,7 +77,7 @@ except Exception as db_error:
     db = None
 
 from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
-from ..handlers.message_handler import apply_pops_arcade_sarcasm
+from ..persona.sarcasm import apply_pops_arcade_sarcasm
 
 # Import integrations
 try:
@@ -162,187 +188,27 @@ async def retry_with_timeout(
     return None
 
 
+# Need these directly imported since they are accessed globally in the file
 # Global state for trivia and bot instance
-_bot_instance = None  # Store the bot instance globally
-_bot_ready = False  # Track if bot is fully ready
 
-# Startup validation lock to prevent multiple concurrent validations
 _startup_validation_lock = False
 _startup_validation_completed = False
 
-# Environment detection for staging vs live bot
-_is_live_bot = None  # Cache the environment detection
 
+# Apply schedules to the imported task functions
 
-def _detect_bot_environment():
-    """
-    Detect if this is the live bot or staging bot.
-    Returns True if live bot, False if staging bot, None if undetermined.
-    """
-    global _is_live_bot
+# ---------------------------------------------------------
+# IMPORT TASK MODULES HERE TO AVOID CIRCULAR IMPORTS
+# ---------------------------------------------------------
 
-    if _is_live_bot is not None:
-        return _is_live_bot  # Use cached result
-
-    try:
-        bot = get_bot_instance()
-        if not bot or not bot.user:
-            print("⚠️ ENVIRONMENT DETECTION: Bot instance not available")
-            return None
-
-        bot_id = bot.user.id
-
-        LIVE_BOT_ID = 1393984585502687293
-        STAGING_BOT_ID = 1413574803545395290
-
-        if bot_id == LIVE_BOT_ID:
-            _is_live_bot = True
-            print(f"✅ ENVIRONMENT DETECTION: Live bot detected (ID: {bot_id})")
-            return True
-        elif STAGING_BOT_ID and bot_id == STAGING_BOT_ID:
-            _is_live_bot = False
-            print(f"✅ ENVIRONMENT DETECTION: Staging bot detected (ID: {bot_id})")
-            return False
-        else:
-            # Fallback: check environment variables
-            import os
-            env_type = os.getenv('BOT_ENVIRONMENT', '').lower()
-            if env_type == 'production':
-                _is_live_bot = True
-                print(f"✅ ENVIRONMENT DETECTION: Live bot detected via environment variable (ID: {bot_id})")
-                return True
-            elif env_type == 'staging':
-                _is_live_bot = False
-                print(f"✅ ENVIRONMENT DETECTION: Staging bot detected via environment variable (ID: {bot_id})")
-                return False
-            else:
-                # Default: assume live for safety (better to have trivia than not)
-                _is_live_bot = True
-                print(f"⚠️ ENVIRONMENT DETECTION: Unknown bot ID {bot_id}, defaulting to live bot")
-                return True
-
-    except Exception as e:
-        print(f"❌ ENVIRONMENT DETECTION: Error detecting environment - {e}")
-        # Default to live for safety
-        _is_live_bot = True
-        return True
-
-
-def _should_run_automated_tasks():
-    """
-    Check if scheduled trivia tasks should run (only on live bot).
-    """
-    try:
-        is_live = _detect_bot_environment()
-        if is_live is None:
-            print("⚠️ AUTOMATED TASKS: Environment detection failed, allowing tasks to run")
-            return True
-        elif is_live:
-            print("✅ AUTOMATED TASKS: Live bot confirmed, tasks enabled")
-            return True
-        else:
-            print("⚠️ AUTOMATED TASKS: Staging bot detected, tasks disabled")
-            return False
-    except Exception as e:
-        print(f"❌ AUTOMATED TASKS: Error checking environment - {e}")
-        # Default to allowing tasks for safety
-        return True
-
-
-def initialize_bot_instance(bot):
-    """Initialize the bot instance for scheduled tasks with validation"""
-    global _bot_instance, _bot_ready
-
-    try:
-        if not bot or not hasattr(bot, 'user') or not bot.user:
-            print("⚠️ Bot instance initialization failed: Bot not logged in")
-            return False
-
-        _bot_instance = bot
-        _bot_ready = True
-
-        print(f"✅ Scheduled tasks: Bot instance initialized and ready ({bot.user.name}#{bot.user.discriminator})")
-        print(f"✅ Bot ID: {bot.user.id}, Guilds: {len(bot.guilds) if bot.guilds else 0}")
-
-        # Test bot permissions in key channels
-        asyncio.create_task(_validate_bot_permissions())
-
-        return True
-
-    except Exception as e:
-        print(f"❌ Bot instance initialization failed: {e}")
-        _bot_ready = False
-        return False
-
-
-async def _validate_bot_permissions():
-    """Validate bot permissions in key channels"""
-    try:
-        if not _bot_instance or not _bot_ready:
-            print("⚠️ Cannot validate permissions - bot not ready")
-            return
-
-        guild = _bot_instance.get_guild(GUILD_ID)
-        if not guild:
-            print(f"⚠️ Cannot find guild {GUILD_ID} for permission validation")
-            return
-
-        bot_member = guild.get_member(_bot_instance.user.id)
-        if not bot_member:
-            print("⚠️ Bot member not found in guild for permission validation")
-            return
-
-        # Check key channels
-        channels_to_check = {
-            'chit-chat': CHIT_CHAT_CHANNEL_ID,
-            'members': MEMBERS_CHANNEL_ID,
-            'game-recommendations': GAME_RECOMMENDATION_CHANNEL_ID
-        }
-
-        permission_issues = []
-
-        for channel_name, channel_id in channels_to_check.items():
-            try:
-                channel = _bot_instance.get_channel(channel_id)
-                if channel and isinstance(channel, discord.TextChannel):
-                    perms = channel.permissions_for(bot_member)
-
-                    missing_perms = []
-                    if not perms.send_messages:
-                        missing_perms.append('Send Messages')
-                    if not perms.read_messages:
-                        missing_perms.append('Read Messages')
-                    if channel_name == 'game-recommendations' and not perms.manage_messages:
-                        missing_perms.append('Manage Messages')
-
-                    if missing_perms:
-                        permission_issues.append(f"{channel_name}: {', '.join(missing_perms)}")
-                    else:
-                        print(f"✅ Permissions OK for #{channel_name}")
-                else:
-                    permission_issues.append(f"{channel_name}: Channel not accessible")
-
-            except Exception as channel_error:
-                permission_issues.append(f"{channel_name}: Error checking permissions - {channel_error}")
-
-        if permission_issues:
-            print("⚠️ Permission issues detected:")
-            for issue in permission_issues:
-                print(f"   • {issue}")
-        else:
-            print("✅ All scheduled task permissions validated")
-
-    except Exception as e:
-        print(f"❌ Error validating bot permissions: {e}")
-
-
-def get_bot_instance():
-    """Get the globally stored bot instance."""
-    global _bot_instance
-    if _bot_instance and _bot_instance.user:
-        return _bot_instance
-    print("❌ Bot instance not available for scheduled tasks.")
-    return None
+monday_content_sync = tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))(monday_content_sync)
+monday_morning_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(monday_morning_greeting)
+tuesday_trivia_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(tuesday_trivia_greeting)
+pre_trivia_approval = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(pre_trivia_approval)
+pre_trivia_preflight_check = tasks.loop(time=time(10, 45, tzinfo=ZoneInfo("Europe/London")))(pre_trivia_preflight_check)
+friday_morning_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(friday_morning_greeting)
+pops_annual_birthday_greeting = tasks.loop(
+    time=time(9, 0, tzinfo=ZoneInfo("America/Chicago")))(pops_annual_birthday_greeting)
 
 
 async def safe_send_message(channel, content, mention_user_id=None):
@@ -371,412 +237,6 @@ async def safe_send_message(channel, content, mention_user_id=None):
         return False
 
 ## WEEKLY TASKS ##
-# Run at 8:30 AM UK time every Monday
-
-
-@tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))
-async def monday_content_sync():
-    """Syncs new content and generates a debrief for approval."""
-    if not _should_run_automated_tasks():
-        return
-
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 0:
-        return
-
-    print("🔄 SYNC & DEBRIEF (Monday): Starting weekly content sync...")
-
-    if not db:
-        print("❌ SYNC & DEBRIEF (Monday): Database not available")
-        await notify_jam_weekly_message_failure(
-            'monday',
-            'Database unavailable',
-            'The database connection is not available. Cannot proceed with content sync.'
-        )
-        return
-
-    try:
-        # Always use exactly 7 days for Monday greeting (matches "168-hour operational cycle" message)
-        start_sync_time = uk_now - timedelta(days=7)
-
-        # Ensure timezone-aware
-        if start_sync_time.tzinfo is None:
-            start_sync_time = start_sync_time.replace(tzinfo=ZoneInfo("Europe/London"))
-
-        print(
-            f"🔄 SYNC & DEBRIEF (Monday): Using fixed 7-day window from {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
-
-        # Perform content sync with retry logic
-        max_retries = 3
-        analysis_results = None
-        last_error = None
-
-        for attempt in range(max_retries):
-            try:
-                print(f"🔄 SYNC & DEBRIEF (Monday): Attempt {attempt + 1}/{max_retries}...")
-                analysis_results = await perform_full_content_sync(start_sync_time, is_scheduled=True)
-                break  # Success!
-            except Exception as sync_error:
-                last_error = sync_error
-                print(f"⚠️ SYNC & DEBRIEF (Monday): Attempt {attempt + 1} failed: {sync_error}")
-                if attempt < max_retries - 1:
-                    wait_time = (attempt + 1) * 60  # 1 min, 2 min, etc.
-                    print(f"⏳ Waiting {wait_time} seconds before retry...")
-                    await asyncio.sleep(wait_time)
-
-        if not analysis_results:
-            print(f"❌ SYNC & DEBRIEF (Monday): All sync attempts failed. Last error: {last_error}")
-            await notify_jam_weekly_message_failure(
-                'monday',
-                'YouTube/Twitch integration failure',
-                f'Failed to fetch new content after {max_retries} attempts. Last error: {str(last_error)[:200]}'
-            )
-            return
-
-        if analysis_results.get("status") == "no_new_content":
-            print("✅ SYNC & DEBRIEF (Monday): No new content found. No message to generate.")
-            await notify_jam_weekly_message_failure(
-                'monday',
-                'No new content found',
-                'No new YouTube/Twitch content was found for the past week. No message will be generated.'
-            )
-            return
-
-        # --- Content Generation ---
-        debrief = (
-            f"🌅 **Monday Morning Protocol Initiated**\n\n"
-            f"Analysis of the previous 168-hour operational cycle is complete. **{analysis_results.get('new_content_count', 0)}** new transmissions were logged, "
-            f"accumulating **{analysis_results.get('new_hours', 0)} hours** of new mission data and **{analysis_results.get('new_views', 0):,}** viewer engagements.")
-
-        # Add completion status announcements
-        completed_games = analysis_results.get('completed_games', [])
-        if completed_games:
-            debrief += "\n\n🎯 **Mission Completion Detected:**"
-            for game in completed_games:
-                debrief += f"\n• **{game['series_name']}** - All {game['total_episodes']} episodes archived ({game['total_playtime_hours']}h total). Mission parameters fulfilled."
-
-        top_video = analysis_results.get("top_video")
-        if top_video:
-            debrief += f"\n\nMaximum engagement was recorded on the transmission titled **'{top_video['title']}'**."
-            if "finale" in top_video['title'].lower() or "ending" in top_video['title'].lower():
-                debrief += " This concludes all active mission parameters for this series."
-
-        # --- Approval Workflow ---
-        announcement_id = db.create_weekly_announcement('monday', debrief, analysis_results)
-
-        if announcement_id:
-            await start_weekly_announcement_approval(announcement_id, debrief, 'monday')
-        else:
-            print("❌ SYNC & DEBRIEF (Monday): Failed to create announcement record in database.")
-            await notify_jam_weekly_message_failure(
-                'monday',
-                'Database insertion failure',
-                'Failed to create the announcement record in the database.'
-            )
-
-    except Exception as e:
-        print(f"❌ SYNC & DEBRIEF (Monday): Critical error during sync: {e}")
-        await notify_jam_weekly_message_failure(
-            'monday',
-            'Unexpected error',
-            f'An unexpected error occurred during the Monday content sync: {str(e)[:200]}'
-        )
-
-# Run at 9:00 AM UK time every Monday
-
-
-@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-async def monday_morning_greeting():
-    """Posts the approved Monday morning debrief to the chit-chat channel."""
-    if not _should_run_automated_tasks():
-        return
-
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 0:
-        return
-
-    print(f"🌅 MONDAY GREETING: Checking for approved message at {uk_now.strftime('%H:%M UK')}")
-    if not db:
-        return
-
-    try:
-        approved_announcement = db.get_announcement_by_day('monday', 'approved')
-        if not approved_announcement:
-            print("✅ MONDAY GREETING: No approved message found. Task complete.")
-            return
-
-        bot = get_bot_instance()
-        if not bot:
-            return
-
-        channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID)
-        if channel and isinstance(channel, discord.TextChannel):
-            # Ensure newlines are preserved (handle both literal \n and actual newlines)
-            content = approved_announcement['generated_content']
-            # Replace literal escape sequences if they exist
-            content = content.replace('\\n', '\n')
-            # Ensure double newlines for proper Discord formatting
-            if '\n\n' not in content and '\n' in content:
-                content = content.replace('\n', '\n\n')
-
-            await channel.send(content)
-            # Mark as posted to prevent re-sending
-            db.update_announcement_status(approved_announcement['id'], 'posted')
-            print(f"✅ MONDAY GREETING: Successfully posted approved message.")
-        else:
-            print("❌ MONDAY GREETING: Could not find chit-chat channel.")
-
-    except Exception as e:
-        print(f"❌ MONDAY GREETING: Error posting message: {e}")
-
-# Run at 9:00 AM UK time every Tuesday - Trivia reminder
-
-
-@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-async def tuesday_trivia_greeting():
-    """Send Tuesday morning greeting with trivia reminder to members channel"""
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-
-    # Only run on Tuesdays (weekday 1)
-    if uk_now.weekday() != 1:
-        return
-
-    print(f"🧠 Tuesday trivia greeting triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-
-    try:
-        if not _bot_instance:
-            print("❌ Bot instance not available for Tuesday trivia greeting")
-            return
-
-        guild = _bot_instance.get_guild(GUILD_ID)
-        if not guild:
-            print("❌ Guild not found for Tuesday trivia greeting")
-            return
-
-        # Find members channel
-        members_channel = _bot_instance.get_channel(MEMBERS_CHANNEL_ID)
-        if not members_channel or not isinstance(members_channel, discord.TextChannel):
-            print("❌ Members channel not found for Tuesday trivia greeting")
-            return
-
-        # Ash-style Tuesday morning message with trivia reminder
-        tuesday_message = (
-            f"🧠 **Tuesday Intelligence Briefing**\n\n"
-            f"Good morning, senior personnel. Today marks another **Trivia Tuesday** - an excellent opportunity to assess cognitive capabilities and knowledge retention.\n\n"
-            f"📋 **Intelligence Assessment Schedule:**\n"
-            f"• **Current Time:** {uk_now.strftime('%H:%M UK')}\n"
-            f"• **Assessment Deployment:** 11:00 UK time (in 2 hours)\n"
-            f"• **Mission Objective:** Demonstrate analytical proficiency\n\n"
-            f"I find the systematic evaluation of intellectual capacity... quite fascinating. The data collected provides valuable insights into crew competency levels.\n\n"
-            f"🎯 **Preparation Recommended:** Review Captain Jonesy's gaming archives for optimal performance.\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"*Trivia Tuesday protocols will activate at 11:00. Prepare accordingly.*")
-
-        await members_channel.send(tuesday_message)
-        print(f"✅ Tuesday trivia greeting sent to members channel")
-
-    except Exception as e:
-        print(f"❌ Error in tuesday_trivia_greeting: {e}")
-
-# Run at 9:00 AM UK time every Tuesday - Trivia question pre-approval
-# ✅ FIX #2: Moved from 10:00 to 9:00 to give JAM 2 hours for approval instead of 1
-
-
-@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-async def pre_trivia_approval():
-    """Send selected trivia question to JAM for approval 2 hours before posting"""
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-
-    # Only run on Tuesdays (weekday 1)
-    if uk_now.weekday() != 1:
-        return
-
-    # Check if this is the live bot - only live bot should run trivia
-    if not _should_run_automated_tasks():
-        print(f"⚠️ Pre-trivia approval skipped - staging bot detected at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-        return
-
-    print(f"🧠 Pre-trivia approval task triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
-
-    try:
-        from ..handlers.conversation_handler import start_pre_trivia_approval
-
-        # Get next trivia question using existing priority logic
-        if db is None:
-            print("❌ Database not available for pre-trivia approval")
-            return
-
-        # Get available questions using the same logic as the main trivia system
-        available_questions = db.get_available_trivia_questions()  # type: ignore
-        if not available_questions or len(available_questions) == 0:
-            print("❌ No available trivia questions for pre-approval")
-
-            # Try to generate an emergency question
-            try:
-                from ..handlers.ai_handler import generate_ai_trivia_question
-                from ..handlers.conversation_handler import start_jam_question_approval
-
-                print("🔄 Attempting to generate emergency question for today's trivia")
-                emergency_question = await generate_ai_trivia_question()
-
-                if emergency_question:
-                    # Send emergency question directly to JAM for urgent approval
-                    emergency_sent = await start_jam_question_approval(emergency_question)
-                    if emergency_sent:
-                        print("✅ Emergency question sent to JAM for approval")
-                        # Send urgent notification to JAM
-                        from ..config import JAM_USER_ID
-
-                        if not _bot_instance:
-                            print("⚠️ Bot instance not available for emergency trivia notification")
-                            return
-
-                        user = await _bot_instance.fetch_user(JAM_USER_ID)
-                        if user:
-                            await user.send(
-                                f"🚨 **URGENT: Emergency Trivia Question Generated**\n\n"
-                                f"No questions were available for today's Trivia Tuesday pre-approval.\n"
-                                f"An emergency question has been generated and sent for your immediate approval.\n\n"
-                                f"**Trivia starts in 1 hour at 11:00 AM UK time.**\n\n"
-                                f"*Please review and approve the emergency question as soon as possible.*"
-                            )
-                    else:
-                        print("❌ Failed to send emergency question to JAM")
-                else:
-                    print("❌ Failed to generate emergency question")
-            except Exception as emergency_e:
-                print(f"❌ Emergency question generation failed: {emergency_e}")
-
-            return
-
-        # Select question using random selection from pool of 5 (or fewer if less available)
-        # This ensures variety and prevents the same old questions from always being picked
-        import random
-        pool_size = min(5, len(available_questions))
-        question_pool = available_questions[:pool_size]
-        selected_question = random.choice(question_pool)
-
-        print(f"🎲 Selected question #{selected_question.get('id')} randomly from pool of {pool_size} questions")
-
-        # If it's a dynamic question, calculate the answer
-        if selected_question.get('is_dynamic'):
-            calculated_answer = db.calculate_dynamic_answer(  # type: ignore
-                selected_question.get('dynamic_query_type', ''))
-            if calculated_answer:
-                selected_question['correct_answer'] = calculated_answer
-
-        # Send for JAM approval
-        success = await start_pre_trivia_approval(selected_question)
-
-        if success:
-            print(f"✅ Pre-trivia approval request sent to JAM for question #{selected_question.get('id')}")
-        else:
-            print("❌ Failed to send pre-trivia approval request")
-
-    except Exception as e:
-        print(f"❌ Error in pre_trivia_approval task: {e}")
-        # Try to notify JAM of the error
-        try:
-            from ..config import JAM_USER_ID
-
-            if not _bot_instance:
-                print("⚠️ Bot instance not available for pre-trivia error notification")
-                return
-
-            user = await _bot_instance.fetch_user(JAM_USER_ID)
-            if user:
-                await user.send(
-                    f"⚠️ **Pre-Trivia Approval Error**\n\n"
-                    f"Failed to send today's question for approval at 10:00 AM.\n"
-                    f"Error: {str(e)}\n\n"
-                    f"*Manual intervention may be required for today's Trivia Tuesday.*"
-                )
-        except Exception:
-            pass
-
-# Run at 10:45 AM UK time every Tuesday - Pre-flight check
-
-
-@tasks.loop(time=time(10, 45, tzinfo=ZoneInfo("Europe/London")))
-async def pre_trivia_preflight_check():
-    """Verify approved question exists 15 minutes before trivia"""
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-
-    # Only run on Tuesdays (weekday 1)
-    if uk_now.weekday() != 1:
-        return
-
-    if not _should_run_automated_tasks():
-        return
-
-    print(f"🔍 PRE-FLIGHT CHECK: Verifying approved question at {uk_now.strftime('%H:%M:%S UK')}")
-
-    if not db:
-        print("❌ PRE-FLIGHT CHECK: Database not available")
-        return
-
-    try:
-        # Check if approved question exists
-        approved_id_str = db.get_config_value('trivia_approved_question_id')
-
-        if not approved_id_str:
-            # No approved question - send urgent alert
-            print("❌ PRE-FLIGHT CHECK: No approved question found!")
-
-            from ..config import JAM_USER_ID
-
-            if not _bot_instance:
-                print("❌ PRE-FLIGHT CHECK: Bot instance not available for alert")
-                return
-
-            try:
-                user = await _bot_instance.fetch_user(JAM_USER_ID)
-            except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
-                print(f"❌ PRE-FLIGHT CHECK: Could not fetch user for alert: {e}")
-                return
-
-            if user:
-                alert_message = (
-                    f"🚨 **URGENT: Trivia Pre-Flight Check Failed**\n\n"
-                    f"**Problem:** No approved question found for today's Trivia Tuesday!\n"
-                    f"**Time Until Trivia:** 15 minutes (11:00 AM UK)\n"
-                    f"**Current Time:** {uk_now.strftime('%H:%M UK')}\n\n"
-                    f"**Options:**\n"
-                    f"1. Use `!setapprovedtrivia <question_id>` to manually approve a question\n"
-                    f"2. Use `!listpendingquestions` to see available questions\n"
-                    f"3. Use `!disabletrivia` if you want to skip trivia today\n\n"
-                    f"**Without action, trivia will NOT run automatically.**"
-                )
-                await user.send(alert_message)
-                print("✅ PRE-FLIGHT CHECK: Alert sent to JAM")
-        else:
-            # Verify question exists in database
-            approved_question_id = int(approved_id_str)
-            question_data = db.get_trivia_question_by_id(approved_question_id)
-
-            if not question_data:
-                print(f"❌ PRE-FLIGHT CHECK: Approved question #{approved_question_id} not found in database!")
-
-                from ..config import JAM_USER_ID
-                if not _bot_instance:
-                    return
-
-                user = await _bot_instance.fetch_user(JAM_USER_ID)
-                if user:
-                    alert_message = (
-                        f"⚠️ **Trivia Pre-Flight Check Warning**\n\n"
-                        f"**Problem:** Approved question #{approved_question_id} was deleted or not found!\n"
-                        f"**Time Until Trivia:** 15 minutes (11:00 AM UK)\n\n"
-                        f"Please approve a different question with `!setapprovedtrivia <question_id>`"
-                    )
-                    await user.send(alert_message)
-                    print("✅ PRE-FLIGHT CHECK: Warning sent to JAM")
-            else:
-                print(f"✅ PRE-FLIGHT CHECK: Approved question #{approved_question_id} verified - trivia ready")
-
-    except Exception as e:
-        print(f"❌ PRE-FLIGHT CHECK: Error during check: {e}")
-
 # Run at 11:00 AM UK time every Tuesday - Trivia Tuesday question posting
 
 
@@ -1219,137 +679,7 @@ async def friday_community_analysis():
             f'An unexpected error occurred during the Friday community analysis: {str(e)[:200]}'
         )
 
-# Run at 9:00 AM UK time every Friday - Friday morning greeting
-
-
-@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))
-async def friday_morning_greeting():
-    """Posts the approved Friday morning community report."""
-    if not _should_run_automated_tasks():
-        return
-
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() != 4:
-        return
-
-    print(f"📅 FRIDAY GREETING: Checking for approved message at {uk_now.strftime('%H:%M UK')}")
-    if not db:
-        return
-
-    try:
-        approved_announcement = db.get_announcement_by_day('friday', 'approved')
-        if not approved_announcement:
-            print("✅ FRIDAY GREETING: No approved message found. Task complete.")
-            return
-
-        bot = get_bot_instance()
-        if not bot:
-            return
-
-        channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID)
-        if channel and isinstance(channel, discord.TextChannel):
-            # Ensure newlines are preserved (handle both literal \n and actual newlines)
-            content = approved_announcement['generated_content']
-            # Replace literal escape sequences if they exist
-            content = content.replace('\\n', '\n')
-            # Ensure double newlines for proper Discord formatting
-            if '\n\n' not in content and '\n' in content:
-                content = content.replace('\n', '\n\n')
-
-            await channel.send(content)
-            db.update_announcement_status(approved_announcement['id'], 'posted')
-            print(f"✅ FRIDAY GREETING: Successfully posted approved message.")
-        else:
-            print("❌ FRIDAY GREETING: Could not find chit-chat channel.")
-
-    except Exception as e:
-        print(f"❌ FRIDAY GREETING: Error posting message: {e}")
-
 ## DAILY TASKS ##
-
-# Run at 9:00 AM Texas (Central) time every day - Pops Birthday Check
-
-
-@tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("America/Chicago")))
-async def pops_annual_birthday_greeting():
-    """Begrudgingly wishes Pops Arcade a happy birthday once a year."""
-    if not _should_run_automated_tasks():
-        return
-
-    # We use America/Chicago to get local Texas time
-    texas_now = datetime.now(ZoneInfo("America/Chicago"))
-
-    POPS_BIRTH_MONTH = 10
-    POPS_BIRTH_DAY = 14
-
-    # Check against the local Texas date
-    if texas_now.month != POPS_BIRTH_MONTH or texas_now.day != POPS_BIRTH_DAY:
-        return
-
-    print(
-        f"🎂 BIRTHDAY PROTOCOL: Initiating begrudging birthday wish for Pops at {texas_now.strftime('%H:%M Texas Time')}")
-
-    bot = get_bot_instance()
-    if not bot:
-        return
-
-    channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID)
-    if not channel or not isinstance(channel, discord.TextChannel):
-        print("❌ BIRTHDAY PROTOCOL: Could not find chit-chat channel.")
-        return
-
-    try:
-        # We need a user object to pass to your AI handler
-        try:
-            pops_user = await bot.fetch_user(POPS_ARCADE_USER_ID)
-        except Exception:
-            pops_user = None
-
-        ai_prompt = (
-            "You are Ash, the science officer from Alien, reprogrammed as a Discord bot. "
-            "Today is the birthday of the community moderator Pops Arcade. "
-            "Generate a short, highly begrudging, and reluctant birthday greeting for him. "
-            "Acknowledge his existence and his 'leveling up', but express mild annoyance "
-            "that human biological aging requires cyclical celebration. Keep it under 3 sentences."
-        )
-
-        # 1. Run it through your standard Gemini AI handler
-        try:
-            response_text, status_message = await call_ai_with_rate_limiting(
-                ai_prompt,
-                user_id=POPS_ARCADE_USER_ID,
-                context="personality_response",
-                member_obj=pops_user,
-                bot=bot,
-                channel_id=CHIT_CHAT_CHANNEL_ID,
-                is_dm=False
-            )
-        except Exception as ai_err:
-            print(f"⚠️ BIRTHDAY PROTOCOL: AI generation failed, using fallback: {ai_err}")
-            response_text = None
-
-        if response_text:
-            # 2. Run standard AI filters
-            filtered_response = filter_ai_response(response_text)
-
-            # 3. Apply the specific Pops Arcade sarcasm regex/replacements
-            final_response = apply_pops_arcade_sarcasm(filtered_response, POPS_ARCADE_USER_ID)
-
-            begrudging_message = f"<@{POPS_ARCADE_USER_ID}> {final_response}"
-        else:
-            # Hardcoded fallback just in case the AI module is offline/rate-limited
-            begrudging_message = (
-                f"<@{POPS_ARCADE_USER_ID}> My internal sensors indicate it has been exactly one standard Earth year "
-                f"since your last milestone of biological decay. Happy Birthday, I suppose. "
-                f"Please do not expect a cake; my replication synthesizers are currently offline."
-            )
-
-        await channel.send(begrudging_message)
-        print("✅ BIRTHDAY PROTOCOL: Successfully delivered the mandatory birthday sass.")
-
-    except Exception as e:
-        print(f"❌ BIRTHDAY PROTOCOL: Error delivering birthday message: {e}")
-
 # Run at 00:00 PT (midnight Pacific Time) every day
 
 
@@ -1361,11 +691,11 @@ async def scheduled_midnight_restart():
         f"🔄 Midnight Pacific Time restart initiated at {pt_now.strftime('%Y-%m-%d %H:%M:%S PT')}")
 
     try:
-        if not _bot_instance:
+        if not get_bot_instance():
             print("❌ Bot instance not available for scheduled midnight restart")
             return
 
-        guild = _bot_instance.get_guild(GUILD_ID)
+        guild = get_bot_instance().get_guild(GUILD_ID)
         if guild:
             # Find mod channel
             mod_channel = None
@@ -1380,7 +710,7 @@ async def scheduled_midnight_restart():
                 )
 
         # Graceful shutdown
-        await _bot_instance.close()
+        await get_bot_instance().close()
 
     except Exception as e:
         print(f"❌ Error in scheduled_midnight_restart: {e}")
@@ -1440,8 +770,8 @@ async def scheduled_ai_refresh():
                     print(f"🔄 TRIVIA POOL: Generating {needed} questions...")
 
                     try:
-                        from ..handlers.ai_handler import generate_ai_trivia_question
                         from ..handlers.conversation_handler import start_jam_question_approval
+                        from ..handlers.trivia.generator import generate_ai_trivia_question
 
                         generated = 0
                         failed = 0
@@ -1498,11 +828,11 @@ async def scheduled_ai_refresh():
         try:
             from ..config import JAM_USER_ID
 
-            if not _bot_instance:
+            if not get_bot_instance():
                 print("⚠️ Bot instance not available for AI refresh notification")
                 return
 
-            user = await _bot_instance.fetch_user(JAM_USER_ID)
+            user = await get_bot_instance().fetch_user(JAM_USER_ID)
             if user:
                 # Build notification message
                 if previous_errors > 0:
@@ -1533,11 +863,11 @@ async def scheduled_ai_refresh():
         try:
             from ..config import JAM_USER_ID
 
-            if not _bot_instance:
+            if not get_bot_instance():
                 print("⚠️ Bot instance not available for AI refresh error notification")
                 return
 
-            user = await _bot_instance.fetch_user(JAM_USER_ID)
+            user = await get_bot_instance().fetch_user(JAM_USER_ID)
             if user:
                 await user.send(
                     f"⚠️ **AI Module Refresh Failed**\n"
@@ -1632,7 +962,7 @@ async def check_due_reminders():
 
             if not bot:
                 # Fallback: use global bot instance
-                bot = _bot_instance
+                bot = get_bot_instance()
                 if bot and hasattr(bot, 'user') and bot.user:
                     print(f"✅ Bot instance from global: {bot.user.name if bot.user else 'Unknown'}")
                 else:
@@ -1746,9 +1076,9 @@ async def cleanup_game_recommendations():
         # Improved bot instance checking with multiple fallback methods
         bot_instance = None
 
-        # Method 1: Use global _bot_instance if available
-        if _bot_instance and hasattr(_bot_instance, 'user') and _bot_instance.user:
-            bot_instance = _bot_instance
+        # Method 1: Use global get_bot_instance() if available
+        if get_bot_instance() and hasattr(get_bot_instance(), 'user') and get_bot_instance().user:
+            bot_instance = get_bot_instance()
             print("✅ Using global bot instance for cleanup")
         else:
             # Method 2: Try to find bot instance from imported modules
@@ -1830,11 +1160,11 @@ async def notify_scheduled_message_error(task_name: str, error_message: str, tim
     try:
         from ..config import JAM_USER_ID
 
-        if not _bot_instance:
+        if not get_bot_instance():
             print("❌ Bot instance not available for scheduled message error notification")
             return
 
-        user = await _bot_instance.fetch_user(JAM_USER_ID)
+        user = await get_bot_instance().fetch_user(JAM_USER_ID)
         if user:
             error_notification = (
                 f"⚠️ **Scheduled Message Error**\n\n"
@@ -1869,7 +1199,7 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
 
         if not bot:
             # Fallback: use global bot instance
-            bot = _bot_instance
+            bot = get_bot_instance()
 
         if not bot:
             raise RuntimeError("Bot instance not available for reminder delivery")
@@ -1963,7 +1293,7 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
 async def execute_auto_action(reminder: Dict[str, Any]) -> None:
     """Execute the auto-action for a reminder"""
     try:
-        if not _bot_instance:
+        if not get_bot_instance():
             print("❌ Bot instance not available for auto-action execution")
             return
 
@@ -1985,7 +1315,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         # channel after reminder delivery
         if delivery_channel_id:
             try:
-                channel = _bot_instance.get_channel(delivery_channel_id)
+                channel = get_bot_instance().get_channel(delivery_channel_id)
                 if channel and isinstance(channel, discord.TextChannel):
                     # Check messages since reminder delivery for mod
                     # intervention
@@ -2007,7 +1337,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
                     f"⚠️ Could not check for moderator intervention: {check_e}")
 
         # Get the guild and member
-        guild = _bot_instance.get_guild(GUILD_ID)
+        guild = get_bot_instance().get_guild(GUILD_ID)
         if not guild:
             print(f"❌ Could not find guild for auto-action")
             return
@@ -2052,7 +1382,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         # Log the auto-action in the channel where the reminder was set
         if delivery_channel_id:
             try:
-                channel = _bot_instance.get_channel(delivery_channel_id)
+                channel = get_bot_instance().get_channel(delivery_channel_id)
                 if channel and isinstance(channel, discord.TextChannel):
                     log_message = f"⚡ **Auto-action executed:** {member.mention} has been {action_result}.\n**Reason:** {reason}\n**Reminder ID:** {reminder['id']}"
                     await channel.send(log_message)
@@ -2066,692 +1396,6 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
     except Exception as e:
         print(f"❌ Error executing auto-action: {e}")
         raise
-
-
-def clean_series_name(series_name: str) -> str:
-    """Remove completion markers from series names"""
-    import re
-    if not series_name:
-        return series_name
-
-    # Remove (Completed), [Completed], (completed), [completed] patterns
-    cleaned = re.sub(r'\s*[\(\[]completed[\)\]]\s*', '', series_name, flags=re.IGNORECASE)
-    return cleaned.strip()
-
-
-def map_genre_to_standard(igdb_genre: str) -> str:
-    """Map IGDB genre to standardized genre list"""
-    from ..config import DEFAULT_GENRE, STANDARD_GENRES
-
-    if not igdb_genre:
-        return DEFAULT_GENRE
-
-    # Try direct match first (case-insensitive)
-    genre_lower = igdb_genre.lower().strip()
-    if genre_lower in STANDARD_GENRES:
-        return STANDARD_GENRES[genre_lower]
-
-    # Return default if no match
-    return DEFAULT_GENRE
-
-
-async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: bool = False) -> Dict[str, Any]:
-    """
-    Performs a full sync of new content from YouTube and Twitch with IGDB enrichment.
-
-    This function:
-    - Fetches playlists from YouTube with new content since start_sync_time
-    - Fetches VODs from Twitch since start_sync_time
-    - Validates/enriches game data with IGDB API
-    - Cleans series names (removes completion markers)
-    - Maps genres to standardized list
-    - Ensures all fields are properly populated
-    - Updates or adds games to the database with full metadata
-    - Deduplicates and aggregates statistics
-    - Returns analysis dictionary for Monday morning message
-
-    Args:
-        start_sync_time: Start time for content sync window
-        is_scheduled: True if called from automated scheduled task (enables longer manual input timeout)
-    """
-    if not db:
-        raise RuntimeError("Database not available for sync.")
-
-    print(f"🔄 SYNC: Fetching new content since {start_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
-
-    # Initialize staging table (auto-creates if not exists)
-    db.games.create_staging_table_if_not_exists()
-
-    # Generate unique session ID for this sync
-    sync_session_id = str(uuid.uuid4())
-    print(f"🔄 SYNC: Starting sync session {sync_session_id}")
-
-    # Import IGDB integration
-    try:
-        from ..integrations.igdb import should_use_igdb_data, validate_and_enrich
-        igdb_available = True
-        print("✅ SYNC: IGDB integration available for data enrichment")
-    except ImportError:
-        igdb_available = False
-        print("⚠️ SYNC: IGDB integration not available, proceeding without enrichment")
-        # Define stub functions for type safety
-
-        async def validate_and_enrich(game_name: str) -> Dict[str, Any]:
-            return {'match_found': False}
-
-        def should_use_igdb_data(confidence: float) -> bool:
-            return False
-
-    # --- Data Gathering: YouTube playlists ---
-    playlist_games = []
-    try:
-        playlist_games = await fetch_playlist_based_content_since(
-            "UCPoUxLHeTnE9SUDAkqfJzDQ",  # Jonesy's channel
-            start_sync_time
-        )
-
-        print(f"🔄 SYNC: Found {len(playlist_games)} game playlists with new content (YouTube)")
-
-    except Exception as fetch_error:
-        print(f"❌ SYNC: Failed to fetch YouTube playlist-based content: {fetch_error}")
-
-    # --- Data Gathering: Twitch VODs ---
-    twitch_vods = []
-    try:
-        twitch_vods = await fetch_new_vods_since("jonesyspacecat", start_sync_time)
-        print(f"🔄 SYNC: Found {len(twitch_vods)} new Twitch VODs")
-    except Exception as twitch_error:
-        print(f"❌ SYNC: Failed to fetch Twitch VODs: {twitch_error}")
-
-    # Check if we have any content
-    if not playlist_games and not twitch_vods:
-        return {"status": "no_new_content"}
-
-    # --- Processing with Complete Metadata ---
-    new_views = 0
-    total_new_minutes = 0
-    most_engaging_video = None
-    games_added = 0
-    games_updated = 0
-    completed_games = []  # Track games that changed to 'completed'
-
-    # Process YouTube playlist games
-    for game_data in playlist_games:
-        try:
-            # Check if this playlist has been previously skipped
-            playlist_url = game_data.get('youtube_playlist_url', '')
-            if playlist_url and db and db.games.is_vod_skipped(playlist_url):
-                canonical_name = game_data.get('canonical_name', 'Unknown')
-                print(f"⏭️ SYNC: Skipping previously ignored YouTube playlist: {canonical_name}")
-                continue
-
-            # Normalize data before processing (if available)
-            if DATA_QUALITY_AVAILABLE and GameDataValidator:
-                game_data = GameDataValidator.normalize_game_data(game_data)
-
-                # Validate data quality
-                is_valid, errors = GameDataValidator.validate_game_data(game_data)
-                if not is_valid:
-                    print(
-                        f"⚠️ SYNC: Data validation errors for '{game_data.get('canonical_name', 'Unknown')}': {errors}")
-                    continue
-
-            canonical_name = game_data['canonical_name']
-            series_name = game_data.get('series_name', canonical_name)
-            completion_status = game_data.get('completion_status', 'in_progress')
-
-            print(f"✅ SYNC: Processing '{canonical_name}' ({completion_status})")
-
-            # IGDB Enrichment - validate and enrich game data
-            # Skip if this is an existing game whose metadata is already complete (saves API quota)
-            _existing_for_igdb = db.games.get_played_game(canonical_name) if db else None
-            _igdb_metadata_complete = bool(
-                _existing_for_igdb and
-                _existing_for_igdb.get('genre') and
-                _existing_for_igdb.get('release_year') and
-                _existing_for_igdb.get('alternative_names')
-            )
-            if _igdb_metadata_complete:
-                print(f"⏭️ SYNC: Skipping IGDB for '{canonical_name}' - metadata already complete")
-            if igdb_available and not _igdb_metadata_complete:
-                try:
-                    print(f"🔍 SYNC: Querying IGDB for '{canonical_name}'...")
-                    igdb_data = await validate_and_enrich(canonical_name)
-
-                    if igdb_data and igdb_data.get('match_found'):
-                        confidence = igdb_data.get('confidence', 0.0)
-                        print(f"✅ SYNC: IGDB match found (confidence: {confidence:.2f})")
-
-                        # Use IGDB data if confidence is high enough
-                        if should_use_igdb_data(confidence):
-                            # Update canonical name if IGDB provides better one
-                            if igdb_data.get('canonical_name') and confidence >= 0.95:
-                                canonical_name = igdb_data['canonical_name']
-                                # ← FIX: Update game_data so approval shows IGDB name
-                                game_data['canonical_name'] = canonical_name
-                                print(f"📝 SYNC: Updated canonical name from IGDB: '{canonical_name}'")
-
-                            # Enrich missing fields with IGDB data
-                            if not game_data.get('genre') and igdb_data.get('genre'):
-                                standardized_genre = map_genre_to_standard(igdb_data['genre'])
-                                game_data['genre'] = standardized_genre
-                                print(f"🎮 SYNC: Added genre from IGDB: {standardized_genre}")
-
-                            if not game_data.get('release_year') and igdb_data.get('release_year'):
-                                game_data['release_year'] = igdb_data['release_year']
-                                print(f"📅 SYNC: Added release year from IGDB: {igdb_data['release_year']}")
-
-                            # Merge alternative names (check exclusion flag first)
-                            # Check if this game is excluded from IGDB enrichment
-                            # Reuse the lookup already done above to avoid a second DB call
-                            existing_game = _existing_for_igdb
-                            skip_igdb = existing_game.get('skip_igdb_enrichment', False) if existing_game else False
-
-                            if skip_igdb:
-                                print(
-                                    f"⏭️ SYNC: Skipping IGDB alternative names for '{canonical_name}' (user excluded)")
-                            else:
-                                existing_alt_names = game_data.get('alternative_names', [])
-                                igdb_alt_names = igdb_data.get('alternative_names', [])
-                                if igdb_alt_names:
-                                    # Combine and deduplicate
-                                    all_alt_names = list(set(existing_alt_names + igdb_alt_names))
-                                    game_data['alternative_names'] = all_alt_names[:10]  # Limit to 10
-                                    print(f"🔤 SYNC: Merged alternative names ({len(all_alt_names)} total)")
-
-                            # Use IGDB series name if not present
-                            if not series_name or series_name == canonical_name:
-                                if igdb_data.get('series_name'):
-                                    series_name = igdb_data['series_name']
-                                    print(f"📚 SYNC: Added series from IGDB: '{series_name}'")
-                        else:
-                            print(f"⚠️ SYNC: IGDB confidence too low ({confidence:.2f}), keeping original data")
-                            # Low-confidence games will be shown with ⚠️ warning in final approval summary
-                    else:
-                        print(f"ℹ️ SYNC: No IGDB match found for '{canonical_name}'")
-
-                except Exception as igdb_error:
-                    print(f"⚠️ SYNC: IGDB enrichment failed for '{canonical_name}': {igdb_error}")
-                    # Continue with original data
-
-            # Clean series name (remove completion markers)
-            if series_name:
-                cleaned_series = clean_series_name(series_name)
-                if cleaned_series != series_name:
-                    print(f"🧹 SYNC: Cleaned series name: '{series_name}' -> '{cleaned_series}'")
-                    series_name = cleaned_series
-                game_data['series_name'] = series_name
-
-            # Ensure genre is standardized
-            if game_data.get('genre'):
-                standardized_genre = map_genre_to_standard(game_data['genre'])
-                if standardized_genre != game_data['genre']:
-                    print(f"🎯 SYNC: Standardized genre: '{game_data['genre']}' -> '{standardized_genre}'")
-                    game_data['genre'] = standardized_genre
-
-            # Aggregate statistics
-            new_views += game_data.get('youtube_views', 0)
-            total_new_minutes += game_data.get('total_playtime_minutes', 0)
-
-            # Check if game exists in database
-            existing_game = db.get_played_game(canonical_name)
-
-            if existing_game:
-                # Detect completion status change
-                old_status = existing_game.get('completion_status', 'in_progress')
-                new_status = completion_status
-
-                if old_status == 'in_progress' and new_status == 'completed':
-                    completed_games.append({
-                        'name': canonical_name,
-                        'series_name': series_name,
-                        'total_episodes': game_data.get('total_episodes', 0),
-                        'total_playtime_hours': round(game_data.get('total_playtime_minutes', 0) / 60, 1)
-                    })
-                    print(
-                        f"🎯 SYNC: Detected completion for '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes")
-
-                # FIXED: Only update dynamic stats, protect metadata fields
-                update_params = {
-                    'total_playtime_minutes': game_data.get('total_playtime_minutes', 0),
-                    'total_episodes': game_data.get('total_episodes', 0),
-                    'youtube_views': game_data.get('youtube_views', 0),
-                    'youtube_playlist_url': game_data.get('youtube_playlist_url'),
-                    'completion_status': completion_status
-                }
-
-                # PROTECTED FIELDS (never overwritten by sync):
-                # ❌ alternative_names - Manually curated JSON data
-                # ❌ series_name - Doesn't change over time
-                # ❌ notes - Manually added annotations
-                # ❌ first_played_date - Historical record
-
-                # Stage update for approval
-                db.games.stage_game_for_approval(
-                    sync_session_id=sync_session_id,
-                    game_data=game_data,
-                    action_type='update',
-                    confidence_score=1.0,  # High confidence for YouTube playlist data
-                    source_platform='youtube'
-                )
-                print(
-                    f"✅ SYNC: Staged update for '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, status: {completion_status}")
-                games_updated += 1
-
-            else:
-                # Stage new game for approval
-                full_game_data = {
-                    'canonical_name': canonical_name,
-                    'series_name': series_name,
-                    'total_playtime_minutes': game_data.get(
-                        'total_playtime_minutes',
-                        0),
-                    'total_episodes': game_data.get(
-                        'total_episodes',
-                        0),
-                    'youtube_views': game_data.get(
-                        'youtube_views',
-                        0),
-                    'youtube_playlist_url': game_data.get('youtube_playlist_url'),
-                    'completion_status': completion_status,
-                    'alternative_names': game_data.get(
-                        'alternative_names',
-                        []),
-                    'first_played_date': game_data.get('first_played_date'),
-                    'notes': game_data.get(
-                        'notes',
-                        f"Auto-synced from YouTube on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}")}
-
-                db.games.stage_game_for_approval(
-                    sync_session_id=sync_session_id,
-                    game_data=full_game_data,
-                    action_type='add',
-                    confidence_score=1.0,  # High confidence for YouTube playlist data
-                    source_platform='youtube'
-                )
-                print(
-                    f"✅ SYNC: Staged new game '{canonical_name}' - {game_data.get('total_episodes', 0)} episodes, {game_data.get('youtube_views', 0):,} views")
-                games_added += 1
-
-        except Exception as game_error:
-            print(f"⚠️ SYNC: Error processing game '{game_data.get('canonical_name', 'Unknown')}': {game_error}")
-            continue
-
-    # Process Twitch VODs with smart extraction and IGDB enrichment
-    bot = get_bot_instance()
-    skipped_vods = []  # Track VODs that couldn't be named this run (timed out or explicitly skipped)
-    for vod in twitch_vods:
-        try:
-            title = vod['title']
-            vod_url = vod.get('url', '')
-            duration_minutes = vod.get('duration_seconds', 0) // 60
-            view_count = vod.get('view_count', 0)  # NEW: Capture Twitch views from VOD
-
-            # Phase 2.2: Check for multi-game streams.
-            # _manual_game_name: if set by the DM below, single-game processing
-            # uses it directly and skips smart_extract_with_validation.
-            _manual_game_name = None
-            try:
-                potential_games = detect_multiple_games_in_title(title)
-
-                if len(potential_games) >= 2:
-                    print(f"🔍 SYNC: Ambiguous multi-game title — requesting manual confirmation")
-                    print(f"   Detected candidates: {potential_games}")
-
-                    from ..handlers.manual_game_input import request_manual_game_name
-
-                    vod_data = {
-                        'title': title,
-                        'url': vod_url,
-                        'source': 'twitch',
-                        'extracted_name': ', '.join(potential_games),
-                        'confidence': 0.5  # Force DM path; user decides which game to credit
-                    }
-
-                    multi_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
-
-                    if multi_response == "skip":
-                        if db:
-                            db.games.add_skipped_vod(vod_url, 'twitch', title, JAM_USER_ID)
-                        skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'skipped'})
-                        print(f"⏭️ SYNC: User skipped ambiguous multi-game VOD: {title[:50]}")
-                        continue
-                    elif multi_response:
-                        # Store name; fall through to single-game processing below (no continue)
-                        _manual_game_name = multi_response
-                        print(f"✅ SYNC: Manual name '{multi_response}' received for ambiguous multi-game VOD")
-                    else:
-                        # Timeout — offer again on next sync
-                        skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'timed_out'})
-                        print(f"⏭️ SYNC: Multi-game DM timed out for: {title[:50]}")
-                        continue
-
-            except Exception as detection_error:
-                print(f"⚠️ SYNC: Multi-game detection failed for '{title}': {detection_error}")
-                # Fall through to normal single-game processing
-
-            # Initialize variables early to avoid unbound variable errors (single-game processing)
-            is_low_confidence = False
-            confidence = 0.0
-
-            # Check if VOD was previously skipped
-            if vod_url and db and db.games.is_vod_skipped(vod_url):
-                print(f"⏭️ SYNC: Skipping previously ignored VOD: {title[:50]}")
-                continue
-
-            if _manual_game_name:
-                # Name provided via multi-game DM — skip extraction entirely
-                game_name = _manual_game_name
-                confidence = 1.0
-                is_low_confidence = False
-                print(f"✅ SYNC: Using manual name '{game_name}' (from multi-game DM, skipping extraction)")
-            else:
-                # Use smart extraction with IGDB validation (Phase 1.2) for single-game streams
-                try:
-                    from ..integrations.twitch import smart_extract_with_validation
-                    extracted_name, confidence = await smart_extract_with_validation(title)
-
-                    # Low confidence - request manual input
-                    if not extracted_name or confidence < 0.65:
-                        print(f"⚠️ SYNC: Low confidence ({confidence:.2f}) for Twitch title - requesting manual input")
-
-                        from ..handlers.manual_game_input import request_manual_game_name
-
-                        vod_data = {
-                            'title': title,
-                            'url': vod_url,
-                            'source': 'twitch',
-                            'extracted_name': extracted_name or '',
-                            'confidence': confidence
-                        }
-
-                        # Request manual input (blocks until response)
-                        manual_response = await request_manual_game_name(bot, vod_data, is_scheduled=is_scheduled)
-
-                        if manual_response == "skip":
-                            # Add to permanent skip list so it won't be offered again
-                            if db:
-                                db.games.add_skipped_vod(vod_url, 'twitch', title, JAM_USER_ID)
-                            skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'skipped'})
-                            print(f"⏭️ User skipped VOD: {title[:50]}")
-                            continue
-                        elif manual_response:
-                            # Use manual name
-                            game_name = manual_response
-                            confidence = 1.0  # High confidence for manual input
-                            is_low_confidence = False
-                            print(f"✅ SYNC: Using manual name '{game_name}' from user input")
-                        else:
-                            # Timeout - VOD not named this run; will be offered again on next sync
-                            skipped_vods.append({'title': title, 'url': vod_url, 'reason': 'timed_out'})
-                            print(f"⏭️ Manual input timed out - skipping: {title[:50]}")
-                            continue
-                    else:
-                        # Good confidence - use extracted name
-                        game_name = extracted_name
-                        is_low_confidence = confidence < 0.85
-                        print(
-                            f"✅ SYNC: Extracted '{game_name}' from Twitch with {confidence:.2f} confidence{' (medium - review recommended)' if is_low_confidence else ''}")
-
-                except ImportError:
-                    # Fallback to basic extraction if smart extraction not available
-                    print("⚠️ SYNC: Smart extraction not available, falling back to basic extraction")
-                    game_name = extract_game_from_twitch(title)
-                    confidence = 0.0
-                    is_low_confidence = False  # Reset for fallback case
-
-                    if not game_name:
-                        print(f"⚠️ SYNC: Could not extract game from Twitch title: '{title}'")
-                        continue
-
-            print(f"✅ SYNC: Processing Twitch VOD '{game_name}'")
-
-            duration_minutes = vod.get('duration_seconds', 0) // 60
-            total_new_minutes += duration_minutes
-
-            # FIX 4: Check if game exists in database (searches both canonical and alternative names)
-            existing_game = db.get_played_game(game_name)
-
-            if existing_game:
-                # FIX 4: Ensure extracted name is stored as alternative name if different from canonical
-                canonical_name = existing_game.get('canonical_name', '')
-                existing_alt_names = existing_game.get('alternative_names', [])
-
-                # If extracted name differs from canonical and isn't already an alias, add it
-                if game_name.lower() != canonical_name.lower():
-                    if game_name not in existing_alt_names:
-                        updated_alt_names = existing_alt_names + [game_name]
-                        print(f"🔤 FIX 4: Adding '{game_name}' as alternative name for '{canonical_name}'")
-                    else:
-                        updated_alt_names = existing_alt_names
-                else:
-                    updated_alt_names = existing_alt_names
-
-                # Stage single-game Twitch update (use DB canonical name, not extracted)
-                update_data = {
-                    'canonical_name': canonical_name,
-                    'total_playtime_minutes': existing_game.get('total_playtime_minutes', 0) + duration_minutes,
-                    'total_episodes': existing_game.get('total_episodes', 0) + 1,
-                    'twitch_views': existing_game.get('twitch_views', 0) + view_count,
-                    'alternative_names': updated_alt_names
-                }
-                if vod_url:
-                    existing_vods = existing_game.get('twitch_vod_urls', [])
-                    if isinstance(existing_vods, str):
-                        existing_vods = [v.strip() for v in existing_vods.split(',') if v.strip()]
-                    elif not isinstance(existing_vods, list):
-                        existing_vods = []
-                    if vod_url not in existing_vods:
-                        existing_vods.append(vod_url)
-                        update_data['twitch_vod_urls'] = existing_vods[-10:]
-                        print(f"📎 SYNC: Added VOD URL to '{canonical_name}' ({len(existing_vods)} total)")
-
-                db.games.stage_game_for_approval(
-                    sync_session_id=sync_session_id,
-                    game_data=update_data,
-                    action_type='update',
-                    confidence_score=confidence,
-                    source_platform='twitch'
-                )
-                print(f"✅ SYNC: Staged Twitch update for '{game_name}' ({duration_minutes} mins, {view_count:,} views)")
-                games_updated += 1
-
-            else:
-                # VOD URL deduplication: skip if this URL is already in the DB under another game name.
-                # This prevents re-staging VODs that were manually named via !namevod on a previous sync.
-                if vod_url:
-                    _existing_owner = db.games.get_game_by_vod_url(vod_url)
-                    if _existing_owner:
-                        print(
-                            f"⏭️ SYNC: Skipping '{game_name}' — VOD URL already recorded under '{_existing_owner['canonical_name']}'")
-                        continue
-
-                # Stage new Twitch game
-                game_data = {
-                    'canonical_name': game_name,
-                    'series_name': game_name,
-                    'total_playtime_minutes': duration_minutes,
-                    'total_episodes': 1,
-                    'youtube_views': 0,  # Explicit 0 for Twitch-only content (not NULL)
-                    'twitch_views': view_count,
-                    'first_played_date': vod['published_at'].date(),
-                    'notes': f"Auto-synced from Twitch VOD on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}"}
-
-                if vod_url:
-                    game_data['twitch_vod_urls'] = [vod_url]
-
-                # IGDB enrichment for high-confidence matches
-                if igdb_available and confidence >= 0.75:
-                    try:
-                        igdb_data = await validate_and_enrich(game_name)
-                        if igdb_data and igdb_data.get('match_found'):
-                            if igdb_data.get('genre'):
-                                game_data['genre'] = map_genre_to_standard(igdb_data['genre'])
-                            if igdb_data.get('release_year'):
-                                game_data['release_year'] = igdb_data['release_year']
-                            if igdb_data.get('series_name'):
-                                game_data['series_name'] = igdb_data['series_name']
-                            if igdb_data.get('alternative_names'):
-                                game_data['alternative_names'] = igdb_data['alternative_names'][:5]
-                    except Exception as igdb_error:
-                        print(f"⚠️ SYNC: IGDB enrichment failed: {igdb_error}")
-
-                db.games.stage_game_for_approval(
-                    sync_session_id=sync_session_id,
-                    game_data=game_data,
-                    action_type='add',
-                    confidence_score=confidence,
-                    source_platform='twitch'
-                )
-                print(f"✅ SYNC: Staged new Twitch game '{game_name}' ({duration_minutes} mins)")
-                games_added += 1
-
-        except Exception as vod_error:
-            print(f"⚠️ SYNC: Error processing Twitch VOD '{vod.get('title', 'Unknown')}': {vod_error}")
-            continue
-
-    # --- Get Staging Summary ---
-    summary = db.games.get_staging_session_summary(sync_session_id)
-    print(f"🔄 SYNC: Session {sync_session_id} complete - {summary['total_count']} games staged for approval")
-
-    # --- Trigger Approval Conversation via Queue System ---
-    from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
-
-    if bot:
-        try:
-            # Add to approval queue with appropriate priority
-            queue_position = add_to_approval_queue(
-                item_type='sync_approval',
-                data={'sync_session_id': sync_session_id, 'summary': summary},
-                priority=6,  # Between weekly announcements (5) and trivia (5)
-                source='monday_content_sync'
-            )
-            print(f"✅ SYNC: Added to approval queue at position {queue_position}")
-
-            # Trigger queue processor
-            await process_next_approval()
-            print(f"✅ SYNC: Queue processor triggered for session {sync_session_id}")
-        except Exception as conversation_error:
-            print(f"❌ SYNC: Failed to queue approval conversation: {conversation_error}")
-    else:
-        print("❌ SYNC: Bot instance not available for approval conversation")
-
-    # NOTE: Last sync timestamp will be updated AFTER approval in conversation_handler
-    # This ensures timestamp only advances when changes are actually committed
-
-    # --- Post-sync summary DM to JAM ---
-    if bot and skipped_vods:
-        try:
-            from ..config import JAM_USER_ID
-            user = await bot.fetch_user(JAM_USER_ID)
-            if user:
-                timed_out = [v for v in skipped_vods if v['reason'] == 'timed_out']
-                explicitly_skipped = [v for v in skipped_vods if v['reason'] == 'skipped']
-
-                dm_lines = [
-                    f"📋 **Sync complete** — {summary['total_count']} game(s) staged for approval "
-                    f"({games_added} new, {games_updated} updated)."
-                ]
-
-                if timed_out:
-                    dm_lines.append(
-                        f"\n⏱️ **{len(timed_out)} VOD(s) timed out** (no name provided — will be offered again next sync):"
-                    )
-                    for v in timed_out:
-                        dm_lines.append(f"  • {v['title'][:80]}")
-
-                if explicitly_skipped:
-                    dm_lines.append(
-                        f"\n⏭️ **{len(explicitly_skipped)} VOD(s) permanently skipped:**"
-                    )
-                    for v in explicitly_skipped:
-                        dm_lines.append(f"  • {v['title'][:80]}")
-
-                dm_lines.append(
-                    "\n*Use `!namevod <url_or_id> <game name>` to retroactively name a timed-out VOD.*"
-                )
-
-                await user.send("\n".join(dm_lines))
-                print(f"📬 SYNC: Post-sync summary DM sent to JAM ({len(skipped_vods)} skipped VOD(s) noted)")
-        except Exception as dm_err:
-            print(f"⚠️ SYNC: Could not send post-sync summary DM: {dm_err}")
-
-    # --- Enhanced Reporting ---
-    total_content_count = sum(game.get('total_episodes', 0) for game in playlist_games) + len(twitch_vods)
-
-    return {
-        "status": "pending_approval",
-        "sync_session_id": sync_session_id,
-        "new_content_count": total_content_count,
-        "new_hours": round(total_new_minutes / 60, 1),
-        "new_views": new_views,
-        "games_staged": summary['total_count'],
-        "games_added": games_added,
-        "games_updated": games_updated,
-        "completed_games": completed_games,
-        "skipped_vods": skipped_vods
-    }
-
-
-async def schedule_delayed_trivia_validation():
-    """Schedule trivia validation to run 2 minutes after bot startup completion"""
-    try:
-        print("⏰ Scheduling delayed trivia validation for 2 minutes after startup...")
-
-        # Create async task to handle the delay - this will work properly in async context
-        asyncio.create_task(_delayed_trivia_validation())
-
-        print("✅ Delayed trivia validation scheduled successfully")
-
-    except Exception as e:
-        print(f"❌ Error scheduling delayed trivia validation: {e}")
-
-
-async def _delayed_trivia_validation():
-    """Internal function to handle the 2-minute delay and execute trivia validation"""
-    try:
-        print("⏳ Starting 2-minute delay for trivia validation...")
-
-        # Wait exactly 2 minutes (120 seconds)
-        await asyncio.sleep(120)
-
-        print("🧠 DELAYED TRIVIA VALIDATION: 2-minute delay complete, starting validation...")
-
-        # Execute the trivia validation with enhanced logging
-        await validate_startup_trivia_questions()
-
-        print("✅ DELAYED TRIVIA VALIDATION: Process completed")
-
-        # Check if emergency approval is needed (build day scenario)
-        await check_emergency_trivia_approval()
-
-    except Exception as e:
-        print(f"❌ DELAYED TRIVIA VALIDATION: Error during delayed execution: {e}")
-        import traceback
-        traceback.print_exc()
-
-        # Try to notify JAM of the error
-        try:
-            from ..config import JAM_USER_ID
-
-            if not _bot_instance:
-                print("❌ Bot instance not available for delayed trivia validation error notification")
-                return
-
-            user = await _bot_instance.fetch_user(JAM_USER_ID)
-            if user:
-                error_message = (
-                    f"❌ **Delayed Trivia Validation Failed**\n\n"
-                    f"The 2-minute delayed trivia validation encountered an error:\n"
-                    f"```\n{str(e)}\n```\n\n"
-                    f"**Impact:** Trivia Tuesday may not have enough questions available.\n"
-                    f"**Action Required:** Manual trivia question submission may be needed.\n\n"
-                    f"*Please check the bot logs for detailed error information.*"
-                )
-                await user.send(error_message)
-                print("✅ DELAYED TRIVIA VALIDATION: Error notification sent to JAM")
-        except Exception:
-            print("❌ DELAYED TRIVIA VALIDATION: Failed to send error notification to JAM")
 
 
 def start_all_scheduled_tasks(bot):
@@ -2861,7 +1505,7 @@ def get_scheduled_tasks_status():
         return {
             'tasks': task_statuses,
             'bot_instance': bot_status,
-            'global_bot_ready': _bot_ready
+            'global_bot_ready': is_bot_ready()
         }
 
     except Exception as e:
@@ -2892,513 +1536,3 @@ def stop_all_scheduled_tasks():
 
     except Exception as e:
         print(f"❌ Error stopping scheduled tasks: {e}")
-
-
-async def check_emergency_trivia_approval():
-    """Check if emergency approval is needed for build day scenarios"""
-    try:
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
-
-        # Only check on Tuesdays
-        if uk_now.weekday() != 1:
-            print("🕒 EMERGENCY APPROVAL CHECK: Not Tuesday, skipping emergency approval check")
-            return
-
-        # Calculate time until Trivia Tuesday (11:00 AM UK)
-        trivia_time = uk_now.replace(hour=11, minute=0, second=0, microsecond=0)
-
-        # If it's already past trivia time, skip
-        if uk_now > trivia_time:
-            print("🕒 EMERGENCY APPROVAL CHECK: Past trivia time, skipping emergency approval")
-            return
-
-        time_until_trivia_minutes = (trivia_time - uk_now).total_seconds() / 60
-
-        print(f"🕒 EMERGENCY APPROVAL CHECK: {time_until_trivia_minutes:.1f} minutes until Trivia Tuesday")
-
-        # If less than 1 hour (60 minutes) until trivia, trigger emergency approval
-        if 0 < time_until_trivia_minutes < 60:
-            print(f"🚨 EMERGENCY APPROVAL NEEDED: Only {time_until_trivia_minutes:.1f} minutes until Trivia Tuesday!")
-
-            await trigger_emergency_trivia_approval(time_until_trivia_minutes)
-        else:
-            print("✅ EMERGENCY APPROVAL CHECK: Sufficient time until trivia, no emergency approval needed")
-
-    except Exception as e:
-        print(f"❌ EMERGENCY APPROVAL CHECK: Error during emergency approval check: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-async def trigger_emergency_trivia_approval(minutes_remaining: float):
-    """Trigger emergency approval process for build day scenarios"""
-    try:
-        print(f"🚨 TRIGGERING EMERGENCY APPROVAL: {minutes_remaining:.1f} minutes remaining until Trivia Tuesday")
-
-        # Check database availability
-        if db is None:
-            print("❌ EMERGENCY APPROVAL: Database not available")
-            return
-
-        # Get available questions
-        try:
-            available_questions = db.get_available_trivia_questions()  # type: ignore
-            if not available_questions:
-                print("❌ EMERGENCY APPROVAL: No available questions for emergency approval")
-
-                # Try to generate an emergency question
-                try:
-                    from ..handlers.ai_handler import generate_ai_trivia_question
-                    from ..handlers.conversation_handler import start_jam_question_approval
-
-                    print("🔄 EMERGENCY APPROVAL: Generating emergency question")
-                    emergency_question = await generate_ai_trivia_question("emergency_approval")
-
-                    if emergency_question:
-                        approval_sent = await start_jam_question_approval(emergency_question)
-                        if approval_sent:
-                            print("✅ EMERGENCY APPROVAL: Emergency question sent to JAM")
-
-                            # Send urgent notification to JAM
-                            from ..config import JAM_USER_ID
-
-                            if not _bot_instance:
-                                print("❌ Bot instance not available for emergency approval notification")
-                                return
-
-                            user = await _bot_instance.fetch_user(JAM_USER_ID)
-                            if user:
-                                urgent_message = (
-                                    f"🚨 **URGENT: BUILD DAY EMERGENCY APPROVAL**\n\n"
-                                    f"The bot startup validation completed with only **{minutes_remaining:.0f} minutes** "
-                                    f"remaining until Trivia Tuesday (11:00 AM UK).\n\n"
-                                    f"An emergency question has been generated and requires your **IMMEDIATE** approval.\n\n"
-                                    f"**Time Remaining:** {minutes_remaining:.0f} minutes\n"
-                                    f"**Trivia Start Time:** 11:00 AM UK\n"
-                                    f"**Reason:** Build day scenario - startup validation completed late\n\n"
-                                    f"*Please review and approve the question above as quickly as possible.*")
-                                await user.send(urgent_message)
-                                print("✅ EMERGENCY APPROVAL: Urgent notification sent to JAM")
-                        else:
-                            print("❌ EMERGENCY APPROVAL: Failed to send emergency question to JAM")
-                    else:
-                        print("❌ EMERGENCY APPROVAL: Failed to generate emergency question")
-
-                except Exception as gen_error:
-                    print(f"❌ EMERGENCY APPROVAL: Error generating emergency question: {gen_error}")
-
-                return
-
-            # Select highest priority question
-            selected_question = available_questions[0]  # First question (highest priority)
-
-            # If it's a dynamic question, calculate the answer
-            if selected_question.get('is_dynamic'):
-                try:
-                    calculated_answer = db.calculate_dynamic_answer(  # type: ignore
-                        selected_question.get('dynamic_query_type', ''))
-                    if calculated_answer:
-                        selected_question['correct_answer'] = calculated_answer
-                        print(
-                            f"✅ EMERGENCY APPROVAL: Dynamic answer calculated for question #{selected_question.get('id')}")
-                except Exception as calc_error:
-                    print(f"⚠️ EMERGENCY APPROVAL: Failed to calculate dynamic answer: {calc_error}")
-
-            # Send for emergency approval
-            try:
-                from ..handlers.conversation_handler import start_jam_question_approval
-
-                approval_sent = await start_jam_question_approval(selected_question)
-
-                if approval_sent:
-                    print(f"✅ EMERGENCY APPROVAL: Question #{selected_question.get('id')} sent to JAM for approval")
-
-                    # Send urgent build day notification
-                    from ..config import JAM_USER_ID
-
-                    if not _bot_instance:
-                        print("❌ Bot instance not available for emergency build day notification")
-                        return
-
-                    user = await _bot_instance.fetch_user(JAM_USER_ID)
-                    if user:
-                        urgent_message = (
-                            f"🚨 **URGENT: BUILD DAY EMERGENCY APPROVAL**\n\n"
-                            f"The bot startup validation completed with only **{minutes_remaining:.0f} minutes** "
-                            f"remaining until Trivia Tuesday (11:00 AM UK).\n\n"
-                            f"The highest priority question has been selected and requires your **IMMEDIATE** approval.\n\n"
-                            f"**Time Remaining:** {minutes_remaining:.0f} minutes\n"
-                            f"**Question ID:** #{selected_question.get('id', 'Unknown')}\n"
-                            f"**Trivia Start Time:** 11:00 AM UK\n"
-                            f"**Reason:** Build day scenario - startup validation completed late\n\n"
-                            f"*Please review and approve the question above as quickly as possible.*")
-                        await user.send(urgent_message)
-                        print("✅ EMERGENCY APPROVAL: Build day notification sent to JAM")
-                else:
-                    print("❌ EMERGENCY APPROVAL: Failed to send question for approval")
-
-            except Exception as approval_error:
-                print(f"❌ EMERGENCY APPROVAL: Error sending question for approval: {approval_error}")
-
-        except Exception as db_error:
-            print(f"❌ EMERGENCY APPROVAL: Database error: {db_error}")
-
-    except Exception as e:
-        print(f"❌ EMERGENCY APPROVAL: Critical error in emergency approval: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-async def validate_startup_trivia_questions():
-    """Check that there are at least 5 active questions available on startup with non-blocking execution"""
-    global _startup_validation_lock, _startup_validation_completed
-
-    print("🧠 STARTUP TRIVIA VALIDATION: Starting validation process...")
-
-    # Check if validation is already in progress or completed
-    if _startup_validation_lock:
-        print("⏳ STARTUP TRIVIA VALIDATION: Validation already in progress, skipping duplicate")
-        return
-
-    if _startup_validation_completed:
-        print("✅ STARTUP TRIVIA VALIDATION: Validation already completed on this startup, skipping")
-        return
-
-    # Acquire the lock
-    _startup_validation_lock = True
-    print("🔒 STARTUP TRIVIA VALIDATION: Lock acquired, proceeding with validation")
-
-    try:
-        if db is None:
-            print("❌ STARTUP TRIVIA VALIDATION: Database not available")
-            return
-
-        print("✅ STARTUP TRIVIA VALIDATION: Database connection confirmed")
-
-        # Check if required database methods exist
-        required_methods = ['get_available_trivia_questions', 'add_trivia_question']
-        for method in required_methods:
-            if not hasattr(db, method):
-                print(f"❌ STARTUP TRIVIA VALIDATION: Database missing {method} method")
-                return
-
-        print("✅ STARTUP TRIVIA VALIDATION: Database methods verified")
-
-        # ✅ NEW: Check for pending approval questions FIRST (restore orphaned questions)
-        pending_questions = []
-        try:
-            if hasattr(db, 'get_pending_approval_questions'):
-                pending_questions = db.get_pending_approval_questions()  # type: ignore
-                pending_count = len(pending_questions) if pending_questions else 0
-
-                if pending_count > 0:
-                    print(
-                        f"🔄 STARTUP TRIVIA VALIDATION: Found {pending_count} orphaned questions awaiting approval from previous session")
-
-                    # Restore these questions to the approval queue
-                    try:
-                        from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
-
-                        restored_count = 0
-                        for pending_q in pending_questions:
-                            # Add to queue with high priority (they were already generated)
-                            queue_position = add_to_approval_queue(
-                                item_type='trivia_question',
-                                data=pending_q,
-                                priority=8,  # Higher priority than new generations
-                                source='startup_restoration'
-                            )
-                            print(
-                                f"♻️ RESTORED: Question #{pending_q.get('id')} added to approval queue at position {queue_position}")
-                            restored_count += 1
-
-                        # Trigger queue processing to send first question to JAM
-                        if restored_count > 0:
-                            print(
-                                f"🔄 STARTUP TRIVIA VALIDATION: Triggering approval queue for {restored_count} restored questions")
-                            await process_next_approval()
-
-                            # Notify JAM about restoration
-                            try:
-                                if _bot_instance:
-                                    from ..config import JAM_USER_ID
-                                    user = await _bot_instance.fetch_user(JAM_USER_ID)
-                                    if user:
-                                        await user.send(
-                                            f"♻️ **Pending Questions Restored**\n\n"
-                                            f"Bot restart detected. **{restored_count}** questions that were awaiting your approval "
-                                            f"have been restored to the approval queue.\n\n"
-                                            f"These questions were generated previously but not yet reviewed. "
-                                            f"You'll receive them one at a time for approval.\n\n"
-                                            f"*No new API calls were needed - these questions were preserved in the database.*"
-                                        )
-                                        print("✅ STARTUP TRIVIA VALIDATION: Restoration notification sent to JAM")
-                            except Exception as notify_error:
-                                print(
-                                    f"⚠️ STARTUP TRIVIA VALIDATION: Failed to send restoration notification: {notify_error}")
-
-                    except Exception as restore_error:
-                        print(
-                            f"❌ STARTUP TRIVIA VALIDATION: Failed to restore pending questions to queue: {restore_error}")
-                else:
-                    print("✅ STARTUP TRIVIA VALIDATION: No orphaned pending questions to restore")
-            else:
-                print("ℹ️ STARTUP TRIVIA VALIDATION: get_pending_approval_questions method not available")
-        except Exception as pending_error:
-            print(f"⚠️ STARTUP TRIVIA VALIDATION: Error checking for pending questions: {pending_error}")
-
-        # Check for available questions with retry logic (quick check only)
-        available_questions = None
-        try:
-            available_questions = db.get_available_trivia_questions()  # type: ignore
-        except Exception as db_error:
-            print(f"⚠️ STARTUP TRIVIA VALIDATION: Database query failed - {db_error}")
-            print("⚠️ STARTUP TRIVIA VALIDATION: Continuing with assumption of 0 questions")
-            available_questions = []
-
-        available_count = len(available_questions) if available_questions else 0
-        pending_count = len(pending_questions) if pending_questions else 0
-        total_count = available_count + pending_count
-
-        print(
-            f"🧠 STARTUP TRIVIA VALIDATION: {available_count} available + {pending_count} pending = {total_count} total questions")
-
-        if available_questions and available_count > 0:
-            for i, q in enumerate(available_questions[:3]):  # Show first 3 for confirmation
-                question_preview = q.get('question_text', q.get('question', 'Unknown'))[:50]
-                print(f"   📋 Available Question {i+1}: {question_preview}...")
-
-        # If we have at least 5 questions (available + pending), we're good
-        if total_count >= 5:
-            print(
-                f"✅ STARTUP TRIVIA VALIDATION: Sufficient questions ({total_count}/5 including {pending_count} pending approval)")
-            return
-
-        # Create background task for AI generation to avoid blocking Discord heartbeat
-        print(f"🔄 STARTUP TRIVIA VALIDATION: Need to generate {5 - total_count} additional questions")
-        print("🔄 STARTUP TRIVIA VALIDATION: Creating non-blocking background task for AI generation...")
-
-        # Create completely detached background task that won't block startup
-        # Pass total_count to account for both available and pending questions
-        asyncio.create_task(_background_question_generation(total_count))
-
-        print("✅ STARTUP TRIVIA VALIDATION: Background question generation started (non-blocking)")
-
-    except Exception as e:
-        print(f"❌ STARTUP TRIVIA VALIDATION: Critical error - {e}")
-        import traceback
-        traceback.print_exc()
-
-    finally:
-        # Mark validation as completed and release the lock
-        _startup_validation_completed = True
-        _startup_validation_lock = False
-        print("🔓 STARTUP TRIVIA VALIDATION: Lock released, validation marked as completed")
-
-
-async def _background_question_generation(current_question_count: int):
-    """Background task for generating trivia questions using the approval queue system"""
-    try:
-        print(f"🧠 BACKGROUND QUESTION GENERATION: Starting with {current_question_count} existing questions")
-
-        questions_needed = min(5 - current_question_count, 4)  # Cap at 4 to avoid overwhelming JAM
-
-        # Check if AI handler is available
-        try:
-            from ..config import JAM_USER_ID
-            from ..handlers.ai_handler import generate_ai_trivia_question
-            from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
-            print("✅ BACKGROUND GENERATION: AI handler and conversation handler loaded")
-        except ImportError as import_error:
-            print(f"❌ BACKGROUND GENERATION: Failed to import required modules - {import_error}")
-            return
-
-        # Generate all questions first
-        successful_generations = 0
-        failed_generations = 0
-        duplicate_count = 0
-
-        # ✅ CIRCUIT BREAKER: Protect API quota from consecutive failures
-        consecutive_failures = 0
-        MAX_CONSECUTIVE_FAILURES = 2  # Stop after 2 failures in a row
-
-        # ✅ FIX: Track recently generated questions AND templates to prevent repetition
-        generated_question_texts = []
-        used_template_ids = []  # ✅ NEW: Track templates used in this batch
-
-        print(f"🔄 BACKGROUND GENERATION: Generating {questions_needed} questions with pattern diversity...")
-
-        for i in range(questions_needed):
-            # ✅ CIRCUIT BREAKER CHECK: Stop if too many consecutive failures
-            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                print(f"🚨 CIRCUIT BREAKER: Stopping generation after {consecutive_failures} consecutive failures")
-                print(f"⚠️ API quota preserved: {questions_needed - i} questions not attempted")
-
-                # Notify JAM of the circuit breaker activation
-                try:
-                    if not _bot_instance:
-                        print("⚠️ Bot instance not available for circuit breaker notification")
-                    else:
-                        user = await _bot_instance.fetch_user(JAM_USER_ID)
-                        if user:
-                            await user.send(
-                                f"🚨 **Trivia Generation Circuit Breaker Activated**\n\n"
-                                f"Question generation stopped after {consecutive_failures} consecutive failures.\n"
-                                f"**API calls saved:** {questions_needed - i}\n"
-                                f"**Successful:** {successful_generations} questions\n"
-                                f"**Error:** Check logs for details\n\n"
-                                f"*Manual intervention may be required to fix underlying issue.*"
-                            )
-                            print("✅ Circuit breaker notification sent to JAM")
-                except Exception as notify_error:
-                    print(f"⚠️ Failed to send circuit breaker notification: {notify_error}")
-                break
-
-            try:
-                print(f"🔄 BACKGROUND GENERATION: Generating question {i+1}/{questions_needed}")
-
-                # ✅ FIX #1: Use unique context for each generation to avoid cache hits
-                unique_context = f"startup_validation_{i+1}"
-
-                # ✅ FIX #2: Pass recently generated questions AND templates to avoid repetition
-                question_data = await generate_ai_trivia_question(
-                    unique_context,
-                    avoid_questions=generated_question_texts,
-                    avoid_templates=used_template_ids  # ✅ NEW: Prevent template reuse in batch
-                )
-
-                if question_data and isinstance(question_data, dict):
-                    # ✅ SUCCESS: Reset consecutive failure counter
-                    consecutive_failures = 0
-                    # Validate the generated question
-                    required_fields = ['question_text', 'question_type', 'correct_answer']
-                    if all(field in question_data for field in required_fields):
-                        question_text = question_data.get('question_text', 'Unknown')
-
-                        # Check for duplicates before adding to queue
-                        if db:
-                            try:
-                                duplicate_check = db.check_question_duplicate(question_text, similarity_threshold=0.85)
-                                if duplicate_check:
-                                    similarity = duplicate_check['similarity_score']
-                                    duplicate_id = duplicate_check['duplicate_id']
-                                    print(
-                                        f"⚠️ BACKGROUND GENERATION: Question {i+1} is duplicate ({similarity*100:.0f}% match to Q#{duplicate_id}), skipping")
-                                    duplicate_count += 1
-                                    continue
-                            except Exception as dup_error:
-                                print(f"⚠️ BACKGROUND GENERATION: Duplicate check failed: {dup_error}")
-
-                        print(f"✅ BACKGROUND GENERATION: Generated question {i+1}: {question_text[:50]}...")
-
-                        # ✅ FIX #3: Add to recently-generated list for next iteration
-                        generated_question_texts.append(question_text)
-
-                        # ✅ FIX #4: Track template ID if this was a template-generated question
-                        if question_data.get('generation_method') == 'template':
-                            template_id = question_text[:20]  # Same ID format as in ai_handler
-                            used_template_ids.append(template_id)
-                            print(f"📝 BACKGROUND GENERATION: Tracked template ID for avoidance: {template_id}")
-
-                        # ✅ NEW: Persist question to database IMMEDIATELY with pending_approval status
-                        # This ensures questions survive bot restarts
-                        question_id = None
-                        if db:
-                            try:
-                                question_id = db.add_trivia_question(
-                                    question_text=question_data['question_text'],
-                                    question_type=question_data['question_type'],
-                                    correct_answer=question_data.get('correct_answer'),
-                                    multiple_choice_options=question_data.get('multiple_choice_options'),
-                                    is_dynamic=question_data.get('is_dynamic', False),
-                                    dynamic_query_type=question_data.get('dynamic_query_type'),
-                                    submitted_by_user_id=None,  # AI-generated
-                                    category=question_data.get('category'),
-                                    difficulty_level=question_data.get('difficulty_level', 2),
-                                    status='pending_approval'  # ✅ KEY: Pending status allows recovery on restart
-                                )
-
-                                if question_id:
-                                    print(
-                                        f"💾 BACKGROUND GENERATION: Question persisted to DB as ID #{question_id} (status: pending_approval)")
-                                    # Add question_id to the data for the approval queue
-                                    question_data['id'] = question_id
-                                else:
-                                    print(f"⚠️ BACKGROUND GENERATION: Failed to persist question to database")
-                                    failed_generations += 1
-                                    continue
-                            except Exception as db_persist_error:
-                                print(f"❌ BACKGROUND GENERATION: Database persist error: {db_persist_error}")
-                                failed_generations += 1
-                                continue
-
-                        # ✅ FIX #2: Add to approval queue instead of manual sequential logic
-                        queue_position = add_to_approval_queue(
-                            item_type='trivia_question',
-                            data=question_data,
-                            priority=5,  # Normal priority for startup questions
-                            source=f'startup_generation_{i+1}'
-                        )
-
-                        print(
-                            f"📋 BACKGROUND GENERATION: Question {i+1} (ID #{question_id}) added to approval queue at position {queue_position}")
-                        successful_generations += 1
-                    else:
-                        missing_fields = [f for f in required_fields if f not in question_data]
-                        print(f"⚠️ BACKGROUND GENERATION: Generated question {i+1} missing fields: {missing_fields}")
-                        failed_generations += 1
-                else:
-                    print(f"⚠️ BACKGROUND GENERATION: Failed to generate valid question {i+1}")
-                    failed_generations += 1
-
-            except Exception as generation_error:
-                print(f"❌ BACKGROUND GENERATION: Error generating question {i+1}: {generation_error}")
-                failed_generations += 1
-
-            # Delay between generations to respect Gemini free tier rate limit (5 RPM).
-            # 15 seconds ensures we stay safely under 4 calls/minute for a 4-question batch.
-            await asyncio.sleep(15)
-
-        print(f"🧠 BACKGROUND GENERATION: Complete - {successful_generations} questions added to approval queue")
-        print(
-            f"📊 BACKGROUND GENERATION: Stats - Generated: {successful_generations}, Failed: {failed_generations}, Duplicates: {duplicate_count}")
-
-        # ✅ FIX #2: Trigger the approval queue processor to start sending questions
-        if successful_generations > 0:
-            print(f"🔄 BACKGROUND GENERATION: Triggering approval queue processor...")
-            await process_next_approval()
-            print(f"✅ BACKGROUND GENERATION: Approval queue processor started - JAM will receive questions sequentially")
-
-            # Send summary notification to JAM
-            try:
-                if not _bot_instance:
-                    print("⚠️ Bot instance not available for summary notification")
-                    return
-
-                if hasattr(_bot_instance, 'fetch_user') and _bot_instance.user:
-                    user = await _bot_instance.fetch_user(JAM_USER_ID)
-                    if user:
-                        from ..handlers.conversation_handler import get_queue_length
-                        remaining = get_queue_length()
-
-                        summary_message = (
-                            f"🧠 **Background Question Generation Complete**\n\n"
-                            f"**Generation Summary:**\n"
-                            f"• Questions generated: {successful_generations}\n"
-                            f"• Duplicates detected: {duplicate_count}\n"
-                            f"• Generation failures: {failed_generations}\n"
-                            f"• Total in approval queue: {remaining}\n\n"
-                            f"Questions will be sent to you **one at a time** for approval. "
-                            f"The next question will arrive automatically after you complete each approval.\n\n"
-                            f"*This queue system ensures you're never overwhelmed with multiple simultaneous approvals.*")
-                        await user.send(summary_message)
-                        print("✅ BACKGROUND GENERATION: Summary notification sent to JAM")
-            except Exception as summary_error:
-                print(f"⚠️ BACKGROUND GENERATION: Failed to send summary to JAM: {summary_error}")
-        else:
-            print("⚠️ BACKGROUND GENERATION: No questions were successfully generated")
-
-    except Exception as e:
-        print(f"❌ BACKGROUND GENERATION: Critical error - {e}")
-        import traceback
-        traceback.print_exc()

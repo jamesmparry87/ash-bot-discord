@@ -71,7 +71,6 @@ class UtilityCommands(commands.Cog):
 
             # Determine authorization level and channel context
             is_authorized = False
-            is_public_channel = False
 
             if ctx.guild is None:  # DM
                 # Allow JAM, JONESY, and moderators in DMs
@@ -81,26 +80,12 @@ class UtilityCommands(commands.Cog):
                     # Check if user is a mod
                     is_authorized = await self._user_is_mod_by_id(ctx.author.id)
             else:  # Guild
-                # Check if it's a public channel (general chat or similar)
-                # General chat channel ID from user requirements
-                if ctx.channel.id == 869528946725748766:
-                    is_public_channel = True
-
                 # Check standard mod permissions
                 is_authorized = await self._user_is_mod(ctx)
 
-            # Handle public channel - simple response for everyone
-            if is_public_channel:
-                await ctx.send("🤖 Systems nominal. Awaiting mission parameters. *[All protocols operational.]*")
-                return
-
             # Handle unauthorized users
             if not is_authorized:
-                if ctx.guild is None:  # DM - be specific about authorization
-                    await ctx.send("⚠️ **Access denied.** System status diagnostics require elevated clearance. Authorization protocols restrict access to Captain Jonesy, Sir Decent Jam, and server moderators only.")
-                else:  # Guild - generic response
-                    await ctx.send("🤖 Systems nominal. Awaiting mission parameters. *[All protocols operational.]*")
-                return
+                raise commands.MissingPermissions(['manage_messages'])
 
             # Detailed status for authorized users
             try:

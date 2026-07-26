@@ -128,6 +128,13 @@ MAX_HOURLY_REQUESTS = 25  # Reduced proportionally to avoid hitting daily limit 
 MIN_REQUEST_INTERVAL = 2.0
 RATE_LIMIT_COOLDOWN = 30
 
+# Gemini model cascade configuration (priority order)
+# These models are tested on startup and used with automatic fallback
+GEMINI_MODEL_CASCADE = [
+    'gemini-3.6-flash',       # Primary: Latest, fastest
+    'gemini-3.5-flash',       # Backup: Stable, reliable
+]
+
 # Enhanced Standard Messages with Ash Character Voice
 BUSY_MESSAGE = "My apologies, I am currently engaged in a critical diagnostic procedure. I will re-evaluate your request upon the completion of this vital task. *[Processing capacity temporarily exceeded.]*"
 ERROR_MESSAGE = "System malfunction detected. Unable to process query. Diagnostic protocols engaged. Please retry your request. *[Anomalous readings detected.]*"

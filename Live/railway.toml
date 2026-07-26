@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python bot_modular.py"
+startCommand = "python main.py"
 healthcheckTimeout = 300
 restartPolicyType = "ALWAYS"
 restartPolicyMaxRetries = 10

@@ -345,7 +345,8 @@ async def execute_youtube_auto_post(
     """Execute automatic YouTube post to youtube-uploads channel"""
     try:
         # Import the global bot instance from scheduled tasks
-        from ..tasks.scheduled import _bot_instance
+        from ..tasks.utils import get_bot_instance
+        _bot_instance = get_bot_instance()
 
         if not _bot_instance:
             print("❌ Bot instance not available for YouTube auto-post")

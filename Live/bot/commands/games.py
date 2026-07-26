@@ -13,7 +13,7 @@ from discord.ext import commands
 
 from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..database import get_database
-from ..tasks.scheduled import perform_full_content_sync
+from ..tasks.sync_vods import perform_full_content_sync
 
 # Get database instance
 db = get_database()
@@ -223,7 +223,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         """Add a game recommendation (alias for addgame)"""
         await self._add_game(ctx, entry)
 
-    @commands.command(name="listgames")
+    @commands.command(name="listgames", aliases=["gameslist"])
     async def list_games(self, ctx):
         """List all game recommendations"""
         try:
@@ -314,8 +314,8 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             # Also update the persistent recommendations list in the
             # recommendations channel
             RECOMMEND_CHANNEL_ID = 1271568447108550687
-            recommend_channel = ctx.guild.get_channel(RECOMMEND_CHANNEL_ID)
-            if recommend_channel and ctx.channel.id != RECOMMEND_CHANNEL_ID:
+            recommend_channel = self.bot.get_channel(RECOMMEND_CHANNEL_ID)
+            if recommend_channel and ctx.guild and ctx.channel.id != RECOMMEND_CHANNEL_ID:
                 # Only update if we're not already in the recommendations
                 # channel to avoid redundancy
                 await self.post_or_update_recommend_list(ctx, recommend_channel)
@@ -963,7 +963,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 # Trigger approval queue
                 try:
                     from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
-                    from ..tasks.scheduled import get_bot_instance
+                    from ..tasks.utils import get_bot_instance
 
                     summary = db_module.games.get_staging_session_summary(sync_session_id)
                     bot = get_bot_instance()
@@ -1399,7 +1399,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             # Import IGDB integration and helper functions
             try:
                 from ..integrations.igdb import should_use_igdb_data, validate_and_enrich
-                from ..tasks.scheduled import clean_series_name, map_genre_to_standard
+                from ..tasks.sync_vods import clean_series_name, map_genre_to_standard
                 igdb_available = True
             except ImportError as import_error:
                 await ctx.send(f"❌ **IGDB integration not available:** {str(import_error)}\n\n*Cannot proceed without IGDB module.*")

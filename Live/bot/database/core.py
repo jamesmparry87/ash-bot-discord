@@ -669,9 +669,9 @@ class DatabaseManager:
         """Delegate to games module - update played game"""
         return self.games.update_played_game(game_id, **kwargs)
 
-    def add_played_game(self, **kwargs):
+    def add_played_game(self, canonical_name, **kwargs):
         """Delegate to games module - add played game"""
-        return self.games.add_played_game(**kwargs)
+        return self.games.add_played_game(canonical_name, **kwargs)
 
     def get_played_game(self, game_name):
         """Delegate to games module - get played game"""
@@ -721,6 +721,10 @@ class DatabaseManager:
         """Delegate to games module - get series games"""
         return self.games.get_series_games(series_name)
 
+    def get_games_by_series_organized(self):
+        """Delegate to games module - get games by series organized"""
+        return self.games.get_games_by_series_organized()
+
     def get_ranking_context(self, game_name, context_type='all'):
         """Delegate to games module - get ranking context"""
         return self.games.get_ranking_context(game_name, context_type)
@@ -745,9 +749,9 @@ class DatabaseManager:
         """Delegate to games module - get platform comparison stats"""
         return self.games.get_platform_comparison_stats()
 
-    def get_engagement_metrics(self, limit=10):
+    def get_engagement_metrics(self, game_name=None, limit=10):
         """Delegate to games module - get engagement metrics"""
-        return self.games.get_engagement_metrics(limit)
+        return self.games.get_engagement_metrics(game_name, limit)
 
     def get_gaming_timeline(self, order='ASC'):
         """Delegate to games module - get gaming timeline"""
