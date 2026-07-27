@@ -413,23 +413,23 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                 # FIXED: Only update dynamic stats, protect metadata fields
                 existing_episodes = existing_game.get('total_episodes', 0)
                 existing_playtime = existing_game.get('total_playtime_minutes', 0)
-                
+
                 new_episodes = game_data.get('total_episodes', 0)
                 new_playtime = game_data.get('total_playtime_minutes', 0)
-                
+
                 # Check if we actually need to update this game
                 needs_update = (
                     new_episodes > existing_episodes or
                     new_playtime > existing_playtime or
                     completion_status != old_status
                 )
-                
+
                 if not needs_update:
                     print(f"⏭️ SYNC: Skipping '{canonical_name}' - no new episodes or playtime")
                     continue
 
                 game_data['existing_episodes'] = existing_episodes
-                
+
                 update_params = {
                     'total_playtime_minutes': new_playtime,
                     'total_episodes': new_episodes,
