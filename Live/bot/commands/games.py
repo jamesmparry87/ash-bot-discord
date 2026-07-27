@@ -1250,7 +1250,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         try:
             database = self._get_db()
             await ctx.send("🔍 **Database Audit Initiated**\n\nScanning all games for anomalies, missing metadata, and corrupted stats...")
-            
+
             all_games = database.get_all_played_games()
 
             anomalies = []
@@ -1311,8 +1311,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 "💡 **Next Steps:**\n"
                 "• **Missing genre/year:** Run `!syncgames enrich` to fetch from IGDB. If still missing, use `!editgame <name> --genre <genre> --year <year>`\n"
                 "• **Phantom views:** Run `!syncgames verify --fix` to refresh YouTube statistics *(Note: 0 views is normal for Twitch-only games > 90 days old)*\n"
-                "• **Extreme stats:** Verify if they are duplicates and run `!syncgames dedupe`\n"
-            )
+                "• **Extreme stats:** Verify if they are duplicates and run `!syncgames dedupe`\n")
 
             # Send in chunks if necessary
             for anom in anomalies:
@@ -1324,7 +1323,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
 
             if report.strip():
                 await ctx.send(report)
-                
+
             await ctx.send(next_steps)
 
         except Exception as e:
@@ -1335,11 +1334,11 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
         try:
             database = self._get_db()
             game = database.get_played_game(game_name)
-            
+
             if not game:
                 await ctx.send(f"❌ **Game not found.** Could not find '{game_name}' in the database.")
                 return
-                
+
             canonical_name = game.get('canonical_name')
             alt_names = game.get('alternative_names', [])
             if isinstance(alt_names, str):
@@ -1355,11 +1354,11 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             # Escape each name and add word boundaries. e.g. r'\b(?:saros|alternative)\b'
             pattern_str = r'\b(?:' + '|'.join(re.escape(n) for n in names_to_match) + r')\b'
             regex_pattern = re.compile(pattern_str, re.IGNORECASE)
-            
+
             # 869527428018606140 = Twitch, 869527363594121226 = YT
             twitch_channel = self.bot.get_channel(869527428018606140)
             yt_channel = self.bot.get_channel(869527363594121226)
-            
+
             if not twitch_channel or not yt_channel:
                 await ctx.send("❌ **Error:** Could not access the notification channels.")
                 return
@@ -1368,24 +1367,32 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 f"🔍 **Recovery Scan Initiated**\n"
                 f"Scanning Discord history for `{canonical_name}`... This may take up to 30 seconds."
             )
-            
+
             twitch_episodes = 0
             yt_episodes = 0
-            
+
             # Scan Twitch history
             async for msg in twitch_channel.history(limit=None):
-                content = (msg.content + " " + " ".join([embed.title or "" for embed in msg.embeds]) + " " + " ".join([embed.description or "" for embed in msg.embeds]))
+                content = (msg.content +
+                           " " +
+                           " ".join([embed.title or "" for embed in msg.embeds]) +
+                           " " +
+                           " ".join([embed.description or "" for embed in msg.embeds]))
                 if regex_pattern.search(content):
                     twitch_episodes += 1
-            
+
             # Scan YT history
             async for msg in yt_channel.history(limit=None):
-                content = (msg.content + " " + " ".join([embed.title or "" for embed in msg.embeds]) + " " + " ".join([embed.description or "" for embed in msg.embeds]))
+                content = (msg.content +
+                           " " +
+                           " ".join([embed.title or "" for embed in msg.embeds]) +
+                           " " +
+                           " ".join([embed.description or "" for embed in msg.embeds]))
                 if regex_pattern.search(content):
                     yt_episodes += 1
 
             total_episodes_found = twitch_episodes + yt_episodes
-            recovered_playtime_minutes = twitch_episodes * 240 # Only apply 4 hours to Twitch streams
+            recovered_playtime_minutes = twitch_episodes * 240  # Only apply 4 hours to Twitch streams
 
             if total_episodes_found == 0:
                 await status_msg.edit(content=f"✅ **Recovery Complete**\nCould not find any historical streams or videos for `{canonical_name}`.")
@@ -1394,13 +1401,13 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             # Stage the update
             import uuid
             sync_session_id = str(uuid.uuid4())
-            
+
             update_data = {
                 'canonical_name': canonical_name,
                 'total_episodes': max(game.get('total_episodes', 0), total_episodes_found),
                 'total_playtime_minutes': max(game.get('total_playtime_minutes', 0), recovered_playtime_minutes)
             }
-            
+
             database.games.stage_game_for_approval(
                 sync_session_id=sync_session_id,
                 game_data=update_data,
@@ -1408,7 +1415,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 confidence_score=1.0,
                 source_platform='discord_recovery'
             )
-            
+
             report = (
                 f"✅ **Recovery Complete for `{canonical_name}`**\n\n"
                 f"**Recovered from Discord History:**\n"
@@ -1421,9 +1428,9 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 f"• Playtime: {game.get('total_playtime_minutes', 0) // 60}h\n\n"
                 f"I have staged an update with the higher values. Please check your DMs to approve."
             )
-            
+
             await status_msg.edit(content=report)
-            
+
             # Trigger approval via conversation handler
             from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
             summary = database.games.get_staging_session_summary(sync_session_id)
@@ -1434,7 +1441,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 source='discord_recovery'
             )
             await process_next_approval()
-            
+
         except Exception as e:
             await ctx.send(f"❌ **Recovery failed:** {str(e)}")
 

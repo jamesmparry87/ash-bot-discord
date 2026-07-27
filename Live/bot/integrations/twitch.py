@@ -84,19 +84,19 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
                     import json
                     try:
                         alt = json.loads(alt)
-                    except:
+                    except BaseException:
                         alt = [n.strip() for n in alt.split(',')]
-                
+
                 # Add canon and alt names, but exclude extremely short or generic terms
                 if canon and len(canon) >= 4:
                     all_names.append((canon, canon))
                 for a in alt:
                     if a and len(a) >= 4:
                         all_names.append((a, canon))
-            
+
             # Sort by length descending to match longest possible names first
             all_names.sort(key=lambda x: len(x[0]), reverse=True)
-            
+
             for search_name, canonical in all_names:
                 # Use word boundaries so "Saros" doesn't match "Sarosaurus"
                 pattern = re.compile(r'\b' + re.escape(search_name) + r'\b', re.IGNORECASE)
