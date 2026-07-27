@@ -1351,6 +1351,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
 
             names_to_match = [canonical_name.lower()] + [n.lower() for n in alt_names]
             import re
+
             # Escape each name and add word boundaries. e.g. r'\b(?:saros|alternative)\b'
             pattern_str = r'\b(?:' + '|'.join(re.escape(n) for n in names_to_match) + r')\b'
             regex_pattern = re.compile(pattern_str, re.IGNORECASE)
