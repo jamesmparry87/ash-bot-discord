@@ -1404,8 +1404,8 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
 
             update_data = {
                 'canonical_name': canonical_name,
-                'total_episodes': max(game.get('total_episodes', 0), total_episodes_found),
-                'total_playtime_minutes': max(game.get('total_playtime_minutes', 0), recovered_playtime_minutes)
+                'total_episodes': total_episodes_found,
+                'total_playtime_minutes': recovered_playtime_minutes
             }
 
             database.games.stage_game_for_approval(
