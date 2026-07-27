@@ -1426,8 +1426,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 f"**Current Database Stats (To be replaced):**\n"
                 f"• Episodes: {game.get('total_episodes', 0)}\n"
                 f"• Playtime: {game.get('total_playtime_minutes', 0) // 60}h\n\n"
-                f"I have staged an update to **replace** the corrupted database stats with the recovered values. Please check your DMs to approve."
-            )
+                f"I have staged an update to **replace** the corrupted database stats with the recovered values. Please check your DMs to approve.")
 
             await status_msg.edit(content=report)
 
