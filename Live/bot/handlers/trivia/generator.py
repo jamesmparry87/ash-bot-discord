@@ -459,6 +459,7 @@ Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_a
             print(f"🎮 TRIVIA DIRECTOR: Selected '{selected_category}' | Answer: {correct_answer or 'AI-determined'}")
 
             ai_question = None
+            temperature = 0.0  # Default if AI is skipped
 
             if final_question_text and selected_category != 'Franchise_Lore':
                 # HYBRID APPROACH: Skip AI for statistical questions

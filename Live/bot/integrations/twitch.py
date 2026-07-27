@@ -68,6 +68,44 @@ async def smart_extract_with_validation(title: str) -> tuple[Optional[str], floa
     best_name = None
     best_confidence = 0.0
 
+    # NEW: Check against existing games first!
+    # If a known database game appears directly in the title, skip IGDB extraction completely.
+    from ..database import get_database
+    db = get_database()
+    if db:
+        try:
+            # We fetch all played games to do a reverse match (is game name in title?)
+            all_games = db.get_all_played_games()
+            all_names = []
+            for g in all_games:
+                canon = g.get('canonical_name')
+                alt = g.get('alternative_names', [])
+                if isinstance(alt, str):
+                    import json
+                    try:
+                        alt = json.loads(alt)
+                    except:
+                        alt = [n.strip() for n in alt.split(',')]
+                
+                # Add canon and alt names, but exclude extremely short or generic terms
+                if canon and len(canon) >= 4:
+                    all_names.append((canon, canon))
+                for a in alt:
+                    if a and len(a) >= 4:
+                        all_names.append((a, canon))
+            
+            # Sort by length descending to match longest possible names first
+            all_names.sort(key=lambda x: len(x[0]), reverse=True)
+            
+            for search_name, canonical in all_names:
+                # Use word boundaries so "Saros" doesn't match "Sarosaurus"
+                pattern = re.compile(r'\b' + re.escape(search_name) + r'\b', re.IGNORECASE)
+                if pattern.search(title):
+                    print(f"✅ Found exact local DB match in title: '{search_name}' -> '{canonical}'")
+                    return canonical, 1.0
+        except Exception as e:
+            print(f"⚠️ SYNC: Failed checking local DB for title match: {e}")
+
     # Helper function to check if text is all caps (likely commentary)
     def is_all_caps_commentary(text: str) -> bool:
         """Check if text is all caps and likely commentary, not a game name"""
