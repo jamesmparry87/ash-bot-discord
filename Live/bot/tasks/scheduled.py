@@ -605,9 +605,21 @@ async def friday_community_analysis():
             jonesy_messages.sort(key=lambda m: len(m.reactions), reverse=True)
             top_jonesy_message = jonesy_messages[0]
             if len(top_jonesy_message.reactions) > 2:  # Set a minimum reaction threshold
+                import re
+                
+                # Clean the message content
+                clean_content = top_jonesy_message.content
+                clean_content = re.sub(r'https?://\S+', '', clean_content) # Remove URLs
+                clean_content = clean_content.replace('\n', ' ').replace('\r', '') # Remove newlines
+                clean_content = ' '.join(clean_content.split()) # Clean whitespace
+                
+                if len(clean_content) > 120:
+                    clean_content = clean_content[:117] + "..."
+                    
                 # Extract JSON-serializable data from Message object
                 message_data = {
-                    "content": top_jonesy_message.content,
+                    "content": top_jonesy_message.content, # Keep raw for data
+                    "clean_content": clean_content,
                     "author_id": top_jonesy_message.author.id,
                     "author_name": top_jonesy_message.author.name,
                     "reaction_count": len(top_jonesy_message.reactions),
@@ -618,7 +630,7 @@ async def friday_community_analysis():
                 analysis_modules.append({
                     "type": "jonesy_message",
                     "data": message_data,
-                    "content": f"Analysis of command personnel communications indicates a high engagement rate with the transmission: \"{top_jonesy_message.content}\". This may represent an emerging crew catchphrase."
+                    "content": f"Analysis of command personnel communications indicates a high engagement rate with the transmission: \"{clean_content}\". This may represent an emerging crew catchphrase."
                 })
 
         # Module B: Trivia Tuesday Recap
@@ -632,6 +644,16 @@ async def friday_community_analysis():
                     recap += f" Conversely, User <@{notable_id}> submitted multiple analyses that were... suboptimal. Recalibration is recommended."
                 analysis_modules.append({"type": "trivia_recap", "data": trivia_stats, "content": recap})
 
+        # Module C: General Activity (Fallback)
+        # Always available as long as there are messages, guarantees Friday greeting generates
+        if all_messages:
+            activity_recap = f"Total communication volume across monitored channels registered at **{len(all_messages)} transmissions** this week. Processing complete."
+            analysis_modules.append({
+                "type": "general_activity", 
+                "data": {"total_messages": len(all_messages)}, 
+                "content": activity_recap
+            })
+
         if not analysis_modules:
             print("✅ COMMUNITY ANALYSIS (Friday): Insufficient notable moments to generate a report.")
             await notify_jam_weekly_message_failure(
@@ -642,7 +664,12 @@ async def friday_community_analysis():
             return
 
         import random
-        chosen_moment = random.choice(analysis_modules)  # Choose one random module to report on for variance
+        # Give preference to specific modules over the general fallback if possible
+        specific_modules = [m for m in analysis_modules if m['type'] != 'general_activity']
+        if specific_modules:
+            chosen_moment = random.choice(specific_modules)
+        else:
+            chosen_moment = random.choice(analysis_modules)
 
         intros = [
             "Good morning, personnel. My analysis of the past week's crew engagement is complete.",

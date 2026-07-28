@@ -3239,7 +3239,7 @@ class GamesDatabase:
                 if action_type == 'add':
                     # FIX 6: Check if game already exists before adding
                     game_name = game_data.get('canonical_name')
-                    existing_game = self.get_played_game(game_name)
+                    existing_game = existing_games_map.get(game_name)
 
                     if existing_game:
                         # Game exists - convert to update with aggregated data
@@ -3308,7 +3308,7 @@ class GamesDatabase:
                 elif action_type == 'update':
                     # Update existing game
                     game_name = game_data.get('canonical_name')
-                    existing_game = self.get_played_game(game_name)
+                    existing_game = existing_games_map.get(game_name)
 
                     if existing_game:
                         # Extract update parameters from game_data
@@ -3320,6 +3320,9 @@ class GamesDatabase:
                             'youtube_playlist_url': game_data.get('youtube_playlist_url'),
                             'completion_status': game_data.get('completion_status')
                         }
+                        
+                        if 'alternative_names' in game_data:
+                            update_params['alternative_names'] = game_data['alternative_names']
 
                         success = self.update_played_game(existing_game['id'], **update_params)
                         if success:

@@ -1381,16 +1381,20 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 if regex_pattern.search(content):
                     twitch_episodes += 1
 
-            # Scan YT history
-            async for msg in yt_channel.history(limit=None):
-                content = (msg.content +
-                           " " +
-                           " ".join([embed.title or "" for embed in msg.embeds]) +
-                           " " +
-                           " ".join([embed.description or "" for embed in msg.embeds]))
-                if regex_pattern.search(content):
-                    yt_episodes += 1
+            # Check if game has a YT playlist
+            has_yt_playlist = bool(game.get('youtube_playlist_url'))
 
+            # Scan YT history ONLY if a playlist exists (to avoid counting Shorts as full episodes)
+            if has_yt_playlist:
+                async for msg in yt_channel.history(limit=None):
+                    content = (msg.content +
+                               " " +
+                               " ".join([embed.title or "" for embed in msg.embeds]) +
+                               " " +
+                               " ".join([embed.description or "" for embed in msg.embeds]))
+                    if regex_pattern.search(content):
+                        yt_episodes += 1
+            
             total_episodes_found = twitch_episodes + yt_episodes
             recovered_playtime_minutes = twitch_episodes * 240  # Only apply 4 hours to Twitch streams
 
@@ -1416,11 +1420,15 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 source_platform='discord_recovery'
             )
 
+            yt_label = f"• YouTube Videos: {yt_episodes}"
+            if not has_yt_playlist:
+                yt_label += " *(Ignored: No YT Playlist found - avoiding Shorts)*"
+
             report = (
                 f"✅ **Recovery Complete for `{canonical_name}`**\n\n"
                 f"**Recovered from Discord History:**\n"
                 f"• Twitch Go-Lives: {twitch_episodes}\n"
-                f"• YouTube Videos: {yt_episodes}\n"
+                f"{yt_label}\n"
                 f"• Total Found Episodes: {total_episodes_found}\n"
                 f"• Estimated Twitch Playtime: {recovered_playtime_minutes // 60}h\n\n"
                 f"**Current Database Stats (To be replaced):**\n"

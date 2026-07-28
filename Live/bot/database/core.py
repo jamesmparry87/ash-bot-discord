@@ -872,19 +872,19 @@ class DatabaseManager:
         """Delegate to trivia module - normalize trivia answer for matching"""
         return self.trivia.normalize_trivia_answer(answer_text)
 
-    # ========== SESSIONS DELEGATIONS (to sessions module) ==========
+    # ========== ANNOUNCEMENT DELEGATIONS (to config module) ==========
 
     def create_weekly_announcement(self, day, content, analysis_cache=None):
-        """Delegate to sessions module - create weekly announcement"""
-        return self.sessions.create_weekly_announcement(day, content, analysis_cache)
+        """Delegate to config module - create weekly announcement"""
+        return self.config.create_weekly_announcement(day, content, analysis_cache)
 
     def get_announcement_by_day(self, day, status='pending_approval'):
-        """Delegate to sessions module - get announcement by day"""
-        return self.sessions.get_announcement_by_day(day, status)
+        """Delegate to config module - get announcement by day"""
+        return self.config.get_announcement_by_day(day, status)
 
     def update_announcement_status(self, announcement_id, status, new_content=None):
-        """Delegate to sessions module - update announcement status"""
-        return self.sessions.update_announcement_status(announcement_id, status, new_content)
+        """Delegate to config module - update announcement status"""
+        return self.config.update_announcement_status(announcement_id, status, new_content)
 
     def get_all_active_approval_sessions(self):
         """Delegate to sessions module - get all active approval sessions"""
