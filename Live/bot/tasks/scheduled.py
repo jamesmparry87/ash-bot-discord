@@ -606,7 +606,7 @@ async def friday_community_analysis():
             top_jonesy_message = jonesy_messages[0]
             if len(top_jonesy_message.reactions) > 2:  # Set a minimum reaction threshold
                 import re
-                
+
                 # Clean the message content
                 clean_content = top_jonesy_message.content
                 clean_content = re.sub(r'https?://\S+', '', clean_content) # Remove URLs
@@ -664,6 +664,7 @@ async def friday_community_analysis():
             return
 
         import random
+
         # Give preference to specific modules over the general fallback if possible
         specific_modules = [m for m in analysis_modules if m['type'] != 'general_activity']
         if specific_modules:
