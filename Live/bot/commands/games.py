@@ -1394,7 +1394,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                                " ".join([embed.description or "" for embed in msg.embeds]))
                     if regex_pattern.search(content):
                         yt_episodes += 1
-            
+
             total_episodes_found = twitch_episodes + yt_episodes
             recovered_playtime_minutes = twitch_episodes * 240  # Only apply 4 hours to Twitch streams
 

@@ -138,7 +138,8 @@ async def monday_content_sync():
             debrief += "\n\n🎯 **Mission Completion Detected:**\n> "
             completions = []
             for game in completed_games:
-                completions.append(f"**{game['series_name']}** - All {game['total_episodes']} episodes archived ({game['total_playtime_hours']}h total)")
+                completions.append(
+                    f"**{game['series_name']}** - All {game['total_episodes']} episodes archived ({game['total_playtime_hours']}h total)")
             debrief += "\n> ".join(completions) + "\n> \n> *Mission parameters fulfilled.*"
 
         top_video = analysis_results.get("top_video")
@@ -271,28 +272,28 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
     # --- Performance Optimization: Pre-fetch all games ---
     print("🔄 SYNC: Building in-memory game cache to prevent N+1 queries...")
     all_played_games = db.get_all_played_games()
-    
+
     # Create exact and normalized indices for lightning fast O(1) lookups
     import string
-    
+
     def normalize_name(name):
         return name.lower().translate(str.maketrans('', '', string.punctuation)).replace(' ', '')
-        
+
     game_cache_exact = {}
     game_cache_normalized = {}
     game_cache_alt = {}
-    
+
     for game in all_played_games:
         canonical = game.get('canonical_name', '')
         if not canonical:
             continue
-            
+
         exact_lower = canonical.lower().strip()
         norm = normalize_name(canonical)
-        
+
         game_cache_exact[exact_lower] = game
         game_cache_normalized[norm] = game
-        
+
         alt_names_raw = game.get('alternative_names', [])
         if isinstance(alt_names_raw, str):
             import json
@@ -302,41 +303,41 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                 alt_names = [n.strip() for n in alt_names_raw.split(',') if n.strip()]
         else:
             alt_names = alt_names_raw or []
-            
+
         for alt in alt_names:
             game_cache_alt[alt.lower().strip()] = game
 
     def find_game_in_cache(name: str):
         if not name:
             return None
-            
+
         name_lower = name.lower().strip()
         name_norm = normalize_name(name)
-        
+
         # 1. Exact canonical
         if name_lower in game_cache_exact:
             return game_cache_exact[name_lower]
-            
+
         # 2. Normalized canonical
         if name_norm in game_cache_normalized:
             return game_cache_normalized[name_norm]
-            
+
         # 3. Exact alternative
         if name_lower in game_cache_alt:
             return game_cache_alt[name_lower]
-            
+
         # 4. Normalized alternative
         for alt_lower, game in game_cache_alt.items():
             if normalize_name(alt_lower) == name_norm:
                 return game
-                
+
         return None
 
     # --- Processing with Complete Metadata ---
     new_views = 0
     total_new_minutes = 0
     actual_new_minutes = 0  # True delta
-    actual_new_episodes = 0 # True delta
+    actual_new_episodes = 0  # True delta
     most_engaging_video = None
     games_added = 0
     games_updated = 0
@@ -422,10 +423,12 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                                 if isinstance(existing_alt_names, str):
                                     import json
                                     try:
-                                        existing_alt_names = json.loads(existing_alt_names) if existing_alt_names else []
+                                        existing_alt_names = json.loads(
+                                            existing_alt_names) if existing_alt_names else []
                                     except (json.JSONDecodeError, TypeError):
-                                        existing_alt_names = [n.strip() for n in existing_alt_names.split(',') if n.strip()]
-                                        
+                                        existing_alt_names = [
+                                            n.strip() for n in existing_alt_names.split(',') if n.strip()]
+
                                 igdb_alt_names = igdb_data.get('alternative_names', [])
                                 if igdb_alt_names or existing_alt_names:
                                     # Combine and deduplicate
@@ -473,15 +476,15 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                 # Calculate true delta for reporting
                 existing_episodes = existing_game.get('total_episodes', 0)
                 existing_playtime = existing_game.get('total_playtime_minutes', 0)
-                
+
                 new_episodes = game_data.get('total_episodes', 0)
                 new_playtime = game_data.get('total_playtime_minutes', 0)
-                
+
                 if new_episodes > existing_episodes:
                     actual_new_episodes += (new_episodes - existing_episodes)
                 if new_playtime > existing_playtime:
                     actual_new_minutes += (new_playtime - existing_playtime)
-                    
+
                 # Detect completion status change
                 old_status = existing_game.get('completion_status', 'in_progress')
                 new_status = completion_status
@@ -545,11 +548,11 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
 
             else:
                 # Stage new game for approval
-                
+
                 # All episodes and minutes are considered "new" for a completely new game
                 actual_new_episodes += game_data.get('total_episodes', 0)
                 actual_new_minutes += game_data.get('total_playtime_minutes', 0)
-                
+
                 full_game_data = {
                     'canonical_name': canonical_name,
                     'series_name': series_name,

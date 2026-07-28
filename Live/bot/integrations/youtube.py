@@ -589,9 +589,10 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                     # Filter out Shorts (duration <= 65 seconds)
                     original_count = len(videos_data)
                     videos_data = [v for v in videos_data if v.get('duration_seconds', 0) > 65]
-                    
+
                     if len(videos_data) < original_count:
-                        print(f"✂️ SYNC: Filtered out {original_count - len(videos_data)} Short(s) from '{playlist_title}'")
+                        print(
+                            f"✂️ SYNC: Filtered out {original_count - len(videos_data)} Short(s) from '{playlist_title}'")
 
                     if not videos_data:
                         print(f"⏭️ SYNC: Skipping playlist '{playlist_title}' - no full videos found (only Shorts)")

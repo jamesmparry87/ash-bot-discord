@@ -609,16 +609,16 @@ async def friday_community_analysis():
 
                 # Clean the message content
                 clean_content = top_jonesy_message.content
-                clean_content = re.sub(r'https?://\S+', '', clean_content) # Remove URLs
-                clean_content = clean_content.replace('\n', ' ').replace('\r', '') # Remove newlines
-                clean_content = ' '.join(clean_content.split()) # Clean whitespace
-                
+                clean_content = re.sub(r'https?://\S+', '', clean_content)  # Remove URLs
+                clean_content = clean_content.replace('\n', ' ').replace('\r', '')  # Remove newlines
+                clean_content = ' '.join(clean_content.split())  # Clean whitespace
+
                 if len(clean_content) > 120:
                     clean_content = clean_content[:117] + "..."
-                    
+
                 # Extract JSON-serializable data from Message object
                 message_data = {
-                    "content": top_jonesy_message.content, # Keep raw for data
+                    "content": top_jonesy_message.content,  # Keep raw for data
                     "clean_content": clean_content,
                     "author_id": top_jonesy_message.author.id,
                     "author_name": top_jonesy_message.author.name,
@@ -649,8 +649,8 @@ async def friday_community_analysis():
         if all_messages:
             activity_recap = f"Total communication volume across monitored channels registered at **{len(all_messages)} transmissions** this week. Processing complete."
             analysis_modules.append({
-                "type": "general_activity", 
-                "data": {"total_messages": len(all_messages)}, 
+                "type": "general_activity",
+                "data": {"total_messages": len(all_messages)},
                 "content": activity_recap
             })
 

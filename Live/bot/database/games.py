@@ -3320,7 +3320,7 @@ class GamesDatabase:
                             'youtube_playlist_url': game_data.get('youtube_playlist_url'),
                             'completion_status': game_data.get('completion_status')
                         }
-                        
+
                         if 'alternative_names' in game_data:
                             update_params['alternative_names'] = game_data['alternative_names']
 
