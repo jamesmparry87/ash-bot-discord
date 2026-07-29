@@ -13,7 +13,7 @@ from discord.ext import commands
 
 from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..database import get_database
-from ..tasks.sync_vods import perform_full_content_sync, invalidate_game_cache
+from ..tasks.sync_vods import invalidate_game_cache, perform_full_content_sync
 
 # Get database instance
 db = get_database()
