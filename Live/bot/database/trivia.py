@@ -2651,12 +2651,12 @@ class TriviaDatabase:
                 
                 if row:
                     return {
-                        'game_title': row[0],
-                        'reaction': row[1],
-                        'trigger': row[2],
-                        'lore_summary': row[3],
-                        'submitted_by': row[4],
-                        'message_id': row[5]
+                        'game_title': row['game_title'],
+                        'reaction': row['reaction'],
+                        'trigger': row['trigger'],
+                        'lore_summary': row['lore_summary'],
+                        'submitted_by': row['submitted_by_discord_id'],
+                        'message_id': row['message_id']
                     }
                 return None
         except Exception as e:
