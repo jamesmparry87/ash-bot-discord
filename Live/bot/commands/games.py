@@ -35,27 +35,21 @@ class GamesCommands(commands.Cog):
             database = self._get_db()
             added = []
             duplicate = []
+            entry = entry.strip()
+            if not entry:
+                await ctx.send("⚠️ Submission invalid. Please provide a game name. Efficiency is paramount.")
+                return
 
-            for part in entry.split(","):
-                part = part.strip()
-                if not part:
-                    continue
+            if " - " in entry:
+                name, reason = map(str.strip, entry.split(" - ", 1))
+            else:
+                name, reason = entry, "(no reason provided)"
 
-                if " - " in part:
-                    name, reason = map(str.strip, part.split(" - ", 1))
-                else:
-                    name, reason = part, "(no reason provided)"
-
-                if not name:
-                    continue
-
-                # Typo-tolerant duplicate check (case-insensitive, fuzzy match)
-                if database.game_exists(name):
-                    duplicate.append(name)
-                    continue
-
-                # Exclude username if user is Sir Decent Jam (user ID
-                # 337833732901961729)
+            # Typo-tolerant duplicate check (case-insensitive, fuzzy match)
+            if database.game_exists(name):
+                duplicate.append(name)
+            else:
+                # Exclude username if user is Sir Decent Jam (user ID 337833732901961729)
                 if str(ctx.author.id) == str(JAM_USER_ID):
                     added_by = ""
                 else:
@@ -66,7 +60,7 @@ class GamesCommands(commands.Cog):
 
             if added:
                 RECOMMEND_CHANNEL_ID = 1271568447108550687
-                confirm_msg = f"🧾 Recommendation(s) logged: {', '.join(added)}. Efficiency noted."
+                confirm_msg = f"🧾 Recommendation logged: {name}. Efficiency noted."
 
                 # Send confirmation privately to the user via DM
                 try:
@@ -82,10 +76,7 @@ class GamesCommands(commands.Cog):
                         await self.post_or_update_recommend_list(ctx, recommend_channel)
 
             if duplicate:
-                await ctx.send(f"⚠️ Submission rejected: {', '.join(duplicate)} already exist(s) in the database. Redundancy is inefficient. Please submit only unique recommendations.")
-
-            if not added and not duplicate:
-                await ctx.send("⚠️ Submission invalid. Please provide at least one game name. Efficiency is paramount.")
+                await ctx.send(f"⚠️ Submission rejected: '{name}' already exists in the database. Redundancy is inefficient.")
 
         except RuntimeError:
             await ctx.send("❌ Database unavailable")
@@ -128,9 +119,12 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                     value="No recommendations currently catalogued.",
                     inline=False)
             else:
-                # Create one continuous list
+                # Create one continuous list, limited to 75 to prevent embed size limits
+                display_games = games[-75:] if len(games) > 75 else games
+                start_index = max(1, len(games) - 74)
+                
                 game_lines = []
-                for i, game in enumerate(games, 1):
+                for i, game in enumerate(display_games, start_index):
                     # Truncate long names/reasons to fit in embed and apply
                     # Title Case
                     name = game['name'][:40] + \
@@ -165,7 +159,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                             # Add current field - use empty string for field
                             # name to eliminate gaps
                             embed.add_field(
-                                name="", value="\n".join(current_field), inline=False)
+                                name="\u200b", value="\n".join(current_field), inline=False)
                             # Start new field
                             current_field = [line]
                             current_length = len(line)
@@ -176,7 +170,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                     # Add the final field
                     if current_field:
                         embed.add_field(
-                            name="",
+                            name="\u200b",
                             value="\n".join(current_field),
                             inline=False
                         )
@@ -184,14 +178,18 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                     # Single field for all games - use empty string for field
                     # name
                     embed.add_field(
-                        name="",
+                        name="\u200b",
                         value=field_value,
                         inline=False
                     )
 
             # Add footer with stats
-            embed.set_footer(
-                text=f"Total recommendations: {len(games)} | Last updated")
+            if len(games) > 75:
+                footer_text = f"Total recommendations: {len(games)} (Showing latest 75) | Last updated"
+            else:
+                footer_text = f"Total recommendations: {len(games)} | Last updated"
+            
+            embed.set_footer(text=footer_text)
             embed.timestamp = discord.utils.utcnow()
 
             # Try to update the existing message if possible
