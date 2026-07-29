@@ -351,6 +351,10 @@ async def initialize_modular_components():
                        {"name": "data_cleanup",
                         "module": "bot.commands.data_cleanup",
                         "class": "DataCleanupCommands",
+                        "critical": False},
+                       {"name": "clips",
+                        "module": "bot.commands.clips",
+                        "class": "ClipTriviaCog",
                         "critical": False}]
 
     command_modules_loaded = 0

@@ -2601,6 +2601,70 @@ class TriviaDatabase:
                 'error': str(e)
             }
 
+    def clip_lore_exists(self, canonical_url: str) -> bool:
+        """Check if a clip has already been analyzed and stored in the database."""
+        conn = self.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM clip_lore WHERE canonical_url = %s",
+                    (canonical_url,)
+                )
+                return cur.fetchone() is not None
+        except Exception as e:
+            logger.error(f"Error checking clip lore existence: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def add_clip_lore(self, canonical_url: str, original_url: str, game_title: str, reaction: str, trigger: str, lore_summary: str, submitted_by: str, message_id: int) -> bool:
+        """Insert extracted clip lore into the database."""
+        conn = self.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO clip_lore (
+                        canonical_url, original_url, game_title, reaction, trigger, lore_summary, submitted_by_discord_id, message_id
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (canonical_url) DO NOTHING
+                """, (canonical_url, original_url, game_title, reaction, trigger, lore_summary, submitted_by, message_id))
+                conn.commit()
+                return cur.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error inserting clip lore: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
+    def get_clip_lore(self, canonical_url: str) -> Optional[Dict[str, Any]]:
+        """Retrieve clip lore details from the database."""
+        conn = self.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT game_title, reaction, trigger, lore_summary, submitted_by_discord_id, message_id 
+                    FROM clip_lore 
+                    WHERE canonical_url = %s
+                """, (canonical_url,))
+                row = cur.fetchone()
+                
+                if row:
+                    return {
+                        'game_title': row[0],
+                        'reaction': row[1],
+                        'trigger': row[2],
+                        'lore_summary': row[3],
+                        'submitted_by': row[4],
+                        'message_id': row[5]
+                    }
+                return None
+        except Exception as e:
+            logger.error(f"Error retrieving clip lore: {e}")
+            return None
+        finally:
+            conn.close()
+
 
 # Export
 __all__ = ['TriviaDatabase']

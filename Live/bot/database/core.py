@@ -402,6 +402,21 @@ class DatabaseManager:
 
                 # Create trivia tables
                 cur.execute("""
+                    CREATE TABLE IF NOT EXISTS clip_lore (
+                        id SERIAL PRIMARY KEY,
+                        canonical_url TEXT UNIQUE NOT NULL,
+                        original_url TEXT,
+                        game_title TEXT,
+                        reaction TEXT,
+                        trigger TEXT,
+                        lore_summary TEXT,
+                        submitted_by_discord_id TEXT,
+                        message_id BIGINT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+
+                cur.execute("""
                     CREATE TABLE IF NOT EXISTS trivia_questions (
                         id SERIAL PRIMARY KEY,
                         question_text TEXT NOT NULL,
