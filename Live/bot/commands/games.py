@@ -122,7 +122,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 # Create one continuous list, limited to 75 to prevent embed size limits
                 display_games = games[-75:] if len(games) > 75 else games
                 start_index = max(1, len(games) - 74)
-                
+
                 game_lines = []
                 for i, game in enumerate(display_games, start_index):
                     # Truncate long names/reasons to fit in embed and apply
@@ -188,7 +188,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                 footer_text = f"Total recommendations: {len(games)} (Showing latest 75) | Last updated"
             else:
                 footer_text = f"Total recommendations: {len(games)} | Last updated"
-            
+
             embed.set_footer(text=footer_text)
             embed.timestamp = discord.utils.utcnow()
 
