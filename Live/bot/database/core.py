@@ -16,8 +16,10 @@ import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 
+import sys
+
 # Set up logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 

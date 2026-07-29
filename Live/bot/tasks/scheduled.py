@@ -1071,6 +1071,8 @@ async def check_due_reminders():
 async def check_auto_actions():
     """Check for reminders that need auto-actions triggered"""
     try:
+        from bot.database import get_database
+        db = get_database()
         uk_now = datetime.now(ZoneInfo("Europe/London"))
         auto_action_reminders = db.get_reminders_awaiting_auto_action(  # type: ignore
             uk_now)  # type: ignore
