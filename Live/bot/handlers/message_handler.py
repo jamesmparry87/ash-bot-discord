@@ -793,7 +793,7 @@ async def handle_general_conversation(message: discord.Message, bot: commands.Bo
 
                         # The AI was just used heavily to parse the clip; sleep briefly to avoid rate limiting
                         await asyncio.sleep(1.5)
-                
+
                 if clip_lore:
                     prompt_context += (
                         f"\n\nContext regarding the video clip the user shared:\n"
