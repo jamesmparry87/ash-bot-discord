@@ -20,31 +20,33 @@ from psycopg2.extras import RealDictCursor
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class PooledConnectionWrapper:
     """
     Wraps a psycopg2 connection from a connection pool to automatically
     return it to the pool when .close() is called, preventing connection leaks.
     """
+
     def __init__(self, pool, conn):
         self._pool = pool
         self._conn = conn
-        
+
     def cursor(self, *args, **kwargs):
         return self._conn.cursor(*args, **kwargs)
-        
+
     def commit(self):
         return self._conn.commit()
-        
+
     def rollback(self):
         return self._conn.rollback()
-        
+
     def close(self):
         """Returns the connection to the pool instead of closing it."""
         try:
             self._pool.putconn(self._conn)
         except Exception as e:
             logger.error(f"Error returning connection to pool: {e}")
-            
+
     def __getattr__(self, name):
         """Pass any other attribute accesses to the underlying connection."""
         return getattr(self._conn, name)
@@ -76,7 +78,7 @@ class DatabaseManager:
         """
         self.database_url = os.getenv('DATABASE_URL')
         self._connection_pool = None
-        
+
         if not self.database_url:
             logger.warning(
                 "DATABASE_URL not found. Database features will be disabled.")
@@ -86,7 +88,7 @@ class DatabaseManager:
             try:
                 # Initialize connection pool (min 1, max 20 connections)
                 self._connection_pool = pool.ThreadedConnectionPool(
-                    1, 20, 
+                    1, 20,
                     dsn=self.database_url,
                     cursor_factory=RealDictCursor,
                     connect_timeout=5
@@ -286,7 +288,7 @@ class DatabaseManager:
             return PooledConnectionWrapper(self._connection_pool, conn)
         except Exception as e:
             logger.error(f"Database pool getconn failed: {e}")
-            
+
             # Fallback to single connection if pool fails
             try:
                 logger.info("Attempting fallback single connection...")
