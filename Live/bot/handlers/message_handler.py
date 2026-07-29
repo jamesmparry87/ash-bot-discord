@@ -770,19 +770,19 @@ async def handle_general_conversation(message: discord.Message, bot: commands.Bo
         if ai_enabled:
             author_name = message.author.display_name
             prompt_context = ""
-            
+
             # Check for clip links in conversation
             import re
             url_pattern = re.compile(r'https?://(?:www\.|clips\.)?(?:twitch\.tv|youtube\.com|youtu\.be)/\S+')
             match = url_pattern.search(content)
             if match:
                 clip_url = match.group(0)
-                from bot.commands.clips import canonicalize_clip_url, ClipParsingService
+                from bot.commands.clips import ClipParsingService, canonicalize_clip_url
                 from bot.database import get_database
                 canonical_url = canonicalize_clip_url(clip_url)
                 db = get_database()
                 clip_lore = db.trivia.get_clip_lore(canonical_url)
-                
+
                 if not clip_lore:
                     await message.channel.send("👀 Scanning the provided clip for details, please stand by...")
                     parser = ClipParsingService()
@@ -800,8 +800,7 @@ async def handle_general_conversation(message: discord.Message, bot: commands.Bo
                         f"- Reaction: {clip_lore['reaction']}\n"
                         f"- What happened: {clip_lore['trigger']}\n"
                         f"- Lore: {clip_lore['lore_summary']}\n"
-                        f"Please incorporate this context naturally into your response to answer any questions about the clip."
-                    )
+                        f"Please incorporate this context naturally into your response to answer any questions about the clip.")
 
             # The add_pops_arcade_personality_context function is now called inside call_ai_with_rate_limiting
 
