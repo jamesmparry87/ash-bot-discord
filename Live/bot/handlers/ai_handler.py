@@ -1384,6 +1384,7 @@ async def call_ai_for_generation(
         record_ai_error()
         return None, f"error:{str(e)}"
 
+
 async def upload_and_analyze_media(file_path: str, prompt: str) -> Tuple[Optional[str], str]:
     """
     Upload a media file (like a video clip) to Gemini, poll until ready, and generate content.
@@ -1395,7 +1396,7 @@ async def upload_and_analyze_media(file_path: str, prompt: str) -> Tuple[Optiona
 
     if primary_ai != "gemini" or not gemini_client or not current_gemini_model:
         return None, "no_ai_available"
-        
+
     can_request, reason = check_rate_limits(priority="low")
     if not can_request:
         return None, f"rate_limit:{reason}"
@@ -1419,14 +1420,14 @@ async def upload_and_analyze_media(file_path: str, prompt: str) -> Tuple[Optiona
             )
             state = uploaded_file.state
             attempts += 1
-            
+
         if state.name == "FAILED":
             return None, "file_processing_failed"
         elif state.name == "PROCESSING":
             return None, "file_processing_timeout"
-            
+
         print(f"✅ File {uploaded_file.name} is ACTIVE. Generating content...")
-        
+
         def sync_generation():
             from google.genai import types
             return gemini_client.models.generate_content(
@@ -1436,20 +1437,20 @@ async def upload_and_analyze_media(file_path: str, prompt: str) -> Tuple[Optiona
                     temperature=0.4,
                 )
             )
-            
+
         import concurrent.futures
         loop = asyncio.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = loop.run_in_executor(executor, sync_generation)
             response = await asyncio.wait_for(future, timeout=60.0)
-            
+
         record_ai_request()
-        
+
         if response and hasattr(response, "text") and response.text:
             return response.text, "success"
-            
+
         return None, "empty_response"
-        
+
     except asyncio.TimeoutError:
         record_ai_error()
         return None, "generation_timeout"
@@ -2231,7 +2232,7 @@ async def safe_initialize_ai_async():
 __all__ = [
     'call_ai_with_rate_limiting',
     'call_ai_for_generation',  # NEW: Lightweight generation for trivia/announcements
-    'upload_and_analyze_media', # NEW: Video processing
+    'upload_and_analyze_media',  # NEW: Video processing
     'check_fallback_responses',  # NEW: Hardcoded fallback responses when quota exhausted
     'filter_ai_response',
     'create_ai_announcement_content',

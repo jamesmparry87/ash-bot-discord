@@ -2617,7 +2617,16 @@ class TriviaDatabase:
         finally:
             conn.close()
 
-    def add_clip_lore(self, canonical_url: str, original_url: str, game_title: str, reaction: str, trigger: str, lore_summary: str, submitted_by: str, message_id: int) -> bool:
+    def add_clip_lore(
+            self,
+            canonical_url: str,
+            original_url: str,
+            game_title: str,
+            reaction: str,
+            trigger: str,
+            lore_summary: str,
+            submitted_by: str,
+            message_id: int) -> bool:
         """Insert extracted clip lore into the database."""
         conn = self.db.get_connection()
         try:
@@ -2643,12 +2652,12 @@ class TriviaDatabase:
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT game_title, reaction, trigger, lore_summary, submitted_by_discord_id, message_id 
-                    FROM clip_lore 
+                    SELECT game_title, reaction, trigger, lore_summary, submitted_by_discord_id, message_id
+                    FROM clip_lore
                     WHERE canonical_url = %s
                 """, (canonical_url,))
                 row = cur.fetchone()
-                
+
                 if row:
                     return {
                         'game_title': row[0],
