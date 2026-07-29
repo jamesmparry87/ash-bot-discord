@@ -10,13 +10,12 @@ This module provides the foundational DatabaseManager class with:
 
 import logging
 import os
+import sys
 from typing import List, Optional
 
 import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
-
-import sys
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
