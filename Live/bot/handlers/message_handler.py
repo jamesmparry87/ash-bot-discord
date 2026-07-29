@@ -777,7 +777,7 @@ async def handle_general_conversation(message: discord.Message, bot: commands.Bo
             match = url_pattern.search(content)
             if match:
                 clip_url = match.group(0)
-                from bot.commands.clips import canonicalize_clip_url, ClipParsingService
+                from bot.commands.clips import ClipParsingService, canonicalize_clip_url
                 from bot.database import get_database
                 canonical_url = canonicalize_clip_url(clip_url)
                 db = get_database()

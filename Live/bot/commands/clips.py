@@ -4,15 +4,14 @@ import logging
 import os
 import re
 import traceback
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
 
 import discord
-from discord.ext import commands
-
+from bot.config import JAM_USER_ID, JONESY_USER_ID
 from bot.database import get_database
 from bot.handlers.ai_handler import upload_and_analyze_media
-from bot.config import JAM_USER_ID, JONESY_USER_ID
+from discord.ext import commands
 
 logger = logging.getLogger(__name__)
 
