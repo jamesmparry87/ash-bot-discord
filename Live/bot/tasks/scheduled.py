@@ -252,7 +252,7 @@ async def trivia_tuesday():
         print("❌ TRIVIA TUESDAY: Database not available")
         await notify_scheduled_message_error("Trivia Tuesday", "Database not available.", uk_now)
         return
-        
+
     if db.get_config_value('trivia_scheduled_disabled') == 'true':
         print(
             f"⚠️ Trivia Tuesday skipped - scheduled trivia disabled for manual override at {uk_now.strftime('%H:%M:%S UK')}")
@@ -934,15 +934,15 @@ async def check_due_reminders():
 
         # Get dynamic database instance
         db = get_database()
-        
+
         # Enhanced database diagnostics - only log issues or when processing reminders
         if db is None:
             print("❌ Database instance is None - reminder system disabled")
             return
-            
+
         if not hasattr(db, 'get_due_reminders'):
             print("❌ Database instance missing get_due_reminders - reminder system disabled")
-            return      
+            return
 
         # Check database connection - only log errors
         try:

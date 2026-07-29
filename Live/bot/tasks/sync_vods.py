@@ -51,9 +51,10 @@ from .utils import _should_run_automated_tasks, get_bot_instance
 # Add global tracker for manual edits made during long-running syncs
 _stale_game_names = set()
 
+
 def invalidate_game_cache(canonical_name: str):
     """
-    Marks a game as stale so the sync loop knows to fetch a fresh copy 
+    Marks a game as stale so the sync loop knows to fetch a fresh copy
     from the database rather than relying on its in-memory cache.
     """
     if canonical_name:
@@ -61,6 +62,7 @@ def invalidate_game_cache(canonical_name: str):
         norm = canonical_name.lower().translate(str.maketrans('', '', string.punctuation)).replace(' ', '')
         _stale_game_names.add(norm)
         print(f"🔄 SYNC: Cache invalidated for '{canonical_name}' due to manual edit.")
+
 
 db = get_database()
 
