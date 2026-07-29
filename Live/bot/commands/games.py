@@ -13,7 +13,7 @@ from discord.ext import commands
 
 from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..database import get_database
-from ..tasks.sync_vods import perform_full_content_sync
+from ..tasks.sync_vods import perform_full_content_sync, invalidate_game_cache
 
 # Get database instance
 db = get_database()
@@ -458,6 +458,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
 
                     details_text = f" ({', '.join(details)})" if details else ""
                     await ctx.send(f"✅ **'{game_name}' added to played games database**{details_text}.\n\n*Use `!gameinfo {game_name}` to view details.*")
+                    invalidate_game_cache(game_name)
                 else:
                     await ctx.send(f"❌ **Failed to add '{game_name}'.** Database error occurred or game may already exist.")
 
@@ -676,6 +677,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
 
                     changes_text = ', '.join(changes)
                     await ctx.send(f"✅ **Updated '{game_display_name}':** {changes_text}\n\n*Use `!gameinfo {game_identifier}` to view updated details.*")
+                    invalidate_game_cache(game_display_name)
                 else:
                     await ctx.send(f"❌ **Failed to update '{game_display_name}'.** Game not found or database error.")
 
@@ -947,6 +949,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
                         f"• Episodes updated: {existing_game.get('total_episodes', 0)} → "
                         f"{existing_game.get('total_episodes', 0) + 1}"
                     )
+                    invalidate_game_cache(canonical_name)
                 else:
                     await ctx.send(f"❌ **Database update failed** for `{canonical_name}`. Check bot logs.")
 

@@ -48,6 +48,20 @@ except ImportError:
 from ..database import get_database
 from .utils import _should_run_automated_tasks, get_bot_instance
 
+# Add global tracker for manual edits made during long-running syncs
+_stale_game_names = set()
+
+def invalidate_game_cache(canonical_name: str):
+    """
+    Marks a game as stale so the sync loop knows to fetch a fresh copy 
+    from the database rather than relying on its in-memory cache.
+    """
+    if canonical_name:
+        import string
+        norm = canonical_name.lower().translate(str.maketrans('', '', string.punctuation)).replace(' ', '')
+        _stale_game_names.add(norm)
+        print(f"🔄 SYNC: Cache invalidated for '{canonical_name}' due to manual edit.")
+
 db = get_database()
 
 
@@ -313,6 +327,17 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
 
         name_lower = name.lower().strip()
         name_norm = normalize_name(name)
+
+        # Check if game was manually edited during the sync run
+        if name_norm in _stale_game_names:
+            print(f"🔄 SYNC: Re-fetching stale game '{name}' from database...")
+            fresh_game = db.games.get_played_game(name) if hasattr(db, 'games') else None
+            if fresh_game:
+                game_cache_normalized[name_norm] = fresh_game
+                if name_lower in game_cache_exact:
+                    game_cache_exact[name_lower] = fresh_game
+                _stale_game_names.remove(name_norm)
+                return fresh_game
 
         # 1. Exact canonical
         if name_lower in game_cache_exact:

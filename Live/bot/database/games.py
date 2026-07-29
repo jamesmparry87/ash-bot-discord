@@ -103,6 +103,13 @@ class GamesDatabase:
                     END $$;
                 """)
 
+                # Migration 4: Add performance indexes
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_played_games_canonical_name ON played_games(canonical_name);
+                    CREATE INDEX IF NOT EXISTS idx_played_games_skip_igdb ON played_games(skip_igdb_enrichment);
+                    CREATE INDEX IF NOT EXISTS idx_played_games_genre ON played_games(genre);
+                """)
+
                 conn.commit()
                 logger.info("✅ Database migrations complete")
         except Exception as e:

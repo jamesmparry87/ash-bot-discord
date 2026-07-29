@@ -68,13 +68,9 @@ except ImportError:
 # Database and config imports
 try:
     from ..database import DatabaseManager, get_database
-
-    # Get database instance
-    db: DatabaseManager | None = get_database()
-    print("✅ Scheduled tasks: Database connection established")
+    print("✅ Scheduled tasks: Database module imported successfully")
 except Exception as db_error:
-    print(f"⚠️ Scheduled tasks: Database not available - {db_error}")
-    db = None
+    print(f"⚠️ Scheduled tasks: Database import failed - {db_error}")
 
 from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
 from ..persona.sarcasm import apply_pops_arcade_sarcasm
@@ -250,8 +246,14 @@ async def trivia_tuesday():
         print(f"⚠️ Trivia Tuesday skipped - staging bot detected at {uk_now.strftime('%H:%M:%S UK')}")
         return
 
-    # Check if scheduled trivia is disabled for manual override
-    if db and db.get_config_value('trivia_scheduled_disabled') == 'true':
+    # 1. Check if scheduled Trivia Tuesday is disabled
+    db = get_database()
+    if not db:
+        print("❌ TRIVIA TUESDAY: Database not available")
+        await notify_scheduled_message_error("Trivia Tuesday", "Database not available.", uk_now)
+        return
+        
+    if db.get_config_value('trivia_scheduled_disabled') == 'true':
         print(
             f"⚠️ Trivia Tuesday skipped - scheduled trivia disabled for manual override at {uk_now.strftime('%H:%M:%S UK')}")
         # Auto-reset after 24 hours
@@ -395,6 +397,7 @@ async def trivia_tuesday():
 async def check_stale_trivia_sessions():
     """Auto-end trivia sessions that have been active for more than 2 hours"""
     try:
+        db = get_database()
         if not db:
             return
 
@@ -553,6 +556,7 @@ async def friday_community_analysis():
         )
         return
 
+    db = get_database()
     if not db:
         print("❌ COMMUNITY ANALYSIS (Friday): Database not available")
         await notify_jam_weekly_message_failure(
@@ -793,6 +797,7 @@ async def scheduled_ai_refresh():
         # NEW: Trivia Pool Validation and Auto-Replenishment
         pool_status_message = ""
         try:
+            db = get_database()
             if db:
                 available_questions = db.get_available_trivia_questions()
                 pool_count = len(available_questions) if available_questions else 0
@@ -927,14 +932,17 @@ async def check_due_reminders():
     try:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
 
+        # Get dynamic database instance
+        db = get_database()
+        
         # Enhanced database diagnostics - only log issues or when processing reminders
-        if not db:
-            print("❌ Database instance (db) is None - reminder system disabled")
+        if db is None:
+            print("❌ Database instance is None - reminder system disabled")
             return
-
-        if not db:
-            print("❌ Database instance not available - reminder system disabled")
-            return
+            
+        if not hasattr(db, 'get_due_reminders'):
+            print("❌ Database instance missing get_due_reminders - reminder system disabled")
+            return      
 
         # Check database connection - only log errors
         try:

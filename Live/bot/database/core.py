@@ -13,11 +13,41 @@ import os
 from typing import List, Optional
 
 import psycopg2
+from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+class PooledConnectionWrapper:
+    """
+    Wraps a psycopg2 connection from a connection pool to automatically
+    return it to the pool when .close() is called, preventing connection leaks.
+    """
+    def __init__(self, pool, conn):
+        self._pool = pool
+        self._conn = conn
+        
+    def cursor(self, *args, **kwargs):
+        return self._conn.cursor(*args, **kwargs)
+        
+    def commit(self):
+        return self._conn.commit()
+        
+    def rollback(self):
+        return self._conn.rollback()
+        
+    def close(self):
+        """Returns the connection to the pool instead of closing it."""
+        try:
+            self._pool.putconn(self._conn)
+        except Exception as e:
+            logger.error(f"Error returning connection to pool: {e}")
+            
+    def __getattr__(self, name):
+        """Pass any other attribute accesses to the underlying connection."""
+        return getattr(self._conn, name)
 
 
 class DatabaseManager:
@@ -45,13 +75,27 @@ class DatabaseManager:
         If DATABASE_URL is not set, database features will be disabled.
         """
         self.database_url = os.getenv('DATABASE_URL')
+        self._connection_pool = None
+        
         if not self.database_url:
             logger.warning(
                 "DATABASE_URL not found. Database features will be disabled.")
             self.connection = None
         else:
             self.connection = None
-            self.init_database()
+            try:
+                # Initialize connection pool (min 1, max 20 connections)
+                self._connection_pool = pool.ThreadedConnectionPool(
+                    1, 20, 
+                    dsn=self.database_url,
+                    cursor_factory=RealDictCursor,
+                    connect_timeout=5
+                )
+                logger.info("✅ Database connection pool initialized successfully")
+                self.init_database()
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize database connection pool: {e}")
+                self._connection_pool = None
 
         # Initialize domain modules (lazy loaded when first accessed)
         self._config = None
@@ -225,25 +269,33 @@ class DatabaseManager:
 
     def get_connection(self):
         """
-        Get database connection with retry logic.
+        Get database connection from the connection pool.
 
-        Always creates a fresh connection for each operation to avoid stale connections.
-        This is more reliable than trying to reuse connections.
+        Returns a wrapped connection that safely returns to the pool
+        when .close() is called, ensuring compatibility with existing code.
 
         Returns:
-            psycopg2 connection object or None if connection fails
+            PooledConnectionWrapper object or None if connection fails
         """
-        if not self.database_url:
+        if not self.database_url or not self._connection_pool:
             return None
 
         try:
-            # Always create a fresh connection for each operation to avoid stale connections
-            self.connection = psycopg2.connect(
-                self.database_url, cursor_factory=RealDictCursor, connect_timeout=5)
-            return self.connection
+            conn = self._connection_pool.getconn()
+            # Wrap the connection so .close() calls putconn() instead
+            return PooledConnectionWrapper(self._connection_pool, conn)
         except Exception as e:
-            logger.error(f"Database connection failed: {e}")
-            return None
+            logger.error(f"Database pool getconn failed: {e}")
+            
+            # Fallback to single connection if pool fails
+            try:
+                logger.info("Attempting fallback single connection...")
+                fallback_conn = psycopg2.connect(
+                    self.database_url, cursor_factory=RealDictCursor, connect_timeout=5)
+                return fallback_conn
+            except Exception as e2:
+                logger.error(f"Database fallback connection failed: {e2}")
+                return None
 
     def init_database(self):
         """
