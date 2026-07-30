@@ -1689,7 +1689,7 @@ class GamesDatabase:
                 f"Error getting games by franchise {franchise_name}: {e}")
             return []
 
-    def get_random_played_games(self, limit: int = 8) -> List[Dict[str, Any]]:
+    def get_random_played_games(self, limit: int = 8, required_fields: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Get a random sample of played games for AI responses"""
         conn = self.get_connection()
         if not conn:
@@ -1697,11 +1697,23 @@ class GamesDatabase:
 
         try:
             with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT * FROM played_games
-                    ORDER BY RANDOM()
-                    LIMIT %s
-                """, (limit,))
+                query = "SELECT * FROM played_games"
+                
+                conditions = []
+                if required_fields:
+                    for field in required_fields:
+                        valid_fields = ['canonical_name', 'series_name', 'genre', 'release_year', 'platform', 
+                                        'first_played_date', 'completion_status', 'total_episodes', 
+                                        'total_playtime_minutes']
+                        if field in valid_fields:
+                            conditions.append(f"({field} IS NOT NULL AND {field}::text != '')")
+                            
+                if conditions:
+                    query += " WHERE " + " AND ".join(conditions)
+                    
+                query += " ORDER BY RANDOM() LIMIT %s"
+                
+                cur.execute(query, (limit,))
                 results = cur.fetchall()
                 return [dict(row) for row in results]
         except Exception as e:

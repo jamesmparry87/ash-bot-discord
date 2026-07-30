@@ -33,20 +33,35 @@ class PooledConnectionWrapper:
         self._conn = conn
 
     def cursor(self, *args, **kwargs):
+        if not self._conn: raise RuntimeError("Connection is closed")
         return self._conn.cursor(*args, **kwargs)
 
     def commit(self):
+        if not self._conn: raise RuntimeError("Connection is closed")
         return self._conn.commit()
 
     def rollback(self):
+        if not self._conn: raise RuntimeError("Connection is closed")
         return self._conn.rollback()
 
     def close(self):
         """Returns the connection to the pool instead of closing it."""
-        try:
-            self._pool.putconn(self._conn)
-        except Exception as e:
-            logger.error(f"Error returning connection to pool: {e}")
+        if hasattr(self, '_conn') and self._conn is not None:
+            try:
+                self._pool.putconn(self._conn)
+                self._conn = None
+            except Exception as e:
+                logger.error(f"Error returning connection to pool: {e}")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        
+    def __del__(self):
+        """Safety net to prevent connection leaks if close() is forgotten."""
+        self.close()
 
     def __getattr__(self, name):
         """Pass any other attribute accesses to the underlying connection."""
@@ -411,10 +426,29 @@ class DatabaseManager:
                         reaction TEXT,
                         trigger TEXT,
                         lore_summary TEXT,
+                        notable_quote TEXT,
+                        emotion_category TEXT,
+                        characters_involved TEXT,
+                        clip_outcome TEXT,
                         submitted_by_discord_id TEXT,
                         message_id BIGINT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
+                """)
+                
+                # Migration: Add notable_quote and new columns to existing clip_lore table
+                cur.execute("""
+                    DO $$ 
+                    BEGIN 
+                        BEGIN
+                            ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS notable_quote TEXT;
+                            ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS emotion_category TEXT;
+                            ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS characters_involved TEXT;
+                            ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS clip_outcome TEXT;
+                        EXCEPTION
+                            WHEN duplicate_column THEN RAISE NOTICE 'columns already exist in clip_lore.';
+                        END;
+                    END $$;
                 """)
 
                 cur.execute("""

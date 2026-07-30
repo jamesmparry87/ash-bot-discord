@@ -650,11 +650,20 @@ async def _background_question_generation(current_question_count: int):
                 unique_context = f"startup_validation_{i+1}"
 
                 # ✅ FIX #2: Pass recently generated questions AND templates to avoid repetition
-                question_data = await generate_ai_trivia_question(
-                    unique_context,
-                    avoid_questions=generated_question_texts,
-                    avoid_templates=used_template_ids  # ✅ NEW: Prevent template reuse in batch
-                )
+                import random
+                from ..handlers.ai_handler import generate_contextual_trivia
+
+                # 50% chance to use the new contextual clip/game lore generator
+                if random.random() < 0.5:
+                    print("🔄 BACKGROUND GENERATION: Using new contextual/clip trivia generator")
+                    question_data = await generate_contextual_trivia()
+                else:
+                    print("🔄 BACKGROUND GENERATION: Using classic Trivia Director")
+                    question_data = await generate_ai_trivia_question(
+                        unique_context,
+                        avoid_questions=generated_question_texts,
+                        avoid_templates=used_template_ids  # ✅ NEW: Prevent template reuse in batch
+                    )
 
                 if question_data and isinstance(question_data, dict):
                     # ✅ SUCCESS: Reset consecutive failure counter

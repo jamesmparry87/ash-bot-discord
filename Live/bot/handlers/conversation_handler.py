@@ -2226,7 +2226,11 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
             # Automatically fetch next available question
             try:
-                next_question = db.get_next_trivia_question(exclude_user_id=JAM_USER_ID)
+                avoid_category = question_data.get('category')
+                next_question = db.get_next_trivia_question(
+                    exclude_user_id=JAM_USER_ID, 
+                    avoid_category=avoid_category
+                )
 
                 if next_question:
                     # Calculate dynamic answer if needed
@@ -2425,6 +2429,32 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                     # Question not in database yet (shouldn't happen with new flow, but handle gracefully)
                     print(f"⚠️ REJECTION: Question has no ID, cannot mark as rejected in database")
 
+                # ✅ NEW: Purge any remaining questions in the queue that have the same rejected category
+                global jam_approval_queue
+                rejected_category = question_data.get('category')
+                
+                # Determine how many items we are about to remove
+                items_to_remove = [
+                    item for item in jam_approval_queue 
+                    if item.get('type') == 'trivia_question' and 
+                       item.get('data', {}).get('question_data', {}).get('category') == rejected_category
+                ]
+                
+                if rejected_category and items_to_remove:
+                    # Actually filter the queue
+                    jam_approval_queue = [item for item in jam_approval_queue if item not in items_to_remove]
+                    
+                    # Also mark them as rejected in the DB so they don't linger in pending_approval
+                    for item in items_to_remove:
+                        q_id = item.get('data', {}).get('question_data', {}).get('id')
+                        if q_id and db:
+                            try:
+                                db.trivia.reject_trivia_question(q_id)
+                            except Exception:
+                                pass
+                                
+                    print(f"🗑️ Removed {len(items_to_remove)} pending questions of rejected category '{rejected_category}' from the queue.")
+
                 # ✅ CRITICAL FIX: Get queue length BEFORE clearing conversation
                 queue_length = get_queue_length()
 
@@ -2439,6 +2469,9 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                     f"The trivia question has been rejected and marked as 'retired'. "
                     f"It won't be shown again.\n\n"
                 )
+                
+                if items_to_remove:
+                    rejection_msg += f"🧹 Also purged {len(items_to_remove)} other pending questions in the '{rejected_category}' category.\n\n"
 
                 if queue_length > 0:
                     rejection_msg += f"📬 **Processing next question...** ({queue_length} remaining in queue)"

@@ -22,6 +22,10 @@ Return a strict JSON response with the following keys:
 - "reaction": The streamer's exact reaction (e.g. screamed, rage quit, burst out laughing, fell off chair).
 - "trigger": What happened in the game to cause this reaction.
 - "lore_summary": A one-sentence trivia fact focused on the streamer's experience (e.g. "During a stream, Jonesy fell off the cliff after being startled by a chicken in Skyrim").
+- "notable_quote": A memorable or funny direct quote spoken by the streamer during the clip (if any, otherwise "").
+- "emotion_category": The primary emotion displayed (e.g., "Rage", "Joy", "Terror", "Confusion", "Amusement").
+- "characters_involved": Any specific enemies, bosses, or NPCs involved in the clip's events.
+- "clip_outcome": The result of the clip's events (e.g., "Success", "Failure", "Death", "Neutral").
 Ensure the response is ONLY valid JSON, without markdown formatting.
 """
 
@@ -118,6 +122,10 @@ class ClipParsingService:
                 reaction=data.get("reaction", ""),
                 trigger=data.get("trigger", ""),
                 lore_summary=data.get("lore_summary", ""),
+                notable_quote=data.get("notable_quote", ""),
+                emotion_category=data.get("emotion_category", ""),
+                characters_involved=data.get("characters_involved", ""),
+                clip_outcome=data.get("clip_outcome", ""),
                 submitted_by=str(message.author.id),
                 message_id=message.id
             )
@@ -143,101 +151,18 @@ class ClipTriviaCog(commands.Cog):
         self.parser = ClipParsingService()
         self.target_channel_id = 1210874007591718982
         self.url_pattern = re.compile(
-            r'https?://(?:www\.|clips\.)?(?:twitch\.tv|youtube\.com|youtu\.be)/\S+'
+            r'https?://(?:www\.)?(?:clips\.twitch\.tv/\S+|twitch\.tv/\w+/clip/\S+|youtube\.com/clip/\S+|youtube\.com/shorts/\S+|youtu\.be/clip/\S+)'
         )
 
-        # Background worker queue
-        self.clip_queue = asyncio.Queue()
-        self.expected_batch_size = 0
-        self.current_batch_processed = 0
-        self.worker_task = self.bot.loop.create_task(self.process_queue())
 
-    async def cog_unload(self):
-        self.worker_task.cancel()
-
-    async def process_queue(self):
-        """Background worker to process clips sequentially with cooldown."""
-        while True:
-            try:
-                # Wait for next clip in queue
-                message, clip_url = await self.clip_queue.get()
-
-                # If we are starting a batch and expected_batch_size is 0 (ad hoc mode without tracking)
-                # this shouldn't happen with our updates, but fallback to 1
-                if self.expected_batch_size == 0:
-                    self.expected_batch_size = 1
-
-                self.current_batch_processed += 1
-
-                print(f"🎬 Processing clip from queue: {clip_url}")
-                success = await self.parser.process_clip(clip_url, message)
-
-                # Update reactions based on success
-                try:
-                    await message.remove_reaction("👀", self.bot.user)
-                    if success:
-                        await message.add_reaction("✅")
-                    else:
-                        await message.add_reaction("❌")
-                except Exception:
-                    pass
-
-                # DM Jam with updates
-                try:
-                    jam_user = await self.bot.fetch_user(JAM_USER_ID)
-                    if jam_user:
-                        is_first = (self.current_batch_processed == 1)
-                        is_last = (self.current_batch_processed == self.expected_batch_size)
-                        is_single = (self.expected_batch_size == 1)
-
-                        date_str = message.created_at.strftime("%Y-%m-%d")
-
-                        if is_single or is_first or is_last:
-                            # Full info
-                            clip_details = None
-                            if success:
-                                canonical_url = canonicalize_clip_url(clip_url)
-                                clip_details = get_database().trivia.get_clip_lore(canonical_url)
-
-                            if success and clip_details:
-                                title = clip_details.get('game_title', 'Unknown Game')
-                                reaction = clip_details.get('reaction', 'Reaction')
-                                msg = f"🔬 **Archive Update** [{self.current_batch_processed}/{self.expected_batch_size}]\n"
-                                msg += f"I have processed the clip from {date_str}: **{title}**.\n"
-                                msg += f"Observed reaction: *{reaction}*."
-                            else:
-                                msg = f"⚠️ **Archive Update** [{self.current_batch_processed}/{self.expected_batch_size}]\n"
-                                msg += f"I attempted to process the clip from {date_str}, but the analysis failed."
-                        else:
-                            # Short info
-                            if success:
-                                msg = f"🔬 Processing... [{self.current_batch_processed}/{self.expected_batch_size}] (Success)"
-                            else:
-                                msg = f"⚠️ Processing... [{self.current_batch_processed}/{self.expected_batch_size}] (Failed)"
-
-                        await jam_user.send(msg)
-                except Exception as e:
-                    logger.error(f"Failed to DM Jam regarding clip processing: {e}")
-
-                # Reset batch tracking if complete
-                if self.current_batch_processed >= self.expected_batch_size:
-                    self.expected_batch_size = 0
-                    self.current_batch_processed = 0
-
-                self.clip_queue.task_done()
-
-                # Sleep for 60 seconds to prevent rate limits
-                await asyncio.sleep(60.0)
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Error in clip processing worker: {e}")
-                await asyncio.sleep(10.0)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or message.channel.id != self.target_channel_id:
+            return
+            
+        # Isolate to Live Bot only to prevent conflicts
+        if self.bot.user and self.bot.user.id != 1393984585502687293:
             return
 
         match = self.url_pattern.search(message.content)
@@ -245,14 +170,13 @@ class ClipTriviaCog(commands.Cog):
             clip_url = match.group(0)
             canonical_url = canonicalize_clip_url(clip_url)
 
-            # Fast DB check before queuing
+            # Fast DB check
             db = get_database()
             if db.trivia.clip_lore_exists(canonical_url):
                 return
 
-            self.expected_batch_size += 1
+            # Acknowledge visually so users know it's in the queue for 8 PM
             await message.add_reaction("👀")
-            await self.clip_queue.put((message, clip_url))
 
     @commands.command(name="scan_clips")
     async def scan_clips(self, ctx, limit: int = 20):
@@ -311,10 +235,30 @@ class ClipTriviaCog(commands.Cog):
 
         queued_count = len(clips_to_queue)
         if queued_count > 0:
-            self.expected_batch_size += queued_count
-            for msg, curl in clips_to_queue:
-                await msg.add_reaction("👀")
-                await self.clip_queue.put((msg, curl))
+            for idx, (msg, curl) in enumerate(clips_to_queue):
+                await ctx.send(f"🎬 Processing clip {idx + 1}/{queued_count}: {curl}")
+                
+                # Acknowledge processing
+                try:
+                    await msg.add_reaction("👀")
+                except Exception:
+                    pass
+                    
+                success = await self.parser.process_clip(curl, msg)
+                
+                # Update reactions based on success
+                try:
+                    await msg.remove_reaction("👀", self.bot.user)
+                    if success:
+                        await msg.add_reaction("✅")
+                    else:
+                        await msg.add_reaction("❌")
+                except Exception:
+                    pass
+                    
+                # Sleep to respect rate limits if not the last clip
+                if idx < queued_count - 1:
+                    await asyncio.sleep(60.0)
 
         # Update state
         if oldest_message_id and oldest_message_date:

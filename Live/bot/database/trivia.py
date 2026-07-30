@@ -177,9 +177,11 @@ class TriviaDatabase:
             logger.error(f"Error adding trivia question: {e}")
             conn.rollback()
             return None
+        finally:
+            conn.close()
 
     def get_next_trivia_question(
-            self, exclude_user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
+            self, exclude_user_id: Optional[int] = None, avoid_category: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Get the next trivia question based on priority system (excluding answered/retired questions)
 
@@ -191,13 +193,19 @@ class TriviaDatabase:
 
         try:
             with conn.cursor() as cur:
-                # Build exclusion condition if exclude_user_id is provided
-                exclusion_condition = ""
+                # Build exclusion condition if parameters are provided
+                exclusion_conditions = []
                 query_params = []
 
                 if exclude_user_id is not None:
-                    exclusion_condition = "AND (submitted_by_user_id != %s OR submitted_by_user_id IS NULL)"
-                    query_params = [exclude_user_id]
+                    exclusion_conditions.append("(submitted_by_user_id != %s OR submitted_by_user_id IS NULL)")
+                    query_params.append(exclude_user_id)
+                
+                if avoid_category:
+                    exclusion_conditions.append("(category != %s OR category IS NULL)")
+                    query_params.append(avoid_category)
+                
+                exclusion_condition = " AND " + " AND ".join(exclusion_conditions) if exclusion_conditions else ""
 
                 # ✅ FIX #2: Explicitly exclude 'retired' and 'answered' statuses
                 # Priority 1: Recent mod-submitted questions (available status,
@@ -260,6 +268,8 @@ class TriviaDatabase:
         except Exception as e:
             logger.error(f"Error getting next trivia question: {e}")
             return None
+        finally:
+            conn.close()
 
     def create_trivia_session(
             self,
@@ -329,6 +339,8 @@ class TriviaDatabase:
             logger.error(f"Error creating trivia session: {e}")
             conn.rollback()
             return None
+        finally:
+            conn.close()
 
     def get_active_trivia_session(self) -> Optional[Dict[str, Any]]:
         """
@@ -2625,6 +2637,10 @@ class TriviaDatabase:
             reaction: str,
             trigger: str,
             lore_summary: str,
+            notable_quote: str,
+            emotion_category: str,
+            characters_involved: str,
+            clip_outcome: str,
             submitted_by: str,
             message_id: int) -> bool:
         """Insert extracted clip lore into the database."""
@@ -2633,10 +2649,14 @@ class TriviaDatabase:
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO clip_lore (
-                        canonical_url, original_url, game_title, reaction, trigger, lore_summary, submitted_by_discord_id, message_id
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        canonical_url, original_url, game_title, reaction, trigger, lore_summary, 
+                        notable_quote, emotion_category, characters_involved, clip_outcome, 
+                        submitted_by_discord_id, message_id
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (canonical_url) DO NOTHING
-                """, (canonical_url, original_url, game_title, reaction, trigger, lore_summary, submitted_by, message_id))
+                """, (canonical_url, original_url, game_title, reaction, trigger, lore_summary, 
+                      notable_quote, emotion_category, characters_involved, clip_outcome, 
+                      submitted_by, message_id))
                 conn.commit()
                 return cur.rowcount > 0
         except Exception as e:
@@ -2652,7 +2672,9 @@ class TriviaDatabase:
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT game_title, reaction, trigger, lore_summary, submitted_by_discord_id, message_id
+                    SELECT game_title, reaction, trigger, lore_summary, notable_quote, 
+                           emotion_category, characters_involved, clip_outcome, 
+                           submitted_by_discord_id, message_id
                     FROM clip_lore
                     WHERE canonical_url = %s
                 """, (canonical_url,))
@@ -2664,6 +2686,10 @@ class TriviaDatabase:
                         'reaction': row['reaction'],
                         'trigger': row['trigger'],
                         'lore_summary': row['lore_summary'],
+                        'notable_quote': row['notable_quote'],
+                        'emotion_category': row['emotion_category'],
+                        'characters_involved': row['characters_involved'],
+                        'clip_outcome': row['clip_outcome'],
                         'submitted_by': row['submitted_by_discord_id'],
                         'message_id': row['message_id']
                     }
@@ -2674,6 +2700,57 @@ class TriviaDatabase:
         finally:
             conn.close()
 
+    def get_random_clip_lore(self, limit: int = 1, required_fields: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """Retrieve random clip lore entries, optionally filtering for non-empty fields."""
+        conn = self.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                query = """
+                    SELECT canonical_url, original_url, game_title, reaction, trigger, 
+                           lore_summary, notable_quote, emotion_category, characters_involved, 
+                           clip_outcome, submitted_by_discord_id, message_id
+                    FROM clip_lore
+                """
+                
+                conditions = []
+                if required_fields:
+                    for field in required_fields:
+                        # Ensure the field is valid to prevent SQL injection
+                        valid_fields = ['game_title', 'reaction', 'trigger', 'lore_summary', 'notable_quote', 
+                                        'emotion_category', 'characters_involved', 'clip_outcome', 'submitted_by_discord_id']
+                        if field in valid_fields:
+                            conditions.append(f"({field} IS NOT NULL AND {field} != '')")
+                
+                if conditions:
+                    query += " WHERE " + " AND ".join(conditions)
+                    
+                query += " ORDER BY RANDOM() LIMIT %s"
+                
+                cur.execute(query, (limit,))
+                rows = cur.fetchall()
+                
+                results = []
+                for row in rows:
+                    results.append({
+                        'canonical_url': row['canonical_url'],
+                        'original_url': row['original_url'],
+                        'game_title': row['game_title'],
+                        'reaction': row['reaction'],
+                        'trigger': row['trigger'],
+                        'lore_summary': row['lore_summary'],
+                        'notable_quote': row['notable_quote'],
+                        'emotion_category': row['emotion_category'],
+                        'characters_involved': row['characters_involved'],
+                        'clip_outcome': row['clip_outcome'],
+                        'submitted_by': row['submitted_by_discord_id'],
+                        'message_id': row['message_id']
+                    })
+                return results
+        except Exception as e:
+            logger.error(f"Error retrieving random clip lore: {e}")
+            return []
+        finally:
+            conn.close()
 
 # Export
 __all__ = ['TriviaDatabase']
