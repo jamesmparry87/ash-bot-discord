@@ -651,6 +651,7 @@ async def _background_question_generation(current_question_count: int):
 
                 # ✅ FIX #2: Pass recently generated questions AND templates to avoid repetition
                 import random
+
                 from ..handlers.ai_handler import generate_contextual_trivia
 
                 # 50% chance to use the new contextual clip/game lore generator
