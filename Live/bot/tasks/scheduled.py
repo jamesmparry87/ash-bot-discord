@@ -1493,6 +1493,17 @@ async def daily_clip_scan_task():
 
             if not db.trivia.clip_lore_exists(canonical_url):
                 clips_to_process.append((message, clip_url))
+            else:
+                # Clip already processed - ensure it has the ✅ reaction
+                has_tick = any(str(r.emoji) == "✅" for r in message.reactions)
+                if not has_tick:
+                    try:
+                        await message.add_reaction("✅")
+                        if bot.user:
+                            await message.remove_reaction("👀", bot.user)
+                            await message.remove_reaction("❌", bot.user)
+                    except Exception:
+                        pass
 
     queued_count = len(clips_to_process)
     if queued_count == 0:
@@ -1507,25 +1518,60 @@ async def daily_clip_scan_task():
     except Exception as e:
         print(f"Failed to fetch Jam user for DMs: {e}")
 
+    quota_exhausted = False
     for idx, (msg, curl) in enumerate(clips_to_process):
+        if quota_exhausted:
+            break
+            
         success = False
+        
+        # Clear any old failure marks before retrying
+        try:
+            if bot.user:
+                await msg.remove_reaction("❌", bot.user)
+        except Exception:
+            pass
+
         # Add a simple retry loop for Gemini 503 errors
         for attempt in range(3):
             success = await cog.parser.process_clip(curl, msg)
             if success:
                 break
+                
+            from bot.handlers.ai_handler import primary_ai
+            if primary_ai != "gemini":
+                print("🚫 Primary AI is exhausted or unavailable. Aborting clip batch.")
+                quota_exhausted = True
+                break
+                
             print(f"⚠️ Clip processing failed (attempt {attempt + 1}/3). Retrying in 30s...")
             await asyncio.sleep(30.0)
+
+        if quota_exhausted:
+            # Send a DM saying we aborted
+            if jam_user:
+                await jam_user.send(f"⚠️ **Clip Processing Aborted**\nThe AI quota was exhausted while processing clip {idx + 1}/{queued_count}. The remaining {queued_count - idx} clips will be processed tomorrow.")
+            # Do not apply ✅ or ❌, just leave it for tomorrow
+            try:
+                if bot.user:
+                    await msg.remove_reaction("👀", bot.user)
+            except Exception:
+                pass
+            break
 
         try:
             if bot.user:
                 await msg.remove_reaction("👀", bot.user)
+        except Exception:
+            pass
+            
+        try:
             if success:
                 await msg.add_reaction("✅")
             else:
                 await msg.add_reaction("❌")
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error updating reaction on message {msg.id}: {e}")
 
         # Send DM update
         if jam_user:

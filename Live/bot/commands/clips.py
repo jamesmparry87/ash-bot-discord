@@ -22,10 +22,10 @@ Return a strict JSON response with the following keys:
 - "reaction": The streamer's exact reaction (e.g. screamed, rage quit, burst out laughing, fell off chair).
 - "trigger": What happened in the game to cause this reaction.
 - "lore_summary": A one-sentence trivia fact focused on the streamer's experience (e.g. "During a stream, Jonesy fell off the cliff after being startled by a chicken in Skyrim").
-- "notable_quote": A memorable or funny direct quote spoken by the streamer during the clip (if any, otherwise "").
-- "emotion_category": The primary emotion displayed (e.g., "Rage", "Joy", "Terror", "Confusion", "Amusement").
-- "characters_involved": Any specific enemies, bosses, or NPCs involved in the clip's events.
-- "clip_outcome": The result of the clip's events (e.g., "Success", "Failure", "Death", "Neutral").
+- "notable_quote": A memorable or funny direct quote spoken by the streamer during the clip. Capture a longer, full sentence or a few sentences to ensure there is enough context to understand what they are reacting to (if any, otherwise "").
+- "emotion_category": MUST be exactly one of the following: ["Rage", "Joy", "Terror", "Confusion", "Amusement", "Frustration", "Shock", "Neutral"]. Do not use synonyms.
+- "characters_involved": Any specific enemies, bosses, or NPCs involved. Format as a simple comma-separated string (e.g., "Banished Knight, Godrick Soldiers"). Do not use brackets, braces, or quotes.
+- "clip_outcome": MUST be exactly one of the following: ["Success", "Failure", "Death", "Neutral"]. Do not use synonyms.
 Ensure the response is ONLY valid JSON, without markdown formatting.
 """
 
@@ -159,9 +159,8 @@ class ClipTriviaCog(commands.Cog):
         if message.author.bot or message.channel.id != self.target_channel_id:
             return
 
-        # Isolate to Live Bot only to prevent conflicts
-        if self.bot.user and self.bot.user.id != 1393984585502687293:
-            return
+        # Allow both live and staging bots to acknowledge with 👀
+        # (This helps verify the bot is seeing the clips in all environments)
 
         match = self.url_pattern.search(message.content)
         if match:
@@ -230,13 +229,27 @@ class ClipTriviaCog(commands.Cog):
 
                 if not db.trivia.clip_lore_exists(canonical_url):
                     clips_to_queue.append((message, clip_url))
+                else:
+                    # Clip already processed - ensure it has the ✅ reaction
+                    has_tick = any(str(r.emoji) == "✅" for r in message.reactions)
+                    if not has_tick:
+                        try:
+                            await message.add_reaction("✅")
+                            await message.remove_reaction("👀", self.bot.user)
+                            await message.remove_reaction("❌", self.bot.user)
+                        except Exception:
+                            pass
 
         queued_count = len(clips_to_queue)
         if queued_count > 0:
             for idx, (msg, curl) in enumerate(clips_to_queue):
                 await ctx.send(f"🎬 Processing clip {idx + 1}/{queued_count}: {curl}")
 
-                # Acknowledge processing
+                # Acknowledge processing and clear any old failure marks
+                try:
+                    await msg.remove_reaction("❌", self.bot.user)
+                except Exception:
+                    pass
                 try:
                     await msg.add_reaction("👀")
                 except Exception:
@@ -244,15 +257,29 @@ class ClipTriviaCog(commands.Cog):
 
                 success = await self.parser.process_clip(curl, msg)
 
+                from bot.handlers.ai_handler import primary_ai
+                if primary_ai != "gemini":
+                    await ctx.send("🚫 **AI Quota Exhausted!** Aborting the remainder of the clip scan to avoid spamming the API. We'll pick up the rest tomorrow!")
+                    # Clean up the 👀 reaction from the aborted clip
+                    try:
+                        await msg.remove_reaction("👀", self.bot.user)
+                    except Exception:
+                        pass
+                    break
+
                 # Update reactions based on success
                 try:
                     await msg.remove_reaction("👀", self.bot.user)
+                except Exception:
+                    pass
+                
+                try:
                     if success:
                         await msg.add_reaction("✅")
                     else:
                         await msg.add_reaction("❌")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.error(f"Failed to add final reaction to clip {curl}: {e}")
 
                 # Sleep to respect rate limits if not the last clip
                 if idx < queued_count - 1:
@@ -273,6 +300,27 @@ class ClipTriviaCog(commands.Cog):
             # Optionally reset tracker if we hit the beginning
             await ctx.send("✅ Scan complete. Found 0 clips. Reached the beginning of the channel!")
 
+    @commands.command(name="reset_clips")
+    async def reset_clips(self, ctx):
+        """[Admin] Deletes all clip lore from the database so they can be re-processed."""
+        if ctx.author.id not in [JAM_USER_ID, JONESY_USER_ID]:
+            await ctx.send("❌ Unauthorized.")
+            return
+            
+        db = get_database()
+        try:
+            conn = db._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM clip_lore")
+            deleted_count = cursor.rowcount
+            conn.commit()
+            conn.close()
+            
+            await ctx.send(f"✅ **Database Reset:** Successfully deleted **{deleted_count}** processed clips from the database.\n"
+                           f"They will be picked up as 'new' clips and re-processed using the strict formatting rules on the next scan!")
+        except Exception as e:
+            logger.error(f"Error resetting clips: {e}")
+            await ctx.send(f"❌ Error resetting clips: {e}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ClipTriviaCog(bot))
