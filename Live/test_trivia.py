@@ -1,5 +1,15 @@
 ﻿import asyncio
-from bot.handlers.ai_handler import generate_contextual_trivia‬ 椀渀椀琀椀愀氀椀稀攀开愀椀开愀猀礀渀挀਀昀爀漀洀 戀漀琀⸀搀愀琀愀戀愀猀攀 椀洀瀀漀爀琀 最攀琀开搀愀琀愀戀愀猀攀਀਀愀猀礀渀挀 搀攀昀 琀攀猀琀开最攀渀攀爀愀琀椀漀渀⠀⤀㨀 
+
+from bot.handlers.ai_handler import (
+    generate_contextual_trivia‬,
+    戀漀琀⸀搀愀琀愀戀愀猀攀,
+    搀攀昀,
+    最攀琀开搀愀琀愀戀愀猀攀਀਀愀猀礀渀挀,
+    椀洀瀀漀爀琀,
+    椀渀椀琀椀愀氀椀稀攀开愀椀开愀猀礀渀挀਀昀爀漀洀,
+    琀攀猀琀开最攀渀攀爀愀琀椀漀渀⠀⤀㨀,
+)
+
     print("Testing generate_contextual_trivia (5 iterations)...")
     db = get_database()
     await initialize_ai_async()
