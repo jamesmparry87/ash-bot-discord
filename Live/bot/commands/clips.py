@@ -154,13 +154,11 @@ class ClipTriviaCog(commands.Cog):
             r'https?://(?:www\.)?(?:clips\.twitch\.tv/\S+|twitch\.tv/\w+/clip/\S+|youtube\.com/clip/\S+|youtube\.com/shorts/\S+|youtu\.be/clip/\S+)'
         )
 
-
-
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or message.channel.id != self.target_channel_id:
             return
-            
+
         # Isolate to Live Bot only to prevent conflicts
         if self.bot.user and self.bot.user.id != 1393984585502687293:
             return
@@ -237,15 +235,15 @@ class ClipTriviaCog(commands.Cog):
         if queued_count > 0:
             for idx, (msg, curl) in enumerate(clips_to_queue):
                 await ctx.send(f"🎬 Processing clip {idx + 1}/{queued_count}: {curl}")
-                
+
                 # Acknowledge processing
                 try:
                     await msg.add_reaction("👀")
                 except Exception:
                     pass
-                    
+
                 success = await self.parser.process_clip(curl, msg)
-                
+
                 # Update reactions based on success
                 try:
                     await msg.remove_reaction("👀", self.bot.user)
@@ -255,7 +253,7 @@ class ClipTriviaCog(commands.Cog):
                         await msg.add_reaction("❌")
                 except Exception:
                     pass
-                    
+
                 # Sleep to respect rate limits if not the last clip
                 if idx < queued_count - 1:
                     await asyncio.sleep(60.0)

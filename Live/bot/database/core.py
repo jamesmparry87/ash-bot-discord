@@ -33,15 +33,18 @@ class PooledConnectionWrapper:
         self._conn = conn
 
     def cursor(self, *args, **kwargs):
-        if not self._conn: raise RuntimeError("Connection is closed")
+        if not self._conn:
+            raise RuntimeError("Connection is closed")
         return self._conn.cursor(*args, **kwargs)
 
     def commit(self):
-        if not self._conn: raise RuntimeError("Connection is closed")
+        if not self._conn:
+            raise RuntimeError("Connection is closed")
         return self._conn.commit()
 
     def rollback(self):
-        if not self._conn: raise RuntimeError("Connection is closed")
+        if not self._conn:
+            raise RuntimeError("Connection is closed")
         return self._conn.rollback()
 
     def close(self):
@@ -58,7 +61,7 @@ class PooledConnectionWrapper:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-        
+
     def __del__(self):
         """Safety net to prevent connection leaks if close() is forgotten."""
         self.close()
@@ -435,11 +438,11 @@ class DatabaseManager:
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
-                
+
                 # Migration: Add notable_quote and new columns to existing clip_lore table
                 cur.execute("""
-                    DO $$ 
-                    BEGIN 
+                    DO $$
+                    BEGIN
                         BEGIN
                             ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS notable_quote TEXT;
                             ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS emotion_category TEXT;

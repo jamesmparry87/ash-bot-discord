@@ -1452,61 +1452,61 @@ async def daily_clip_scan_task():
     """Scan clips channel for unprocessed clips every weekday evening"""
     if not _should_run_automated_tasks():
         return
-        
+
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() > 4: # 0-4 is Mon-Fri
+    if uk_now.weekday() > 4:  # 0-4 is Mon-Fri
         print("⏭️ Skipping daily clip scan (weekend)")
         return
-        
+
     print("🎬 Starting daily clip scan task...")
     bot = get_bot_instance()
     if not bot:
         return
-        
+
     channel_id = 1210874007591718982
     channel = bot.get_channel(channel_id)
     if not channel or not isinstance(channel, discord.TextChannel):
         print("❌ Could not find clips channel for daily scan")
         return
-        
+
     cog = bot.get_cog("ClipTriviaCog")
     if not cog:
         print("❌ Could not find ClipTriviaCog for daily scan")
         return
-        
+
     db = get_database()
     if not db:
         print("❌ Could not get database for daily scan")
         return
-        
+
     clips_to_process = []
-    
+
     async for message in channel.history(limit=50):
         if message.author.bot:
             continue
-            
+
         match = cog.url_pattern.search(message.content)
         if match:
             from bot.commands.clips import canonicalize_clip_url
             clip_url = match.group(0)
             canonical_url = canonicalize_clip_url(clip_url)
-            
+
             if not db.trivia.clip_lore_exists(canonical_url):
                 clips_to_process.append((message, clip_url))
-                
+
     queued_count = len(clips_to_process)
     if queued_count == 0:
         print("✅ Daily clip scan complete. No new clips found.")
         return
-        
+
     print(f"🎬 Processing {queued_count} new clips...")
-    
+
     jam_user = None
     try:
         jam_user = await bot.fetch_user(JAM_USER_ID)
     except Exception as e:
         print(f"Failed to fetch Jam user for DMs: {e}")
-    
+
     for idx, (msg, curl) in enumerate(clips_to_process):
         success = False
         # Add a simple retry loop for Gemini 503 errors
@@ -1516,7 +1516,7 @@ async def daily_clip_scan_task():
                 break
             print(f"⚠️ Clip processing failed (attempt {attempt + 1}/3). Retrying in 30s...")
             await asyncio.sleep(30.0)
-        
+
         try:
             if bot.user:
                 await msg.remove_reaction("👀", bot.user)
@@ -1526,7 +1526,7 @@ async def daily_clip_scan_task():
                 await msg.add_reaction("❌")
         except Exception:
             pass
-            
+
         # Send DM update
         if jam_user:
             date_str = msg.created_at.strftime("%Y-%m-%d")
@@ -1534,7 +1534,7 @@ async def daily_clip_scan_task():
                 from bot.commands.clips import canonicalize_clip_url
                 canonical_url = canonicalize_clip_url(curl)
                 clip_details = db.trivia.get_clip_lore(canonical_url)
-                
+
                 if clip_details:
                     title = clip_details.get('game_title', 'Unknown Game')
                     reaction = clip_details.get('reaction', 'Reaction')
@@ -1542,7 +1542,7 @@ async def daily_clip_scan_task():
                     emotion = clip_details.get('emotion_category', '')
                     outcome = clip_details.get('clip_outcome', '')
                     characters = clip_details.get('characters_involved', '')
-                    
+
                     dm_msg = f"🔬 **Archive Update** [{idx + 1}/{queued_count}]\n"
                     dm_msg += f"I have processed the clip from {date_str}: **{title}**.\n"
                     dm_msg += f"Observed reaction: *{reaction}*."
@@ -1550,23 +1550,26 @@ async def daily_clip_scan_task():
                         dm_msg += f"\nNotable Quote: *\"{quote}\"*"
                     if emotion or outcome or characters:
                         dm_msg += "\n\n**Additional Analysis:**"
-                        if emotion: dm_msg += f"\n• Emotion: {emotion}"
-                        if outcome: dm_msg += f"\n• Outcome: {outcome}"
-                        if characters: dm_msg += f"\n• Characters: {characters}"
+                        if emotion:
+                            dm_msg += f"\n• Emotion: {emotion}"
+                        if outcome:
+                            dm_msg += f"\n• Outcome: {outcome}"
+                        if characters:
+                            dm_msg += f"\n• Characters: {characters}"
                 else:
                     dm_msg = f"🔬 Processing... [{idx + 1}/{queued_count}] (Success)"
             else:
                 dm_msg = f"⚠️ **Archive Update** [{idx + 1}/{queued_count}]\n"
                 dm_msg += f"I attempted to process the clip from {date_str}, but the analysis failed after 3 attempts."
-                
+
             try:
                 await jam_user.send(dm_msg)
             except Exception:
                 pass
-            
+
         if idx < queued_count - 1:
             await asyncio.sleep(60.0)
-            
+
     print("✅ Daily clip scan completed successfully.")
 
 

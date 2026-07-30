@@ -1400,18 +1400,19 @@ async def generate_contextual_trivia() -> Optional[Dict[str, Any]]:
         'game_series_marathon',
         'game_retro_vs_modern'
     ]
-    
+
     cat = random.choice(categories)
     category_prompt = None
-    
+
     if cat == 'clip_famous_last_words':
         clips = db.trivia.get_random_clip_lore(limit=10, required_fields=['notable_quote', 'clip_outcome'])
         clips = [c for c in clips if c['clip_outcome'].lower() in ('death', 'failure')]
-        if not clips: return None
+        if not clips:
+            return None
         clip = random.choice(clips)
-        
+
         category_prompt = f"""Write one multiple-choice trivia question for fans of Captain Jonesy's gaming channel.
-Jonesy uses she/her pronouns. 
+Jonesy uses she/her pronouns.
 
 REAL CLIP DATA:
 Game: {clip['game_title']}
@@ -1426,9 +1427,10 @@ Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "dec
 
     elif cat == 'clip_vibe_check':
         clips = db.trivia.get_random_clip_lore(limit=10, required_fields=['emotion_category', 'game_title'])
-        if not clips: return None
+        if not clips:
+            return None
         clip = random.choice(clips)
-        
+
         category_prompt = f"""Write one multiple-choice trivia question for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
 
@@ -1443,9 +1445,10 @@ Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "dec
 
     elif cat == 'clip_cause_and_effect':
         clips = db.trivia.get_random_clip_lore(limit=10, required_fields=['trigger', 'reaction', 'characters_involved'])
-        if not clips: return None
+        if not clips:
+            return None
         clip = random.choice(clips)
-        
+
         category_prompt = f"""Write one multiple-choice trivia question for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
 
@@ -1461,13 +1464,14 @@ Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "dec
 
     elif cat == 'clip_community_leaderboard':
         clips = db.trivia.get_random_clip_lore(limit=10, required_fields=['submitted_by_discord_id', 'lore_summary'])
-        if not clips: return None
+        if not clips:
+            return None
         clip = random.choice(clips)
-        
+
         # We assume the Discord bot resolves this ID before asking, or we just ask for the user ID.
         # For simplicity, we ask the AI to put <@ID> and Discord renders it!
         user_id = clip['submitted_by_discord_id']
-        
+
         category_prompt = f"""Write one multiple-choice trivia question for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
 
@@ -1475,16 +1479,17 @@ REAL CLIP DATA:
 Event: {clip['lore_summary']}
 Clipped by Discord User: <@{user_id}>
 
-Create a "Community Leaderboard" question asking which eagle-eyed community member managed to clip this exact moment. 
+Create a "Community Leaderboard" question asking which eagle-eyed community member managed to clip this exact moment.
 The correct answer MUST be exactly: <@{user_id}>
 Provide 3 believable but incorrect decoy options using fake Discord tags (e.g. <@123456789>, <@987654321>).
 Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "...", "explanation": "Brief explanation."}}"""
 
     elif cat == 'game_platform_loyalty':
         games = db.games.get_random_played_games(limit=5, required_fields=['platform', 'canonical_name'])
-        if not games: return None
+        if not games:
+            return None
         game = random.choice(games)
-        
+
         category_prompt = f"""Write one multiple-choice trivia question for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
 
@@ -1499,9 +1504,10 @@ Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "dec
 
     elif cat == 'game_series_marathon':
         games = db.games.get_random_played_games(limit=5, required_fields=['series_name', 'total_episodes'])
-        if not games: return None
+        if not games:
+            return None
         game = random.choice(games)
-        
+
         category_prompt = f"""Write one multiple-choice trivia question for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
 
@@ -1515,12 +1521,18 @@ Provide 3 believable but incorrect decoy options.
 Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "...", "explanation": "Brief explanation."}}"""
 
     elif cat == 'game_retro_vs_modern':
-        games = db.games.get_random_played_games(limit=5, required_fields=['release_year', 'first_played_date', 'canonical_name'])
-        if not games: return None
+        games = db.games.get_random_played_games(
+            limit=5,
+            required_fields=[
+                'release_year',
+                'first_played_date',
+                'canonical_name'])
+        if not games:
+            return None
         game = random.choice(games)
-        
+
         play_year = str(game['first_played_date']).split('-')[0]
-        
+
         category_prompt = f"""Write one multiple-choice trivia question for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
 
@@ -1543,16 +1555,20 @@ Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "dec
         context=f"contextual_trivia_{cat}",
         model="gemini-1.5-flash"
     )
-    
+
     if not ai_response:
         return None
-        
+
     try:
         data = robust_json_parse(ai_response)
         if data and 'question_text' in data and 'correct_answer' in data:
-            options = [data["correct_answer"], data.get("decoy_1", "A"), data.get("decoy_2", "B"), data.get("decoy_3", "C")]
+            options = [
+                data["correct_answer"], data.get(
+                    "decoy_1", "A"), data.get(
+                    "decoy_2", "B"), data.get(
+                    "decoy_3", "C")]
             random.shuffle(options)
-            
+
             return {
                 "question_text": data["question_text"],
                 "question_type": "multiple_choice",
@@ -1561,12 +1577,12 @@ Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "dec
                 "category": cat,
                 "difficulty_level": "medium",
                 "explanation": data.get("explanation", ""),
-                "is_dynamic": False, # Since it's generated and baked, it acts as a static question
+                "is_dynamic": False,  # Since it's generated and baked, it acts as a static question
                 "dynamic_query_type": None
             }
     except Exception as e:
         logger.error(f"Failed to parse contextual trivia: {e}")
-        
+
     return None
 
 

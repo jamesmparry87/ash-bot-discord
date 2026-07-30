@@ -200,11 +200,11 @@ class TriviaDatabase:
                 if exclude_user_id is not None:
                     exclusion_conditions.append("(submitted_by_user_id != %s OR submitted_by_user_id IS NULL)")
                     query_params.append(exclude_user_id)
-                
+
                 if avoid_category:
                     exclusion_conditions.append("(category != %s OR category IS NULL)")
                     query_params.append(avoid_category)
-                
+
                 exclusion_condition = " AND " + " AND ".join(exclusion_conditions) if exclusion_conditions else ""
 
                 # ✅ FIX #2: Explicitly exclude 'retired' and 'answered' statuses
@@ -2649,13 +2649,13 @@ class TriviaDatabase:
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO clip_lore (
-                        canonical_url, original_url, game_title, reaction, trigger, lore_summary, 
-                        notable_quote, emotion_category, characters_involved, clip_outcome, 
+                        canonical_url, original_url, game_title, reaction, trigger, lore_summary,
+                        notable_quote, emotion_category, characters_involved, clip_outcome,
                         submitted_by_discord_id, message_id
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (canonical_url) DO NOTHING
-                """, (canonical_url, original_url, game_title, reaction, trigger, lore_summary, 
-                      notable_quote, emotion_category, characters_involved, clip_outcome, 
+                """, (canonical_url, original_url, game_title, reaction, trigger, lore_summary,
+                      notable_quote, emotion_category, characters_involved, clip_outcome,
                       submitted_by, message_id))
                 conn.commit()
                 return cur.rowcount > 0
@@ -2672,8 +2672,8 @@ class TriviaDatabase:
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT game_title, reaction, trigger, lore_summary, notable_quote, 
-                           emotion_category, characters_involved, clip_outcome, 
+                    SELECT game_title, reaction, trigger, lore_summary, notable_quote,
+                           emotion_category, characters_involved, clip_outcome,
                            submitted_by_discord_id, message_id
                     FROM clip_lore
                     WHERE canonical_url = %s
@@ -2706,29 +2706,37 @@ class TriviaDatabase:
         try:
             with conn.cursor() as cur:
                 query = """
-                    SELECT canonical_url, original_url, game_title, reaction, trigger, 
-                           lore_summary, notable_quote, emotion_category, characters_involved, 
+                    SELECT canonical_url, original_url, game_title, reaction, trigger,
+                           lore_summary, notable_quote, emotion_category, characters_involved,
                            clip_outcome, submitted_by_discord_id, message_id
                     FROM clip_lore
                 """
-                
+
                 conditions = []
                 if required_fields:
                     for field in required_fields:
                         # Ensure the field is valid to prevent SQL injection
-                        valid_fields = ['game_title', 'reaction', 'trigger', 'lore_summary', 'notable_quote', 
-                                        'emotion_category', 'characters_involved', 'clip_outcome', 'submitted_by_discord_id']
+                        valid_fields = [
+                            'game_title',
+                            'reaction',
+                            'trigger',
+                            'lore_summary',
+                            'notable_quote',
+                            'emotion_category',
+                            'characters_involved',
+                            'clip_outcome',
+                            'submitted_by_discord_id']
                         if field in valid_fields:
                             conditions.append(f"({field} IS NOT NULL AND {field} != '')")
-                
+
                 if conditions:
                     query += " WHERE " + " AND ".join(conditions)
-                    
+
                 query += " ORDER BY RANDOM() LIMIT %s"
-                
+
                 cur.execute(query, (limit,))
                 rows = cur.fetchall()
-                
+
                 results = []
                 for row in rows:
                     results.append({
@@ -2751,6 +2759,7 @@ class TriviaDatabase:
             return []
         finally:
             conn.close()
+
 
 # Export
 __all__ = ['TriviaDatabase']
