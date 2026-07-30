@@ -1522,9 +1522,9 @@ async def daily_clip_scan_task():
     for idx, (msg, curl) in enumerate(clips_to_process):
         if quota_exhausted:
             break
-            
+
         success = False
-        
+
         # Clear any old failure marks before retrying
         try:
             if bot.user:
@@ -1537,13 +1537,13 @@ async def daily_clip_scan_task():
             success = await cog.parser.process_clip(curl, msg)
             if success:
                 break
-                
+
             from bot.handlers.ai_handler import primary_ai
             if primary_ai != "gemini":
                 print("🚫 Primary AI is exhausted or unavailable. Aborting clip batch.")
                 quota_exhausted = True
                 break
-                
+
             print(f"⚠️ Clip processing failed (attempt {attempt + 1}/3). Retrying in 30s...")
             await asyncio.sleep(30.0)
 
@@ -1564,7 +1564,7 @@ async def daily_clip_scan_task():
                 await msg.remove_reaction("👀", bot.user)
         except Exception:
             pass
-            
+
         try:
             if success:
                 await msg.add_reaction("✅")
