@@ -1273,8 +1273,8 @@ class TriviaCommands(commands.Cog):
 
                     try:
                         # Test the answer evaluation directly
-                        if hasattr(db, '_evaluate_trivia_answer'):
-                            score, match_type = db._evaluate_trivia_answer(
+                        if hasattr(db.trivia, '_evaluate_trivia_answer'):
+                            score, match_type = db.trivia._evaluate_trivia_answer(
                                 test_answer,
                                 test_question_data['correct_answer'],
                                 test_question_data['question_type']
@@ -1479,7 +1479,7 @@ class TriviaCommands(commands.Cog):
             for i in range(count):
                 try:
                     # Use our internal AI generation method
-                    question_data = await self._generate_ai_question_fallback()
+                    question_data = await generate_ai_question_fallback(db=get_database(), bot=self.bot)
 
                     if question_data:
                         # Send each question for approval

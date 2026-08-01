@@ -94,8 +94,17 @@ class ClipParsingService:
             if not download_result or not os.path.exists(local_filename):
                 raise RuntimeError(f"Failed to download video from {url}")
 
+            # Prepare dynamic prompt with known games list
+            played_games = self.db.games.get_all_played_games()
+            game_titles = [g.get('canonical_name') for g in played_games if g.get('canonical_name')]
+            prompt = TRIVIA_PROMPT
+            
+            if game_titles:
+                game_list_str = ", ".join(game_titles)
+                prompt += f"\n\nCRITICAL INSTRUCTION FOR 'game_title': Whenever possible, match the game to one of our known played games: [{game_list_str}]. For example, if it looks like Hitman 2, use 'Hitman: World of Assassination' if that is in the list. Only use a new name if it definitely does not match any game in this list."
+
             # 2. Upload and analyze via ai_handler (handles polling and deletion)
-            response_text, status = await upload_and_analyze_media(local_filename, TRIVIA_PROMPT)
+            response_text, status = await upload_and_analyze_media(local_filename, prompt)
 
             if not response_text or status != "success":
                 raise RuntimeError(f"Gemini analysis failed: {status}")
@@ -237,8 +246,10 @@ class ClipTriviaCog(commands.Cog):
                             await message.add_reaction("✅")
                             await message.remove_reaction("👀", self.bot.user)
                             await message.remove_reaction("❌", self.bot.user)
-                        except Exception:
-                            pass
+                        except discord.Forbidden:
+                            logger.error(f"Missing permissions to add/remove reactions in channel {message.channel.id}")
+                        except Exception as e:
+                            logger.error(f"Failed to update retroactive reaction for {canonical_url}: {e}")
 
         queued_count = len(clips_to_queue)
         if queued_count > 0:
@@ -252,6 +263,8 @@ class ClipTriviaCog(commands.Cog):
                     pass
                 try:
                     await msg.add_reaction("👀")
+                except discord.Forbidden:
+                    logger.error(f"Missing permissions to add 👀 reaction in channel {msg.channel.id}")
                 except Exception:
                     pass
 
@@ -278,6 +291,9 @@ class ClipTriviaCog(commands.Cog):
                         await msg.add_reaction("✅")
                     else:
                         await msg.add_reaction("❌")
+                except discord.Forbidden:
+                    logger.error(f"Missing permissions to add ✅/❌ reaction in channel {msg.channel.id}")
+                    await ctx.send(f"⚠️ **Permission Error:** I don't have the 'Add Reactions' permission in this channel to react to {curl}!")
                 except Exception as e:
                     logger.error(f"Failed to add final reaction to clip {curl}: {e}")
 

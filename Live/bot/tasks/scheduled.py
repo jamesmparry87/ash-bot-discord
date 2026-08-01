@@ -1570,6 +1570,10 @@ async def daily_clip_scan_task():
                 await msg.add_reaction("✅")
             else:
                 await msg.add_reaction("❌")
+        except discord.Forbidden:
+            print(f"⚠️ Missing permissions to add ✅/❌ reaction to message {msg.id}")
+            if jam_user:
+                await jam_user.send(f"⚠️ **Permission Error:** I don't have the 'Add Reactions' permission in the clips channel to react to {curl}!")
         except Exception as e:
             print(f"Error updating reaction on message {msg.id}: {e}")
 

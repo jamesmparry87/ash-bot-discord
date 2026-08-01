@@ -2593,8 +2593,9 @@ class TriviaDatabase:
 
             # Emergency fallback: Try to get ANY game
             try:
-                cur.execute("SELECT * FROM played_games ORDER BY RANDOM() LIMIT 1")
-                result = cur.fetchone()
+                with conn.cursor() as fallback_cur:
+                    fallback_cur.execute("SELECT * FROM played_games ORDER BY RANDOM() LIMIT 1")
+                    result = fallback_cur.fetchone()
                 if result:
                     return {
                         'category': 'Single_Game_Lore',
