@@ -285,7 +285,7 @@ class ClipTriviaCog(commands.Cog):
                     await msg.remove_reaction("👀", self.bot.user)
                 except Exception:
                     pass
-                
+
                 try:
                     if success:
                         await msg.add_reaction("✅")
@@ -322,7 +322,7 @@ class ClipTriviaCog(commands.Cog):
         if ctx.author.id not in [JAM_USER_ID, JONESY_USER_ID]:
             await ctx.send("❌ Unauthorized.")
             return
-            
+
         db = get_database()
         try:
             conn = db._get_connection()
@@ -331,12 +331,13 @@ class ClipTriviaCog(commands.Cog):
             deleted_count = cursor.rowcount
             conn.commit()
             conn.close()
-            
+
             await ctx.send(f"✅ **Database Reset:** Successfully deleted **{deleted_count}** processed clips from the database.\n"
                            f"They will be picked up as 'new' clips and re-processed using the strict formatting rules on the next scan!")
         except Exception as e:
             logger.error(f"Error resetting clips: {e}")
             await ctx.send(f"❌ Error resetting clips: {e}")
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ClipTriviaCog(bot))
