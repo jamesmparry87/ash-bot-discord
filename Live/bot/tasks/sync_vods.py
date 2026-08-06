@@ -80,7 +80,7 @@ async def monday_content_sync():
 
     if not db:
         print("❌ SYNC & DEBRIEF (Monday): Database not available")
-        await notify_jam_weekly_message_failure(
+        if notify_jam_weekly_message_failure: await notify_jam_weekly_message_failure(
             'monday',
             'Database unavailable',
             'The database connection is not available. Cannot proceed with content sync.'
@@ -118,7 +118,7 @@ async def monday_content_sync():
 
         if not analysis_results:
             print(f"❌ SYNC & DEBRIEF (Monday): All sync attempts failed. Last error: {last_error}")
-            await notify_jam_weekly_message_failure(
+            if notify_jam_weekly_message_failure: await notify_jam_weekly_message_failure(
                 'monday',
                 'YouTube/Twitch integration failure',
                 f'Failed to fetch new content after {max_retries} attempts. Last error: {str(last_error)[:200]}'
@@ -127,7 +127,7 @@ async def monday_content_sync():
 
         if analysis_results.get("status") == "no_new_content":
             print("✅ SYNC & DEBRIEF (Monday): No new content found. No message to generate.")
-            await notify_jam_weekly_message_failure(
+            if notify_jam_weekly_message_failure: await notify_jam_weekly_message_failure(
                 'monday',
                 'No new content found',
                 'No new YouTube/Twitch content was found for the past week. No message will be generated.'
@@ -143,35 +143,41 @@ async def monday_content_sync():
         ]
 
         # --- Content Generation ---
-        debrief = (
-            f"🌅 **Monday Morning Protocol Initiated**\n\n"
-            f"{random.choice(intros)} **{analysis_results.get('new_content_count', 0)}** new transmissions were logged, "
-            f"accumulating **{analysis_results.get('new_hours', 0)} hours** of new mission data and **{analysis_results.get('new_views', 0):,}** viewer engagements.")
+        from ..handlers.ai_handler import generate_weekly_report
+        
+        # Try dynamic AI generation first
+        debrief = await generate_weekly_report('monday', analysis_results)
+        
+        if not debrief:
+            # Fallback to static message if AI is disabled or fails
+            debrief = (
+                f"🌅 **Monday Morning Protocol Initiated**\n\n"
+                f"{random.choice(intros)} **{analysis_results.get('new_content_count', 0)}** new transmissions were logged, "
+                f"accumulating **{analysis_results.get('new_hours', 0)} hours** of new mission data and **{analysis_results.get('new_views', 0):,}** viewer engagements.")
 
-        # Add completion status announcements
-        completed_games = analysis_results.get('completed_games', [])
-        if completed_games:
-            debrief += "\n\n🎯 **Mission Completion Detected:**\n> "
-            completions = []
-            for game in completed_games:
-                completions.append(
-                    f"**{game['series_name']}** - All {game['total_episodes']} episodes archived ({game['total_playtime_hours']}h total)")
-            debrief += "\n> ".join(completions) + "\n> \n> *Mission parameters fulfilled.*"
+            completed_games = analysis_results.get('completed_games', [])
+            if completed_games:
+                debrief += "\n\n🎯 **Mission Completion Detected:**\n> "
+                completions = []
+                for game in completed_games:
+                    completions.append(
+                        f"**{game['series_name']}** - All {game['total_episodes']} episodes archived ({game['total_playtime_hours']}h total)")
+                debrief += "\n> ".join(completions) + "\n> \n> *Mission parameters fulfilled.*"
 
-        top_video = analysis_results.get("top_video")
-        if top_video:
-            debrief += f"\n\nMaximum engagement was recorded on the transmission titled **'{top_video['title']}'**."
-            if "finale" in top_video['title'].lower() or "ending" in top_video['title'].lower():
-                debrief += " This concludes all active mission parameters for this series."
+            top_video = analysis_results.get("top_video")
+            if top_video:
+                debrief += f"\n\nMaximum engagement was recorded on the transmission titled **'{top_video['title']}'**."
+                if "finale" in top_video['title'].lower() or "ending" in top_video['title'].lower():
+                    debrief += " This concludes all active mission parameters for this series."
 
         # --- Approval Workflow ---
         announcement_id = db.create_weekly_announcement('monday', debrief, analysis_results)
 
         if announcement_id:
-            await start_weekly_announcement_approval(announcement_id, debrief, 'monday')
+            if start_weekly_announcement_approval: await start_weekly_announcement_approval(announcement_id, debrief, 'monday')
         else:
             print("❌ SYNC & DEBRIEF (Monday): Failed to create announcement record in database.")
-            await notify_jam_weekly_message_failure(
+            if notify_jam_weekly_message_failure: await notify_jam_weekly_message_failure(
                 'monday',
                 'Database insertion failure',
                 'Failed to create the announcement record in the database.'
@@ -179,7 +185,7 @@ async def monday_content_sync():
 
     except Exception as e:
         print(f"❌ SYNC & DEBRIEF (Monday): Critical error during sync: {e}")
-        await notify_jam_weekly_message_failure(
+        if notify_jam_weekly_message_failure: await notify_jam_weekly_message_failure(
             'monday',
             'Unexpected error',
             f'An unexpected error occurred during the Monday content sync: {str(e)[:200]}'
@@ -263,7 +269,7 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
     # --- Data Gathering: YouTube playlists ---
     playlist_games = []
     try:
-        playlist_games = await fetch_playlist_based_content_since(
+        playlist_games = await fetch_playlist_based_content_since(  # type: ignore
             "UCPoUxLHeTnE9SUDAkqfJzDQ",  # Jonesy's channel
             start_sync_time
         )
@@ -276,7 +282,7 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
     # --- Data Gathering: Twitch VODs ---
     twitch_vods = []
     try:
-        twitch_vods = await fetch_new_vods_since("jonesyspacecat", start_sync_time)
+        twitch_vods = await fetch_new_vods_since("jonesyspacecat", start_sync_time)  # type: ignore
         print(f"🔄 SYNC: Found {len(twitch_vods)} new Twitch VODs")
     except Exception as twitch_error:
         print(f"❌ SYNC: Failed to fetch Twitch VODs: {twitch_error}")
@@ -632,7 +638,7 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
             # uses it directly and skips smart_extract_with_validation.
             _manual_game_name = None
             try:
-                potential_games = detect_multiple_games_in_title(title)
+                potential_games = detect_multiple_games_in_title(title)  # type: ignore
 
                 if len(potential_games) >= 2:
                     print(f"🔍 SYNC: Ambiguous multi-game title — requesting manual confirmation")
@@ -736,7 +742,7 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                 except ImportError:
                     # Fallback to basic extraction if smart extraction not available
                     print("⚠️ SYNC: Smart extraction not available, falling back to basic extraction")
-                    game_name = extract_game_from_twitch(title)
+                    game_name = extract_game_from_twitch(title)  # type: ignore
                     confidence = 0.0
                     is_low_confidence = False  # Reset for fallback case
 

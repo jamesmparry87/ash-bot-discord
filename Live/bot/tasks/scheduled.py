@@ -71,6 +71,7 @@ try:
     print("✅ Scheduled tasks: Database module imported successfully")
 except Exception as db_error:
     print(f"⚠️ Scheduled tasks: Database import failed - {db_error}")
+    get_database = lambda: None  # type: ignore
 
 from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
 from ..persona.sarcasm import apply_pops_arcade_sarcasm
@@ -362,12 +363,12 @@ async def trivia_tuesday():
             return
 
         # 4. Format the message using shared formatting function for consistency
-        from bot.utils.trivia_formatting import create_trivia_question_embed
+        from ..utils.trivia_formatting import create_trivia_question_embed
 
         embed = create_trivia_question_embed(
             question_data=question_data,
             session_id=session_id,
-            started_by=None  # None indicates automated/scheduled
+            started_by="Ash (Automated)"  # type: ignore
         )
 
         # 5. Post the message and update the session
@@ -667,33 +668,42 @@ async def friday_community_analysis():
             )
             return
 
-        import random
+        analysis_cache = {"modules": analysis_modules}  # Cache all found modules for regeneration
+        
+        from ..handlers.ai_handler import generate_weekly_report
+        
+        # Try dynamic AI generation first
+        debrief = await generate_weekly_report('friday', analysis_cache)
+        
+        if not debrief:
+            # Fallback to static message if AI is disabled or fails
+            import random
 
-        # Give preference to specific modules over the general fallback if possible
-        specific_modules = [m for m in analysis_modules if m['type'] != 'general_activity']
-        if specific_modules:
-            chosen_moment = random.choice(specific_modules)
-        else:
-            chosen_moment = random.choice(analysis_modules)
+            # Give preference to specific modules over the general fallback if possible
+            specific_modules = [m for m in analysis_modules if m['type'] != 'general_activity']
+            if specific_modules:
+                chosen_moment = random.choice(specific_modules)
+            else:
+                chosen_moment = random.choice(analysis_modules)
 
-        intros = [
-            "Good morning, personnel. My analysis of the past week's crew engagement is complete.",
-            "Attention crew. I have processed the weekly communication logs. The results are... as expected.",
-            "Greetings. I have concluded my scheduled Friday assessment of your interpersonal data exchanges.",
-            "Weekly diagnostic complete. I have evaluated the crew's recent communication patterns for optimal efficiency."]
+            intros = [
+                "Good morning, personnel. My analysis of the past week's crew engagement is complete.",
+                "Attention crew. I have processed the weekly communication logs. The results are... as expected.",
+                "Greetings. I have concluded my scheduled Friday assessment of your interpersonal data exchanges.",
+                "Weekly diagnostic complete. I have evaluated the crew's recent communication patterns for optimal efficiency."]
 
-        outros = [
-            "Weekend operational pause is now in effect.",
-            "You are now authorized to commence your weekend operational pause. Please ensure your biological functions remain intact until Monday.",
-            "I recommend using the next 48 hours for biological rest. Operational pause is active.",
-            "End of report. Please return to your designated leisure activities."]
+            outros = [
+                "Weekend operational pause is now in effect.",
+                "You are now authorized to commence your weekend operational pause. Please ensure your biological functions remain intact until Monday.",
+                "I recommend using the next 48 hours for biological rest. Operational pause is active.",
+                "End of report. Please return to your designated leisure activities."]
 
-        debrief = (
-            f"📅 **Friday Protocol Assessment**\n\n"
-            f"{random.choice(intros)}\n\n"
-            f"{chosen_moment['content']}\n\n"
-            f"{random.choice(outros)}"
-        )
+            debrief = (
+                f"📅 **Friday Protocol Assessment**\n\n"
+                f"{random.choice(intros)}\n\n"
+                f"{chosen_moment['content']}\n\n"
+                f"{random.choice(outros)}"
+            )
 
         # Debug: Verify newlines are present in the generated content
         print(f"🔍 FRIDAY GREETING DEBUG: Generated content length: {len(debrief)} chars")
@@ -701,7 +711,7 @@ async def friday_community_analysis():
         print(f"🔍 FRIDAY GREETING DEBUG: First 200 chars: {repr(debrief[:200])}")
 
         # --- 4. Approval Workflow ---
-        analysis_cache = {"modules": analysis_modules}  # Cache all found modules for regeneration
+        # --- 4. Approval Workflow ---
         announcement_id = db.create_weekly_announcement('friday', debrief, analysis_cache)
 
         if announcement_id:
@@ -738,7 +748,7 @@ async def scheduled_midnight_restart():
             print("❌ Bot instance not available for scheduled midnight restart")
             return
 
-        guild = get_bot_instance().get_guild(GUILD_ID)
+        guild = get_bot_instance().get_guild(GUILD_ID)  # type: ignore
         if guild:
             # Find mod channel
             mod_channel = None
@@ -753,7 +763,7 @@ async def scheduled_midnight_restart():
                 )
 
         # Graceful shutdown
-        await get_bot_instance().close()
+        await get_bot_instance().close()  # type: ignore
 
     except Exception as e:
         print(f"❌ Error in scheduled_midnight_restart: {e}")
@@ -876,7 +886,7 @@ async def scheduled_ai_refresh():
                 print("⚠️ Bot instance not available for AI refresh notification")
                 return
 
-            user = await get_bot_instance().fetch_user(JAM_USER_ID)
+            user = await get_bot_instance().fetch_user(JAM_USER_ID)  # type: ignore
             if user:
                 # Build notification message
                 if previous_errors > 0:
@@ -911,7 +921,7 @@ async def scheduled_ai_refresh():
                 print("⚠️ Bot instance not available for AI refresh error notification")
                 return
 
-            user = await get_bot_instance().fetch_user(JAM_USER_ID)
+            user = await get_bot_instance().fetch_user(JAM_USER_ID)  # type: ignore
             if user:
                 await user.send(
                     f"⚠️ **AI Module Refresh Failed**\n"
@@ -1071,7 +1081,7 @@ async def check_due_reminders():
 async def check_auto_actions():
     """Check for reminders that need auto-actions triggered"""
     try:
-        from bot.database import get_database
+        from ..database import get_database
         db = get_database()
         uk_now = datetime.now(ZoneInfo("Europe/London"))
         auto_action_reminders = db.get_reminders_awaiting_auto_action(  # type: ignore
@@ -1126,7 +1136,7 @@ async def cleanup_game_recommendations():
         bot_instance = None
 
         # Method 1: Use global get_bot_instance() if available
-        if get_bot_instance() and hasattr(get_bot_instance(), 'user') and get_bot_instance().user:
+        if get_bot_instance() and hasattr(get_bot_instance(), 'user') and get_bot_instance().user:  # type: ignore
             bot_instance = get_bot_instance()
             print("✅ Using global bot instance for cleanup")
         else:
@@ -1144,19 +1154,19 @@ async def cleanup_game_recommendations():
                 print("💡 This is normal during bot startup or if scheduled tasks start before bot is ready")
                 return
 
-        guild = bot_instance.get_guild(GUILD_ID)
+        guild = bot_instance.get_guild(GUILD_ID)  # type: ignore
         if not guild:
             print("❌ Guild not found for game recommendation cleanup")
             return
 
         # Get the game recommendation channel
-        game_rec_channel = bot_instance.get_channel(GAME_RECOMMENDATION_CHANNEL_ID)
+        game_rec_channel = bot_instance.get_channel(GAME_RECOMMENDATION_CHANNEL_ID)  # type: ignore
         if not game_rec_channel or not isinstance(game_rec_channel, discord.TextChannel):
             print("❌ Game recommendation channel not found for cleanup")
             return
 
         # Check bot permissions in the channel
-        bot_member = guild.get_member(bot_instance.user.id) if bot_instance.user else None
+        bot_member = guild.get_member(bot_instance.user.id) if bot_instance.user else None  # type: ignore
         if bot_member:
             permissions = game_rec_channel.permissions_for(bot_member)
             if not permissions.manage_messages:
@@ -1213,7 +1223,7 @@ async def notify_scheduled_message_error(task_name: str, error_message: str, tim
             print("❌ Bot instance not available for scheduled message error notification")
             return
 
-        user = await get_bot_instance().fetch_user(JAM_USER_ID)
+        user = await get_bot_instance().fetch_user(JAM_USER_ID)  # type: ignore
         if user:
             error_notification = (
                 f"⚠️ **Scheduled Message Error**\n\n"
@@ -1281,7 +1291,7 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
                 if not user:
                     # If not in cache, fetch from Discord API
                     print(f"🔍 User {user_id} not in cache, fetching from Discord API...")
-                    user = await bot.fetch_user(user_id)
+                    user = await bot.fetch_user(user_id) if bot else None
 
                 if user:
                     print(f"✅ Successfully obtained user object for {user_id}: {user.name}")
@@ -1364,7 +1374,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         # channel after reminder delivery
         if delivery_channel_id:
             try:
-                channel = get_bot_instance().get_channel(delivery_channel_id)
+                channel = get_bot_instance().get_channel(delivery_channel_id)  # type: ignore
                 if channel and isinstance(channel, discord.TextChannel):
                     # Check messages since reminder delivery for mod
                     # intervention
@@ -1386,7 +1396,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
                     f"⚠️ Could not check for moderator intervention: {check_e}")
 
         # Get the guild and member
-        guild = get_bot_instance().get_guild(GUILD_ID)
+        guild = get_bot_instance().get_guild(GUILD_ID)  # type: ignore
         if not guild:
             print(f"❌ Could not find guild for auto-action")
             return
@@ -1431,7 +1441,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         # Log the auto-action in the channel where the reminder was set
         if delivery_channel_id:
             try:
-                channel = get_bot_instance().get_channel(delivery_channel_id)
+                channel = get_bot_instance().get_channel(delivery_channel_id)  # type: ignore
                 if channel and isinstance(channel, discord.TextChannel):
                     log_message = f"⚡ **Auto-action executed:** {member.mention} has been {action_result}.\n**Reason:** {reason}\n**Reminder ID:** {reminder['id']}"
                     await channel.send(log_message)
@@ -1487,7 +1497,7 @@ async def daily_clip_scan_task():
 
         match = cog.url_pattern.search(message.content)
         if match:
-            from bot.commands.clips import canonicalize_clip_url
+            from ..commands.clips import canonicalize_clip_url
             clip_url = match.group(0)
             canonical_url = canonicalize_clip_url(clip_url)
 
@@ -1538,7 +1548,7 @@ async def daily_clip_scan_task():
             if success:
                 break
 
-            from bot.handlers.ai_handler import primary_ai
+            from ..handlers.ai_handler import primary_ai
             if primary_ai != "gemini":
                 print("🚫 Primary AI is exhausted or unavailable. Aborting clip batch.")
                 quota_exhausted = True
@@ -1581,7 +1591,7 @@ async def daily_clip_scan_task():
         if jam_user:
             date_str = msg.created_at.strftime("%Y-%m-%d")
             if success:
-                from bot.commands.clips import canonicalize_clip_url
+                from ..commands.clips import canonicalize_clip_url
                 canonical_url = canonicalize_clip_url(curl)
                 clip_details = db.trivia.get_clip_lore(canonical_url)
 

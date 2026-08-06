@@ -890,9 +890,9 @@ class DatabaseManager:
         """Delegate to trivia module - get trivia question by id"""
         return self.trivia.get_trivia_question_by_id(question_id)
 
-    def get_next_trivia_question(self, exclude_user_id=None):
+    def get_next_trivia_question(self, exclude_user_id=None, avoid_category=None):
         """Delegate to trivia module - get next trivia question"""
-        return self.trivia.get_next_trivia_question(exclude_user_id)
+        return self.trivia.get_next_trivia_question(exclude_user_id, avoid_category)
 
     def create_trivia_session(self, question_id, **kwargs):
         """Delegate to trivia module - create trivia session"""

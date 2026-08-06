@@ -97,6 +97,7 @@ def add_to_approval_queue(item_type: str, data: Dict[str, Any], priority: int = 
 
     # Insert based on priority (higher priority first)
     inserted = False
+    i = 0
     for i, existing_item in enumerate(jam_approval_queue):
         if priority > existing_item.get('priority', 0):
             jam_approval_queue.insert(i, queue_item)
@@ -834,12 +835,41 @@ async def handle_weekly_announcement_approval(message: discord.Message):
         if content == '1':
             db.update_announcement_status(announcement_id, 'approved')
 
+            uk_now = datetime.now(ZoneInfo("Europe/London"))
+            day_map = {'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3, 'friday': 4, 'saturday': 5, 'sunday': 6}
+            target_day_int = day_map.get(convo['day'].lower())
+
+            # Determine if we should post immediately (past 9 AM on target day, or an entirely different day)
+            post_immediately = False
+            if target_day_int is not None:
+                if uk_now.weekday() != target_day_int or uk_now.hour >= 9:
+                    post_immediately = True
+
+            if post_immediately:
+                # Post the message immediately
+                bot = _get_bot_instance()
+                from ..config import CHIT_CHAT_CHANNEL_ID
+                channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID) if bot else None
+                
+                if channel and isinstance(channel, discord.TextChannel):
+                    post_content = convo['original_content'].replace('\\n', '\n')
+                    if '\n\n' not in post_content and '\n' in post_content:
+                        post_content = post_content.replace('\n', '\n\n')
+                        
+                    await channel.send(post_content)
+                    db.update_announcement_status(announcement_id, 'posted')
+                    reply_text = "✅ **Approved and posted immediately.** (It is past the 9:00 AM scheduled time)."
+                else:
+                    reply_text = "✅ **Approved.** (Failed to post immediately: could not find Chit-Chat channel)."
+            else:
+                reply_text = "✅ **Approved.** The message will be posted at 9:00 AM."
+
             # ✅ FIX #4: Process next approval from queue
             queue_length = get_queue_length()
             if queue_length > 0:
-                await message.reply(f"✅ **Approved.** The message will be posted at 9:00 AM.\n\n📬 Processing next approval ({queue_length} remaining)...")
+                await message.reply(f"{reply_text}\n\n📬 Processing next approval ({queue_length} remaining)...")
             else:
-                await message.reply("✅ **Approved.** The message will be posted at 9:00 AM.")
+                await message.reply(reply_text)
 
             del weekly_announcement_approvals[user_id]
 
@@ -2324,6 +2354,8 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                         if db is None:
                             await message.reply("❌ **Database offline.** Cannot save approved question.")
                             return
+
+                        question_id = None
 
                         # ✅ NEW: Check if question already exists in database (was persisted during generation)
                         existing_question_id = question_data.get('id')

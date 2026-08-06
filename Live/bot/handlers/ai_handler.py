@@ -1247,7 +1247,9 @@ async def call_ai_with_rate_limiting(prompt: str,
 async def call_ai_for_generation(
     prompt: str,
     context: str = "generation",
-    temperature: float = 0.7
+    temperature: float = 0.7,
+    system_instruction: Optional[str] = None,
+    model: Optional[str] = None
 ) -> Tuple[Optional[str], str]:
     """
     Lightweight AI call for non-conversational generation tasks (trivia, announcements, etc.).
@@ -1314,6 +1316,9 @@ async def call_ai_for_generation(
                     "max_output_tokens": 2000,  # Smaller than conversational (3000)
                     "temperature": temperature
                 }
+                
+                if system_instruction:
+                    generation_config["system_instruction"] = system_instruction
 
                 # Shorter timeout for generation tasks
                 timeout_duration = 20.0
@@ -1329,8 +1334,9 @@ async def call_ai_for_generation(
                         raise ValueError("Gemini client not initialized")
 
                     # LIGHTWEIGHT: Send ONLY the prompt - no persona, no examples, no context
+                    model_to_use = model or current_gemini_model
                     response = gemini_client.models.generate_content(
-                        model=current_gemini_model,
+                        model=model_to_use,
                         contents=prompt,  # Just the raw prompt!
                         config=generation_config
                     )
@@ -1549,7 +1555,7 @@ Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "dec
         return None
 
     # Call AI
-    ai_response = await call_ai_for_generation(
+    ai_response, status_message = await call_ai_for_generation(
         system_instruction="You are a trivia master for a gaming channel.",
         prompt=category_prompt,
         context=f"contextual_trivia_{cat}",
@@ -2278,6 +2284,41 @@ Write 2-4 sentences maximum. Make it engaging and user-focused."""
     except Exception as e:
         print(f"Error in AI content enhancement: {e}")
         return user_content  # Fallback to original content
+
+async def generate_weekly_report(day: str, stats_data: dict) -> Optional[str]:
+    """Generates a dynamic Monday or Friday message using Ash's persona."""
+    try:
+        if not ai_enabled:
+            return None
+
+        prompt = f"""You are Ash, the ship's AI (analytical, slightly clinical, but helpful). Write the {day.capitalize()} community report.
+Here is the data from the week:
+"""
+        if day == 'monday':
+            prompt += f"- New broadcasts: {stats_data.get('new_content_count', 0)}\n"
+            prompt += f"- New broadcast hours: {stats_data.get('new_hours', 0)}\n"
+            prompt += f"- New viewer engagements: {stats_data.get('new_views', 0)}\n"
+            completed = stats_data.get('completed_games', [])
+            if completed:
+                prompt += f"- Missions Completed: {', '.join([g['series_name'] for g in completed])}\n"
+            top_video = stats_data.get('top_video')
+            if top_video:
+                prompt += f"- Top Video: '{top_video['title']}'\n"
+        elif day == 'friday':
+            for module in stats_data.get('modules', []):
+                prompt += f"- {module['type']}: {module['content']}\n"
+                
+        prompt += """
+Write a short, engaging summary in your persona (2-4 sentences max). Be punchy and avoid sounding like a boring spreadsheet. Use markdown formatting where appropriate."""
+
+        response_text, status = await call_ai_with_rate_limiting(prompt, user_id=0)
+        
+        if response_text:
+            return filter_ai_response(response_text)
+        return None
+    except Exception as e:
+        print(f"Error generating weekly report: {e}")
+        return None
 
 
 async def initialize_ai_async():
