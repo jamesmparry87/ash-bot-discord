@@ -671,7 +671,7 @@ async def friday_community_analysis():
         analysis_cache = {"modules": analysis_modules}  # Cache all found modules for regeneration
         
         from ..handlers.ai_handler import generate_weekly_report
-        
+
         # Try dynamic AI generation first
         debrief = await generate_weekly_report('friday', analysis_cache)
         

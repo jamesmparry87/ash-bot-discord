@@ -144,7 +144,7 @@ async def monday_content_sync():
 
         # --- Content Generation ---
         from ..handlers.ai_handler import generate_weekly_report
-        
+
         # Try dynamic AI generation first
         debrief = await generate_weekly_report('monday', analysis_results)
         
