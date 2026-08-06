@@ -71,7 +71,7 @@ try:
     print("✅ Scheduled tasks: Database module imported successfully")
 except Exception as db_error:
     print(f"⚠️ Scheduled tasks: Database import failed - {db_error}")
-    get_database = lambda: None  # type: ignore
+    def get_database(): return None  # type: ignore
 
 from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
 from ..persona.sarcasm import apply_pops_arcade_sarcasm
@@ -688,12 +688,12 @@ async def friday_community_analysis():
             return
 
         analysis_cache = {"modules": analysis_modules}  # Cache all found modules for regeneration
-        
+
         from ..handlers.ai_handler import generate_weekly_report
-        
+
         # Try dynamic AI generation first
         debrief = await generate_weekly_report('friday', analysis_cache)
-        
+
         if not debrief:
             # Fallback to static message if AI is disabled or fails
             import random

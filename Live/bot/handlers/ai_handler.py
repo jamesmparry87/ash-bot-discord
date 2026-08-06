@@ -1316,7 +1316,7 @@ async def call_ai_for_generation(
                     "max_output_tokens": 2000,  # Smaller than conversational (3000)
                     "temperature": temperature
                 }
-                
+
                 if system_instruction:
                     generation_config["system_instruction"] = system_instruction
 
@@ -2285,6 +2285,7 @@ Write 2-4 sentences maximum. Make it engaging and user-focused."""
         print(f"Error in AI content enhancement: {e}")
         return user_content  # Fallback to original content
 
+
 async def generate_weekly_report(day: str, stats_data: dict) -> Optional[str]:
     """Generates a dynamic Monday or Friday message using Ash's persona."""
     try:
@@ -2307,12 +2308,12 @@ Here is the data from the week:
         elif day == 'friday':
             for module in stats_data.get('modules', []):
                 prompt += f"- {module['type']}: {module['content']}\n"
-                
+
         prompt += """
 Write a short, engaging summary in your persona (2-4 sentences max). Be punchy and avoid sounding like a boring spreadsheet. Use markdown formatting where appropriate."""
 
         response_text, status = await call_ai_with_rate_limiting(prompt, user_id=0)
-        
+
         if response_text:
             return filter_ai_response(response_text)
         return None
