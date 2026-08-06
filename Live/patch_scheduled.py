@@ -1,5 +1,5 @@
-import sys
 import re
+import sys
 
 with open(r'bot\tasks\scheduled.py', 'r', encoding='utf-8') as f:
     content = f.read()
