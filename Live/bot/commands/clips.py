@@ -98,7 +98,7 @@ class ClipParsingService:
             played_games = self.db.games.get_all_played_games()
             game_titles = [g.get('canonical_name') for g in played_games if g.get('canonical_name')]
             prompt = TRIVIA_PROMPT
-            
+
             if game_titles:
                 game_list_str = ", ".join(game_titles)
                 prompt += f"\n\nCRITICAL INSTRUCTION FOR 'game_title': Whenever possible, match the game to one of our known played games: [{game_list_str}]. For example, if it looks like Hitman 2, use 'Hitman: World of Assassination' if that is in the list. Only use a new name if it definitely does not match any game in this list."
