@@ -606,8 +606,11 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
 
                     # Get first video date
                     first_video_date = None
+                    completed_date = None
                     if videos_data:
                         first_video_date = videos_data[0].get('published_at')
+                        if completion_status == 'completed':
+                            completed_date = videos_data[-1].get('published_at')
 
                     # Build alternative names ONLY from IGDB (no video titles or playlist names)
                     alternative_names = []
@@ -648,6 +651,7 @@ async def fetch_playlist_based_content_since(channel_id: str, start_timestamp: d
                         'completion_status': completion_status,
                         'alternative_names': alternative_names,
                         'first_played_date': first_video_date,
+                        'completed_date': completed_date,
                         'igdb_id': igdb_id,  # IGDB tracking
                         'data_confidence': data_confidence,  # Confidence score
                         'notes': f"Auto-synced from YouTube playlist. {total_episodes} episodes, {total_playtime_minutes//60}h {total_playtime_minutes%60}m total."

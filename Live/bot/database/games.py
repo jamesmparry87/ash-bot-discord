@@ -135,6 +135,7 @@ class GamesDatabase:
                         genre: Optional[str] = None,
                         release_year: Optional[int] = None,
                         first_played_date: Optional[str] = None,
+                        completed_date: Optional[str] = None,
                         completion_status: str = "unknown",
                         total_episodes: int = 0,
                         total_playtime_minutes: int = 0,
@@ -167,10 +168,10 @@ class GamesDatabase:
                 cur.execute("""
                     INSERT INTO played_games (
                         canonical_name, alternative_names, series_name, genre,
-                        release_year, first_played_date, completion_status, total_episodes,
+                        release_year, first_played_date, completed_date, completion_status, total_episodes,
                         total_playtime_minutes, youtube_playlist_url, twitch_vod_urls, notes, youtube_views, twitch_views,
                         skip_igdb_enrichment, created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """, (
                     canonical_name,
                     alt_names_str,
@@ -178,6 +179,7 @@ class GamesDatabase:
                     genre,
                     release_year,
                     first_played_date,
+                    completed_date,
                     completion_status,
                     total_episodes,
                     total_playtime_minutes,
@@ -992,6 +994,7 @@ class GamesDatabase:
                     'release_year',
                     'platform',
                     'first_played_date',
+                    'completed_date',
                     'completion_status',
                     'total_episodes',
                     'total_playtime_minutes',
@@ -1193,6 +1196,7 @@ class GamesDatabase:
                                 'release_year',
                                 'platform',
                                 'first_played_date',
+                    'completed_date',
                                 'completion_status',
                                 'total_episodes',
                                 'total_playtime_minutes',
@@ -1267,6 +1271,7 @@ class GamesDatabase:
                                 game_data.get('release_year'),
                                 game_data.get('platform'),
                                 game_data.get('first_played_date'),
+                                game_data.get('completed_date'),
                                 game_data.get('completion_status', 'unknown'),
                                 game_data.get('total_episodes', 0),
                                 game_data.get('total_playtime_minutes', 0),
@@ -1364,6 +1369,7 @@ class GamesDatabase:
                         "release_year": master_game.get("release_year"),
                         "platform": master_game.get("platform"),
                         "first_played_date": master_game.get("first_played_date"),
+                        "completed_date": master_game.get("completed_date"),
                         "completion_status": master_game.get(
                             "completion_status",
                             "unknown"),
@@ -1433,6 +1439,14 @@ class GamesDatabase:
                                 duplicate_game["first_played_date"] < merged_data["first_played_date"]
                             ):
                                 merged_data["first_played_date"] = duplicate_game["first_played_date"]
+                        
+                        # Use latest completed_date
+                        if duplicate_game.get("completed_date"):
+                            if (
+                                not merged_data["completed_date"] or
+                                duplicate_game["completed_date"] > merged_data["completed_date"]
+                            ):
+                                merged_data["completed_date"] = duplicate_game["completed_date"]
 
                         # Use latest release_year if master doesn't have one
                         if not merged_data.get(
@@ -1478,6 +1492,7 @@ class GamesDatabase:
                             genre = %s,
                             release_year = %s,
                             first_played_date = %s,
+                            completed_date = %s,
                             completion_status = %s,
                             total_episodes = %s,
                             total_playtime_minutes = %s,
@@ -1492,6 +1507,7 @@ class GamesDatabase:
                         merged_data['genre'],
                         merged_data['release_year'],
                         merged_data['first_played_date'],
+                        merged_data.get('completed_date'),
                         merged_data['completion_status'],
                         merged_data['total_episodes'],
                         merged_data['total_playtime_minutes'],
@@ -1704,7 +1720,7 @@ class GamesDatabase:
                 if required_fields:
                     for field in required_fields:
                         valid_fields = ['canonical_name', 'series_name', 'genre', 'release_year', 'platform',
-                                        'first_played_date', 'completion_status', 'total_episodes',
+                                        'first_played_date', 'completed_date', 'completion_status', 'total_episodes',
                                         'total_playtime_minutes']
                         if field in valid_fields:
                             conditions.append(f"({field} IS NOT NULL AND {field}::text != '')")

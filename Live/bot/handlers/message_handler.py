@@ -678,13 +678,18 @@ async def process_gaming_query_with_context(message: discord.Message) -> bool:
             elif query_type == "year":
                 await handle_year_query(message, match)
             elif query_type == "game_status":
-                await handle_game_status_query(message, match)
-                game_name = match.group(1).strip()
-                context.update_game_context(game_name, "game_status")
+                if await handle_game_status_query(message, match):
+                    game_name = match.group(1).strip()
+                    context.update_game_context(game_name, "game_status")
+                else:
+                    # Fall back to general conversation (AI) if not found in DB
+                    return False
             elif query_type == "game_details":
-                await handle_game_details_query(message, match)
-                game_name = match.group(1).strip()
-                context.update_game_context(game_name, "game_details")
+                if await handle_game_details_query(message, match):
+                    game_name = match.group(1).strip()
+                    context.update_game_context(game_name, "game_details")
+                else:
+                    return False
             elif query_type == "recommendation":
                 await handle_recommendation_query(message, match)
                 game_name = match.group(1).strip()

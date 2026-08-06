@@ -685,6 +685,8 @@ async def fetch_comprehensive_twitch_games(
                         game_series[game_name] = {
                             'canonical_name': game_name,
                             'first_stream_date': created_at,
+                            'completed_date': None,
+                            'completion_status': 'in_progress',
                             'total_episodes': 0,
                             'total_duration_seconds': 0,
                             'vod_urls': [],
@@ -700,6 +702,15 @@ async def fetch_comprehensive_twitch_games(
                     # Update first stream date if earlier
                     if created_at < series_info['first_stream_date']:
                         series_info['first_stream_date'] = created_at
+                        
+                    # Detect completion
+                    finale_keywords = ['finale', 'final episode', 'the end', 'part final']
+                    title_lower = title.lower()
+                    if any(kw in title_lower for kw in finale_keywords):
+                        series_info['completion_status'] = 'completed'
+                        # Use the latest date found among finale videos
+                        if not series_info['completed_date'] or created_at > series_info['completed_date']:
+                            series_info['completed_date'] = created_at
 
             # Convert series data to game data format
             for game_name, series_info in game_series.items():
@@ -714,6 +725,8 @@ async def fetch_comprehensive_twitch_games(
                         "twitch_vod_urls": series_info["vod_urls"][:10],
                         "notes": f"Auto-imported from Twitch. {series_info['total_episodes']} VODs found.",
                         'date_started': series_info['first_stream_date'],
+                        'completed_date': series_info['completed_date'],
+                        'completion_status': series_info['completion_status'],
                         'alternative_names': [game_name]
                     }
                     games_data.append(game_data)

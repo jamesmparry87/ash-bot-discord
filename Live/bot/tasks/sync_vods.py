@@ -558,6 +558,7 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                     'youtube_views': game_data.get('youtube_views', 0),
                     'youtube_playlist_url': game_data.get('youtube_playlist_url'),
                     'completion_status': completion_status,
+                    'completed_date': game_data.get('completed_date'),
                     'existing_episodes': existing_episodes
                 }
 
@@ -604,6 +605,7 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
                         'alternative_names',
                         []),
                     'first_played_date': game_data.get('first_played_date'),
+                    'completed_date': game_data.get('completed_date'),
                     'notes': game_data.get(
                         'notes',
                         f"Auto-synced from YouTube on {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')}")}

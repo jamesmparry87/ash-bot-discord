@@ -145,12 +145,12 @@ async def handle_year_query(
 
 async def handle_game_status_query(
         message: discord.Message,
-        match: Match[str]) -> None:
+        match: Match[str]) -> bool:
     """Handle individual game status queries."""
     # Check if database is available
     if db is None:
         await message.reply("Database analysis systems offline. Game status queries unavailable.")
-        return
+        return True True
 
     game_name = match.group(1).strip()
     game_name_lower = game_name.lower()
@@ -203,102 +203,49 @@ async def handle_game_status_query(
                 context.set_disambiguation_state(game_name.title(), "game_status", available_game_names)
 
                 await message.reply(f"Database analysis indicates multiple entries exist in the '{game_name.title()}' series. Captain Jonesy's gaming archives contain: {games_list}. Specify which particular iteration you are referencing for detailed mission data.")
-                return
+                return True
         else:
-            await message.reply(f"Database scan complete. No entries found for '{game_name.title()}' series in Captain Jonesy's gaming archives. Either the series has not been engaged or requires more specific designation for accurate retrieval.")
-            return
+            return False
 
     # Search for the game in PLAYED GAMES database
     played_game = db.get_played_game(game_name)  # type: ignore
 
     if played_game:
-        # Game found in played games database - enhanced response with
-        # conversational follow-ups
-        episodes = f" across {played_game.get('total_episodes', 0)} episodes" if played_game.get(
-            'total_episodes', 0) > 0 else ""
-        status = played_game.get('completion_status', 'unknown')
-
-        status_text = {
-            'completed': 'completed',
-            'ongoing': 'ongoing',
-            'dropped': 'terminated',
-            'unknown': 'status unknown'
-        }.get(status, 'status unknown')
-
-        # Base response
-        response = f"Affirmative. Captain Jonesy has played '{played_game['canonical_name']}'{episodes}, {status_text}. "
-
-        # Add contextual follow-up suggestions based on game properties
-        try:
-            # Get ranking context for interesting facts
-            ranking_context = db.get_ranking_context(  # type: ignore
-                played_game["canonical_name"], "all")
-
-            # Series-based suggestions
-            if played_game.get(
-                    "series_name") and played_game["series_name"] != played_game["canonical_name"]:
-                series_games = db.get_all_played_games(  # type: ignore
-                    played_game["series_name"])
-                if len(series_games) > 1:
-                    response += f"This marks her engagement with the {played_game['series_name']} franchise. I could analyze her complete {played_game['series_name']} chronology or compare this series against her other gaming preferences if you require additional data."
-                else:
-                    response += f"I can examine her complete gaming franchise analysis or compare series engagement patterns if you require additional mission data."
-
-            # High episode count suggestions
-            elif played_game.get("total_episodes", 0) > 15:
-                if ranking_context and not ranking_context.get("error"):
-                    episode_rank = ranking_context.get(
-                        "rankings",
-                        {}).get(
-                        "episodes",
-                        {}).get(
-                        "rank",
-                        0)
-                    if episode_rank <= 5:
-                        response += f"Fascinating - this ranks #{episode_rank} in her episode count metrics. I could analyze her other marathon gaming sessions or compare completion patterns for lengthy {played_game.get('genre', 'similar')} games if you require deeper analysis."
-                    else:
-                        response += f"This represents a significant gaming commitment with {played_game['total_episodes']} episodes. Would you like me to investigate her completion timeline patterns or examine her sustained engagement metrics?"
-                else:
-                    response += f"This represents a significant gaming commitment. I could analyze her other extended gaming sessions or examine completion efficiency patterns if additional data is required."
-
-            # Recent/ongoing game suggestions
-            elif status == 'ongoing':
-                response += f"Mission status: ongoing. I can track her progress against typical completion metrics for similar titles or analyze her current gaming rotation if you require mission updates."
-
-            # Completed game suggestions with interesting stats
-            elif status == 'completed' and played_game.get('total_episodes', 0) > 0:
-                if played_game['total_episodes'] <= 8:
-                    response += f"Efficient completion detected - this falls within optimal episode range for focused gaming sessions. I can provide comparative analysis of similar pacing games or her completion efficiency trends if you require additional data."
-                else:
-                    response += f"Comprehensive completion achieved across {played_game['total_episodes']} episodes. Would you like me to investigate her completion timeline analysis or compare this against other {played_game.get('genre', 'similar')} gaming commitments?"
-
-            # Default follow-up for other cases
-            else:
-                if played_game.get('youtube_playlist_url'):
-                    response += "I can provide the YouTube playlist link or analyze additional mission parameters if you require further data."
-                else:
-                    response += "Additional mission parameters available upon request."
-
-        except Exception as e:
-            # Fallback if ranking context fails
-            print(f"Error generating follow-up suggestions: {e}")
-            response += "Additional mission parameters available upon request."
-
+        # Generate dynamic response using AI
+        from ..ai_handler import call_ai_for_generation
+        
+        system_prompt = """You are Ash, the ship's AI computer. The user has asked if Captain Jonesy played a specific game or for its completion status. 
+Respond dynamically and concisely. Use the following data.
+Game: {game_name}
+Status: {status}
+Episodes: {episodes}
+Completed Date: {completed_date}
+"""
+        system_prompt = system_prompt.format(
+            game_name=played_game['canonical_name'],
+            status=played_game.get('completion_status', 'unknown'),
+            episodes=played_game.get('total_episodes', 0),
+            completed_date=played_game.get('completed_date', 'unknown')
+        )
+        
+        response, _ = await call_ai_for_generation(system_prompt, message.content)
+        if not response:
+            response = f"Affirmative. Captain Jonesy has played '{played_game['canonical_name']}'."
         await message.reply(response)
+        return True
     else:
         # Game not found in played games database
-        game_title = game_name.title()
-        await message.reply(f"Database analysis complete. No records of Captain Jonesy engaging '{game_title}' found in gaming archives. Mission parameters indicate this title has not been processed.")
+        return False
 
 
 async def handle_game_details_query(
         message: discord.Message,
-        match: Match[str]) -> None:
+        match: Match[str]) -> bool:
     """Handle specific game detail queries (playtime, duration, etc.)."""
     # Check if database is available
     if db is None:
         await message.reply("Database analysis systems offline. Game detail queries unavailable.")
-        return
+        return True True
 
     game_name = match.group(1).strip()
     game_name_lower = game_name.lower()
@@ -342,57 +289,38 @@ async def handle_game_details_query(
             context.set_disambiguation_state(game_name.title(), "game_details", available_game_names)
 
             await message.reply(f"Database analysis indicates multiple entries exist in the '{game_name.title()}' series. Captain Jonesy's gaming archives contain: {games_list}. Specify which particular iteration you are referencing for detailed temporal analysis.")
-            return
+            return True
 
     # Search for the game in PLAYED GAMES database
     played_game = db.get_played_game(game_name)  # type: ignore
 
     if played_game:
-        playtime_minutes = played_game.get('total_playtime_minutes', 0)
-        episodes = played_game.get('total_episodes', 0)
-        status = played_game.get('completion_status', 'unknown')
-        canonical_name = played_game['canonical_name']
-
-        if playtime_minutes > 0:
-            if playtime_minutes >= 60:
-                hours = playtime_minutes // 60
-                minutes = playtime_minutes % 60
-                if minutes > 0:
-                    playtime_text = f"{hours}h {minutes}m"
-                else:
-                    playtime_text = f"{hours} hours"
-            else:
-                playtime_text = f"{playtime_minutes} minutes"
-
-            response = f"Database analysis: Captain Jonesy invested {playtime_text} in '{canonical_name}'"
-
-            if episodes > 0:
-                avg_per_episode = round(playtime_minutes / episodes, 1)
-                response += f" across {episodes} episodes (average: {avg_per_episode} minutes per episode)"
-
-            response += f", completion status: {status}. "
-
-            # Add contextual follow-up
-            if status == 'completed':
-                response += f"This represents a comprehensive gaming commitment. I could compare this against her other {status} titles or analyze completion efficiency patterns if you require additional data."
-            elif status == 'ongoing':
-                response += f"Mission status: ongoing. I can track progress metrics or provide estimated completion timeline analysis if you require mission updates."
-            else:
-                response += f"I can provide comparative analysis against similar games or examine her engagement patterns if additional data is required."
-
-        else:
-            # No playtime data available
-            if episodes > 0:
-                response = f"Database analysis: '{canonical_name}' engaged for {episodes} episodes, completion status: {status}. However, temporal data is insufficient - playtime metrics require enhancement for comprehensive analysis."
-            else:
-                response = f"Database analysis: '{canonical_name}' found in gaming archives, completion status: {status}. However, both temporal and episode data are insufficient for detailed analysis."
-
+        from ..ai_handler import call_ai_for_generation
+        
+        system_prompt = """You are Ash, the ship's AI computer. The user is asking for details/playtime about a specific game Jonesy played.
+Respond dynamically and concisely. Use the following data:
+Game: {game_name}
+Status: {status}
+Episodes: {episodes}
+Playtime (minutes): {playtime}
+Completed Date: {completed_date}
+"""
+        system_prompt = system_prompt.format(
+            game_name=played_game['canonical_name'],
+            status=played_game.get('completion_status', 'unknown'),
+            episodes=played_game.get('total_episodes', 0),
+            playtime=played_game.get('total_playtime_minutes', 0),
+            completed_date=played_game.get('completed_date', 'unknown')
+        )
+        
+        response, _ = await call_ai_for_generation(system_prompt, message.content)
+        if not response:
+            response = f"Captain Jonesy has invested {played_game.get('total_playtime_minutes', 0)} minutes in '{played_game['canonical_name']}'."
         await message.reply(response)
+        return True
     else:
-        # Game not found in played games database
-        game_title = game_name.title()
-        await message.reply(f"Database scan complete. No records of Captain Jonesy engaging '{game_title}' found in gaming archives. Temporal analysis unavailable for unprocessed titles.")
-
+        # Game not found
+        return False
 
 async def handle_recommendation_query(
         message: discord.Message,

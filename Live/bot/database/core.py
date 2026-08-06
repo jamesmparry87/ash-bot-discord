@@ -376,6 +376,7 @@ class DatabaseManager:
                         release_year INTEGER,
                         platform VARCHAR(100),
                         first_played_date DATE,
+                        completed_date DATE,
                         completion_status VARCHAR(50) DEFAULT 'unknown',
                         total_episodes INTEGER DEFAULT 0,
                         total_playtime_minutes INTEGER DEFAULT 0,
@@ -390,6 +391,10 @@ class DatabaseManager:
                 """)
 
                 # Create indexes for played_games
+                cur.execute("""
+                    ALTER TABLE played_games ADD COLUMN IF NOT EXISTS completed_date DATE;
+                """)
+                
                 cur.execute("""
                     CREATE INDEX IF NOT EXISTS idx_played_games_canonical_name
                     ON played_games(canonical_name)

@@ -1321,7 +1321,7 @@ async def call_ai_for_generation(
                     generation_config["system_instruction"] = system_instruction
 
                 # Shorter timeout for generation tasks
-                timeout_duration = 20.0
+                timeout_duration = 40.0  # Increased for trivia generation
 
                 import asyncio
                 import concurrent.futures
