@@ -1196,7 +1196,7 @@ class GamesDatabase:
                                 'release_year',
                                 'platform',
                                 'first_played_date',
-                    'completed_date',
+                                'completed_date',
                                 'completion_status',
                                 'total_episodes',
                                 'total_playtime_minutes',
@@ -1439,7 +1439,7 @@ class GamesDatabase:
                                 duplicate_game["first_played_date"] < merged_data["first_played_date"]
                             ):
                                 merged_data["first_played_date"] = duplicate_game["first_played_date"]
-                        
+
                         # Use latest completed_date
                         if duplicate_game.get("completed_date"):
                             if (

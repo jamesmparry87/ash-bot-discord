@@ -32,19 +32,20 @@ content = content.replace(
 )
 
 # For status query
-status_split = content.split("    if played_game:\n        # Game found in played games database - enhanced response with\n        # conversational follow-ups")
+status_split = content.split(
+    "    if played_game:\n        # Game found in played games database - enhanced response with\n        # conversational follow-ups")
 if len(status_split) == 2:
     status_part1 = status_split[0]
     status_part2 = status_split[1]
-    
+
     # find where details query starts
     end_of_status_idx = status_part2.find("async def handle_game_details_query")
-    
+
     status_replacement = """    if played_game:
         # Generate dynamic response using AI
         from ..ai_handler import call_ai_for_generation
-        
-        system_prompt = \"\"\"You are Ash, the ship's AI computer. The user has asked if Captain Jonesy played a specific game or for its completion status. 
+
+        system_prompt = \"\"\"You are Ash, the ship's AI computer. The user has asked if Captain Jonesy played a specific game or for its completion status.
 Respond dynamically and concisely. Use the following data.
 Game: {game_name}
 Status: {status}
@@ -57,7 +58,7 @@ Completed Date: {completed_date}
             episodes=played_game.get('total_episodes', 0),
             completed_date=played_game.get('completed_date', 'unknown')
         )
-        
+
         response, _ = await call_ai_for_generation(system_prompt, message.content)
         if not response:
             response = f"Affirmative. Captain Jonesy has played '{played_game['canonical_name']}'."
@@ -71,17 +72,18 @@ Completed Date: {completed_date}
     content = status_part1 + status_replacement + status_part2[end_of_status_idx:]
 
 # For details query
-details_split = content.split("    if played_game:\n        playtime_minutes = played_game.get('total_playtime_minutes', 0)")
+details_split = content.split(
+    "    if played_game:\n        playtime_minutes = played_game.get('total_playtime_minutes', 0)")
 if len(details_split) == 2:
     details_part1 = details_split[0]
     details_part2 = details_split[1]
-    
+
     # find where recommendation query starts
     end_of_details_idx = details_part2.find("async def handle_recommendation_query")
-    
+
     details_replacement = """    if played_game:
         from ..ai_handler import call_ai_for_generation
-        
+
         system_prompt = \"\"\"You are Ash, the ship's AI computer. The user is asking for details/playtime about a specific game Jonesy played.
 Respond dynamically and concisely. Use the following data:
 Game: {game_name}
@@ -97,7 +99,7 @@ Completed Date: {completed_date}
             playtime=played_game.get('total_playtime_minutes', 0),
             completed_date=played_game.get('completed_date', 'unknown')
         )
-        
+
         response, _ = await call_ai_for_generation(system_prompt, message.content)
         if not response:
             response = f"Captain Jonesy has invested {played_game.get('total_playtime_minutes', 0)} minutes in '{played_game['canonical_name']}'."

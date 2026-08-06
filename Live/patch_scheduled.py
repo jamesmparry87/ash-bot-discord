@@ -57,7 +57,9 @@ search_str = """            # STEP 2: Fallback to querying available questions (
             except Exception as pool_error:"""
 
 # The line break before except is tricky. We'll find the precise block.
-pattern = re.compile(r"            # STEP 2: Fallback to querying available questions.*?print\(\s*f\"✅ TRIVIA AUTO-START: Auto-selected question #\{question_data\['id'\]\}.*?\)", re.DOTALL)
+pattern = re.compile(
+    r"            # STEP 2: Fallback to querying available questions.*?print\(\s*f\"✅ TRIVIA AUTO-START: Auto-selected question #\{question_data\['id'\]\}.*?\)",
+    re.DOTALL)
 
 replacement = """            # STEP 2: Fallback to querying available questions (same logic as manual !starttrivia)
             print("🔄 TRIVIA AUTO-START: No pre-approved question, querying available pool...")

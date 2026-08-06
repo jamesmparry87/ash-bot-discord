@@ -61,7 +61,7 @@ merge_replacement = """                        if duplicate_game.get("first_play
                                 duplicate_game["first_played_date"] < merged_data["first_played_date"]
                             ):
                                 merged_data["first_played_date"] = duplicate_game["first_played_date"]
-                        
+
                         # Use latest completed_date
                         if duplicate_game.get("completed_date"):
                             if (
@@ -71,7 +71,7 @@ merge_replacement = """                        if duplicate_game.get("first_play
                                 merged_data["completed_date"] = duplicate_game["completed_date"]"""
 
 content = content.replace(
-"""                        if duplicate_game.get("first_played_date"):
+    """                        if duplicate_game.get("first_played_date"):
                             if (
                                 not merged_data["first_played_date"] or
                                 duplicate_game["first_played_date"] < merged_data["first_played_date"]

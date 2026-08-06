@@ -213,8 +213,8 @@ async def handle_game_status_query(
     if played_game:
         # Generate dynamic response using AI
         from ..ai_handler import call_ai_for_generation
-        
-        system_prompt = """You are Ash, the ship's AI computer. The user has asked if Captain Jonesy played a specific game or for its completion status. 
+
+        system_prompt = """You are Ash, the ship's AI computer. The user has asked if Captain Jonesy played a specific game or for its completion status.
 Respond dynamically and concisely. Use the following data.
 Game: {game_name}
 Status: {status}
@@ -227,7 +227,7 @@ Completed Date: {completed_date}
             episodes=played_game.get('total_episodes', 0),
             completed_date=played_game.get('completed_date', 'unknown')
         )
-        
+
         response, _ = await call_ai_for_generation(system_prompt, message.content)
         if not response:
             response = f"Affirmative. Captain Jonesy has played '{played_game['canonical_name']}'."
@@ -296,7 +296,7 @@ async def handle_game_details_query(
 
     if played_game:
         from ..ai_handler import call_ai_for_generation
-        
+
         system_prompt = """You are Ash, the ship's AI computer. The user is asking for details/playtime about a specific game Jonesy played.
 Respond dynamically and concisely. Use the following data:
 Game: {game_name}
@@ -312,7 +312,7 @@ Completed Date: {completed_date}
             playtime=played_game.get('total_playtime_minutes', 0),
             completed_date=played_game.get('completed_date', 'unknown')
         )
-        
+
         response, _ = await call_ai_for_generation(system_prompt, message.content)
         if not response:
             response = f"Captain Jonesy has invested {played_game.get('total_playtime_minutes', 0)} minutes in '{played_game['canonical_name']}'."
@@ -321,6 +321,7 @@ Completed Date: {completed_date}
     else:
         # Game not found
         return False
+
 
 async def handle_recommendation_query(
         message: discord.Message,

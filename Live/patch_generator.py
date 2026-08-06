@@ -5,7 +5,9 @@ with open(r'bot\handlers\trivia\generator.py', 'r', encoding='utf-8') as f:
     content = f.read()
 
 # 1. Update TRIVIA_CATEGORIES
-categories_pattern = re.compile(r"        TRIVIA_CATEGORIES = \{\n            # --- Channel stats \(factual, answer-first\) ---\n            'Episode_Champion': \{'weight': 2\.0\},.*?# --- AI-creative \(low weight - occasional variety\) ---\n            'Franchise_Lore': \{'weight': 0\.5\},  # Lore question, AI provides answer\n        \}", re.DOTALL)
+categories_pattern = re.compile(
+    r"        TRIVIA_CATEGORIES = \{\n            # --- Channel stats \(factual, answer-first\) ---\n            'Episode_Champion': \{'weight': 2\.0\},.*?# --- AI-creative \(low weight - occasional variety\) ---\n            'Franchise_Lore': \{'weight': 0\.5\},  # Lore question, AI provides answer\n        \}",
+    re.DOTALL)
 
 new_categories = """        TRIVIA_CATEGORIES = {
             # --- Channel stats (factual, answer-first) ---
@@ -42,7 +44,7 @@ clip_logic = """            elif cat == 'Clip_Famous_Last_Words':
                 correct_answer = None
                 is_json_response = True
                 print(f"✅ TRIVIA DIRECTOR: Got clip '{clip['trigger']}' for Clip_Famous_Last_Words")
-                
+
                 category_prompt = f\"\"\"Write one multiple-choice trivia question for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
 
@@ -111,7 +113,8 @@ Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "dec
 content = franchise_lore_pattern.sub(clip_logic, content)
 
 # 3. Update CATEGORY_TEMPERATURES for clip types
-temp_pattern = re.compile(r"                CATEGORY_TEMPERATURES = \{\n                    'Franchise_Lore': 0\.9,\n                \}")
+temp_pattern = re.compile(
+    r"                CATEGORY_TEMPERATURES = \{\n                    'Franchise_Lore': 0\.9,\n                \}")
 new_temps = """                CATEGORY_TEMPERATURES = {
                     'Franchise_Lore': 0.9,
                     'Clip_Famous_Last_Words': 0.8,
