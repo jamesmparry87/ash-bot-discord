@@ -836,7 +836,14 @@ async def handle_weekly_announcement_approval(message: discord.Message):
             db.update_announcement_status(announcement_id, 'approved')
 
             uk_now = datetime.now(ZoneInfo("Europe/London"))
-            day_map = {'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3, 'friday': 4, 'saturday': 5, 'sunday': 6}
+            day_map = {
+                'monday': 0,
+                'tuesday': 1,
+                'wednesday': 2,
+                'thursday': 3,
+                'friday': 4,
+                'saturday': 5,
+                'sunday': 6}
             target_day_int = day_map.get(convo['day'].lower())
 
             # Determine if we should post immediately (past 9 AM on target day, or an entirely different day)
@@ -850,12 +857,12 @@ async def handle_weekly_announcement_approval(message: discord.Message):
                 bot = _get_bot_instance()
                 from ..config import CHIT_CHAT_CHANNEL_ID
                 channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID) if bot else None
-                
+
                 if channel and isinstance(channel, discord.TextChannel):
                     post_content = convo['original_content'].replace('\\n', '\n')
                     if '\n\n' not in post_content and '\n' in post_content:
                         post_content = post_content.replace('\n', '\n\n')
-                        
+
                     await channel.send(post_content)
                     db.update_announcement_status(announcement_id, 'posted')
                     reply_text = "✅ **Approved and posted immediately.** (It is past the 9:00 AM scheduled time)."

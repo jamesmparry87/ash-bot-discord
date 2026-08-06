@@ -80,11 +80,12 @@ async def monday_content_sync():
 
     if not db:
         print("❌ SYNC & DEBRIEF (Monday): Database not available")
-        if notify_jam_weekly_message_failure: await notify_jam_weekly_message_failure(
-            'monday',
-            'Database unavailable',
-            'The database connection is not available. Cannot proceed with content sync.'
-        )
+        if notify_jam_weekly_message_failure:
+            await notify_jam_weekly_message_failure(
+                'monday',
+                'Database unavailable',
+                'The database connection is not available. Cannot proceed with content sync.'
+            )
         return
 
     try:
@@ -118,20 +119,22 @@ async def monday_content_sync():
 
         if not analysis_results:
             print(f"❌ SYNC & DEBRIEF (Monday): All sync attempts failed. Last error: {last_error}")
-            if notify_jam_weekly_message_failure: await notify_jam_weekly_message_failure(
-                'monday',
-                'YouTube/Twitch integration failure',
-                f'Failed to fetch new content after {max_retries} attempts. Last error: {str(last_error)[:200]}'
-            )
+            if notify_jam_weekly_message_failure:
+                await notify_jam_weekly_message_failure(
+                    'monday',
+                    'YouTube/Twitch integration failure',
+                    f'Failed to fetch new content after {max_retries} attempts. Last error: {str(last_error)[:200]}'
+                )
             return
 
         if analysis_results.get("status") == "no_new_content":
             print("✅ SYNC & DEBRIEF (Monday): No new content found. No message to generate.")
-            if notify_jam_weekly_message_failure: await notify_jam_weekly_message_failure(
-                'monday',
-                'No new content found',
-                'No new YouTube/Twitch content was found for the past week. No message will be generated.'
-            )
+            if notify_jam_weekly_message_failure:
+                await notify_jam_weekly_message_failure(
+                    'monday',
+                    'No new content found',
+                    'No new YouTube/Twitch content was found for the past week. No message will be generated.'
+                )
             return
 
         import random
@@ -147,7 +150,7 @@ async def monday_content_sync():
 
         # Try dynamic AI generation first
         debrief = await generate_weekly_report('monday', analysis_results)
-        
+
         if not debrief:
             # Fallback to static message if AI is disabled or fails
             debrief = (
@@ -174,22 +177,25 @@ async def monday_content_sync():
         announcement_id = db.create_weekly_announcement('monday', debrief, analysis_results)
 
         if announcement_id:
-            if start_weekly_announcement_approval: await start_weekly_announcement_approval(announcement_id, debrief, 'monday')
+            if start_weekly_announcement_approval:
+                await start_weekly_announcement_approval(announcement_id, debrief, 'monday')
         else:
             print("❌ SYNC & DEBRIEF (Monday): Failed to create announcement record in database.")
-            if notify_jam_weekly_message_failure: await notify_jam_weekly_message_failure(
-                'monday',
-                'Database insertion failure',
-                'Failed to create the announcement record in the database.'
-            )
+            if notify_jam_weekly_message_failure:
+                await notify_jam_weekly_message_failure(
+                    'monday',
+                    'Database insertion failure',
+                    'Failed to create the announcement record in the database.'
+                )
 
     except Exception as e:
         print(f"❌ SYNC & DEBRIEF (Monday): Critical error during sync: {e}")
-        if notify_jam_weekly_message_failure: await notify_jam_weekly_message_failure(
-            'monday',
-            'Unexpected error',
-            f'An unexpected error occurred during the Monday content sync: {str(e)[:200]}'
-        )
+        if notify_jam_weekly_message_failure:
+            await notify_jam_weekly_message_failure(
+                'monday',
+                'Unexpected error',
+                f'An unexpected error occurred during the Monday content sync: {str(e)[:200]}'
+            )
 
 
 def clean_series_name(series_name: str) -> str:
