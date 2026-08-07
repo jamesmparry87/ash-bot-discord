@@ -188,7 +188,7 @@ class TriviaDatabase:
         conn = self.get_connection()
         if not conn:
             return 0
-            
+
         try:
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM trivia_questions WHERE status = 'pending_approval'")
