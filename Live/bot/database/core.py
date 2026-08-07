@@ -394,7 +394,7 @@ class DatabaseManager:
                 cur.execute("""
                     ALTER TABLE played_games ADD COLUMN IF NOT EXISTS completed_date DATE;
                 """)
-                
+
                 cur.execute("""
                     CREATE INDEX IF NOT EXISTS idx_played_games_canonical_name
                     ON played_games(canonical_name)

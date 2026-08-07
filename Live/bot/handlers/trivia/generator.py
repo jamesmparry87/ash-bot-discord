@@ -244,7 +244,8 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                 # No break - fall through to AI call section below
 
             elif cat == 'Clip_Famous_Last_Words':
-                clips = current_db.trivia.get_random_clip_lore(limit=10, required_fields=['notable_quote', 'clip_outcome'])
+                clips = current_db.trivia.get_random_clip_lore(
+                    limit=10, required_fields=['notable_quote', 'clip_outcome'])
                 clips = [c for c in clips if c['clip_outcome'].lower() in ('death', 'failure')]
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough death/failure clips for Clip_Famous_Last_Words")
@@ -253,7 +254,7 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                 correct_answer = None
                 is_json_response = True
                 print(f"✅ TRIVIA DIRECTOR: Got clip '{clip['trigger']}' for Clip_Famous_Last_Words")
-                
+
                 category_prompt = f"""Write one multiple-choice trivia question for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
 
@@ -270,7 +271,8 @@ Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "dec
                 selected_category = cat
 
             elif cat == 'Clip_Vibe_Check':
-                clips = current_db.trivia.get_random_clip_lore(limit=10, required_fields=['emotion_category', 'game_title'])
+                clips = current_db.trivia.get_random_clip_lore(
+                    limit=10, required_fields=['emotion_category', 'game_title'])
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough clips for Clip_Vibe_Check")
                     continue
@@ -293,7 +295,9 @@ Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "dec
                 selected_category = cat
 
             elif cat == 'Clip_Cause_And_Effect':
-                clips = current_db.trivia.get_random_clip_lore(limit=10, required_fields=['trigger', 'reaction', 'characters_involved'])
+                clips = current_db.trivia.get_random_clip_lore(
+                    limit=10, required_fields=[
+                        'trigger', 'reaction', 'characters_involved'])
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough clips for Clip_Cause_And_Effect")
                     continue

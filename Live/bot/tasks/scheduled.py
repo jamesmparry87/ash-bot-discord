@@ -408,7 +408,7 @@ async def trivia_tuesday():
 # Run every 15 minutes to check for stale trivia sessions
 
 
-@tasks.loop(minutes=15)
+@ tasks.loop(minutes=15)
 async def check_stale_trivia_sessions():
     """Auto-end trivia sessions that have been active for more than 2 hours"""
     try:
@@ -549,7 +549,7 @@ async def check_stale_trivia_sessions():
 # Run at 8:15 AM UK time every Friday - Gathering weekly activity
 
 
-@tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
+@ tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
 async def friday_community_analysis():
     """Scrapes community activity, generates a debrief, and sends it for approval."""
     if not _should_run_automated_tasks():
@@ -750,7 +750,7 @@ async def friday_community_analysis():
 # Run at 00:00 PT (midnight Pacific Time) every day
 
 
-@tasks.loop(time=time(0, 0, tzinfo=ZoneInfo("US/Pacific")))
+@ tasks.loop(time=time(0, 0, tzinfo=ZoneInfo("US/Pacific")))
 async def scheduled_midnight_restart():
     """Automatically restart the bot at midnight Pacific Time to reset daily limits"""
     pt_now = datetime.now(ZoneInfo("US/Pacific"))
@@ -785,7 +785,7 @@ async def scheduled_midnight_restart():
 # Run at 8:15 AM UK time every day (5 minutes after Google quota reset)
 
 
-@tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
+@ tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
 async def scheduled_ai_refresh():
     """Silently refresh AI module connections at 8:15am BST (after Google quota reset)"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
@@ -950,7 +950,7 @@ async def scheduled_ai_refresh():
 # Check reminders every minute
 
 
-@tasks.loop(minutes=1)
+@ tasks.loop(minutes=1)
 async def check_due_reminders():
     """Check for due reminders and deliver them"""
     try:
@@ -1091,7 +1091,7 @@ async def check_due_reminders():
         traceback.print_exc()
 
 
-@tasks.loop(minutes=1)  # Check for auto-actions every minute
+@ tasks.loop(minutes=1)  # Check for auto-actions every minute
 async def check_auto_actions():
     """Check for reminders that need auto-actions triggered"""
     try:
@@ -1128,7 +1128,7 @@ async def check_auto_actions():
 # Run every hour to cleanup old recommendation messages
 
 
-@tasks.loop(hours=1)
+@ tasks.loop(hours=1)
 async def cleanup_game_recommendations():
     """Clean up user recommendation messages older than 24 hours in #game-recommendation channel"""
     try:
@@ -1471,7 +1471,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         raise
 
 
-@tasks.loop(time=time(hour=20, minute=15, tzinfo=ZoneInfo("Europe/London")))
+@ tasks.loop(time=time(hour=20, minute=15, tzinfo=ZoneInfo("Europe/London")))
 async def daily_clip_scan_task():
     """Scan clips channel for unprocessed clips every weekday evening"""
     if not _should_run_automated_tasks():

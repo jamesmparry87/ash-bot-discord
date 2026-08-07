@@ -702,7 +702,7 @@ async def fetch_comprehensive_twitch_games(
                     # Update first stream date if earlier
                     if created_at < series_info['first_stream_date']:
                         series_info['first_stream_date'] = created_at
-                        
+
                     # Detect completion
                     finale_keywords = ['finale', 'final episode', 'the end', 'part final']
                     title_lower = title.lower()
