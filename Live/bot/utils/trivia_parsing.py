@@ -147,7 +147,7 @@ def validate_multiple_choice_options(choices: list, correct_answer: str) -> dict
         if not choice or not choice.strip():
             return {
                 'valid': False,
-                'error': f"Option {chr(65+i)} is empty"
+                'error': f"Option {chr(65 + i)} is empty"
             }
 
     # Validate correct answer letter
@@ -169,7 +169,7 @@ def validate_multiple_choice_options(choices: list, correct_answer: str) -> dict
     if choice_index >= len(choices):
         return {
             'valid': False,
-            'error': f"Correct answer '{correct_answer_upper}' exceeds available options (only {len(choices)} options: {chr(65)}-{chr(64+len(choices))})"
+            'error': f"Correct answer '{correct_answer_upper}' exceeds available options (only {len(choices)} options: {chr(65)}-{chr(64 + len(choices))})"
         }
 
     # All validations passed

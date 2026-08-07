@@ -14,7 +14,7 @@ Usage:
 import os
 import sys
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Dict, List
 from zoneinfo import ZoneInfo
 
 # Load environment variables from .env file
@@ -148,9 +148,9 @@ def test_model(model_name: str) -> Dict[str, Any]:
 
 def test_all_models() -> Dict[str, List[Dict]]:
     """Test all Gemini models and return results"""
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("🔍 TESTING GEMINI MODELS")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
     print(f"⏰ Time: {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d %H:%M:%S UK')}")
 
     results = {
@@ -182,14 +182,14 @@ def test_all_models() -> Dict[str, List[Dict]]:
 
 def print_summary(results: Dict[str, List[Dict]]):
     """Print summary of test results (Phase 4: Enhanced with cascade config)"""
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("📊 SUMMARY")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
 
     if results['working']:
         print(f"\n✅ WORKING MODELS ({len(results['working'])} available):")
         for i, r in enumerate(results['working'], 1):
-            status = "PRIMARY" if i == 1 else f"BACKUP {i-1}"
+            status = "PRIMARY" if i == 1 else f"BACKUP {i - 1}"
             print(f"   {i}. {r['model']:25s} - {status:10s} ({r['response_time']:.2f}s)")
 
         print("\n🔧 RECOMMENDED CASCADE CONFIGURATION:")
@@ -203,15 +203,15 @@ def print_summary(results: Dict[str, List[Dict]]):
         print("   ```")
 
         print("\n📊 CASCADE STRATEGY:")
-        print(f"   • Phase 1: Fixed model names (✅ complete)")
+        print("   • Phase 1: Fixed model names (✅ complete)")
         print(f"   • Phase 2: Model cascade with {len(results['working'])} models (✅ complete)")
-        print(f"   • Phase 3: Auto-fallback on errors (✅ complete)")
-        print(f"   • Phase 4: Enhanced testing (✅ complete)")
+        print("   • Phase 3: Auto-fallback on errors (✅ complete)")
+        print("   • Phase 4: Enhanced testing (✅ complete)")
 
         if len(results['working']) > 1:
-            print(f"\n🛡️ REDUNDANCY:")
-            print(f"   • {len(results['working'])} working models provide {len(results['working'])-1} backup level(s)")
-            print(f"   • Automatic failover if primary fails")
+            print("\n🛡️ REDUNDANCY:")
+            print(f"   • {len(results['working'])} working models provide {len(results['working']) - 1} backup level(s)")
+            print("   • Automatic failover if primary fails")
             print(f"   • Models tested in order: {' → '.join([r['model'] for r in results['working']])}")
     else:
         print("\n❌ NO WORKING MODELS FOUND")
@@ -233,21 +233,21 @@ def print_summary(results: Dict[str, List[Dict]]):
         for r in results['errors']:
             print(f"   • {r['model']} - {r['error'][:100]}")
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
 
 
 def main():
     """Main entry point for CLI usage"""
-    print(f"\n{'#'*80}")
+    print(f"\n{'#' * 80}")
     print("# GEMINI MODEL TESTING UTILITY")
     print("# Tests which Gemini models work with your API key")
-    print(f"{'#'*80}\n")
+    print(f"{'#' * 80}\n")
 
     # Configure API
     configure_api()
 
     # List available models from API
-    api_models = list_available_models()
+    list_available_models()
 
     # Test each model
     results = test_all_models()

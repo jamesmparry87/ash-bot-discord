@@ -180,6 +180,29 @@ class TriviaDatabase:
         finally:
             conn.close()
 
+    def clear_pending_trivia_questions(self) -> int:
+        """
+        Delete all trivia questions with status 'pending_approval'.
+        Returns the number of deleted questions.
+        """
+        conn = self.get_connection()
+        if not conn:
+            return 0
+            
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM trivia_questions WHERE status = 'pending_approval'")
+                deleted_count = cur.rowcount
+                conn.commit()
+                logger.info(f"Cleared {deleted_count} pending trivia questions")
+                return deleted_count
+        except Exception as e:
+            logger.error(f"Error clearing pending trivia questions: {e}")
+            conn.rollback()
+            return 0
+        finally:
+            conn.close()
+
     def get_next_trivia_question(
             self, exclude_user_id: Optional[int] = None, avoid_category: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """

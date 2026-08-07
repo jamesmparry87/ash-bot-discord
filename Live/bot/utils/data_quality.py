@@ -625,7 +625,7 @@ def cleanup_alternative_names_format(db) -> Dict[str, Union[int, str, float]]:
             1
         )
 
-        print(f"\n📊 Cleanup Summary:")
+        print("\n📊 Cleanup Summary:")
         print(f"  Total games: {stats['total_games']}")
         print(f"  Processed: {stats['processed']}")
         print(f"  Cleaned: {stats['cleaned']}")

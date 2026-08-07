@@ -62,7 +62,7 @@ def create_trivia_question_embed(
 
         # Dynamically format options based on count (2-4 supported)
         choices_text = '\n'.join([
-            f"**{chr(65+i)}.** {option}"
+            f"**{chr(65 + i)}.** {option}"
             for i, option in enumerate(options)
         ])
 
@@ -117,7 +117,7 @@ def format_options_preview(options: list) -> str:
     if not options:
         return ""
 
-    preview_lines = [f"**{chr(65+i)}.** {option}" for i, option in enumerate(options)]
+    preview_lines = [f"**{chr(65 + i)}.** {option}" for i, option in enumerate(options)]
     return "\n".join(preview_lines)
 
 

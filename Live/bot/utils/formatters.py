@@ -19,7 +19,7 @@ def format_game_list(games: List[Dict[str,
 
     formatted_games = []
     for i, game in enumerate(games[:max_display]):
-        game_line = f"**{i+1}.** {game.get('canonical_name', 'Unknown Game')}"
+        game_line = f"**{i + 1}.** {game.get('canonical_name', 'Unknown Game')}"
 
         # Add episode info
         if show_episodes and game.get('total_episodes'):
@@ -63,7 +63,7 @@ def format_strike_list(
 
     formatted_strikes = []
     for i, strike in enumerate(strikes):
-        strike_line = f"**{i+1}.** "
+        strike_line = f"**{i + 1}.** "
 
         # Add user info
         user_id = strike.get('user_id', 'Unknown')
@@ -121,12 +121,12 @@ def format_large_number(number: int) -> str:
     """Format large numbers with appropriate suffixes"""
     if number < 1000:
         return str(number)
-    elif number < 1000000:
-        return f"{number/1000:.1f}K"
-    elif number < 1000000000:
-        return f"{number/1000000:.1f}M"
-    else:
-        return f"{number/1000000000:.1f}B"
+    if number >= 1_000_000_000:
+        return f"{number / 1_000_000_000:.1f}B"
+    if number >= 1_000_000:
+        return f"{number / 1_000_000:.1f}M"
+    if number >= 1_000:
+        return f"{number / 1_000:.1f}K"
 
 
 def format_percentage(value: float, total: float) -> str:

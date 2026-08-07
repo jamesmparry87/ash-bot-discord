@@ -242,6 +242,24 @@ class DataCleanupCommands(commands.Cog):
         # Clear stored results
         self.bot.cleanup_results = None
 
+    @commands.command(name='cleartriviaqueue')
+    @commands.check(lambda ctx: ctx.author.id == JAM_USER_ID)
+    async def clear_trivia_queue(self, ctx):
+        """
+        Clear all pending approval trivia questions.
+        Forces the bot to generate a fresh batch of trivia questions.
+
+        **Admin only command**
+        """
+        await ctx.send("🧹 **Clearing Trivia Queue...**")
+        
+        try:
+            deleted_count = self.db.trivia.clear_pending_trivia_questions()
+            await ctx.send(f"✅ Successfully deleted {deleted_count} pending trivia questions.\nThe bot will generate fresh questions (including clip trivia) at the next opportunity.")
+        except Exception as e:
+            await ctx.send(f"❌ **Error clearing trivia queue:** {str(e)}")
+            print(f"Error in clear_trivia_queue: {e}")
+
     @commands.command(name='databasemaintenance')
     @commands.check(lambda ctx: ctx.author.id == JAM_USER_ID)
     async def database_maintenance(self, ctx):

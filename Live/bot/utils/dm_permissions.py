@@ -2,7 +2,6 @@
 DM-aware permission checks for commands that need to work in both guild and DM contexts
 """
 
-from typing import Callable
 
 import discord
 from discord.ext import commands

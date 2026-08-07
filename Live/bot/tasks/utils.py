@@ -179,7 +179,6 @@ async def _validate_bot_permissions():
 
 def get_bot_instance():
     """Get the globally stored bot instance."""
-    global _bot_instance
     if _bot_instance and _bot_instance.user:
         return _bot_instance
 
@@ -188,5 +187,4 @@ def get_bot_instance():
 
 
 def is_bot_ready():
-    global _bot_ready
     return _bot_ready

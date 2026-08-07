@@ -5,7 +5,7 @@ Handles time calculations, timezone conversions, and time-related formatting
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Union
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 # Common timezones used by the bot

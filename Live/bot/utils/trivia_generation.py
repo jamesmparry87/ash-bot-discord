@@ -10,7 +10,6 @@ Handles AI-powered and data-driven trivia question generation including:
 import asyncio
 import logging
 import random
-from typing import Optional
 
 from .trivia_formatting import format_view_count_range, get_episode_range_choices
 from .trivia_parsing import validate_question_quality
@@ -227,6 +226,41 @@ async def generate_ai_enhanced_question(prompt_data: dict, bot=None):
         logger.error(f"Error in AI-enhanced YouTube question generation: {e}")
         return None
 
+def _parse_ai_trivia_response(response_text: str) -> tuple[str, str]:
+    """Parse AI trivia response using multiple strategies to extract question and answer."""
+    question_text = ""
+    answer = ""
+    lines = response_text.strip().split('\n')
+
+    # Strategy 1: Line-by-line parsing
+    for line in lines:
+        line = line.strip()
+        if line.startswith("Question:"):
+            question_text = line.replace("Question:", "").strip()
+        elif line.startswith("Answer:"):
+            answer = line.replace("Answer:", "").strip()
+
+    # Strategy 2: Pipe-separated format
+    if not question_text or not answer:
+        for line in lines:
+            if '|' in line:
+                parts = line.split('|')
+                if len(parts) >= 2:
+                    q_part = parts[0].strip()
+                    a_part = parts[1].strip()
+                    if 'Question:' in q_part or not question_text:
+                        question_text = q_part.replace('Question:', '').strip()
+                    if 'Answer:' in a_part or not answer:
+                        answer = a_part.replace('Answer:', '').strip()
+
+    # Strategy 3: First line as question, second as answer (last resort)
+    if not question_text or not answer:
+        if len(lines) >= 2:
+            question_text = lines[0].strip()
+            answer = lines[1].strip()
+
+    return question_text, answer
+
 
 async def generate_ai_question_fallback(db=None, bot=None, avoid_questions=None, avoid_templates=None):
     """
@@ -330,41 +364,8 @@ async def generate_ai_question_fallback(db=None, bot=None, avoid_questions=None,
                 member_obj=None, bot=bot)
 
             if response_text:
-                # Enhanced parsing with multiple fallback strategies
-                question_text = ""
-                answer = ""
-
-                # Strategy 1: Line-by-line parsing
-                lines = response_text.strip().split('\n')
-                for line in lines:
-                    line = line.strip()
-                    if line.startswith("Question:"):
-                        question_text = line.replace("Question:", "").strip()
-                    elif line.startswith("Answer:"):
-                        answer = line.replace("Answer:", "").strip()
-
-                # Strategy 2: Pipe-separated format
-                if not question_text or not answer:
-                    for line in lines:
-                        if '|' in line:
-                            parts = line.split('|')
-                            if len(parts) >= 2:
-                                q_part = parts[0].strip()
-                                a_part = parts[1].strip()
-
-                                # Extract question
-                                if 'Question:' in q_part or not question_text:
-                                    question_text = q_part.replace('Question:', '').strip()
-
-                                # Extract answer
-                                if 'Answer:' in a_part or not answer:
-                                    answer = a_part.replace('Answer:', '').strip()
-
-                # Strategy 3: First line as question, second as answer (last resort)
-                if not question_text or not answer:
-                    if len(lines) >= 2:
-                        question_text = lines[0].strip()
-                        answer = lines[1].strip()
+                # Parse the response text using the helper function
+                question_text, answer = _parse_ai_trivia_response(response_text)
 
                 # Clean up
                 if question_text and answer:

@@ -1,7 +1,7 @@
 import asyncio
 import os
 import sys
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 from bot.config import GEMINI_MODEL_CASCADE
 from bot.handlers import ai_handler

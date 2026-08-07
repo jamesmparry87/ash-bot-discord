@@ -1,26 +1,10 @@
 import asyncio
-import json
-import uuid
-from datetime import datetime, time, timedelta
-from typing import TYPE_CHECKING, Any, Dict, Optional, cast
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import discord
-from discord.ext import tasks
 
-from ..config import (
-    CHIT_CHAT_CHANNEL_ID,
-    GAME_RECOMMENDATION_CHANNEL_ID,
-    GUILD_ID,
-    JAM_USER_ID,
-    JONESY_USER_ID,
-    MEMBERS_CHANNEL_ID,
-    POPS_ARCADE_USER_ID,
-)
 from ..database import get_database
-from ..handlers.ai_handler import call_ai_with_rate_limiting, filter_ai_response
-from ..handlers.trivia.generator import generate_ai_trivia_question, generate_trivia_batch
-from ..persona.sarcasm import apply_pops_arcade_sarcasm
 from .utils import _should_run_automated_tasks, get_bot_instance
 
 _startup_validation_lock = False
@@ -81,7 +65,7 @@ async def pre_trivia_approval():
                         user = await get_bot_instance().fetch_user(JAM_USER_ID)
                         if user:
                             await user.send(
-                                f"🚨 **URGENT: Emergency Trivia Question Generated**\n\n"
+                                "🚨 **URGENT: Emergency Trivia Question Generated**\n\n"
                                 f"No questions were available for today's Trivia Tuesday pre-approval.\n"
                                 f"An emergency question has been generated and sent for your immediate approval.\n\n"
                                 f"**Trivia starts in 1 hour at 11:00 AM UK time.**\n\n"
@@ -438,6 +422,60 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
         traceback.print_exc()
 
 
+async def _restore_pending_questions(db) -> list:
+    """Helper method to restore orphaned questions"""
+    pending_questions = []
+    try:
+        if hasattr(db, 'get_pending_approval_questions'):
+            pending_questions = db.get_pending_approval_questions()  # type: ignore
+            pending_count = len(pending_questions) if pending_questions else 0
+
+            if pending_count > 0:
+                print(f"🔄 STARTUP TRIVIA VALIDATION: Found {pending_count} orphaned questions awaiting approval from previous session")
+                try:
+                    from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
+                    restored_count = 0
+                    for pending_q in pending_questions:
+                        queue_position = add_to_approval_queue(
+                            item_type='trivia_question',
+                            data=pending_q,
+                            priority=8,
+                            source='startup_restoration'
+                        )
+                        print(f"♻️ RESTORED: Question #{pending_q.get('id')} added to approval queue at position {queue_position}")
+                        restored_count += 1
+
+                    if restored_count > 0:
+                        print(f"🔄 STARTUP TRIVIA VALIDATION: Triggering approval queue for {restored_count} restored questions")
+                        await process_next_approval()
+                        try:
+                            if get_bot_instance():
+                                from ..config import JAM_USER_ID
+                                user = await get_bot_instance().fetch_user(JAM_USER_ID)
+                                if user:
+                                    await user.send(
+                                        f"♻️ **Pending Questions Restored**\n\n"
+                                        f"Bot restart detected. **{restored_count}** questions that were awaiting your approval "
+                                        f"have been restored to the approval queue.\n\n"
+                                        f"These questions were generated previously but not yet reviewed. "
+                                        f"You'll receive them one at a time for approval.\n\n"
+                                        f"*No new API calls were needed - these questions were preserved in the database.*"
+                                    )
+                                    print("✅ STARTUP TRIVIA VALIDATION: Restoration notification sent to JAM")
+                        except Exception as notify_error:
+                            print(f"⚠️ STARTUP TRIVIA VALIDATION: Failed to send restoration notification: {notify_error}")
+                except Exception as restore_error:
+                    print(f"❌ STARTUP TRIVIA VALIDATION: Failed to restore pending questions to queue: {restore_error}")
+            else:
+                print("✅ STARTUP TRIVIA VALIDATION: No orphaned pending questions to restore")
+        else:
+            print("ℹ️ STARTUP TRIVIA VALIDATION: get_pending_approval_questions method not available")
+    except Exception as pending_error:
+        print(f"⚠️ STARTUP TRIVIA VALIDATION: Error checking for pending questions: {pending_error}")
+    
+    return pending_questions
+
+
 async def validate_startup_trivia_questions():
     """Check that there are at least 5 active questions available on startup with non-blocking execution"""
     global _startup_validation_lock, _startup_validation_completed
@@ -474,67 +512,7 @@ async def validate_startup_trivia_questions():
         print("✅ STARTUP TRIVIA VALIDATION: Database methods verified")
 
         # ✅ NEW: Check for pending approval questions FIRST (restore orphaned questions)
-        pending_questions = []
-        try:
-            if hasattr(db, 'get_pending_approval_questions'):
-                pending_questions = db.get_pending_approval_questions()  # type: ignore
-                pending_count = len(pending_questions) if pending_questions else 0
-
-                if pending_count > 0:
-                    print(
-                        f"🔄 STARTUP TRIVIA VALIDATION: Found {pending_count} orphaned questions awaiting approval from previous session")
-
-                    # Restore these questions to the approval queue
-                    try:
-                        from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
-
-                        restored_count = 0
-                        for pending_q in pending_questions:
-                            # Add to queue with high priority (they were already generated)
-                            queue_position = add_to_approval_queue(
-                                item_type='trivia_question',
-                                data=pending_q,
-                                priority=8,  # Higher priority than new generations
-                                source='startup_restoration'
-                            )
-                            print(
-                                f"♻️ RESTORED: Question #{pending_q.get('id')} added to approval queue at position {queue_position}")
-                            restored_count += 1
-
-                        # Trigger queue processing to send first question to JAM
-                        if restored_count > 0:
-                            print(
-                                f"🔄 STARTUP TRIVIA VALIDATION: Triggering approval queue for {restored_count} restored questions")
-                            await process_next_approval()
-
-                            # Notify JAM about restoration
-                            try:
-                                if get_bot_instance():
-                                    from ..config import JAM_USER_ID
-                                    user = await get_bot_instance().fetch_user(JAM_USER_ID)
-                                    if user:
-                                        await user.send(
-                                            f"♻️ **Pending Questions Restored**\n\n"
-                                            f"Bot restart detected. **{restored_count}** questions that were awaiting your approval "
-                                            f"have been restored to the approval queue.\n\n"
-                                            f"These questions were generated previously but not yet reviewed. "
-                                            f"You'll receive them one at a time for approval.\n\n"
-                                            f"*No new API calls were needed - these questions were preserved in the database.*"
-                                        )
-                                        print("✅ STARTUP TRIVIA VALIDATION: Restoration notification sent to JAM")
-                            except Exception as notify_error:
-                                print(
-                                    f"⚠️ STARTUP TRIVIA VALIDATION: Failed to send restoration notification: {notify_error}")
-
-                    except Exception as restore_error:
-                        print(
-                            f"❌ STARTUP TRIVIA VALIDATION: Failed to restore pending questions to queue: {restore_error}")
-                else:
-                    print("✅ STARTUP TRIVIA VALIDATION: No orphaned pending questions to restore")
-            else:
-                print("ℹ️ STARTUP TRIVIA VALIDATION: get_pending_approval_questions method not available")
-        except Exception as pending_error:
-            print(f"⚠️ STARTUP TRIVIA VALIDATION: Error checking for pending questions: {pending_error}")
+        pending_questions = await _restore_pending_questions(db)
 
         # Check for available questions with retry logic (quick check only)
         available_questions = None
@@ -555,7 +533,7 @@ async def validate_startup_trivia_questions():
         if available_questions and available_count > 0:
             for i, q in enumerate(available_questions[:3]):  # Show first 3 for confirmation
                 question_preview = q.get('question_text', q.get('question', 'Unknown'))[:50]
-                print(f"   📋 Available Question {i+1}: {question_preview}...")
+                print(f"   📋 Available Question {i + 1}: {question_preview}...")
 
         # If we have at least 5 questions (available + pending), we're good
         if total_count >= 5:
@@ -585,6 +563,83 @@ async def validate_startup_trivia_questions():
         print("🔓 STARTUP TRIVIA VALIDATION: Lock released, validation marked as completed")
 
 
+def _process_generated_question(question_data, db, index, generated_question_texts, used_template_ids) -> tuple[bool, bool]:
+    """Helper method to process, validate and queue a generated question.
+    Returns (success, is_duplicate).
+    """
+    required_fields = ['question_text', 'question_type', 'correct_answer']
+    if not all(field in question_data for field in required_fields):
+        missing_fields = [f for f in required_fields if f not in question_data]
+        print(f"⚠️ BACKGROUND GENERATION: Generated question {index + 1} missing fields: {missing_fields}")
+        return False, False
+        
+    question_text = question_data.get('question_text', 'Unknown')
+
+    # Check for duplicates before adding to queue
+    if db:
+        try:
+            duplicate_check = db.check_question_duplicate(question_text, similarity_threshold=0.85)
+            if duplicate_check:
+                similarity = duplicate_check['similarity_score']
+                duplicate_id = duplicate_check['duplicate_id']
+                print(
+                    f"⚠️ BACKGROUND GENERATION: Question {index + 1} is duplicate ({similarity * 100:.0f}% match to Q#{duplicate_id}), skipping")
+                return False, True
+        except Exception as dup_error:
+            print(f"⚠️ BACKGROUND GENERATION: Duplicate check failed: {dup_error}")
+
+    print(f"✅ BACKGROUND GENERATION: Generated question {index + 1}: {question_text[:50]}...")
+
+    # ✅ FIX #3: Add to recently-generated list for next iteration
+    generated_question_texts.append(question_text)
+
+    # ✅ FIX #4: Track template ID if this was a template-generated question
+    if question_data.get('generation_method') == 'template':
+        template_id = question_text[:20]  # Same ID format as in ai_handler
+        used_template_ids.append(template_id)
+        print(f"📝 BACKGROUND GENERATION: Tracked template ID for avoidance: {template_id}")
+
+    # ✅ NEW: Persist question to database IMMEDIATELY with pending_approval status
+    # This ensures questions survive bot restarts
+    question_id = None
+    if db:
+        try:
+            question_id = db.add_trivia_question(
+                question_text=question_data['question_text'],
+                question_type=question_data['question_type'],
+                correct_answer=question_data.get('correct_answer'),
+                multiple_choice_options=question_data.get('multiple_choice_options'),
+                is_dynamic=question_data.get('is_dynamic', False),
+                dynamic_query_type=question_data.get('dynamic_query_type'),
+                submitted_by_user_id=None,  # AI-generated
+                category=question_data.get('category'),
+                difficulty_level=question_data.get('difficulty_level', 2),
+                status='pending_approval'  # ✅ KEY: Pending status allows recovery on restart
+            )
+
+            if question_id:
+                print(f"💾 BACKGROUND GENERATION: Question persisted to DB as ID #{question_id} (status: pending_approval)")
+                # Add question_id to the data for the approval queue
+                question_data['id'] = question_id
+            else:
+                print("⚠️ BACKGROUND GENERATION: Failed to persist question to database")
+                return False, False
+        except Exception as db_persist_error:
+            print(f"❌ BACKGROUND GENERATION: Database persist error: {db_persist_error}")
+            return False, False
+
+    # ✅ FIX #2: Add to approval queue instead of manual sequential logic
+    from ..handlers.conversation_handler import add_to_approval_queue
+    queue_position = add_to_approval_queue(
+        item_type='trivia_question',
+        data=question_data,
+        priority=5,  # Normal priority for startup questions
+        source=f'startup_generation_{index + 1}'
+    )
+
+    print(f"📋 BACKGROUND GENERATION: Question {index + 1} (ID #{question_id}) added to approval queue at position {queue_position}")
+    return True, False
+
 async def _background_question_generation(current_question_count: int):
     """Background task for generating trivia questions using the approval queue system"""
     try:
@@ -595,7 +650,7 @@ async def _background_question_generation(current_question_count: int):
         # Check if AI handler is available
         try:
             from ..config import JAM_USER_ID
-            from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
+            from ..handlers.conversation_handler import process_next_approval
             from ..handlers.trivia.generator import generate_ai_trivia_question
             print("✅ BACKGROUND GENERATION: AI handler and conversation handler loaded")
         except ImportError as import_error:
@@ -644,10 +699,10 @@ async def _background_question_generation(current_question_count: int):
                 break
 
             try:
-                print(f"🔄 BACKGROUND GENERATION: Generating question {i+1}/{questions_needed}")
+                print(f"🔄 BACKGROUND GENERATION: Generating question {i + 1}/{questions_needed}")
 
                 # ✅ FIX #1: Use unique context for each generation to avoid cache hits
-                unique_context = f"startup_validation_{i+1}"
+                unique_context = f"startup_validation_{i + 1}"
 
                 # ✅ FIX #2: Pass recently generated questions AND templates to avoid repetition
                 print("🔄 BACKGROUND GENERATION: Using unified Trivia Director")
@@ -660,89 +715,28 @@ async def _background_question_generation(current_question_count: int):
                 if question_data and isinstance(question_data, dict):
                     # ✅ SUCCESS: Reset consecutive failure counter
                     consecutive_failures = 0
-                    # Validate the generated question
-                    required_fields = ['question_text', 'question_type', 'correct_answer']
-                    if all(field in question_data for field in required_fields):
-                        question_text = question_data.get('question_text', 'Unknown')
-
-                        # Check for duplicates before adding to queue
-                        if db:
-                            try:
-                                duplicate_check = db.check_question_duplicate(question_text, similarity_threshold=0.85)
-                                if duplicate_check:
-                                    similarity = duplicate_check['similarity_score']
-                                    duplicate_id = duplicate_check['duplicate_id']
-                                    print(
-                                        f"⚠️ BACKGROUND GENERATION: Question {i+1} is duplicate ({similarity*100:.0f}% match to Q#{duplicate_id}), skipping")
-                                    duplicate_count += 1
-                                    continue
-                            except Exception as dup_error:
-                                print(f"⚠️ BACKGROUND GENERATION: Duplicate check failed: {dup_error}")
-
-                        print(f"✅ BACKGROUND GENERATION: Generated question {i+1}: {question_text[:50]}...")
-
-                        # ✅ FIX #3: Add to recently-generated list for next iteration
-                        generated_question_texts.append(question_text)
-
-                        # ✅ FIX #4: Track template ID if this was a template-generated question
-                        if question_data.get('generation_method') == 'template':
-                            template_id = question_text[:20]  # Same ID format as in ai_handler
-                            used_template_ids.append(template_id)
-                            print(f"📝 BACKGROUND GENERATION: Tracked template ID for avoidance: {template_id}")
-
-                        # ✅ NEW: Persist question to database IMMEDIATELY with pending_approval status
-                        # This ensures questions survive bot restarts
-                        question_id = None
-                        if db:
-                            try:
-                                question_id = db.add_trivia_question(
-                                    question_text=question_data['question_text'],
-                                    question_type=question_data['question_type'],
-                                    correct_answer=question_data.get('correct_answer'),
-                                    multiple_choice_options=question_data.get('multiple_choice_options'),
-                                    is_dynamic=question_data.get('is_dynamic', False),
-                                    dynamic_query_type=question_data.get('dynamic_query_type'),
-                                    submitted_by_user_id=None,  # AI-generated
-                                    category=question_data.get('category'),
-                                    difficulty_level=question_data.get('difficulty_level', 2),
-                                    status='pending_approval'  # ✅ KEY: Pending status allows recovery on restart
-                                )
-
-                                if question_id:
-                                    print(
-                                        f"💾 BACKGROUND GENERATION: Question persisted to DB as ID #{question_id} (status: pending_approval)")
-                                    # Add question_id to the data for the approval queue
-                                    question_data['id'] = question_id
-                                else:
-                                    print(f"⚠️ BACKGROUND GENERATION: Failed to persist question to database")
-                                    failed_generations += 1
-                                    continue
-                            except Exception as db_persist_error:
-                                print(f"❌ BACKGROUND GENERATION: Database persist error: {db_persist_error}")
-                                failed_generations += 1
-                                continue
-
-                        # ✅ FIX #2: Add to approval queue instead of manual sequential logic
-                        queue_position = add_to_approval_queue(
-                            item_type='trivia_question',
-                            data=question_data,
-                            priority=5,  # Normal priority for startup questions
-                            source=f'startup_generation_{i+1}'
-                        )
-
-                        print(
-                            f"📋 BACKGROUND GENERATION: Question {i+1} (ID #{question_id}) added to approval queue at position {queue_position}")
+                    
+                    success, is_duplicate = _process_generated_question(
+                        question_data, 
+                        db, 
+                        i, 
+                        generated_question_texts, 
+                        used_template_ids
+                    )
+                    
+                    if success:
                         successful_generations += 1
                     else:
-                        missing_fields = [f for f in required_fields if f not in question_data]
-                        print(f"⚠️ BACKGROUND GENERATION: Generated question {i+1} missing fields: {missing_fields}")
                         failed_generations += 1
+                        if is_duplicate:
+                            duplicate_count += 1
                 else:
-                    print(f"⚠️ BACKGROUND GENERATION: Failed to generate valid question {i+1}")
+                    print(f"⚠️ BACKGROUND GENERATION: Failed to generate valid question {i + 1}")
                     failed_generations += 1
+                    consecutive_failures += 1
 
             except Exception as generation_error:
-                print(f"❌ BACKGROUND GENERATION: Error generating question {i+1}: {generation_error}")
+                print(f"❌ BACKGROUND GENERATION: Error generating question {i + 1}: {generation_error}")
                 failed_generations += 1
 
             # Delay between generations to respect Gemini free tier rate limit (5 RPM).
@@ -755,9 +749,9 @@ async def _background_question_generation(current_question_count: int):
 
         # ✅ FIX #2: Trigger the approval queue processor to start sending questions
         if successful_generations > 0:
-            print(f"🔄 BACKGROUND GENERATION: Triggering approval queue processor...")
+            print("🔄 BACKGROUND GENERATION: Triggering approval queue processor...")
             await process_next_approval()
-            print(f"✅ BACKGROUND GENERATION: Approval queue processor started - JAM will receive questions sequentially")
+            print("✅ BACKGROUND GENERATION: Approval queue processor started - JAM will receive questions sequentially")
 
             # Send summary notification to JAM
             try:
