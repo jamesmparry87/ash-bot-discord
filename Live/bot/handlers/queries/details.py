@@ -245,7 +245,7 @@ async def handle_game_details_query(
     # Check if database is available
     if db is None:
         await message.reply("Database analysis systems offline. Game detail queries unavailable.")
-        return True True
+        return True
 
     game_name = match.group(1).strip()
     game_name_lower = game_name.lower()

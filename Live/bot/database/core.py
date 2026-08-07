@@ -887,6 +887,10 @@ class DatabaseManager:
         """Delegate to trivia module - get available trivia questions"""
         return self.trivia.get_available_trivia_questions()
 
+    def get_pending_approval_questions(self):
+        """Delegate to trivia module - get pending approval trivia questions"""
+        return self.trivia.get_pending_approval_questions()
+
     def calculate_dynamic_answer(self, query_type, parameter=None):
         """Delegate to trivia module - calculate dynamic answer"""
         return self.trivia.calculate_dynamic_answer(query_type, parameter)
