@@ -332,8 +332,7 @@ async def trivia_tuesday():
 
                 # Select first available (highest priority - matches manual !starttrivia logic)
                 question_data = available_questions[0]
-                print(
-                    f"✅ TRIVIA AUTO-START: Auto-selected question #{question_data['id']} from available pool ({len(available_questions)} questions available)")
+                print(f"✅ TRIVIA AUTO-START: Auto-selected question #{question_data['id']} from available pool ({len(available_questions)} questions available)")
 
                 # NOTIFY JAM ABOUT FALLBACK
                 try:
@@ -342,17 +341,13 @@ async def trivia_tuesday():
                         user = await bot.fetch_user(JAM_USER_ID)
                         if user:
                             await user.send(
-                                f"⚠️ **Trivia Tuesday Auto-Fallback Triggered**
-
-"
-                                f"No pre-approved question was found for today's Trivia Tuesday.
-"
-                                f"The system has automatically selected and posted question #{question_data['id']} from the available pool.
-"
+                                f"⚠️ **Trivia Tuesday Auto-Fallback Triggered**\n\n"
+                                f"No pre-approved question was found for today's Trivia Tuesday.\n"
+                                f"The system has automatically selected and posted question #{question_data['id']} from the available pool.\n"
                                 f"Pool size remaining: {len(available_questions) - 1}"
                             )
                 except Exception as notify_err:
-                    print(f"⚠️ Failed to send fallback notification: {notify_err}")} questions available)")
+                    print(f"⚠️ Failed to send fallback notification: {notify_err}")
 
             except Exception as pool_error:
                 error_msg = f"Error querying available questions pool: {pool_error}"
