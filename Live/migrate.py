@@ -1,5 +1,6 @@
-from bot.database.core import DatabaseManager
 import sys
+
+from bot.database.core import DatabaseManager
 
 sys.path.append('.')
 
