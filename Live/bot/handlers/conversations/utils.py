@@ -337,3 +337,73 @@ async def _regenerate_weekly_announcement_content(analysis_cache: dict, day: str
 
     # Placeholder for Friday's regeneration logic
     return None
+
+async def amend_weekly_content_with_ai(original_content: str, amendment_instruction: str, day: str):
+    """Uses AI to amend weekly announcement content based on user instructions."""
+    from bot.handlers.ai_handler import apply_ash_persona_to_ai_prompt, call_ai_with_rate_limiting, filter_ai_response, ai_enabled
+    from bot.config import JAM_USER_ID
+    if not ai_enabled:
+        return None
+
+    # Create a prompt that asks AI to modify the content according to the instruction
+    amendment_prompt = f"""
+    You have generated the following {day.title()} announcement content:
+    
+    \"{original_content}\"
+    
+    The user has requested the following modification:
+    \"{amendment_instruction}\"
+    
+    Please revise the announcement to incorporate this change. Maintain your analytical Ash persona and the overall structure, but apply the requested modification accurately.
+    
+    IMPORTANT:
+    - Apply the user's instruction precisely
+    - Keep the same general format and tone
+    - Maintain all factual information unless the instruction asks you to change it
+    - Do NOT just append the instruction as text - actually modify the content
+    
+    Provide ONLY the revised announcement text, with no additional commentary.
+    """
+    
+    prompt = apply_ash_persona_to_ai_prompt(amendment_prompt, "announcement_amendment")
+    response_text, status_message = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+
+    if response_text:
+        return filter_ai_response(response_text)
+    return None
+
+async def post_announcement(data: dict, user_id: int) -> bool:
+    """Post announcement to the target channel"""
+    import discord
+    from bot.config import MOD_ALERT_CHANNEL_ID, ANNOUNCEMENTS_CHANNEL_ID
+    from bot.handlers.conversations.core import _get_bot_instance
+    try:
+        target_channel = data.get('target_channel', 'mod')
+        formatted_content = data.get('formatted_content', '')
+
+        # Get the target channel
+        if target_channel == 'mod':
+            channel_id = MOD_ALERT_CHANNEL_ID
+        else:
+            channel_id = ANNOUNCEMENTS_CHANNEL_ID
+
+        bot = _get_bot_instance()
+
+        if bot is None:
+            print(f"? Could not find bot instance for announcement posting")
+            return False
+
+        channel = bot.get_channel(channel_id)
+
+        if not isinstance(channel, discord.TextChannel):
+            print(f"Could not access channel {channel_id}")
+            return False
+
+        # Post the announcement
+        await channel.send(formatted_content)
+        print(f"Posted announcement to {channel.name} by user {user_id}")
+        return True
+
+    except Exception as e:
+        print(f"Error posting announcement: {e}")
+        return False
