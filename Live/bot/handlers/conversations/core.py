@@ -40,3 +40,10 @@ def _get_bot_instance():
 
 
 sync_approval_conversations = {}
+
+
+announcement_conversations = {}
+game_review_conversations = {}
+mod_trivia_conversations = {}
+weekly_announcement_approvals = {}
+jam_approval_queue = []
