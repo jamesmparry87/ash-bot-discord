@@ -340,8 +340,13 @@ async def _regenerate_weekly_announcement_content(analysis_cache: dict, day: str
 
 async def amend_weekly_content_with_ai(original_content: str, amendment_instruction: str, day: str):
     """Uses AI to amend weekly announcement content based on user instructions."""
-    from bot.handlers.ai_handler import apply_ash_persona_to_ai_prompt, call_ai_with_rate_limiting, filter_ai_response, ai_enabled
     from bot.config import JAM_USER_ID
+    from bot.handlers.ai_handler import (
+        ai_enabled,
+        apply_ash_persona_to_ai_prompt,
+        call_ai_with_rate_limiting,
+        filter_ai_response,
+    )
     if not ai_enabled:
         return None
 
@@ -375,7 +380,7 @@ async def amend_weekly_content_with_ai(original_content: str, amendment_instruct
 async def post_announcement(data: dict, user_id: int) -> bool:
     """Post announcement to the target channel"""
     import discord
-    from bot.config import MOD_ALERT_CHANNEL_ID, ANNOUNCEMENTS_CHANNEL_ID
+    from bot.config import ANNOUNCEMENTS_CHANNEL_ID, MOD_ALERT_CHANNEL_ID
     from bot.handlers.conversations.core import _get_bot_instance
     try:
         target_channel = data.get('target_channel', 'mod')
