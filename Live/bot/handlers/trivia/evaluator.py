@@ -466,9 +466,10 @@ def update_question_history(question_data: Dict[str, Any], category: str):
         print(f"⏰ Category '{category}' on cooldown for 30 minutes due to recent usage")
 
 
-import re
 import difflib
+import re
 from typing import Tuple
+
 
 def normalize_trivia_answer(answer_text: str) -> str:
         """Enhanced normalization for trivia answers with fuzzy matching support"""

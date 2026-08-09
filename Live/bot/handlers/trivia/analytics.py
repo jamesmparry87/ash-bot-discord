@@ -1,7 +1,8 @@
+import json
 import re
 from collections import Counter
-import json
 from datetime import datetime
+
 
 def calculate_dynamic_answer(db, dynamic_query_type: str, parameter: Optional[str] = None) -> Optional[str]:
         """
