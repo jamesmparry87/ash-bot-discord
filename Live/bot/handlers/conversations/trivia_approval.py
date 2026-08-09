@@ -1,17 +1,11 @@
-from .core import weekly_announcement_approvals, game_review_conversations, sync_approval_conversations
-from .utils import send_conversation_expired_message
-
-from .core import _get_bot_instance, db, jam_approval_conversations, jam_approval_queue, mod_trivia_conversations, announcement_conversations
-from .utils import check_escape_command, check_conversation_health, track_conversation_step, increment_invalid_input_count, reset_invalid_input_count, validate_numbered_input, create_invalid_input_message, extract_expected_options_from_prompt, _infer_dynamic_query_type
-
 import asyncio
 import re
 import traceback
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 from zoneinfo import ZoneInfo
+
 import discord
-from discord.ext import commands
 from bot.config import (
     ANNOUNCEMENTS_CHANNEL_ID,
     JAM_USER_ID,
@@ -20,8 +14,34 @@ from bot.config import (
     YOUTUBE_UPLOADS_CHANNEL_ID,
 )
 from bot.database import get_database
-from bot.utils.permissions import get_user_communication_tier, user_is_mod_by_id
 from bot.handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+from bot.utils.permissions import get_user_communication_tier, user_is_mod_by_id
+from discord.ext import commands
+
+from .core import (
+    _get_bot_instance,
+    announcement_conversations,
+    db,
+    game_review_conversations,
+    jam_approval_conversations,
+    jam_approval_queue,
+    mod_trivia_conversations,
+    sync_approval_conversations,
+    weekly_announcement_approvals,
+)
+from .utils import (
+    _infer_dynamic_query_type,
+    check_conversation_health,
+    check_escape_command,
+    create_invalid_input_message,
+    extract_expected_options_from_prompt,
+    increment_invalid_input_count,
+    reset_invalid_input_count,
+    send_conversation_expired_message,
+    track_conversation_step,
+    validate_numbered_input,
+)
+
 
 def add_to_approval_queue(item_type: str, data: Dict[str, Any], priority: int = 0, source: str = 'unknown') -> int:
     """

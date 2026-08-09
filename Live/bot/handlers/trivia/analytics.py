@@ -1,9 +1,9 @@
 
-from datetime import datetime
-from collections import Counter
-import re
 import json
 import logging
+import re
+from collections import Counter
+from datetime import datetime
 from typing import List, Optional, cast
 
 from psycopg2.extras import RealDictRow

@@ -4,8 +4,8 @@ import traceback
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 from zoneinfo import ZoneInfo
+
 import discord
-from discord.ext import commands
 from bot.config import (
     ANNOUNCEMENTS_CHANNEL_ID,
     JAM_USER_ID,
@@ -14,8 +14,9 @@ from bot.config import (
     YOUTUBE_UPLOADS_CHANNEL_ID,
 )
 from bot.database import get_database
-from bot.utils.permissions import get_user_communication_tier, user_is_mod_by_id
 from bot.handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+from bot.utils.permissions import get_user_communication_tier, user_is_mod_by_id
+from discord.ext import commands
 
 db = get_database()
 
