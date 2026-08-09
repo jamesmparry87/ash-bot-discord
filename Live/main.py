@@ -439,7 +439,8 @@ async def initialize_modular_components():
 
     # 5. Start Scheduled Tasks
     try:
-        from bot.tasks.scheduled import schedule_delayed_trivia_validation, start_all_scheduled_tasks
+        from bot.tasks.scheduled import start_all_scheduled_tasks
+        from bot.tasks.trivia_preflight import schedule_delayed_trivia_validation
         start_all_scheduled_tasks(bot)
         print("✅ Scheduled tasks started successfully")
 
