@@ -288,8 +288,13 @@ async def format_announcement_content(
     return formatted
 
 async def _regenerate_weekly_announcement_content(analysis_cache: dict, day: str, original_content: str):
-    from bot.handlers.ai_handler import apply_ash_persona_to_ai_prompt, call_ai_with_rate_limiting, filter_ai_response, ai_enabled
     from bot.config import JAM_USER_ID
+    from bot.handlers.ai_handler import (
+        ai_enabled,
+        apply_ash_persona_to_ai_prompt,
+        call_ai_with_rate_limiting,
+        filter_ai_response,
+    )
     """Uses AI to generate a new version of a weekly announcement from cached data."""
     if not ai_enabled:
         return None
