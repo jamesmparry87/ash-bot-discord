@@ -286,3 +286,48 @@ async def format_announcement_content(
                       f"*Hope you enjoy the new functionality! - The Management* 🚀")
 
     return formatted
+
+async def _regenerate_weekly_announcement_content(analysis_cache: dict, day: str, original_content: str):
+    from bot.handlers.ai_handler import apply_ash_persona_to_ai_prompt, call_ai_with_rate_limiting, filter_ai_response, ai_enabled
+    from bot.config import JAM_USER_ID
+    """Uses AI to generate a new version of a weekly announcement from cached data."""
+    if not ai_enabled:
+        return None
+
+    if day == 'monday':
+        # Extract stats from the cache to build the prompt
+        total_videos = analysis_cache.get("total_videos", 0)
+        total_hours = analysis_cache.get("total_hours", 0)
+        total_views = analysis_cache.get("total_views", 0)
+        top_video_title = (analysis_cache.get("top_video") or {}).get('title', 'an unspecified transmission')
+
+        # Create a prompt that specifically asks for a different version
+        content_prompt = f"""
+        Given the following weekly YouTube and Twitch content analysis:
+        - Total New Content: {total_videos} transmissions
+        - Total New Hours: {total_hours}
+        - Total New Views: {total_views}
+        - Most Engaging Video: '{top_video_title}'
+
+        You previously generated this message:
+        "{original_content}"
+
+        Now, generate a DIFFERENT and distinct version of the Monday mission debrief. Maintain your analytical persona as Ash, but alter the focus or tone.
+
+        SUGGESTIONS FOR VARIATION:
+        - Focus more on the 'viewer engagement' metric instead of just content count.
+        - Adopt a more clinical, data-heavy tone.
+        - Frame it as a performance review of the content cycle.
+        - Be even more concise.
+
+        CRITICAL: The new version must be substantially different from the original.
+        """
+        prompt = apply_ash_persona_to_ai_prompt(content_prompt, "announcement_regeneration")
+        response_text, status_message = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+
+        if response_text:
+            return filter_ai_response(response_text)
+        return None
+    
+    # Placeholder for Friday's regeneration logic
+    return None
