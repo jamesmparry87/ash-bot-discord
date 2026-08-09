@@ -1,12 +1,15 @@
 
-from typing import Optional, List, cast
-from psycopg2.extras import RealDictRow
 import logging
+from typing import List, Optional, cast
+
+from psycopg2.extras import RealDictRow
+
 logger = logging.getLogger(__name__)
+import json
 import re
 from collections import Counter
-import json
 from datetime import datetime
+
 
 def calculate_dynamic_answer(db, dynamic_query_type: str, parameter: Optional[str] = None) -> Optional[str]:
         """

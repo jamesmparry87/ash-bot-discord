@@ -1,16 +1,13 @@
-from .utils import send_conversation_expired_message, _infer_dynamic_query_type
-
-from .core import _get_bot_instance, db, mod_trivia_conversations
-from .utils import check_escape_command, check_conversation_health, track_conversation_step, increment_invalid_input_count, reset_invalid_input_count, validate_numbered_input, create_invalid_input_message
-
 import asyncio
 import re
 import traceback
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 from zoneinfo import ZoneInfo
+
 import discord
 from discord.ext import commands
+
 from ..config import (
     ANNOUNCEMENTS_CHANNEL_ID,
     JAM_USER_ID,
@@ -21,6 +18,19 @@ from ..config import (
 from ..database import get_database
 from ..utils.permissions import get_user_communication_tier, user_is_mod_by_id
 from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+from .core import _get_bot_instance, db, mod_trivia_conversations
+from .utils import (
+    _infer_dynamic_query_type,
+    check_conversation_health,
+    check_escape_command,
+    create_invalid_input_message,
+    increment_invalid_input_count,
+    reset_invalid_input_count,
+    send_conversation_expired_message,
+    track_conversation_step,
+    validate_numbered_input,
+)
+
 
 def cleanup_mod_trivia_conversations():
     """Remove mod trivia conversations inactive for more than 1 hour"""
