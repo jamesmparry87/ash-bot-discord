@@ -14,7 +14,7 @@ from bot.config import (
     YOUTUBE_UPLOADS_CHANNEL_ID,
 )
 from bot.database import get_database
-from bot.handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+from bot.handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response, create_ai_announcement_content
 from bot.utils.permissions import get_user_communication_tier, user_is_mod_by_id
 from discord.ext import commands
 
@@ -32,7 +32,6 @@ from .utils import (
     amend_weekly_content_with_ai,
     check_conversation_health,
     check_escape_command,
-    create_ai_announcement_content,
     create_invalid_input_message,
     format_announcement_content,
     increment_invalid_input_count,
