@@ -338,6 +338,7 @@ async def _regenerate_weekly_announcement_content(analysis_cache: dict, day: str
     # Placeholder for Friday's regeneration logic
     return None
 
+
 async def amend_weekly_content_with_ai(original_content: str, amendment_instruction: str, day: str):
     """Uses AI to amend weekly announcement content based on user instructions."""
     from bot.config import JAM_USER_ID
@@ -353,29 +354,30 @@ async def amend_weekly_content_with_ai(original_content: str, amendment_instruct
     # Create a prompt that asks AI to modify the content according to the instruction
     amendment_prompt = f"""
     You have generated the following {day.title()} announcement content:
-    
+
     \"{original_content}\"
-    
+
     The user has requested the following modification:
     \"{amendment_instruction}\"
-    
+
     Please revise the announcement to incorporate this change. Maintain your analytical Ash persona and the overall structure, but apply the requested modification accurately.
-    
+
     IMPORTANT:
     - Apply the user's instruction precisely
     - Keep the same general format and tone
     - Maintain all factual information unless the instruction asks you to change it
     - Do NOT just append the instruction as text - actually modify the content
-    
+
     Provide ONLY the revised announcement text, with no additional commentary.
     """
-    
+
     prompt = apply_ash_persona_to_ai_prompt(amendment_prompt, "announcement_amendment")
     response_text, status_message = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
 
     if response_text:
         return filter_ai_response(response_text)
     return None
+
 
 async def post_announcement(data: dict, user_id: int) -> bool:
     """Post announcement to the target channel"""
