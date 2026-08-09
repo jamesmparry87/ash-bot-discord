@@ -112,7 +112,8 @@ async def handle_statistical_query(
                 re.search(r"which\s+([a-zA-Z0-9\s:]+)\s+game", lower_content)
             parameter = filter_match.group(1).strip() if filter_match else None
 
-            answer = db.calculate_dynamic_answer("most_episodes", parameter)
+            from bot.handlers.trivia.analytics import calculate_dynamic_answer
+            answer = calculate_dynamic_answer(db, ("most_episodes", parameter)
 
             if answer:
                 # We need to fetch the full game data to get the episode count for the response

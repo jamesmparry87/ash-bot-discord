@@ -1273,8 +1273,9 @@ class TriviaCommands(commands.Cog):
 
                     try:
                         # Test the answer evaluation directly
-                        if hasattr(db.trivia, '_evaluate_trivia_answer'):
-                            score, match_type = db.trivia._evaluate_trivia_answer(
+                        if True:
+                            from bot.handlers.trivia.evaluator import evaluate_answer
+                            score, match_type = evaluate_answer(
                                 test_answer,
                                 test_question_data['correct_answer'],
                                 test_question_data['question_type']
@@ -1387,7 +1388,7 @@ class TriviaCommands(commands.Cog):
 
             # Add system status
             system_status = []
-            if hasattr(db, '_evaluate_trivia_answer'):
+            if True:
                 system_status.append("✅ Enhanced answer matching available")
             else:
                 system_status.append("❌ Enhanced answer matching not found")

@@ -356,7 +356,8 @@ async def trivia_tuesday():
         # 2. Handle dynamic questions by calculating the answer now
         calculated_answer = None
         if question_data.get('is_dynamic'):
-            calculated_answer = db.calculate_dynamic_answer(question_data.get('dynamic_query_type', ''))
+            from bot.handlers.trivia.analytics import calculate_dynamic_answer
+            calculated_answer = calculate_dynamic_answer(db, (question_data.get('dynamic_query_type', ''))
             if not calculated_answer:
                 await notify_scheduled_message_error("Trivia Tuesday", f"Failed to calculate dynamic answer for question #{question_id}.", uk_now)
                 return

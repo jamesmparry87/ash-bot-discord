@@ -1850,7 +1850,8 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                 calculated_answer = "Could not be determined. The question may be too ambiguous."
                 if inferred_query_type:
                     if db:
-                        answer = db.calculate_dynamic_answer(inferred_query_type, parameter)
+                        from bot.handlers.trivia.analytics import calculate_dynamic_answer
+                        answer = calculate_dynamic_answer(db, (inferred_query_type, parameter)
                         if answer:
                             calculated_answer = answer
                         else:
@@ -2272,7 +2273,8 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 if next_question:
                     # Calculate dynamic answer if needed
                     if next_question.get('is_dynamic') and next_question.get('dynamic_query_type'):
-                        calculated_answer = db.calculate_dynamic_answer(next_question['dynamic_query_type'])
+                        from bot.handlers.trivia.analytics import calculate_dynamic_answer
+                        calculated_answer = calculate_dynamic_answer(db, (next_question['dynamic_query_type'])
                         next_question['correct_answer'] = calculated_answer
 
                     # Start new approval workflow for replacement question
@@ -2774,10 +2776,10 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
         print("✅ Initialized JAM approval conversation state")
 
         # Create approval message with enhanced formatting
-        question_text = question_data.get('question_text', 'Unknown question')
-        correct_answer = question_data.get('correct_answer', 'Dynamic calculation')
-        question_type = question_data.get('question_type', 'single_answer')
-        category = question_data.get('category', 'ai_generated')
+        question_text = question_data.get('question_text') or 'Unknown question'
+        correct_answer = question_data.get('correct_answer') or 'Dynamic calculation'
+        question_type = question_data.get('question_type') or 'single_answer'
+        category = question_data.get('category') or 'ai_generated'
 
         approval_msg = (
             f"🧠 **TRIVIA QUESTION APPROVAL REQUIRED**\n\n"
