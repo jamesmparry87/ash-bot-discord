@@ -12,16 +12,16 @@ from typing import Any, Dict, Optional, Tuple
 from zoneinfo import ZoneInfo
 import discord
 from discord.ext import commands
-from ..config import (
+from bot.config import (
     ANNOUNCEMENTS_CHANNEL_ID,
     JAM_USER_ID,
     JONESY_USER_ID,
     MOD_ALERT_CHANNEL_ID,
     YOUTUBE_UPLOADS_CHANNEL_ID,
 )
-from ..database import get_database
-from ..utils.permissions import get_user_communication_tier, user_is_mod_by_id
-from .ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
+from bot.database import get_database
+from bot.utils.permissions import get_user_communication_tier, user_is_mod_by_id
+from bot.handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
 
 def cleanup_announcement_conversations():
     """Remove announcement conversations inactive for more than 1 hour"""
@@ -202,7 +202,7 @@ async def handle_weekly_announcement_approval(message: discord.Message):
             if post_immediately:
                 # Post the message immediately
                 bot = _get_bot_instance()
-                from ..config import CHIT_CHAT_CHANNEL_ID
+                from bot.config import CHIT_CHAT_CHANNEL_ID
                 channel = bot.get_channel(CHIT_CHAT_CHANNEL_ID) if bot else None
 
                 if channel and isinstance(channel, discord.TextChannel):
@@ -924,7 +924,7 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
 
             # Re-validate with IGDB using the correct function
             try:
-                from ..integrations.igdb import validate_and_enrich
+                from bot.integrations.igdb import validate_and_enrich
                 igdb_result = await validate_and_enrich(corrected_name)
             except Exception as e:
                 print(f"⚠️ IGDB validation failed: {e}")
@@ -1222,7 +1222,7 @@ async def process_game_review_action(message: discord.Message, conv: Dict[str, A
                     skip_url = vod_urls.split(',')[0].strip()
 
             if skip_url:
-                from ..config import JAM_USER_ID
+                from bot.config import JAM_USER_ID
                 db.games.add_skipped_vod(skip_url, source_platform, canonical_name, JAM_USER_ID)
                 print(f"⏭️ SYNC APPROVAL: Added '{canonical_name}' ({source_platform}) to permanent skip list")
                 platform_label = "playlist" if source_platform == "youtube" else "VOD"
