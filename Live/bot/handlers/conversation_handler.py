@@ -1853,11 +1853,11 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                         from bot.handlers.trivia.analytics import calculate_dynamic_answer
                         answer = calculate_dynamic_answer(db, (inferred_query_type, parameter)
                         if answer:
-                            calculated_answer = answer
+                            calculated_answer=answer
                         else:
-                            calculated_answer = "Could not be determined. No data found for this query."
+                            calculated_answer="Could not be determined. No data found for this query."
 
-                preview_msg = (
+                preview_msg=(
                     f"📋 **Trivia Question Preview**\n\n"
                     f"**Question:** {question_text}\n\n"
                     f"**Current Answer (calculated now):** {calculated_answer}\n"
@@ -1875,7 +1875,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
         elif step == 'choice_a_input':
             # Store choice A and ask for choice B
             data['choices'].append(content.strip())
-            conversation['step'] = 'choice_b_input'
+            conversation['step']='choice_b_input'
             await message.reply(
                 f"✅ **Choice A recorded:** {content}\n\n"
                 f"**What should choice B be?**"
@@ -1884,7 +1884,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
         elif step == 'choice_b_input':
             # Store choice B and ask for choice C
             data['choices'].append(content.strip())
-            conversation['step'] = 'choice_c_input'
+            conversation['step']='choice_c_input'
             await message.reply(
                 f"✅ **Choice B recorded:** {content}\n\n"
                 f"**What should choice C be?**"
@@ -1893,7 +1893,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
         elif step == 'choice_c_input':
             # Store choice C and ask for choice D
             data['choices'].append(content.strip())
-            conversation['step'] = 'choice_d_input'
+            conversation['step']='choice_d_input'
             await message.reply(
                 f"✅ **Choice C recorded:** {content}\n\n"
                 f"**What should choice D be?**"
@@ -1902,10 +1902,10 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
         elif step == 'choice_d_input':
             # Store choice D and move to answer input
             data['choices'].append(content.strip())
-            conversation['step'] = 'answer_input'
+            conversation['step']='answer_input'
 
             # Show all choices for review
-            choices_text = "\n".join([f"**{chr(65+i)}.** {choice}" for i, choice in enumerate(data['choices'])])
+            choices_text="\n".join([f"**{chr(65+i)}.** {choice}" for i, choice in enumerate(data['choices'])])
 
             await message.reply(
                 f"✅ **Choice D recorded:** {content}\n\n"
@@ -1916,29 +1916,29 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
 
         elif step == 'answer_input':
             # Store the answer and move to preview
-            data['correct_answer'] = content
-            conversation['step'] = 'preview'
+            data['correct_answer']=content
+            conversation['step']='preview'
 
-            question_text = data['question_text']
-            is_multiple_choice = data.get('format') == 'multiple_choice'
+            question_text=data['question_text']
+            is_multiple_choice=data.get('format') == 'multiple_choice'
 
             # Validate multiple choice answer
             if is_multiple_choice:
-                answer_upper = content.strip().upper()
+                answer_upper=content.strip().upper()
                 if answer_upper not in ['A', 'B', 'C', 'D']:
                     await message.reply("⚠️ **Invalid answer.** Please provide a single letter: A, B, C, or D.")
                     return
-                data['correct_answer'] = answer_upper
+                data['correct_answer']=answer_upper
 
             # Show preview
-            preview_msg = (
+            preview_msg=(
                 f"📋 **Trivia Question Preview**\n\n"
                 f"**Question:** {question_text}\n"
             )
 
             if is_multiple_choice:
-                choices = data.get('choices', [])
-                choices_text = "\n".join([f"**{chr(65+i)}.** {choice}" for i, choice in enumerate(choices)])
+                choices=data.get('choices', [])
+                choices_text="\n".join([f"**{chr(65+i)}.** {choice}" for i, choice in enumerate(choices)])
                 preview_msg += f"\n**Choices:**\n{choices_text}\n"
 
             preview_msg += (
@@ -1963,14 +1963,14 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                     return
 
                 # Submit the question to database
-                question_text = data['question_text']
-                question_type = (
+                question_text=data['question_text']
+                question_type=(
                     'multiple_choice' if data.get('question_type') == 'manual_answer' and re.search(
                         r'\b[A-D]\)', question_text) else 'single_answer')
 
                 if data.get('question_type') == 'database_calculated':
                     # Database-calculated question
-                    question_id = db.add_trivia_question(  # type: ignore
+                    question_id=db.add_trivia_question(  # type: ignore
                         question_text=question_text,
                         question_type=question_type,
                         correct_answer=None,  # Will be calculated dynamically
@@ -1982,16 +1982,16 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
 
                 else:
                     # Manual question+answer
-                    multiple_choice_options = None
+                    multiple_choice_options=None
                     if question_type == 'multiple_choice':
                         # Extract options from question text
-                        options_match = re.findall(
+                        options_match=re.findall(
                             r'[A-D]\)\s*([^A-D\n]+)', question_text)
                         if options_match:
-                            multiple_choice_options = [
+                            multiple_choice_options=[
                                 opt.strip() for opt in options_match]
 
-                    question_id = db.add_trivia_question(  # type: ignore
+                    question_id=db.add_trivia_question(  # type: ignore
                         question_text=question_text,
                         question_type=question_type,
                         correct_answer=data['correct_answer'],
@@ -2029,7 +2029,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                         del mod_trivia_conversations[user_id]
 
             elif content in ['2', 'edit question', 'edit']:
-                conversation['step'] = 'question_input'
+                conversation['step']='question_input'
                 await message.reply(
                     f"✏️ **Question Edit Mode**\n\n"
                     f"Please provide your revised question text. The previous question will be replaced.\n\n"
@@ -2038,7 +2038,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
 
             elif content in ['3', 'edit answer', 'answer']:
                 if data.get('question_type') == 'manual_answer':
-                    conversation['step'] = 'answer_input'
+                    conversation['step']='answer_input'
                     await message.reply(
                         f"✏️ **Answer Edit Mode**\n\n"
                         f"**Now provide the correct answer.**\n\n"
@@ -2076,8 +2076,8 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                 )
 
         # Update conversation state
-        conversation['data'] = data
-        mod_trivia_conversations[user_id] = conversation
+        conversation['data']=data
+        mod_trivia_conversations[user_id]=conversation
 
     except Exception as e:
         print(f"Error in mod trivia conversation: {e}")
@@ -2110,8 +2110,8 @@ async def start_announcement_conversation(message):
     cleanup_announcement_conversations()
 
     # Initialize conversation state
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-    announcement_conversations[message.author.id] = {
+    uk_now=datetime.now(ZoneInfo("Europe/London"))
+    announcement_conversations[message.author.id]={
         'step': 'channel_selection',
         'data': {},
         'last_activity': uk_now,
@@ -2120,11 +2120,11 @@ async def start_announcement_conversation(message):
 
     # Start the interactive process
     if message.author.id == JONESY_USER_ID:
-        greeting = "Captain Jonesy. Authorization confirmed."
+        greeting="Captain Jonesy. Authorization confirmed."
     else:
-        greeting = "Sir Decent Jam. Creator protocols activated."
+        greeting="Sir Decent Jam. Creator protocols activated."
 
-    channel_msg = (
+    channel_msg=(
         f"🎯 **Update Announcement System Activated**\n\n"
         f"{greeting} Initiating secure briefing sequence for mission update dissemination.\n\n"
         f"📡 **Target Channel Selection:**\n"
@@ -2148,11 +2148,11 @@ async def start_trivia_conversation(ctx):
         return
 
     # Check if user is a moderator - need bot instance for DM permission checking
-    bot_instance = None
+    bot_instance=None
     import sys
     for name, obj in sys.modules.items():
         if hasattr(obj, 'bot') and hasattr(obj.bot, 'user') and obj.bot.user:
-            bot_instance = obj.bot
+            bot_instance=obj.bot
             break
 
     if not await user_is_mod_by_id(ctx.author.id, bot_instance):
@@ -2167,8 +2167,8 @@ async def start_trivia_conversation(ctx):
     cleanup_mod_trivia_conversations()
 
     # Initialize conversation state
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-    mod_trivia_conversations[ctx.author.id] = {
+    uk_now=datetime.now(ZoneInfo("Europe/London"))
+    mod_trivia_conversations[ctx.author.id]={
         'step': 'initial',
         'data': {},
         'last_activity': uk_now,
@@ -2181,10 +2181,10 @@ async def start_trivia_conversation(ctx):
 
 async def handle_jam_approval_conversation(message: discord.Message) -> None:
     """Handle the interactive DM conversation for JAM approval of trivia questions"""
-    user_id = message.author.id
+    user_id=message.author.id
 
     # ✅ CRITICAL: Check conversation exists AND is still valid
-    conversation = jam_approval_conversations.get(user_id)
+    conversation=jam_approval_conversations.get(user_id)
     if not conversation:
         print(f"🚫 CONVERSATION CHECK: No active approval conversation for user {user_id}")
         return
@@ -2193,7 +2193,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
         f"🔄 CONVERSATION ACTIVE: Processing message '{message.content[:50]}...' for user {user_id} in step '{conversation.get('step')}'")
 
     # Get message content early for pre-trivia check
-    content = message.content.strip()
+    content=message.content.strip()
 
     # ✅ FIX #1: Check for escape command
     if check_escape_command(content):
@@ -2208,7 +2208,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
         return
 
     # ✅ FIX #1: Check conversation health
-    is_healthy, error_message = check_conversation_health(conversation, max_age_minutes=60)
+    is_healthy, error_message=check_conversation_health(conversation, max_age_minutes=60)
     if not is_healthy:
         await send_conversation_expired_message(message, "question approval", error_message or "Conversation health check failed")
         if user_id in jam_approval_conversations:
@@ -2218,15 +2218,15 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
     # Handle pre-trivia approval context
     if conversation.get('context') == 'pre_trivia':
         # ✅ FIX #6: Validate numbered input (14/14) - FINAL VALIDATION
-        valid_options = ['1', '2']
+        valid_options=['1', '2']
         if not validate_numbered_input(content, valid_options):
             await message.reply(create_invalid_input_message(content, valid_options, "approve, reject"))
             return
 
         if content == '1':  # Approve
             # ✅ FIX #2: Store approved question ID in config for 11 AM posting
-            question_data = conversation.get('data', {}).get('question_data', {})
-            question_id = question_data.get('id')
+            question_data=conversation.get('data', {}).get('question_data', {})
+            question_id=question_data.get('id')
 
             if question_id and db:
                 try:
@@ -2242,12 +2242,12 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
             del jam_approval_conversations[user_id]
         elif content == '2':  # Reject
             # Mark the rejected question as rejected
-            question_data = conversation.get('data', {}).get('question_data', {})
-            question_id = question_data.get('id')
+            question_data=conversation.get('data', {}).get('question_data', {})
+            question_id=question_data.get('id')
 
             if question_id and db:
                 try:
-                    success = db.trivia.reject_trivia_question(question_id)  # type: ignore
+                    success=db.trivia.reject_trivia_question(question_id)  # type: ignore
                     if success:
                         print(f"✅ PRE-TRIVIA REJECTION: Updated question #{question_id} status to rejected")
                     else:
@@ -2264,8 +2264,8 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
             # Automatically fetch next available question
             try:
-                avoid_category = question_data.get('category')
-                next_question = db.get_next_trivia_question(
+                avoid_category=question_data.get('category')
+                next_question=db.get_next_trivia_question(
                     exclude_user_id=JAM_USER_ID,
                     avoid_category=avoid_category
                 )
@@ -2274,8 +2274,8 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                     # Calculate dynamic answer if needed
                     if next_question.get('is_dynamic') and next_question.get('dynamic_query_type'):
                         from bot.handlers.trivia.analytics import calculate_dynamic_answer
-                        calculated_answer = calculate_dynamic_answer(db, (next_question['dynamic_query_type'])
-                        next_question['correct_answer'] = calculated_answer
+                        calculated_answer=calculate_dynamic_answer(db, (next_question['dynamic_query_type'])
+                        next_question['correct_answer']=calculated_answer
 
                     # Start new approval workflow for replacement question
                     await message.reply(
@@ -2284,7 +2284,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                     )
 
                     # Send the new question for approval (reuse the approval workflow)
-                    success = await start_pre_trivia_approval(next_question)
+                    success=await start_pre_trivia_approval(next_question)
 
                     if not success:
                         await message.reply(
@@ -2307,13 +2307,13 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
             await message.reply("⚠️ Invalid input. Please respond with **1** (Approve) or **2** (Reject).")
         return
 
-    timeout_minutes = 180  # 3 hours - extended for flexible approval timing
-    last_activity = conversation.get('last_activity', datetime.now(ZoneInfo("Europe/London")))
+    timeout_minutes=180  # 3 hours - extended for flexible approval timing
+    last_activity=conversation.get('last_activity', datetime.now(ZoneInfo("Europe/London")))
     if datetime.now(ZoneInfo("Europe/London")) > last_activity + timedelta(minutes=timeout_minutes):
         print(f"⌛️ JAM APPROVAL: Detected expired conversation for user {user_id}. Cleaning up.")
 
         # Mark as expired in the database if a session ID exists
-        session_id = conversation.get('session_id')
+        session_id=conversation.get('session_id')
         if session_id:
             db.complete_approval_session(session_id, 'expired')
 
@@ -2321,7 +2321,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
         del jam_approval_conversations[user_id]
 
         # Inform the user and stop processing.
-        question_id_for_command = (conversation.get('data', {}).get('question_data', {}).get('id', 'Unknown'))
+        question_id_for_command=(conversation.get('data', {}).get('question_data', {}).get('id', 'Unknown'))
         await message.reply(
             f"⌛️ **Approval session timed out.**\n\n"
             f"Your previous conversation has ended due to inactivity.\n\n"
@@ -2347,8 +2347,8 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
     # Update activity
     update_jam_approval_activity(user_id)
 
-    step = conversation.get('step', 'approval')
-    data = conversation.get('data', {})
+    step=conversation.get('step', 'approval')
+    data=conversation.get('data', {})
     # content already defined above for pre-trivia check
 
     try:
@@ -2356,7 +2356,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
             # Handle approval decision
             if content in ['1', 'approve', 'yes', 'accept']:
                 # Approve the question
-                question_data = data.get('question_data')
+                question_data=data.get('question_data')
                 if question_data:
                     try:
                         # Check database availability
@@ -2364,30 +2364,30 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                             await message.reply("❌ **Database offline.** Cannot save approved question.")
                             return
 
-                        question_id = None
+                        question_id=None
 
                         # ✅ NEW: Check if question already exists in database (was persisted during generation)
-                        existing_question_id = question_data.get('id')
+                        existing_question_id=question_data.get('id')
 
                         if existing_question_id:
                             # Question was already persisted with pending_approval status - just update status
                             try:
-                                success = db.approve_trivia_question(existing_question_id)  # type: ignore
+                                success=db.approve_trivia_question(existing_question_id)  # type: ignore
                                 if success:
-                                    question_id = existing_question_id
+                                    question_id=existing_question_id
                                     print(
                                         f"✅ APPROVAL: Updated question #{question_id} status from pending_approval to available")
                                 else:
                                     print(
                                         f"⚠️ APPROVAL: Failed to update status for question #{existing_question_id}, will create new")
-                                    existing_question_id = None  # Fall through to creation
+                                    existing_question_id=None  # Fall through to creation
                             except Exception as status_error:
                                 print(f"⚠️ APPROVAL: Status update failed: {status_error}, will create new")
-                                existing_question_id = None  # Fall through to creation
+                                existing_question_id=None  # Fall through to creation
 
                         if not existing_question_id:
                             # Question not persisted yet (manual submission) - create it
-                            question_id = db.add_trivia_question(  # type: ignore
+                            question_id=db.add_trivia_question(  # type: ignore
                                 question_text=question_data['question_text'],
                                 question_type=question_data.get('question_type', 'single_answer'),
                                 correct_answer=question_data.get('correct_answer'),
@@ -2402,9 +2402,9 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
                         if question_id:
                             # Get queue status before replying
-                            queue_length = get_queue_length()
+                            queue_length=get_queue_length()
 
-                            approval_response = (
+                            approval_response=(
                                 f"✅ **Question Approved Successfully**\n\n"
                                 f"The trivia question has been added to the database with ID #{question_id}. "
                                 f"It is now available for use in future Trivia Tuesday sessions.\n\n"
@@ -2430,7 +2430,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                     print(f"✅ FIX: Cleared approval conversation after approval")
 
                 # ✅ FIX: Auto-process next question in queue
-                queue_length = get_queue_length()
+                queue_length=get_queue_length()
                 if queue_length > 0:
                     print(f"🔄 FIX: Auto-processing next question in queue ({queue_length} remaining)")
                     await process_next_approval()
@@ -2439,17 +2439,17 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
             elif content in ['2', 'modify', 'edit', 'change']:
                 # Switch to template modification mode
-                conversation['step'] = 'template_modification'
-                original_data = data.get('question_data', {})
-                q_text = original_data.get('question_text', '')
-                q_ans = original_data.get('correct_answer', '')
-                q_type = original_data.get('question_type', 'single_answer')
+                conversation['step']='template_modification'
+                original_data=data.get('question_data', {})
+                q_text=original_data.get('question_text', '')
+                q_ans=original_data.get('correct_answer', '')
+                q_type=original_data.get('question_type', 'single_answer')
 
-                decoys_str = ""
+                decoys_str=""
                 if q_type == 'multiple_choice':
-                    options = original_data.get('multiple_choice_options', [])
-                    decoys = [opt for opt in options if opt != q_ans]
-                    decoys_str = " | ".join(decoys)
+                    options=original_data.get('multiple_choice_options', [])
+                    decoys=[opt for opt in options if opt != q_ans]
+                    decoys_str=" | ".join(decoys)
 
                 await message.reply(
                     f"✏️ **Manual Question Editing**\n\n"
@@ -2465,13 +2465,13 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
             elif content in ['3', 'reject', 'no', 'decline']:
                 # ✅ NEW: Use reject_trivia_question method for clean status transition
-                question_data = data.get('question_data', {})
-                question_id = question_data.get('id')
+                question_data=data.get('question_data', {})
+                question_id=question_data.get('id')
 
                 if question_id and db:
                     # Question already in database - update status to rejected
                     try:
-                        success = db.trivia.reject_trivia_question(question_id)  # type: ignore
+                        success=db.trivia.reject_trivia_question(question_id)  # type: ignore
                         if success:
                             print(f"✅ REJECTION: Updated question #{question_id} status to rejected")
                         else:
@@ -2484,10 +2484,10 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
                 # ✅ NEW: Purge any remaining questions in the queue that have the same rejected category
                 global jam_approval_queue
-                rejected_category = question_data.get('category')
+                rejected_category=question_data.get('category')
 
                 # Determine how many items we are about to remove
-                items_to_remove = [
+                items_to_remove=[
                     item for item in jam_approval_queue
                     if item.get('type') == 'trivia_question' and
                     item.get('data', {}).get('question_data', {}).get('category') == rejected_category
@@ -2495,11 +2495,11 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
                 if rejected_category and items_to_remove:
                     # Actually filter the queue
-                    jam_approval_queue = [item for item in jam_approval_queue if item not in items_to_remove]
+                    jam_approval_queue=[item for item in jam_approval_queue if item not in items_to_remove]
 
                     # Also mark them as rejected in the DB so they don't linger in pending_approval
                     for item in items_to_remove:
-                        q_id = item.get('data', {}).get('question_data', {}).get('id')
+                        q_id=item.get('data', {}).get('question_data', {}).get('id')
                         if q_id and db:
                             try:
                                 db.trivia.reject_trivia_question(q_id)
@@ -2510,7 +2510,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                         f"🗑️ Removed {len(items_to_remove)} pending questions of rejected category '{rejected_category}' from the queue.")
 
                 # ✅ CRITICAL FIX: Get queue length BEFORE clearing conversation
-                queue_length = get_queue_length()
+                queue_length=get_queue_length()
 
                 # ✅ CRITICAL FIX: Clear conversation state IMMEDIATELY before any async operations
                 if user_id in jam_approval_conversations:
@@ -2518,7 +2518,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                     print(f"✅ CONVERSATION CLEANUP: Cleared approval conversation immediately (queue: {queue_length})")
 
                 # Notify user of rejection
-                rejection_msg = (
+                rejection_msg=(
                     f"❌ **Question Rejected**\n\n"
                     f"The trivia question has been rejected and marked as 'retired'. "
                     f"It won't be shown again.\n\n"
@@ -2554,10 +2554,10 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
             # Parse the incoming template
             import re
 
-            q_match = re.search(r'Question:\s*(.+)', content, re.IGNORECASE)
-            a_match = re.search(r'Answer:\s*(.+)', content, re.IGNORECASE)
-            t_match = re.search(r'Type:\s*(.+)', content, re.IGNORECASE)
-            d_match = re.search(r'Decoys:\s*(.+)', content, re.IGNORECASE)
+            q_match=re.search(r'Question:\s*(.+)', content, re.IGNORECASE)
+            a_match=re.search(r'Answer:\s*(.+)', content, re.IGNORECASE)
+            t_match=re.search(r'Type:\s*(.+)', content, re.IGNORECASE)
+            d_match=re.search(r'Decoys:\s*(.+)', content, re.IGNORECASE)
 
             if not (q_match and a_match and t_match):
                 await message.reply(
@@ -2566,19 +2566,19 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 )
                 return
 
-            new_q = q_match.group(1).strip()
-            new_a = a_match.group(1).strip()
-            new_t = t_match.group(1).strip().lower().replace(' ', '_')
+            new_q=q_match.group(1).strip()
+            new_a=a_match.group(1).strip()
+            new_t=t_match.group(1).strip().lower().replace(' ', '_')
 
             if new_t not in ['single_answer', 'multiple_choice']:
                 await message.reply("⚠️ **Invalid Type**\n\nPlease use either `single_answer` or `multiple_choice` for the Type.")
                 return
 
-            new_decoys_list = []
+            new_decoys_list=[]
             if new_t == 'multiple_choice':
-                d_str = ""
+                d_str=""
                 if d_match:
-                    d_str = d_match.group(1).strip()
+                    d_str=d_match.group(1).strip()
 
                 if not d_str or d_str.lower() == 'none' or d_str == '-':
                     await message.reply("⚠️ **Missing Decoys**\n\nFor a `multiple_choice` question, you must provide exactly 3 decoys separated by `|` or `,`.")
@@ -2586,31 +2586,31 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
                 # Split by | or ,
                 if '|' in d_str:
-                    new_decoys_list = [d.strip() for d in d_str.split('|') if d.strip()]
+                    new_decoys_list=[d.strip() for d in d_str.split('|') if d.strip()]
                 else:
-                    new_decoys_list = [d.strip() for d in d_str.split(',') if d.strip()]
+                    new_decoys_list=[d.strip() for d in d_str.split(',') if d.strip()]
 
                 if len(new_decoys_list) != 3:
                     await message.reply(f"⚠️ **Invalid Decoys Count**\n\nYou provided {len(new_decoys_list)} decoys. Please provide exactly 3 decoys.")
                     return
 
             # Set values and call save
-            data['modified_question'] = new_q
-            data['modified_answer'] = new_a
-            data['modified_type'] = new_t
+            data['modified_question']=new_q
+            data['modified_answer']=new_a
+            data['modified_type']=new_t
             if new_t == 'multiple_choice':
                 import random
-                options = [new_a] + new_decoys_list
+                options=[new_a] + new_decoys_list
                 random.shuffle(options)
-                data['modified_options'] = options
+                data['modified_options']=options
             else:
-                data['modified_options'] = None
+                data['modified_options']=None
 
             await save_final_modifications(message, data, user_id)
 
         # Update conversation state
-        conversation['data'] = data
-        jam_approval_conversations[user_id] = conversation
+        conversation['data']=data
+        jam_approval_conversations[user_id]=conversation
 
     except Exception as e:
         print(f"Error in JAM approval conversation: {e}")
@@ -2626,18 +2626,18 @@ async def save_final_modifications(message, data: Dict[str, Any], user_id: int):
             await message.reply("❌ **Database offline.** Cannot save modified question.")
             return
 
-        original_data = data.get('question_data', {})
+        original_data=data.get('question_data', {})
 
         # Use modified values if available, otherwise use originals
-        final_question = data.get('modified_question', original_data.get('question_text', ''))
-        final_answer = data.get('modified_answer', original_data.get('correct_answer'))
-        final_type = data.get('modified_type', original_data.get('question_type', 'single_answer'))
+        final_question=data.get('modified_question', original_data.get('question_text', ''))
+        final_answer=data.get('modified_answer', original_data.get('correct_answer'))
+        final_type=data.get('modified_type', original_data.get('question_type', 'single_answer'))
 
-        final_options = data.get('modified_options')
+        final_options=data.get('modified_options')
         if final_options is None and final_type == 'multiple_choice':
-            final_options = original_data.get('multiple_choice_options')
+            final_options=original_data.get('multiple_choice_options')
 
-        question_id = db.add_trivia_question(  # type: ignore
+        question_id=db.add_trivia_question(  # type: ignore
             question_text=final_question,
             question_type=final_type,
             correct_answer=final_answer,
@@ -2650,7 +2650,7 @@ async def save_final_modifications(message, data: Dict[str, Any], user_id: int):
 
         if question_id:
             # Show summary of all changes
-            changes_summary = []
+            changes_summary=[]
             if data.get('modified_question'):
                 changes_summary.append(f"• **Question text** updated")
             if data.get('modified_answer'):
@@ -2658,7 +2658,7 @@ async def save_final_modifications(message, data: Dict[str, Any], user_id: int):
             if data.get('modified_type'):
                 changes_summary.append(f"• **Question type** changed to: {final_type.replace('_', ' ').title()}")
 
-            changes_text = '\n'.join(changes_summary) if changes_summary else "• No modifications made"
+            changes_text='\n'.join(changes_summary) if changes_summary else "• No modifications made"
 
             await message.reply(
                 f"✅ **All Modifications Saved Successfully**\n\n"
@@ -2679,7 +2679,7 @@ async def save_final_modifications(message, data: Dict[str, Any], user_id: int):
         del jam_approval_conversations[user_id]
 
     # ✅ FIX: Process next item in approval queue
-    queue_length = get_queue_length()
+    queue_length=get_queue_length()
     if queue_length > 0:
         print(f"🔄 AUTO-QUEUE: Processing next approval after modifications ({queue_length} remaining)")
         await process_next_approval()
@@ -2694,7 +2694,7 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
             f"🚀 Starting persistent JAM approval workflow for question: {question_data.get('question_text', 'Unknown')[:50]}...")
 
         # Get bot instance using centralized access function
-        bot_instance = _get_bot_instance()
+        bot_instance=_get_bot_instance()
 
         if not bot_instance:
             print("❌ Could not find bot instance for JAM approval")
@@ -2724,7 +2724,7 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
 
         # Create persistent approval session in database
         try:
-            session_id = db.create_approval_session(
+            session_id=db.create_approval_session(
                 user_id=JAM_USER_ID,
                 session_type='question_approval',
                 conversation_step='approval',
@@ -2739,15 +2739,15 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
             print(f"✅ Created persistent approval session {session_id}")
         except Exception as db_e:
             print(f"⚠️ Database session creation failed, using memory fallback: {db_e}")
-            session_id = None
+            session_id=None
 
         # Get JAM user with retry logic
-        jam_user = None
-        max_attempts = 3
+        jam_user=None
+        max_attempts=3
         for attempt in range(max_attempts):
             try:
                 print(f"🔍 Attempting to fetch JAM user {JAM_USER_ID} (attempt {attempt + 1}/{max_attempts})")
-                jam_user = await bot_instance.fetch_user(JAM_USER_ID)
+                jam_user=await bot_instance.fetch_user(JAM_USER_ID)
                 if jam_user:
                     print(f"✅ Successfully fetched JAM user: {jam_user.name}#{jam_user.discriminator}")
                     break
@@ -2766,8 +2766,8 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
             return False
 
         # Initialize approval conversation
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
-        jam_approval_conversations[JAM_USER_ID] = {
+        uk_now=datetime.now(ZoneInfo("Europe/London"))
+        jam_approval_conversations[JAM_USER_ID]={
             'step': 'approval',
             'data': {'question_data': question_data},
             'last_activity': uk_now,
@@ -2776,12 +2776,12 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
         print("✅ Initialized JAM approval conversation state")
 
         # Create approval message with enhanced formatting
-        question_text = question_data.get('question_text') or 'Unknown question'
-        correct_answer = question_data.get('correct_answer') or 'Dynamic calculation'
-        question_type = question_data.get('question_type') or 'single_answer'
-        category = question_data.get('category') or 'ai_generated'
+        question_text=question_data.get('question_text') or 'Unknown question'
+        correct_answer=question_data.get('correct_answer') or 'Dynamic calculation'
+        question_type=question_data.get('question_type') or 'single_answer'
+        category=question_data.get('category') or 'ai_generated'
 
-        approval_msg = (
+        approval_msg=(
             f"🧠 **TRIVIA QUESTION APPROVAL REQUIRED**\n\n"
             f"A new trivia question has been generated and requires your approval before being added to the database.\n\n"
             f"**Question Type:** {question_type.replace('_', ' ').title()}\n"
@@ -2791,7 +2791,7 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
 
         # Add multiple choice options if applicable
         if question_data.get('multiple_choice_options') and question_data.get('question_type') == 'multiple_choice':
-            options_text = '\n'.join([f"**{chr(65+i)}.** {option}"
+            options_text='\n'.join([f"**{chr(65+i)}.** {option}"
                                       for i, option in enumerate(question_data['multiple_choice_options'])])
             approval_msg += f"**Answer Choices:**\n{options_text}\n\n"
 
@@ -2809,13 +2809,13 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
         )
 
         # Send approval request to JAM with retry logic
-        message_sent = False
-        max_send_attempts = 3
+        message_sent=False
+        max_send_attempts=3
         for attempt in range(max_send_attempts):
             try:
                 print(f"📤 Attempting to send approval message to JAM (attempt {attempt + 1}/{max_send_attempts})")
                 await jam_user.send(approval_msg)
-                message_sent = True
+                message_sent=True
                 print(f"✅ Successfully sent question approval request to JAM")
                 break
             except discord.Forbidden:
@@ -2865,10 +2865,10 @@ async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
     try:
         # Get bot instance
         import sys
-        bot_instance = None
+        bot_instance=None
         for name, obj in sys.modules.items():
             if hasattr(obj, 'bot') and hasattr(obj.bot, 'user') and obj.bot.user:
-                bot_instance = obj.bot
+                bot_instance=obj.bot
                 break
 
         if not bot_instance:
@@ -2892,9 +2892,9 @@ async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
             print(f"⚠️ Error during pre-trivia defensive cleanup: {cleanup_e}")
 
         # Get current UK time
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        uk_now=datetime.now(ZoneInfo("Europe/London"))
 
-        jam_approval_conversations[JAM_USER_ID] = {
+        jam_approval_conversations[JAM_USER_ID]={
             'step': 'approval',
             'data': {'question_data': question_data},
             'context': 'pre_trivia',
@@ -2904,7 +2904,7 @@ async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
 
         # Get JAM user
         try:
-            jam_user = await bot_instance.fetch_user(JAM_USER_ID)
+            jam_user=await bot_instance.fetch_user(JAM_USER_ID)
             if not jam_user:
                 print(f"❌ Could not fetch JAM user {JAM_USER_ID}")
                 return False
@@ -2913,14 +2913,14 @@ async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
             return False
 
         # Create pre-trivia approval message
-        question_text = question_data.get('question_text', 'Unknown question')
-        correct_answer = question_data.get('correct_answer', 'Dynamic calculation')
-        question_type = question_data.get('question_type', 'single_answer')
+        question_text=question_data.get('question_text', 'Unknown question')
+        correct_answer=question_data.get('correct_answer', 'Dynamic calculation')
+        question_type=question_data.get('question_type', 'single_answer')
 
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
-        trivia_time = uk_now.replace(hour=11, minute=0, second=0, microsecond=0)
+        uk_now=datetime.now(ZoneInfo("Europe/London"))
+        trivia_time=uk_now.replace(hour=11, minute=0, second=0, microsecond=0)
 
-        pre_approval_msg = (
+        pre_approval_msg=(
             f"⏰ **TRIVIA TUESDAY - PRE-APPROVAL REQUIRED**\n\n"
             f"Trivia Tuesday begins in 1 hour ({trivia_time.strftime('%H:%M UK time')}). "
             f"The following question has been selected for today's session:\n\n"
@@ -2932,7 +2932,7 @@ async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
 
         # Add multiple choice options if applicable
         if question_data.get('multiple_choice_options'):
-            options_text = '\n'.join([f"**{chr(65+i)}.** {option}"
+            options_text='\n'.join([f"**{chr(65+i)}.** {option}"
                                       for i, option in enumerate(question_data['multiple_choice_options'])])
             pre_approval_msg += f"**Answer Choices:**\n{options_text}\n\n"
 
@@ -2964,7 +2964,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
 
         # Clean up expired sessions first
         try:
-            expired_count = db.cleanup_expired_approval_sessions()
+            expired_count=db.cleanup_expired_approval_sessions()
             if expired_count > 0:
                 print(f"🧹 Cleaned up {expired_count} expired approval sessions")
         except Exception as cleanup_e:
@@ -2972,7 +2972,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
 
         # Get all active approval sessions from database
         try:
-            active_sessions = db.get_all_active_approval_sessions()
+            active_sessions=db.get_all_active_approval_sessions()
             print(f"📊 Found {len(active_sessions)} active approval sessions to restore")
         except Exception as db_e:
             print(f"❌ Error fetching active approval sessions: {db_e}")
@@ -2989,7 +2989,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                 if hasattr(obj, 'bot') and hasattr(obj.bot, 'user'):
                     try:
                         if obj.bot.user:  # Check if bot is logged in
-                            bot_instance = obj.bot
+                            bot_instance=obj.bot
                             print(f"✅ Found bot instance for session restoration")
                             break
                     except Exception:
@@ -2999,19 +2999,19 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                 print("❌ Could not find bot instance for session restoration")
                 return {"error": "No bot instance available", "restored_sessions": 0}
 
-        restored_count = 0
-        restoration_results = []
+        restored_count=0
+        restoration_results=[]
 
         # Restore each active session
         for session in active_sessions:
             try:
-                session_id = session['id']
-                user_id = session['user_id']
-                conversation_step = session['conversation_step']
-                question_data = session['question_data']
-                conversation_data = session['conversation_data']
-                created_at = session['created_at']
-                bot_restart_count = session.get('bot_restart_count', 0)
+                session_id=session['id']
+                user_id=session['user_id']
+                conversation_step=session['conversation_step']
+                question_data=session['question_data']
+                conversation_data=session['conversation_data']
+                created_at=session['created_at']
+                bot_restart_count=session.get('bot_restart_count', 0)
 
                 print(f"🔄 Restoring session {session_id} for user {user_id} (step: {conversation_step})")
 
@@ -3021,15 +3021,15 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                     # Increment restart count in database to track deployment impacts
                     try:
                         db.update_approval_session(session_id, increment_restart_count=True)
-                        new_restart_count = bot_restart_count + 1
+                        new_restart_count=bot_restart_count + 1
                         print(f"📈 Updated restart count for session {session_id}: {new_restart_count}")
                     except Exception as update_e:
                         print(f"⚠️ Error updating restart count: {update_e}")
-                        new_restart_count = bot_restart_count
+                        new_restart_count=bot_restart_count
 
                     # Restore conversation state to memory
-                    uk_now = datetime.now(ZoneInfo("Europe/London"))
-                    jam_approval_conversations[user_id] = {
+                    uk_now=datetime.now(ZoneInfo("Europe/London"))
+                    jam_approval_conversations[user_id]={
                         'step': conversation_step,
                         'data': {'question_data': question_data, **conversation_data},
                         'last_activity': uk_now,
@@ -3042,19 +3042,19 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
 
                     # Get JAM user and send reminder
                     try:
-                        jam_user = await bot_instance.fetch_user(JAM_USER_ID)
+                        jam_user=await bot_instance.fetch_user(JAM_USER_ID)
                         if jam_user:
                             # Calculate how long the session has been active
-                            session_age = uk_now - created_at
-                            age_minutes = int(session_age.total_seconds() / 60)
+                            session_age=uk_now - created_at
+                            age_minutes=int(session_age.total_seconds() / 60)
 
                             # Create appropriate reminder message based on conversation step
                             if conversation_step == 'approval':
                                 # Standard approval reminder
-                                question_text = question_data.get('question_text', 'Unknown question')
-                                correct_answer = question_data.get('correct_answer', 'Dynamic calculation')
+                                question_text=question_data.get('question_text', 'Unknown question')
+                                correct_answer=question_data.get('correct_answer', 'Dynamic calculation')
 
-                                reminder_msg = (
+                                reminder_msg=(
                                     f"🔄 **APPROVAL SESSION RESTORED** (Bot Restart #{new_restart_count})\n\n"
                                     f"I've detected an active trivia question approval that was interrupted by a deployment restart. "
                                     f"Your response is still needed:\n\n"
@@ -3070,7 +3070,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
 
                             elif conversation_step in ['modification', 'modification_preview', 'answer_edit_prompt', 'answer_modification', 'type_edit_prompt', 'type_modification']:
                                 # In-progress modification reminder
-                                reminder_msg = (
+                                reminder_msg=(
                                     f"🔄 **MODIFICATION SESSION RESTORED** (Bot Restart #{new_restart_count})\n\n"
                                     f"I've detected an active question modification that was interrupted by a deployment restart. "
                                     f"We were in the middle of editing your trivia question.\n\n"
@@ -3085,11 +3085,11 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                                     f"*Persistent modification system maintained through deployment restarts.*")
 
                                 # Reset to approval step for simplicity after restart
-                                jam_approval_conversations[user_id]['step'] = 'approval'
+                                jam_approval_conversations[user_id]['step']='approval'
 
                             else:
                                 # Unknown step, reset to approval
-                                reminder_msg = (
+                                reminder_msg=(
                                     f"🔄 **APPROVAL SESSION RESTORED** (Bot Restart #{new_restart_count})\n\n"
                                     f"I've detected an active approval session that was interrupted. The session has been "
                                     f"reset to the initial approval state for your convenience.\n\n"
@@ -3100,7 +3100,7 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
                                     f"**3.** ❌ **Reject** - Discard this question\n\n"
                                     f"Please respond with **1**, **2**, or **3**.")
 
-                                jam_approval_conversations[user_id]['step'] = 'approval'
+                                jam_approval_conversations[user_id]['step']='approval'
 
                             # Send the reminder message
                             await jam_user.send(reminder_msg)
@@ -3172,12 +3172,12 @@ async def restore_active_approval_sessions(bot_instance=None) -> Dict[str, Any]:
 async def start_game_review_approval(game_data: Dict[str, Any]) -> bool:
     """Start game review approval workflow for low-confidence matches"""
     try:
-        bot = _get_bot_instance()
+        bot=_get_bot_instance()
         if not bot:
             print("❌ Cannot start game review - bot instance not available")
             return False
 
-        jam_user = await bot.fetch_user(JAM_USER_ID)
+        jam_user=await bot.fetch_user(JAM_USER_ID)
         if not jam_user:
             print(f"❌ Cannot reach JAM for game review")
             return False
@@ -3199,7 +3199,7 @@ async def start_game_review_approval(game_data: Dict[str, Any]) -> bool:
             print(f"⚠️ Error during game review defensive cleanup: {cleanup_e}")
 
         # Create session in database
-        session_id = db.create_game_review_session(
+        session_id=db.create_game_review_session(
             user_id=JAM_USER_ID,
             original_title=game_data['original_title'],
             extracted_name=game_data['extracted_name'],
@@ -3215,8 +3215,8 @@ async def start_game_review_approval(game_data: Dict[str, Any]) -> bool:
             return False
 
         # Initialize conversation
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
-        game_review_conversations[JAM_USER_ID] = {
+        uk_now=datetime.now(ZoneInfo("Europe/London"))
+        game_review_conversations[JAM_USER_ID]={
             'step': 'review',
             'session_id': session_id,
             'data': game_data,
@@ -3224,16 +3224,16 @@ async def start_game_review_approval(game_data: Dict[str, Any]) -> bool:
         }
 
         # Build approval message
-        alt_names = game_data.get('alternative_names', [])
-        igdb_matched = len(alt_names) > 0
+        alt_names=game_data.get('alternative_names', [])
+        igdb_matched=len(alt_names) > 0
 
         # Build IGDB match string safely
         if not igdb_matched:
-            igdb_match_text = "❌ No match found"
+            igdb_match_text="❌ No match found"
         else:
-            igdb_match_text = f"✓ {', '.join(alt_names[:3])}"
+            igdb_match_text=f"✓ {', '.join(alt_names[:3])}"
 
-        approval_msg = (
+        approval_msg=(
             f"🎮 **GAME MATCH REVIEW REQUIRED**\n\n"
             f"Low-confidence game extraction detected during {game_data['source'].title()} sync:\n\n"
             f"**Original Title:** {game_data['original_title']}\n"
@@ -3264,17 +3264,17 @@ async def start_game_review_approval(game_data: Dict[str, Any]) -> bool:
 
 async def handle_game_review_conversation(message: discord.Message) -> None:
     """Handle game review approval conversation"""
-    user_id = message.author.id
-    conversation = game_review_conversations.get(user_id)
+    user_id=message.author.id
+    conversation=game_review_conversations.get(user_id)
 
     if not conversation or user_id != JAM_USER_ID:
         return
 
-    content = message.content.strip()
+    content=message.content.strip()
 
     # ✅ FIX #1: Check for escape command
     if check_escape_command(content):
-        session_id = conversation.get('session_id')
+        session_id=conversation.get('session_id')
         if session_id and db:
             db.complete_game_review_session(session_id, 'cancelled')
 
@@ -3289,9 +3289,9 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
         return
 
     # Get conversation data
-    step = conversation.get('step', 'review')
-    data = conversation.get('data', {})
-    session_id = conversation.get('session_id')
+    step=conversation.get('step', 'review')
+    data=conversation.get('data', {})
+    session_id=conversation.get('session_id')
 
     if not session_id:
         await message.reply("❌ Error: Invalid session")
@@ -3302,7 +3302,7 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
     try:
         if step == 'review':
             # ✅ FIX #6: Validate numbered input (12/14)
-            valid_options = ['1', '2', '3']
+            valid_options=['1', '2', '3']
             if not validate_numbered_input(content, valid_options) and content not in [
                     'accept', 'yes', 'correct', 'fix', 'skip', 'no']:
                 await message.reply(create_invalid_input_message(content, valid_options, "accept, correct, skip"))
@@ -3318,7 +3318,7 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
 
             elif content in ['2', 'correct', 'fix']:
                 # Request correct name
-                conversation['step'] = 'correction'
+                conversation['step']='correction'
                 await message.reply(
                     f"🔧 **Provide Correct Name**\n\n"
                     f"Original title: `{data['original_title']}`\n\n"
@@ -3335,17 +3335,17 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
 
         elif step == 'correction':
             # User provided correct name - re-validate with IGDB
-            corrected_name = content.strip()
+            corrected_name=content.strip()
 
             await message.reply(f"🔍 **Re-validating** `{corrected_name}` with IGDB...")
 
             # Re-validate with IGDB using the correct function
             try:
                 from ..integrations.igdb import validate_and_enrich
-                igdb_result = await validate_and_enrich(corrected_name)
+                igdb_result=await validate_and_enrich(corrected_name)
             except Exception as e:
                 print(f"⚠️ IGDB validation failed: {e}")
-                igdb_result = None
+                igdb_result=None
 
             if igdb_result and igdb_result.get('confidence', 0) >= 0.7:
                 # Good match found
@@ -3366,8 +3366,8 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
                 del game_review_conversations[user_id]
             else:
                 # Still low confidence - ask to try again or skip
-                conversation['step'] = 'correction_failed'
-                confidence_score = igdb_result.get('confidence', 0) if igdb_result else 0
+                conversation['step']='correction_failed'
+                confidence_score=igdb_result.get('confidence', 0) if igdb_result else 0
                 await message.reply(
                     f"⚠️ **Still Low Confidence**\n\n"
                     f"IGDB match: {confidence_score:.2f}\n\n"
@@ -3379,13 +3379,13 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
 
         elif step == 'correction_failed':
             # ✅ FIX #6: Validate numbered input (13/14)
-            valid_options = ['1', '2', '3']
+            valid_options=['1', '2', '3']
             if not validate_numbered_input(content, valid_options):
                 await message.reply(create_invalid_input_message(content, valid_options, "try again, accept, skip"))
                 return
 
             if content == '1':
-                conversation['step'] = 'correction'
+                conversation['step']='correction'
                 await message.reply(f"🔧 Try another name:")
             elif content == '2':
                 db.complete_game_review_session(session_id, 'approved')
@@ -3398,7 +3398,7 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
 
         # Only update conversation if it's still active (not deleted)
         if user_id in game_review_conversations:
-            game_review_conversations[user_id] = conversation
+            game_review_conversations[user_id]=conversation
 
     except Exception as e:
         print(f"❌ Error in game review conversation: {e}")
@@ -3410,25 +3410,25 @@ async def force_reset_approval_session(user_id: int) -> bool:
     """Force reset any active approval session for a user (manual override)"""
     try:
         print(f"🔄 FORCE RESET: Initiating manual reset for user {user_id}")
-        reset_performed = False
+        reset_performed=False
 
         # 1. Clear in-memory conversation state
         if user_id in jam_approval_conversations:
             del jam_approval_conversations[user_id]
             print(f"✅ FORCE RESET: Cleared in-memory conversation state")
-            reset_performed = True
+            reset_performed=True
 
         # 2. Cancel any active database sessions
         if db:
             try:
                 # Find active sessions
-                active_sessions = db.get_all_active_approval_sessions()
-                user_sessions = [s for s in active_sessions if s['user_id'] == user_id]
+                active_sessions=db.get_all_active_approval_sessions()
+                user_sessions=[s for s in active_sessions if s['user_id'] == user_id]
 
                 for session in user_sessions:
                     db.complete_approval_session(session['id'], 'cancelled_manual')
                     print(f"✅ FORCE RESET: Cancelled database session {session['id']}")
-                    reset_performed = True
+                    reset_performed=True
 
             except Exception as db_e:
                 print(f"⚠️ FORCE RESET: Database cleanup error: {db_e}")
@@ -3444,10 +3444,10 @@ async def get_restoration_status() -> Dict[str, Any]:
     """Get status of current approval sessions for monitoring/debugging"""
     try:
         # Get database sessions
-        db_sessions = db.get_all_active_approval_sessions()
+        db_sessions=db.get_all_active_approval_sessions()
 
         # Get memory sessions
-        memory_sessions = []
+        memory_sessions=[]
         for user_id, conversation in jam_approval_conversations.items():
             memory_sessions.append({
                 "user_id": user_id,
@@ -3475,7 +3475,7 @@ async def get_restoration_status() -> Dict[str, Any]:
 # ============================================================================
 
 # Global state for sync approval conversations
-sync_approval_conversations = {}
+sync_approval_conversations={}
 
 
 async def start_sync_approval(sync_session_id: str, summary: Dict[str, Any]) -> bool:
@@ -3490,35 +3490,35 @@ async def start_sync_approval(sync_session_id: str, summary: Dict[str, Any]) -> 
         True if message sent successfully
     """
     try:
-        bot = _get_bot_instance()
+        bot=_get_bot_instance()
         if not bot:
             print("❌ SYNC APPROVAL: Bot instance not available")
             return False
 
-        user = await bot.fetch_user(JAM_USER_ID)
+        user=await bot.fetch_user(JAM_USER_ID)
         if not user:
             print(f"❌ SYNC APPROVAL: Could not fetch JAM user {JAM_USER_ID}")
             return False
 
         # Build approval message
-        new_games = summary.get('new_games', [])
-        updates = summary.get('updates', [])
-        total_count = summary.get('total_count', 0)
+        new_games=summary.get('new_games', [])
+        updates=summary.get('updates', [])
+        total_count=summary.get('total_count', 0)
 
-        message = "🔄 **Database Sync Complete**\n\n"
+        message="🔄 **Database Sync Complete**\n\n"
         message += f"📊 **{total_count} games detected**\n\n"
 
         # Show new games with IDs
         if new_games:
             message += f"🆕 **New Games ({len(new_games)}):**\n"
             for game in new_games[:10]:  # Limit to first 10
-                game_data = game['game_data']
-                confidence = game.get('confidence_score', 1.0)
-                platform = game.get('source_platform', 'unknown')
-                playtime = game_data.get('total_playtime_minutes', 0)
-                episodes = game_data.get('total_episodes', 0)
+                game_data=game['game_data']
+                confidence=game.get('confidence_score', 1.0)
+                platform=game.get('source_platform', 'unknown')
+                playtime=game_data.get('total_playtime_minutes', 0)
+                episodes=game_data.get('total_episodes', 0)
 
-                warning = " ⚠️" if confidence < 0.75 else ""
+                warning=" ⚠️" if confidence < 0.75 else ""
                 message += (
                     f"{game['id']}. **{game_data['canonical_name']}** "
                     f"({platform.title()}, {episodes} ep, "
@@ -3533,10 +3533,10 @@ async def start_sync_approval(sync_session_id: str, summary: Dict[str, Any]) -> 
         if updates:
             message += f"🔄 **Updated Games ({len(updates)}):**\n"
             for game in updates[:5]:  # Show first 5
-                game_data = game['game_data']
-                existing_episodes = game_data.get('existing_episodes', 0)
-                new_episodes = game_data.get('total_episodes', 0)
-                added_episodes = new_episodes - existing_episodes
+                game_data=game['game_data']
+                existing_episodes=game_data.get('existing_episodes', 0)
+                new_episodes=game_data.get('total_episodes', 0)
+                added_episodes=new_episodes - existing_episodes
 
                 message += (
                     f"{game['id']}. **{game_data['canonical_name']}** "
@@ -3556,7 +3556,7 @@ async def start_sync_approval(sync_session_id: str, summary: Dict[str, Any]) -> 
         print(f"✅ SYNC APPROVAL: Sent approval request to JAM (session {sync_session_id})")
 
         # Store conversation state
-        sync_approval_conversations[JAM_USER_ID] = {
+        sync_approval_conversations[JAM_USER_ID]={
             'type': 'sync_approval',
             'sync_session_id': sync_session_id,
             'stage': 'awaiting_choice',
@@ -3580,16 +3580,16 @@ async def handle_sync_approval_conversation(message: discord.Message) -> bool:
     Returns:
         True if message was handled by this conversation
     """
-    user_id = message.author.id
+    user_id=message.author.id
 
     if user_id not in sync_approval_conversations:
         return False
 
-    conv = sync_approval_conversations[user_id]
+    conv=sync_approval_conversations[user_id]
 
     try:
         if conv['stage'] == 'awaiting_choice':
-            choice = message.content.strip()
+            choice=message.content.strip()
 
             if choice == "1":
                 await bulk_approve_sync(message, conv)
@@ -3635,17 +3635,17 @@ async def handle_sync_approval_conversation(message: discord.Message) -> bool:
 async def bulk_approve_sync(message: discord.Message, conv: Dict[str, Any]):
     """Approve all games and commit to database"""
     try:
-        sync_session_id = conv['sync_session_id']
+        sync_session_id=conv['sync_session_id']
 
         await message.channel.send("⏳ Approving all games and committing to database...")
 
         # Mark all as approved
-        staged_games = db.games.get_staged_games(sync_session_id)
+        staged_games=db.games.get_staged_games(sync_session_id)
         for game in staged_games:
             db.games.mark_staged_game_reviewed(game['id'], approved=True)
 
         # Commit to database
-        counts = db.games.commit_staged_games(sync_session_id)
+        counts=db.games.commit_staged_games(sync_session_id)
 
         # Clear staging
         db.games.clear_staging_session(sync_session_id)
@@ -3653,7 +3653,7 @@ async def bulk_approve_sync(message: discord.Message, conv: Dict[str, Any]):
         # Update last sync timestamp NOW that changes are approved and committed
         from datetime import datetime
         from zoneinfo import ZoneInfo
-        current_time_uk = datetime.now(ZoneInfo('Europe/London'))
+        current_time_uk=datetime.now(ZoneInfo('Europe/London'))
         db.config.set_config_value('last_content_sync_timestamp', current_time_uk.isoformat())
         print(f"✅ SYNC APPROVAL: Updated last_content_sync_timestamp to {current_time_uk.isoformat()}")
 
@@ -3688,7 +3688,7 @@ async def start_individual_review(message: discord.Message, conv: Dict[str, Any]
             "• Or reply **cancel** to go back"
         )
 
-        conv['stage'] = 'awaiting_game_ids'
+        conv['stage']='awaiting_game_ids'
 
     except Exception as e:
         print(f"❌ SYNC APPROVAL: Error starting individual review: {e}")
@@ -3698,26 +3698,26 @@ async def start_individual_review(message: discord.Message, conv: Dict[str, Any]
 async def process_individual_review_ids(message: discord.Message, conv: Dict[str, Any]):
     """Process the game IDs to review"""
     try:
-        content = message.content.strip().lower()
+        content=message.content.strip().lower()
 
         if content == 'cancel':
             # Go back to main choice
-            conv['stage'] = 'awaiting_choice'
+            conv['stage']='awaiting_choice'
             await message.channel.send(
                 "↩️ Cancelled. Reply **1**, **2**, or **3** to choose an action."
             )
             return
 
-        sync_session_id = conv['sync_session_id']
-        staged_games = db.games.get_staged_games(sync_session_id)
+        sync_session_id=conv['sync_session_id']
+        staged_games=db.games.get_staged_games(sync_session_id)
 
         if content == 'all':
-            games_to_review = staged_games
+            games_to_review=staged_games
         else:
             # Parse comma-separated IDs
             try:
-                ids = [int(id_str.strip()) for id_str in content.split(',')]
-                games_to_review = [g for g in staged_games if g['id'] in ids]
+                ids=[int(id_str.strip()) for id_str in content.split(',')]
+                games_to_review=[g for g in staged_games if g['id'] in ids]
 
                 if not games_to_review:
                     await message.channel.send(
@@ -3731,19 +3731,19 @@ async def process_individual_review_ids(message: discord.Message, conv: Dict[str
                 return
 
         # Start reviewing first game
-        conv['games_to_review'] = games_to_review
-        conv['review_index'] = 0
-        conv['stage'] = 'reviewing_game'
+        conv['games_to_review']=games_to_review
+        conv['review_index']=0
+        conv['stage']='reviewing_game'
 
         # Auto-approve high-confidence UPDATES only (not new games)
-        conv['auto_approved'] = []
+        conv['auto_approved']=[]
         for game in games_to_review:
             if game.get('confidence_score', 1.0) >= 0.9 and game.get('action_type') == 'update':
                 db.games.mark_staged_game_reviewed(game['id'], approved=True)
                 conv['auto_approved'].append(game)
 
         if conv['auto_approved']:
-            names = [g['game_data']['canonical_name'] for g in conv['auto_approved']]
+            names=[g['game_data']['canonical_name'] for g in conv['auto_approved']]
             await message.channel.send(
                 f"✅ **Auto-approved {len(conv['auto_approved'])} high-confidence games (≥90%):**\n" +
                 "\n".join(f"• {name}" for name in names)
@@ -3759,23 +3759,23 @@ async def process_individual_review_ids(message: discord.Message, conv: Dict[str
 async def show_next_game_for_review(message: discord.Message, conv: Dict[str, Any]):
     """Show the next game in the review queue"""
     try:
-        games = conv['games_to_review']
-        index = conv['review_index']
+        games=conv['games_to_review']
+        index=conv['review_index']
 
         # Skip auto-approved games
         while index < len(games) and games[index] in conv.get('auto_approved', []):
             index += 1
-            conv['review_index'] = index
+            conv['review_index']=index
 
         if index >= len(games):
             # All games reviewed - commit
             await finalize_individual_review(message, conv)
             return
 
-        game = games[index]
-        game_data = game['game_data']
+        game=games[index]
+        game_data=game['game_data']
 
-        review_msg = f"🔍 **Game {index + 1}/{len(games)}**\n\n"
+        review_msg=f"🔍 **Game {index + 1}/{len(games)}**\n\n"
         review_msg += f"**ID:** {game['id']}\n"
         review_msg += f"**Name:** {game_data['canonical_name']}\n"
         review_msg += f"**Action:** {game['action_type']}\n"
@@ -3800,15 +3800,15 @@ async def show_next_game_for_review(message: discord.Message, conv: Dict[str, An
 async def process_game_review_action(message: discord.Message, conv: Dict[str, Any]):
     """Process user's choice for current game"""
     try:
-        choice = message.content.strip().lower()
+        choice=message.content.strip().lower()
 
         if choice == 'cancel':
             await cancel_sync(message, conv)
             return
 
-        games = conv['games_to_review']
-        index = conv['review_index']
-        game = games[index]
+        games=conv['games_to_review']
+        index=conv['review_index']
+        game=games[index]
 
         if choice == '1':
             # Approve
@@ -3821,7 +3821,7 @@ async def process_game_review_action(message: discord.Message, conv: Dict[str, A
 
         elif choice == '2':
             # Edit game name
-            conv['stage'] = 'awaiting_game_name_edit'
+            conv['stage']='awaiting_game_name_edit'
             await message.channel.send(
                 f"✏️ **Edit Game Name**\n\n"
                 f"Current: `{game['game_data']['canonical_name']}`\n\n"
@@ -3833,27 +3833,27 @@ async def process_game_review_action(message: discord.Message, conv: Dict[str, A
             db.games.mark_staged_game_reviewed(game['id'], approved=False)
 
             # Add to permanent skip list so this URL won't appear in future syncs
-            game_data = game.get('game_data', {})
-            source_platform = game.get('source_platform', 'youtube')
-            canonical_name = game_data.get('canonical_name', 'Unknown')
+            game_data=game.get('game_data', {})
+            source_platform=game.get('source_platform', 'youtube')
+            canonical_name=game_data.get('canonical_name', 'Unknown')
 
             # Get the appropriate URL for this platform
-            skip_url = ''
+            skip_url=''
             if source_platform == 'youtube':
-                skip_url = game_data.get('youtube_playlist_url', '')
+                skip_url=game_data.get('youtube_playlist_url', '')
             else:
                 # Twitch - use first VOD URL
-                vod_urls = game_data.get('twitch_vod_urls', [])
+                vod_urls=game_data.get('twitch_vod_urls', [])
                 if isinstance(vod_urls, list) and vod_urls:
-                    skip_url = vod_urls[0]
+                    skip_url=vod_urls[0]
                 elif isinstance(vod_urls, str) and vod_urls:
-                    skip_url = vod_urls.split(',')[0].strip()
+                    skip_url=vod_urls.split(',')[0].strip()
 
             if skip_url:
                 from ..config import JAM_USER_ID
                 db.games.add_skipped_vod(skip_url, source_platform, canonical_name, JAM_USER_ID)
                 print(f"⏭️ SYNC APPROVAL: Added '{canonical_name}' ({source_platform}) to permanent skip list")
-                platform_label = "playlist" if source_platform == "youtube" else "VOD"
+                platform_label="playlist" if source_platform == "youtube" else "VOD"
                 await message.channel.send(
                     f"⏭️ Skipped: **{canonical_name}**\n"
                     f"*This {platform_label} has been permanently excluded from future syncs.*"
@@ -3879,22 +3879,22 @@ async def process_game_review_action(message: discord.Message, conv: Dict[str, A
 async def process_game_name_edit(message: discord.Message, conv: Dict[str, Any]):
     """Process edited game name"""
     try:
-        new_name = message.content.strip()
+        new_name=message.content.strip()
 
         if new_name.lower() == 'cancel':
-            conv['stage'] = 'reviewing_game'
+            conv['stage']='reviewing_game'
             await message.channel.send("↩️ Cancelled edit. Choose an action for this game:")
             await show_next_game_for_review(message, conv)
             return
 
-        games = conv['games_to_review']
-        index = conv['review_index']
-        game = games[index]
+        games=conv['games_to_review']
+        index=conv['review_index']
+        game=games[index]
 
         # Update the game data
-        game_data = game['game_data'].copy()
-        old_name = game_data['canonical_name']
-        game_data['canonical_name'] = new_name
+        game_data=game['game_data'].copy()
+        old_name=game_data['canonical_name']
+        game_data['canonical_name']=new_name
 
         db.games.update_staged_game_data(game['id'], game_data)
         db.games.mark_staged_game_reviewed(game['id'], approved=True)
@@ -3907,7 +3907,7 @@ async def process_game_name_edit(message: discord.Message, conv: Dict[str, Any])
 
         # Move to next
         conv['review_index'] += 1
-        conv['stage'] = 'reviewing_game'
+        conv['stage']='reviewing_game'
         await show_next_game_for_review(message, conv)
 
     except Exception as e:
@@ -3918,13 +3918,13 @@ async def process_game_name_edit(message: discord.Message, conv: Dict[str, Any])
 async def finalize_individual_review(message: discord.Message, conv: Dict[str, Any]):
     """Finalize review and commit approved games"""
     try:
-        sync_session_id = conv['sync_session_id']
+        sync_session_id=conv['sync_session_id']
 
         # Auto-approve un-reviewed games (games not in the review list)
-        all_staged = db.games.get_staged_games(sync_session_id)
-        reviewed_ids = [g['id'] for g in conv.get('games_to_review', [])]
+        all_staged=db.games.get_staged_games(sync_session_id)
+        reviewed_ids=[g['id'] for g in conv.get('games_to_review', [])]
 
-        auto_approved_unreviewed = []
+        auto_approved_unreviewed=[]
         for game in all_staged:
             if game['id'] not in reviewed_ids and not game.get('approved'):
                 db.games.mark_staged_game_reviewed(game['id'], approved=True)
@@ -3940,7 +3940,7 @@ async def finalize_individual_review(message: discord.Message, conv: Dict[str, A
         await message.channel.send("⏳ Committing approved games to database...")
 
         # Commit approved games
-        counts = db.games.commit_staged_games(sync_session_id)
+        counts=db.games.commit_staged_games(sync_session_id)
 
         # Clear staging
         db.games.clear_staging_session(sync_session_id)
@@ -3948,12 +3948,12 @@ async def finalize_individual_review(message: discord.Message, conv: Dict[str, A
         # Update last sync timestamp NOW that changes are approved and committed
         from datetime import datetime
         from zoneinfo import ZoneInfo
-        current_time_uk = datetime.now(ZoneInfo('Europe/London'))
+        current_time_uk=datetime.now(ZoneInfo('Europe/London'))
         db.config.set_config_value('last_content_sync_timestamp', current_time_uk.isoformat())
         print(f"✅ SYNC APPROVAL: Updated last_content_sync_timestamp to {current_time_uk.isoformat()}")
 
         # Build summary
-        summary_msg = f"✅ **Individual Review Complete!**\n\n"
+        summary_msg=f"✅ **Individual Review Complete!**\n\n"
         summary_msg += f"📊 **Results:**\n"
         summary_msg += f"• {counts['added']} new games added\n"
         summary_msg += f"• {counts['updated']} games updated\n"
@@ -3979,7 +3979,7 @@ async def finalize_individual_review(message: discord.Message, conv: Dict[str, A
 async def cancel_sync(message: discord.Message, conv: Dict[str, Any]):
     """Cancel the entire sync"""
     try:
-        sync_session_id = conv['sync_session_id']
+        sync_session_id=conv['sync_session_id']
 
         # Clear staging without committing
         db.games.clear_staging_session(sync_session_id)
@@ -4024,19 +4024,19 @@ async def request_manual_game_name(
         True if request sent successfully
     """
     try:
-        bot = _get_bot_instance()
+        bot=_get_bot_instance()
         if not bot:
             print("❌ MANUAL INPUT: Bot instance not available")
             return False
 
-        user = await bot.fetch_user(JAM_USER_ID)
+        user=await bot.fetch_user(JAM_USER_ID)
         if not user:
             print(f"❌ MANUAL INPUT: Could not fetch JAM user")
             return False
 
         # Store conversation state
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
-        manual_game_input_conversations[JAM_USER_ID] = {
+        uk_now=datetime.now(ZoneInfo("Europe/London"))
+        manual_game_input_conversations[JAM_USER_ID]={
             'step': 'awaiting_game_name',
             'vod_title': vod_title,
             'vod_data': vod_data,
@@ -4048,11 +4048,11 @@ async def request_manual_game_name(
         }
 
         # Build request message
-        duration_mins = vod_data.get('duration_seconds', 0) // 60
-        views = vod_data.get('view_count', 0)
-        platform = callback_data.get('platform', 'unknown')
+        duration_mins=vod_data.get('duration_seconds', 0) // 60
+        views=vod_data.get('view_count', 0)
+        platform=callback_data.get('platform', 'unknown')
 
-        request_msg = (
+        request_msg=(
             f"🤔 **Manual Game Identification Needed**\n\n"
             f"I couldn't confidently identify the game from this {platform} title:\n\n"
             f"**Title:** `{vod_title}`\n"
@@ -4089,15 +4089,15 @@ async def handle_manual_game_input_conversation(message: discord.Message) -> boo
     Returns:
         True if message was handled by this conversation
     """
-    user_id = message.author.id
+    user_id=message.author.id
 
     if user_id not in manual_game_input_conversations:
         return False
 
-    conv = manual_game_input_conversations[user_id]
+    conv=manual_game_input_conversations[user_id]
 
     try:
-        content = message.content.strip()
+        content=message.content.strip()
 
         # Check for escape/cancel
         if check_escape_command(content):
@@ -4144,7 +4144,7 @@ async def handle_manual_game_input_conversation(message: discord.Message) -> boo
 
         else:
             # User provided a game name
-            game_name = content.strip()
+            game_name=content.strip()
 
             await message.channel.send(
                 f"✅ **Game Name Recorded**\n\n"

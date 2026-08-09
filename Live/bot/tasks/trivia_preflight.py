@@ -95,10 +95,10 @@ async def pre_trivia_approval():
             calculated_answer = calculate_dynamic_answer(db, (  # type: ignore
                 selected_question.get('dynamic_query_type', ''))
             if calculated_answer:
-                selected_question['correct_answer'] = calculated_answer
+                selected_question['correct_answer']=calculated_answer
 
         # Send for JAM approval
-        success = await start_pre_trivia_approval(selected_question)
+        success=await start_pre_trivia_approval(selected_question)
 
         if success:
             print(f"✅ Pre-trivia approval request sent to JAM for question #{selected_question.get('id')}")
@@ -115,7 +115,7 @@ async def pre_trivia_approval():
                 print("⚠️ Bot instance not available for pre-trivia error notification")
                 return
 
-            user = await get_bot_instance().fetch_user(JAM_USER_ID)
+            user=await get_bot_instance().fetch_user(JAM_USER_ID)
             if user:
                 await user.send(
                     f"⚠️ **Pre-Trivia Approval Error**\n\n"
@@ -129,7 +129,7 @@ async def pre_trivia_approval():
 
 async def pre_trivia_preflight_check():
     """Verify approved question exists 15 minutes before trivia"""
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    uk_now=datetime.now(ZoneInfo("Europe/London"))
 
     # Only run on Tuesdays (weekday 1)
     if uk_now.weekday() != 1:
@@ -146,7 +146,7 @@ async def pre_trivia_preflight_check():
 
     try:
         # Check if approved question exists
-        approved_id_str = db.get_config_value('trivia_approved_question_id')
+        approved_id_str=db.get_config_value('trivia_approved_question_id')
 
         if not approved_id_str:
             # No approved question - send urgent alert
@@ -159,13 +159,13 @@ async def pre_trivia_preflight_check():
                 return
 
             try:
-                user = await get_bot_instance().fetch_user(JAM_USER_ID)
+                user=await get_bot_instance().fetch_user(JAM_USER_ID)
             except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
                 print(f"❌ PRE-FLIGHT CHECK: Could not fetch user for alert: {e}")
                 return
 
             if user:
-                alert_message = (
+                alert_message=(
                     f"🚨 **URGENT: Trivia Pre-Flight Check Failed**\n\n"
                     f"**Problem:** No approved question found for today's Trivia Tuesday!\n"
                     f"**Time Until Trivia:** 15 minutes (11:00 AM UK)\n"
@@ -180,8 +180,8 @@ async def pre_trivia_preflight_check():
                 print("✅ PRE-FLIGHT CHECK: Alert sent to JAM")
         else:
             # Verify question exists in database
-            approved_question_id = int(approved_id_str)
-            question_data = db.get_trivia_question_by_id(approved_question_id)
+            approved_question_id=int(approved_id_str)
+            question_data=db.get_trivia_question_by_id(approved_question_id)
 
             if not question_data:
                 print(f"❌ PRE-FLIGHT CHECK: Approved question #{approved_question_id} not found in database!")
@@ -190,9 +190,9 @@ async def pre_trivia_preflight_check():
                 if not get_bot_instance():
                     return
 
-                user = await get_bot_instance().fetch_user(JAM_USER_ID)
+                user=await get_bot_instance().fetch_user(JAM_USER_ID)
                 if user:
-                    alert_message = (
+                    alert_message=(
                         f"⚠️ **Trivia Pre-Flight Check Warning**\n\n"
                         f"**Problem:** Approved question #{approved_question_id} was deleted or not found!\n"
                         f"**Time Until Trivia:** 15 minutes (11:00 AM UK)\n\n"
@@ -234,7 +234,7 @@ async def _delayed_trivia_validation():
         # Execute the trivia validation with enhanced logging
         try:
             from .utils import _detect_bot_environment
-            is_live = _detect_bot_environment()
+            is_live=_detect_bot_environment()
             if is_live is False:
                 print("⚠️ DELAYED TRIVIA VALIDATION: Staging bot detected, skipping validation")
                 return
@@ -261,9 +261,9 @@ async def _delayed_trivia_validation():
                 print("❌ Bot instance not available for delayed trivia validation error notification")
                 return
 
-            user = await get_bot_instance().fetch_user(JAM_USER_ID)
+            user=await get_bot_instance().fetch_user(JAM_USER_ID)
             if user:
-                error_message = (
+                error_message=(
                     f"❌ **Delayed Trivia Validation Failed**\n\n"
                     f"The 2-minute delayed trivia validation encountered an error:\n"
                     f"```\n{str(e)}\n```\n\n"
@@ -280,7 +280,7 @@ async def _delayed_trivia_validation():
 async def check_emergency_trivia_approval():
     """Check if emergency approval is needed for build day scenarios"""
     try:
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        uk_now=datetime.now(ZoneInfo("Europe/London"))
 
         # Only check on Tuesdays
         if uk_now.weekday() != 1:
@@ -288,14 +288,14 @@ async def check_emergency_trivia_approval():
             return
 
         # Calculate time until Trivia Tuesday (11:00 AM UK)
-        trivia_time = uk_now.replace(hour=11, minute=0, second=0, microsecond=0)
+        trivia_time=uk_now.replace(hour=11, minute=0, second=0, microsecond=0)
 
         # If it's already past trivia time, skip
         if uk_now > trivia_time:
             print("🕒 EMERGENCY APPROVAL CHECK: Past trivia time, skipping emergency approval")
             return
 
-        time_until_trivia_minutes = (trivia_time - uk_now).total_seconds() / 60
+        time_until_trivia_minutes=(trivia_time - uk_now).total_seconds() / 60
 
         print(f"🕒 EMERGENCY APPROVAL CHECK: {time_until_trivia_minutes:.1f} minutes until Trivia Tuesday")
 
@@ -325,7 +325,7 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
 
         # Get available questions
         try:
-            available_questions = db.get_available_trivia_questions()  # type: ignore
+            available_questions=db.get_available_trivia_questions()  # type: ignore
             if not available_questions:
                 print("❌ EMERGENCY APPROVAL: No available questions for emergency approval")
 
@@ -335,10 +335,10 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
                     from ..handlers.trivia.generator import generate_ai_trivia_question
 
                     print("🔄 EMERGENCY APPROVAL: Generating emergency question")
-                    emergency_question = await generate_ai_trivia_question("emergency_approval")
+                    emergency_question=await generate_ai_trivia_question("emergency_approval")
 
                     if emergency_question:
-                        approval_sent = await start_jam_question_approval(emergency_question)
+                        approval_sent=await start_jam_question_approval(emergency_question)
                         if approval_sent:
                             print("✅ EMERGENCY APPROVAL: Emergency question sent to JAM")
 
@@ -349,9 +349,9 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
                                 print("❌ Bot instance not available for emergency approval notification")
                                 return
 
-                            user = await get_bot_instance().fetch_user(JAM_USER_ID)
+                            user=await get_bot_instance().fetch_user(JAM_USER_ID)
                             if user:
-                                urgent_message = (
+                                urgent_message=(
                                     f"🚨 **URGENT: BUILD DAY EMERGENCY APPROVAL**\n\n"
                                     f"The bot startup validation completed with only **{minutes_remaining:.0f} minutes** "
                                     f"remaining until Trivia Tuesday (11:00 AM UK).\n\n"
@@ -373,16 +373,16 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
                 return
 
             # Select highest priority question
-            selected_question = available_questions[0]  # First question (highest priority)
+            selected_question=available_questions[0]  # First question (highest priority)
 
             # If it's a dynamic question, calculate the answer
             if selected_question.get('is_dynamic'):
                 try:
                     from bot.handlers.trivia.analytics import calculate_dynamic_answer
-                    calculated_answer = calculate_dynamic_answer(db, (  # type: ignore
+                    calculated_answer=calculate_dynamic_answer(db, (  # type: ignore
                         selected_question.get('dynamic_query_type', ''))
                     if calculated_answer:
-                        selected_question['correct_answer'] = calculated_answer
+                        selected_question['correct_answer']=calculated_answer
                         print(
                             f"✅ EMERGENCY APPROVAL: Dynamic answer calculated for question #{selected_question.get('id')}")
                 except Exception as calc_error:
@@ -392,7 +392,7 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
             try:
                 from ..handlers.conversation_handler import start_jam_question_approval
 
-                approval_sent = await start_jam_question_approval(selected_question)
+                approval_sent=await start_jam_question_approval(selected_question)
 
                 if approval_sent:
                     print(f"✅ EMERGENCY APPROVAL: Question #{selected_question.get('id')} sent to JAM for approval")
@@ -404,9 +404,9 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
                         print("❌ Bot instance not available for emergency build day notification")
                         return
 
-                    user = await get_bot_instance().fetch_user(JAM_USER_ID)
+                    user=await get_bot_instance().fetch_user(JAM_USER_ID)
                     if user:
-                        urgent_message = (
+                        urgent_message=(
                             f"🚨 **URGENT: BUILD DAY EMERGENCY APPROVAL**\n\n"
                             f"The bot startup validation completed with only **{minutes_remaining:.0f} minutes** "
                             f"remaining until Trivia Tuesday (11:00 AM UK).\n\n"
@@ -435,20 +435,20 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
 
 async def _restore_pending_questions(db) -> list:
     """Helper method to restore orphaned questions"""
-    pending_questions = []
+    pending_questions=[]
     try:
         if hasattr(db, 'get_pending_approval_questions'):
-            pending_questions = db.get_pending_approval_questions()  # type: ignore
-            pending_count = len(pending_questions) if pending_questions else 0
+            pending_questions=db.get_pending_approval_questions()  # type: ignore
+            pending_count=len(pending_questions) if pending_questions else 0
 
             if pending_count > 0:
                 print(
                     f"🔄 STARTUP TRIVIA VALIDATION: Found {pending_count} orphaned questions awaiting approval from previous session")
                 try:
                     from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
-                    restored_count = 0
+                    restored_count=0
                     for pending_q in pending_questions:
-                        queue_position = add_to_approval_queue(
+                        queue_position=add_to_approval_queue(
                             item_type='trivia_question',
                             data=pending_q,
                             priority=8,
@@ -465,7 +465,7 @@ async def _restore_pending_questions(db) -> list:
                         try:
                             if get_bot_instance():
                                 from ..config import JAM_USER_ID
-                                user = await get_bot_instance().fetch_user(JAM_USER_ID)
+                                user=await get_bot_instance().fetch_user(JAM_USER_ID)
                                 if user:
                                     await user.send(
                                         f"♻️ **Pending Questions Restored**\n\n"
@@ -504,10 +504,10 @@ async def validate_startup_trivia_questions():
 
     try:
         from .utils import _detect_bot_environment
-        is_live = _detect_bot_environment()
+        is_live=_detect_bot_environment()
         if is_live is False:
             print("⚠️ STARTUP TRIVIA VALIDATION: Staging bot detected, disabling automated trivia validation")
-            _startup_validation_completed = True
+            _startup_validation_completed=True
             return
     except Exception as env_error:
         print(f"⚠️ STARTUP TRIVIA VALIDATION: Error checking environment: {env_error}")
@@ -517,7 +517,7 @@ async def validate_startup_trivia_questions():
         return
 
     # Acquire the lock
-    _startup_validation_lock = True
+    _startup_validation_lock=True
     print("🔒 STARTUP TRIVIA VALIDATION: Lock acquired, proceeding with validation")
 
     try:
@@ -528,7 +528,7 @@ async def validate_startup_trivia_questions():
         print("✅ STARTUP TRIVIA VALIDATION: Database connection confirmed")
 
         # Check if required database methods exist
-        required_methods = ['get_available_trivia_questions', 'add_trivia_question']
+        required_methods=['get_available_trivia_questions', 'add_trivia_question']
         for method in required_methods:
             if not hasattr(db, method):
                 print(f"❌ STARTUP TRIVIA VALIDATION: Database missing {method} method")
@@ -537,27 +537,27 @@ async def validate_startup_trivia_questions():
         print("✅ STARTUP TRIVIA VALIDATION: Database methods verified")
 
         # ✅ NEW: Check for pending approval questions FIRST (restore orphaned questions)
-        pending_questions = await _restore_pending_questions(db)
+        pending_questions=await _restore_pending_questions(db)
 
         # Check for available questions with retry logic (quick check only)
-        available_questions = None
+        available_questions=None
         try:
-            available_questions = db.get_available_trivia_questions()  # type: ignore
+            available_questions=db.get_available_trivia_questions()  # type: ignore
         except Exception as db_error:
             print(f"⚠️ STARTUP TRIVIA VALIDATION: Database query failed - {db_error}")
             print("⚠️ STARTUP TRIVIA VALIDATION: Continuing with assumption of 0 questions")
-            available_questions = []
+            available_questions=[]
 
-        available_count = len(available_questions) if available_questions else 0
-        pending_count = len(pending_questions) if pending_questions else 0
-        total_count = available_count + pending_count
+        available_count=len(available_questions) if available_questions else 0
+        pending_count=len(pending_questions) if pending_questions else 0
+        total_count=available_count + pending_count
 
         print(
             f"🧠 STARTUP TRIVIA VALIDATION: {available_count} available + {pending_count} pending = {total_count} total questions")
 
         if available_questions and available_count > 0:
             for i, q in enumerate(available_questions[:3]):  # Show first 3 for confirmation
-                question_preview = q.get('question_text', q.get('question', 'Unknown'))[:50]
+                question_preview=q.get('question_text', q.get('question', 'Unknown'))[:50]
                 print(f"   📋 Available Question {i + 1}: {question_preview}...")
 
         # If we have at least 5 questions (available + pending), we're good
@@ -583,8 +583,8 @@ async def validate_startup_trivia_questions():
 
     finally:
         # Mark validation as completed and release the lock
-        _startup_validation_completed = True
-        _startup_validation_lock = False
+        _startup_validation_completed=True
+        _startup_validation_lock=False
         print("🔓 STARTUP TRIVIA VALIDATION: Lock released, validation marked as completed")
 
 
@@ -593,21 +593,21 @@ def _process_generated_question(question_data, db, index, generated_question_tex
     """Helper method to process, validate and queue a generated question.
     Returns (success, is_duplicate).
     """
-    required_fields = ['question_text', 'question_type', 'correct_answer']
+    required_fields=['question_text', 'question_type', 'correct_answer']
     if not all(field in question_data for field in required_fields):
-        missing_fields = [f for f in required_fields if f not in question_data]
+        missing_fields=[f for f in required_fields if f not in question_data]
         print(f"⚠️ BACKGROUND GENERATION: Generated question {index + 1} missing fields: {missing_fields}")
         return False, False
 
-    question_text = question_data.get('question_text', 'Unknown')
+    question_text=question_data.get('question_text', 'Unknown')
 
     # Check for duplicates before adding to queue
     if db:
         try:
-            duplicate_check = db.check_question_duplicate(question_text, similarity_threshold=0.85)
+            duplicate_check=db.check_question_duplicate(question_text, similarity_threshold=0.85)
             if duplicate_check:
-                similarity = duplicate_check['similarity_score']
-                duplicate_id = duplicate_check['duplicate_id']
+                similarity=duplicate_check['similarity_score']
+                duplicate_id=duplicate_check['duplicate_id']
                 print(
                     f"⚠️ BACKGROUND GENERATION: Question {index + 1} is duplicate ({similarity * 100:.0f}% match to Q#{duplicate_id}), skipping")
                 return False, True
@@ -621,16 +621,16 @@ def _process_generated_question(question_data, db, index, generated_question_tex
 
     # ✅ FIX #4: Track template ID if this was a template-generated question
     if question_data.get('generation_method') == 'template':
-        template_id = question_text[:20]  # Same ID format as in ai_handler
+        template_id=question_text[:20]  # Same ID format as in ai_handler
         used_template_ids.append(template_id)
         print(f"📝 BACKGROUND GENERATION: Tracked template ID for avoidance: {template_id}")
 
     # ✅ NEW: Persist question to database IMMEDIATELY with pending_approval status
     # This ensures questions survive bot restarts
-    question_id = None
+    question_id=None
     if db:
         try:
-            question_id = db.add_trivia_question(
+            question_id=db.add_trivia_question(
                 question_text=question_data['question_text'],
                 question_type=question_data['question_type'],
                 correct_answer=question_data.get('correct_answer'),
@@ -647,7 +647,7 @@ def _process_generated_question(question_data, db, index, generated_question_tex
                 print(
                     f"💾 BACKGROUND GENERATION: Question persisted to DB as ID #{question_id} (status: pending_approval)")
                 # Add question_id to the data for the approval queue
-                question_data['id'] = question_id
+                question_data['id']=question_id
             else:
                 print("⚠️ BACKGROUND GENERATION: Failed to persist question to database")
                 return False, False
@@ -657,7 +657,7 @@ def _process_generated_question(question_data, db, index, generated_question_tex
 
     # ✅ FIX #2: Add to approval queue instead of manual sequential logic
     from ..handlers.conversation_handler import add_to_approval_queue
-    queue_position = add_to_approval_queue(
+    queue_position=add_to_approval_queue(
         item_type='trivia_question',
         data=question_data,
         priority=5,  # Normal priority for startup questions
@@ -674,7 +674,7 @@ async def _background_question_generation(current_question_count: int):
     try:
         print(f"🧠 BACKGROUND QUESTION GENERATION: Starting with {current_question_count} existing questions")
 
-        questions_needed = min(5 - current_question_count, 4)  # Cap at 4 to avoid overwhelming JAM
+        questions_needed=min(5 - current_question_count, 4)  # Cap at 4 to avoid overwhelming JAM
 
         # Check if AI handler is available
         try:
@@ -687,22 +687,22 @@ async def _background_question_generation(current_question_count: int):
             return
 
         # Generate all questions first
-        successful_generations = 0
-        failed_generations = 0
-        duplicate_count = 0
+        successful_generations=0
+        failed_generations=0
+        duplicate_count=0
 
         # ✅ CIRCUIT BREAKER: Protect API quota from consecutive failures
-        consecutive_failures = 0
-        MAX_CONSECUTIVE_FAILURES = 2  # Stop after 2 failures in a row
+        consecutive_failures=0
+        MAX_CONSECUTIVE_FAILURES=2  # Stop after 2 failures in a row
 
         # ✅ FIX: Track recently generated questions AND templates to prevent repetition
-        generated_question_texts = []
-        used_template_ids = []  # ✅ NEW: Track templates used in this batch
+        generated_question_texts=[]
+        used_template_ids=[]  # ✅ NEW: Track templates used in this batch
 
         print(f"🔄 BACKGROUND GENERATION: Generating {questions_needed} questions with pattern diversity...")
 
-        generation_attempts = 0
-        MAX_ATTEMPTS = 3  # Prevent infinite loop if we keep getting 1-question batches
+        generation_attempts=0
+        MAX_ATTEMPTS=3  # Prevent infinite loop if we keep getting 1-question batches
 
         while successful_generations < questions_needed and generation_attempts < MAX_ATTEMPTS:
             generation_attempts += 1
@@ -717,7 +717,7 @@ async def _background_question_generation(current_question_count: int):
                     if not get_bot_instance():
                         print("⚠️ Bot instance not available for circuit breaker notification")
                     else:
-                        user = await get_bot_instance().fetch_user(JAM_USER_ID)
+                        user=await get_bot_instance().fetch_user(JAM_USER_ID)
                         if user:
                             await user.send(
                                 f"🚨 **Trivia Generation Circuit Breaker Activated**\n\n"
@@ -737,11 +737,11 @@ async def _background_question_generation(current_question_count: int):
                     f"🔄 BACKGROUND GENERATION: Attempt {generation_attempts}/{MAX_ATTEMPTS} to reach {questions_needed} questions")
 
                 # ✅ FIX #1: Use unique context for each generation to avoid cache hits
-                unique_context = f"startup_validation_{generation_attempts}"
+                unique_context=f"startup_validation_{generation_attempts}"
 
                 # ✅ FIX #2: Pass recently generated questions AND templates to avoid repetition
                 print("🔄 BACKGROUND GENERATION: Using unified Trivia Director")
-                questions_list = await generate_ai_trivia_question(
+                questions_list=await generate_ai_trivia_question(
                     unique_context,
                     avoid_questions=generated_question_texts,
                     avoid_templates=used_template_ids  # ✅ NEW: Prevent template reuse in batch
@@ -749,9 +749,9 @@ async def _background_question_generation(current_question_count: int):
 
                 if questions_list and isinstance(questions_list, list):
                     # ✅ SUCCESS: Reset consecutive failure counter
-                    consecutive_failures = 0
+                    consecutive_failures=0
                     for q_data in questions_list:
-                        success, is_duplicate = _process_generated_question(
+                        success, is_duplicate=_process_generated_question(
                             q_data,
                             db,
                             successful_generations,
@@ -802,12 +802,12 @@ async def _background_question_generation(current_question_count: int):
                     return
 
                 if hasattr(get_bot_instance(), 'fetch_user') and get_bot_instance().user:
-                    user = await get_bot_instance().fetch_user(JAM_USER_ID)
+                    user=await get_bot_instance().fetch_user(JAM_USER_ID)
                     if user:
                         from ..handlers.conversation_handler import get_queue_length
-                        remaining = get_queue_length()
+                        remaining=get_queue_length()
 
-                        summary_message = (
+                        summary_message=(
                             f"🧠 **Background Question Generation Complete**\n\n"
                             f"**Generation Summary:**\n"
                             f"• Questions generated: {successful_generations}\n"

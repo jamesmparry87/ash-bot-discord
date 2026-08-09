@@ -363,7 +363,7 @@ async def trivia_tuesday():
                 return
 
         # 3. Start a persistent session in the database
-        session_id = db.create_trivia_session(
+        session_id=db.create_trivia_session(
             question_id=question_id,
             session_type='weekly_auto',
             calculated_answer=calculated_answer
@@ -375,16 +375,16 @@ async def trivia_tuesday():
         # 4. Format the message using shared formatting function for consistency
         from ..utils.trivia_formatting import create_trivia_question_embed
 
-        embed = create_trivia_question_embed(
+        embed=create_trivia_question_embed(
             question_data=question_data,
             session_id=session_id,
             started_by="Ash (Automated)"  # type: ignore
         )
 
         # 5. Post the message and update the session
-        channel = bot.get_channel(MEMBERS_CHANNEL_ID)
+        channel=bot.get_channel(MEMBERS_CHANNEL_ID)
         if channel and isinstance(channel, discord.TextChannel):
-            trivia_post = await channel.send(embed=embed)
+            trivia_post=await channel.send(embed=embed)
 
             # CRITICAL: Update the session with message IDs for answer detection
             db.update_trivia_session_messages(
@@ -404,24 +404,24 @@ async def trivia_tuesday():
 # Run every 15 minutes to check for stale trivia sessions
 
 
-@tasks.loop(minutes=15)
+@ tasks.loop(minutes=15)
 async def check_stale_trivia_sessions():
     """Auto-end trivia sessions that have been active for more than 2 hours"""
     try:
-        db = get_database()
+        db=get_database()
         if not db:
             return
 
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
-        cutoff_time = uk_now - timedelta(hours=2)
+        uk_now=datetime.now(ZoneInfo("Europe/London"))
+        cutoff_time=uk_now - timedelta(hours=2)
 
         # Get active sessions older than 2 hours
-        active_session = db.get_active_trivia_session()
+        active_session=db.get_active_trivia_session()
 
         if not active_session:
             return  # No active sessions
 
-        session_started = active_session.get('started_at')
+        session_started=active_session.get('started_at')
         if not session_started:
             return
 
@@ -433,37 +433,37 @@ async def check_stale_trivia_sessions():
         # earlier than it did - causing the auto-close to trigger after only 1 hour.
         if session_started.tzinfo is None:
             from datetime import timezone as _tz
-            session_started = session_started.replace(tzinfo=_tz.utc)
+            session_started=session_started.replace(tzinfo=_tz.utc)
 
         # Check if session is older than 2 hours
         if session_started < cutoff_time:
-            session_id = active_session['id']
+            session_id=active_session['id']
             print(f"⏰ AUTO-END TRIVIA: Session {session_id} has been active for more than 2 hours, auto-ending...")
 
             # Get the bot instance
-            bot = get_bot_instance()
+            bot=get_bot_instance()
             if not bot:
                 print("❌ AUTO-END TRIVIA: Bot instance not available")
                 return
 
             # Get the channel where trivia was posted
-            channel_id = active_session.get('channel_id')
+            channel_id=active_session.get('channel_id')
             if not channel_id:
                 print("❌ AUTO-END TRIVIA: No channel ID found for session")
                 return
 
-            channel = bot.get_channel(channel_id)
+            channel=bot.get_channel(channel_id)
             if not channel or not isinstance(channel, discord.TextChannel):
                 print(f"❌ AUTO-END TRIVIA: Could not find channel {channel_id}")
                 return
 
             # End the session using the same logic as !endtrivia
             try:
-                session_results = db.end_trivia_session(session_id, ended_by=bot.user.id if bot.user else 0)
+                session_results=db.end_trivia_session(session_id, ended_by=bot.user.id if bot.user else 0)
 
                 if session_results:
                     # Create results embed (same as manual !endtrivia)
-                    embed = discord.Embed(
+                    embed=discord.Embed(
                         title="🏆 **Trivia Tuesday - Auto-Completed Results!**",
                         description=f"**Question #{active_session['question_id']}:** {session_results['question']}\n\n*Session automatically ended after 2 hours.*",
                         color=0xffd700,
@@ -477,20 +477,20 @@ async def check_stale_trivia_sessions():
                     )
 
                     # Show winner if present
-                    winner_id = session_results.get('first_correct', {}).get(
+                    winner_id=session_results.get('first_correct', {}).get(
                         'user_id') if session_results.get('first_correct') else None
-                    correct_user_ids = session_results.get('correct_user_ids', [])
-                    incorrect_user_ids = session_results.get('incorrect_user_ids', [])
+                    correct_user_ids=session_results.get('correct_user_ids', [])
+                    incorrect_user_ids=session_results.get('incorrect_user_ids', [])
 
-                    other_correct_ids = [uid for uid in correct_user_ids if uid !=
+                    other_correct_ids=[uid for uid in correct_user_ids if uid !=
                                          winner_id] if winner_id else correct_user_ids
 
                     if winner_id:
                         try:
-                            winner_user = await bot.fetch_user(winner_id)
-                            winner_name = winner_user.display_name if winner_user else f"User {winner_id}"
+                            winner_user=await bot.fetch_user(winner_id)
+                            winner_name=winner_user.display_name if winner_user else f"User {winner_id}"
                         except Exception:
-                            winner_name = f"User {winner_id}"
+                            winner_name=f"User {winner_id}"
 
                         embed.add_field(
                             name="🎯 **Primary Objective: Achieved**",
@@ -498,7 +498,7 @@ async def check_stale_trivia_sessions():
                             inline=False)
 
                     if other_correct_ids:
-                        mentions = [f"<@{uid}>" for uid in other_correct_ids]
+                        mentions=[f"<@{uid}>" for uid in other_correct_ids]
                         embed.add_field(
                             name="📊 **Acceptable Performance**",
                             value=f"Additional personnel {', '.join(mentions)} also provided correct data.",
@@ -506,7 +506,7 @@ async def check_stale_trivia_sessions():
                         )
 
                     if incorrect_user_ids:
-                        mentions = [f"<@{uid}>" for uid in incorrect_user_ids]
+                        mentions=[f"<@{uid}>" for uid in incorrect_user_ids]
                         embed.add_field(
                             name="⚠️ **Mission Assessment: Performance Insufficient**",
                             value=f"Personnel {', '.join(mentions)} require recalibration.",
@@ -514,11 +514,11 @@ async def check_stale_trivia_sessions():
                         )
 
                     # Show participation stats
-                    total_participants = session_results.get('total_participants', 0)
-                    correct_answers = session_results.get('correct_answers', 0)
+                    total_participants=session_results.get('total_participants', 0)
+                    correct_answers=session_results.get('correct_answers', 0)
 
                     if total_participants > 0:
-                        accuracy = round((correct_answers / total_participants) * 100, 1)
+                        accuracy=round((correct_answers / total_participants) * 100, 1)
                         embed.add_field(
                             name="📊 **Session Stats:**",
                             value=f"**Participants:** {total_participants}\n**Correct:** {correct_answers}\n**Accuracy:** {accuracy}%",
@@ -545,18 +545,18 @@ async def check_stale_trivia_sessions():
 # Run at 8:15 AM UK time every Friday - Gathering weekly activity
 
 
-@tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
+@ tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
 async def friday_community_analysis():
     """Scrapes community activity, generates a debrief, and sends it for approval."""
     if not _should_run_automated_tasks():
         return
 
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    uk_now=datetime.now(ZoneInfo("Europe/London"))
     if uk_now.weekday() != 4:
         return  # Only run on Fridays
 
     print("🔄 COMMUNITY ANALYSIS (Friday): Starting weekly activity scrape...")
-    bot = get_bot_instance()
+    bot=get_bot_instance()
 
     if not bot:
         print("❌ COMMUNITY ANALYSIS (Friday): Bot instance not available")
@@ -567,7 +567,7 @@ async def friday_community_analysis():
         )
         return
 
-    db = get_database()
+    db=get_database()
     if not db:
         print("❌ COMMUNITY ANALYSIS (Friday): Database not available")
         await notify_jam_weekly_message_failure(
@@ -580,15 +580,15 @@ async def friday_community_analysis():
     try:
         # --- 1. Data Gathering (Scraping) ---
         # Define public, non-moderator channels to scrape
-        public_channel_ids = [CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID]
+        public_channel_ids=[CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID]
 
-        all_messages = []
-        seven_days_ago = uk_now - timedelta(days=7)
+        all_messages=[]
+        seven_days_ago=uk_now - timedelta(days=7)
 
         # Scrape with error handling
         try:
             for channel_id in public_channel_ids:
-                channel = bot.get_channel(channel_id)
+                channel=bot.get_channel(channel_id)
                 if isinstance(channel, discord.TextChannel):
                     async for message in channel.history(limit=1000, after=seven_days_ago):
                         if not message.author.bot and message.content:
@@ -612,27 +612,27 @@ async def friday_community_analysis():
             return
 
         # --- 2. Analysis & Moment Selection ---
-        analysis_modules = []
+        analysis_modules=[]
 
         # Module A: Jonesy's Most Engaging Message
-        jonesy_messages = [m for m in all_messages if m.author.id == JONESY_USER_ID]
+        jonesy_messages=[m for m in all_messages if m.author.id == JONESY_USER_ID]
         if jonesy_messages:
             jonesy_messages.sort(key=lambda m: len(m.reactions), reverse=True)
-            top_jonesy_message = jonesy_messages[0]
+            top_jonesy_message=jonesy_messages[0]
             if len(top_jonesy_message.reactions) > 2:  # Set a minimum reaction threshold
                 import re
 
                 # Clean the message content
-                clean_content = top_jonesy_message.content
-                clean_content = re.sub(r'https?://\S+', '', clean_content)  # Remove URLs
-                clean_content = clean_content.replace('\n', ' ').replace('\r', '')  # Remove newlines
-                clean_content = ' '.join(clean_content.split())  # Clean whitespace
+                clean_content=top_jonesy_message.content
+                clean_content=re.sub(r'https?://\S+', '', clean_content)  # Remove URLs
+                clean_content=clean_content.replace('\n', ' ').replace('\r', '')  # Remove newlines
+                clean_content=' '.join(clean_content.split())  # Clean whitespace
 
                 if len(clean_content) > 120:
-                    clean_content = clean_content[:117] + "..."
+                    clean_content=clean_content[:117] + "..."
 
                 # Extract JSON-serializable data from Message object
-                message_data = {
+                message_data={
                     "content": top_jonesy_message.content,  # Keep raw for data
                     "clean_content": clean_content,
                     "author_id": top_jonesy_message.author.id,
@@ -649,12 +649,12 @@ async def friday_community_analysis():
                 })
 
         # Module B: Trivia Tuesday Recap
-        trivia_stats = db.get_trivia_participant_stats_for_week()
+        trivia_stats=db.get_trivia_participant_stats_for_week()
         if trivia_stats.get("status") == "success":
-            winner_id = trivia_stats.get("winner_id")
-            notable_id = trivia_stats.get("notable_participant_id")
+            winner_id=trivia_stats.get("winner_id")
+            notable_id=trivia_stats.get("notable_participant_id")
             if winner_id:
-                recap = f"Review of the weekly intelligence assessment confirms <@{winner_id}> demonstrated optimal response efficiency."
+                recap=f"Review of the weekly intelligence assessment confirms <@{winner_id}> demonstrated optimal response efficiency."
                 if notable_id:
                     recap += f" Conversely, User <@{notable_id}> submitted multiple analyses that were... suboptimal. Recalibration is recommended."
                 analysis_modules.append({"type": "trivia_recap", "data": trivia_stats, "content": recap})
@@ -662,7 +662,7 @@ async def friday_community_analysis():
         # Module C: General Activity (Fallback)
         # Always available as long as there are messages, guarantees Friday greeting generates
         if all_messages:
-            activity_recap = f"Total communication volume across monitored channels registered at **{len(all_messages)} transmissions** this week. Processing complete."
+            activity_recap=f"Total communication volume across monitored channels registered at **{len(all_messages)} transmissions** this week. Processing complete."
             analysis_modules.append({
                 "type": "general_activity",
                 "data": {"total_messages": len(all_messages)},
@@ -678,37 +678,37 @@ async def friday_community_analysis():
             )
             return
 
-        analysis_cache = {"modules": analysis_modules}  # Cache all found modules for regeneration
+        analysis_cache={"modules": analysis_modules}  # Cache all found modules for regeneration
 
         from ..handlers.ai_handler import generate_weekly_report
 
         # Try dynamic AI generation first
-        debrief = await generate_weekly_report('friday', analysis_cache)
+        debrief=await generate_weekly_report('friday', analysis_cache)
 
         if not debrief:
             # Fallback to static message if AI is disabled or fails
             import random
 
             # Give preference to specific modules over the general fallback if possible
-            specific_modules = [m for m in analysis_modules if m['type'] != 'general_activity']
+            specific_modules=[m for m in analysis_modules if m['type'] != 'general_activity']
             if specific_modules:
-                chosen_moment = random.choice(specific_modules)
+                chosen_moment=random.choice(specific_modules)
             else:
-                chosen_moment = random.choice(analysis_modules)
+                chosen_moment=random.choice(analysis_modules)
 
-            intros = [
+            intros=[
                 "Good morning, personnel. My analysis of the past week's crew engagement is complete.",
                 "Attention crew. I have processed the weekly communication logs. The results are... as expected.",
                 "Greetings. I have concluded my scheduled Friday assessment of your interpersonal data exchanges.",
                 "Weekly diagnostic complete. I have evaluated the crew's recent communication patterns for optimal efficiency."]
 
-            outros = [
+            outros=[
                 "Weekend operational pause is now in effect.",
                 "You are now authorized to commence your weekend operational pause. Please ensure your biological functions remain intact until Monday.",
                 "I recommend using the next 48 hours for biological rest. Operational pause is active.",
                 "End of report. Please return to your designated leisure activities."]
 
-            debrief = (
+            debrief=(
                 f"📅 **Friday Protocol Assessment**\n\n"
                 f"{random.choice(intros)}\n\n"
                 f"{chosen_moment['content']}\n\n"
@@ -722,7 +722,7 @@ async def friday_community_analysis():
 
         # --- 4. Approval Workflow ---
         # --- 4. Approval Workflow ---
-        announcement_id = db.create_weekly_announcement('friday', debrief, analysis_cache)
+        announcement_id=db.create_weekly_announcement('friday', debrief, analysis_cache)
 
         if announcement_id:
             await start_weekly_announcement_approval(announcement_id, debrief, 'friday')
@@ -746,10 +746,10 @@ async def friday_community_analysis():
 # Run at 00:00 PT (midnight Pacific Time) every day
 
 
-@tasks.loop(time=time(0, 0, tzinfo=ZoneInfo("US/Pacific")))
+@ tasks.loop(time=time(0, 0, tzinfo=ZoneInfo("US/Pacific")))
 async def scheduled_midnight_restart():
     """Automatically restart the bot at midnight Pacific Time to reset daily limits"""
-    pt_now = datetime.now(ZoneInfo("US/Pacific"))
+    pt_now=datetime.now(ZoneInfo("US/Pacific"))
     print(
         f"🔄 Midnight Pacific Time restart initiated at {pt_now.strftime('%Y-%m-%d %H:%M:%S PT')}")
 
@@ -758,13 +758,13 @@ async def scheduled_midnight_restart():
             print("❌ Bot instance not available for scheduled midnight restart")
             return
 
-        guild = get_bot_instance().get_guild(GUILD_ID)  # type: ignore
+        guild=get_bot_instance().get_guild(GUILD_ID)  # type: ignore
         if guild:
             # Find mod channel
-            mod_channel = None
+            mod_channel=None
             for channel in guild.text_channels:
                 if channel.name in ["mod-chat", "moderator-chat", "mod"]:
-                    mod_channel = channel
+                    mod_channel=channel
                     break
 
             if mod_channel:
@@ -781,14 +781,14 @@ async def scheduled_midnight_restart():
 # Run at 8:15 AM UK time every day (5 minutes after Google quota reset)
 
 
-@tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
+@ tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
 async def scheduled_ai_refresh():
     """Silently refresh AI module connections at 8:15am BST (after Google quota reset)"""
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    uk_now=datetime.now(ZoneInfo("Europe/London"))
 
-    dst_offset = uk_now.dst()
-    is_bst = dst_offset is not None and dst_offset.total_seconds() > 0
-    timezone_name = "BST" if is_bst else "GMT"
+    dst_offset=uk_now.dst()
+    is_bst=dst_offset is not None and dst_offset.total_seconds() > 0
+    timezone_name="BST" if is_bst else "GMT"
 
     print(
         f"🤖 AI module refresh initiated at {uk_now.strftime(f'%Y-%m-%d %H:%M:%S {timezone_name}')} (post-quota reset)")
@@ -804,45 +804,45 @@ async def scheduled_ai_refresh():
         initialize_ai()
 
         # Get updated status
-        ai_status = get_ai_status()
+        ai_status=get_ai_status()
 
         print(
             f"🔄 AI refresh completed - Status: {ai_status['status_message']}")
 
         # Only send notification if there were previous issues or this is the
         # first refresh of the day
-        usage_stats = ai_status.get('usage_stats', {})
-        previous_errors = usage_stats.get('consecutive_errors', 0)
+        usage_stats=ai_status.get('usage_stats', {})
+        previous_errors=usage_stats.get('consecutive_errors', 0)
 
         # NEW: Trivia Pool Validation and Auto-Replenishment
-        pool_status_message = ""
+        pool_status_message=""
         try:
-            db = get_database()
+            db=get_database()
             if db:
-                available_questions = db.get_available_trivia_questions()
-                pool_count = len(available_questions) if available_questions else 0
+                available_questions=db.get_available_trivia_questions()
+                pool_count=len(available_questions) if available_questions else 0
 
                 print(f"🧠 TRIVIA POOL CHECK (8:15 AM): {pool_count} questions available")
 
                 if pool_count >= 3:
-                    pool_status_message = f"✅ Trivia Pool: {pool_count} questions available"
+                    pool_status_message=f"✅ Trivia Pool: {pool_count} questions available"
                 else:
-                    pool_status_message = f"⚠️ Trivia Pool: {pool_count}/5 questions (LOW)"
+                    pool_status_message=f"⚠️ Trivia Pool: {pool_count}/5 questions (LOW)"
 
                     # Auto-generate needed questions (always aim to fill back to 5)
-                    needed = 5 - pool_count
+                    needed=5 - pool_count
                     print(f"🔄 TRIVIA POOL: Generating {needed} questions...")
 
                     try:
                         from ..handlers.conversation_handler import start_jam_question_approval
                         from ..handlers.trivia.generator import generate_ai_trivia_question
 
-                        generated = 0
-                        failed = 0
+                        generated=0
+                        failed=0
 
                         # ✅ CIRCUIT BREAKER: Protect API quota from consecutive failures
-                        consecutive_failures = 0
-                        MAX_CONSECUTIVE_FAILURES = 2  # Stop after 2 failures in a row
+                        consecutive_failures=0
+                        MAX_CONSECUTIVE_FAILURES=2  # Stop after 2 failures in a row
 
                         for i in range(needed):
                             # ✅ CIRCUIT BREAKER CHECK: Stop if too many consecutive failures
@@ -854,11 +854,11 @@ async def scheduled_ai_refresh():
                                 break
 
                             try:
-                                question_data = await generate_ai_trivia_question(f"auto_replenish_{i}")
+                                question_data=await generate_ai_trivia_question(f"auto_replenish_{i}")
                                 if question_data:
                                     if await start_jam_question_approval(question_data):
                                         generated += 1
-                                        consecutive_failures = 0  # ✅ Reset on success
+                                        consecutive_failures=0  # ✅ Reset on success
                                         print(f"✅ Generated question {i+1}/{needed}")
                                     else:
                                         failed += 1
@@ -882,10 +882,10 @@ async def scheduled_ai_refresh():
                         pool_status_message += f"\n❌ Replenishment failed: {str(replenish_error)[:100]}"
                         print(f"❌ TRIVIA POOL: Replenishment error: {replenish_error}")
             else:
-                pool_status_message = "❌ Trivia Pool: Database unavailable"
+                pool_status_message="❌ Trivia Pool: Database unavailable"
 
         except Exception as pool_error:
-            pool_status_message = f"❌ Trivia Pool: Check failed - {str(pool_error)[:100]}"
+            pool_status_message=f"❌ Trivia Pool: Check failed - {str(pool_error)[:100]}"
             print(f"❌ TRIVIA POOL CHECK: Error - {pool_error}")
 
         # Send notification to JAM (always send now, includes pool status)
@@ -896,11 +896,11 @@ async def scheduled_ai_refresh():
                 print("⚠️ Bot instance not available for AI refresh notification")
                 return
 
-            user = await get_bot_instance().fetch_user(JAM_USER_ID)  # type: ignore
+            user=await get_bot_instance().fetch_user(JAM_USER_ID)  # type: ignore
             if user:
                 # Build notification message
                 if previous_errors > 0:
-                    notification_msg = (
+                    notification_msg=(
                         f"🤖 **AI Module Refresh Complete**\n"
                         f"• Status: {ai_status['status_message']}\n"
                         f"• Previous errors cleared: {previous_errors}\n"
@@ -909,7 +909,7 @@ async def scheduled_ai_refresh():
                         f"*AI functionality should now be restored.*"
                     )
                 else:
-                    notification_msg = (
+                    notification_msg=(
                         f"🤖 **Daily System Refresh - {uk_now.strftime(f'%H:%M {timezone_name}')}**\n"
                         f"• AI Status: {ai_status['status_message']}\n"
                         f"• {pool_status_message}\n\n"
@@ -931,7 +931,7 @@ async def scheduled_ai_refresh():
                 print("⚠️ Bot instance not available for AI refresh error notification")
                 return
 
-            user = await get_bot_instance().fetch_user(JAM_USER_ID)  # type: ignore
+            user=await get_bot_instance().fetch_user(JAM_USER_ID)  # type: ignore
             if user:
                 await user.send(
                     f"⚠️ **AI Module Refresh Failed**\n"
@@ -946,14 +946,14 @@ async def scheduled_ai_refresh():
 # Check reminders every minute
 
 
-@tasks.loop(minutes=1)
+@ tasks.loop(minutes=1)
 async def check_due_reminders():
     """Check for due reminders and deliver them"""
     try:
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
+        uk_now=datetime.now(ZoneInfo("Europe/London"))
 
         # Get dynamic database instance
-        db = get_database()
+        db=get_database()
 
         # Enhanced database diagnostics - only log issues or when processing reminders
         if db is None:
@@ -967,7 +967,7 @@ async def check_due_reminders():
         # Check database connection - only log errors
         try:
             if hasattr(db, 'get_connection') and callable(getattr(db, 'get_connection')):
-                conn = db.get_connection()
+                conn=db.get_connection()
                 if not conn:
                     print("❌ No database connection available - reminder system disabled")
                     return
@@ -981,7 +981,7 @@ async def check_due_reminders():
         # Test database connection - only log errors
         try:
             if hasattr(db, 'get_connection') and callable(getattr(db, 'get_connection')):
-                conn = db.get_connection()  # type: ignore
+                conn=db.get_connection()  # type: ignore
                 if not conn:
                     print("❌ Database connection failed in reminder check")
                     return
@@ -994,7 +994,7 @@ async def check_due_reminders():
 
         # Get due reminders - only log if found or if error occurs
         try:
-            due_reminders = db.get_due_reminders(uk_now)  # type: ignore
+            due_reminders=db.get_due_reminders(uk_now)  # type: ignore
 
             # Only log when there are actually reminders to process
             if due_reminders and len(due_reminders) > 0:
@@ -1017,19 +1017,19 @@ async def check_due_reminders():
         print(f" Processing {len(due_reminders)} due reminders")
 
         # Get bot instance more reliably
-        bot = None
+        bot=None
         try:
             # Try multiple methods to get bot instance
             import sys
             for name, obj in sys.modules.items():
                 if hasattr(obj, 'bot') and hasattr(obj.bot, 'user') and obj.bot.user:
-                    bot = obj.bot
+                    bot=obj.bot
                     print(f"✅ Bot instance found: {bot.user.name if bot.user else 'Unknown'}")
                     break
 
             if not bot:
                 # Fallback: use global bot instance
-                bot = get_bot_instance()
+                bot=get_bot_instance()
                 if bot and hasattr(bot, 'user') and bot.user:
                     print(f"✅ Bot instance from global: {bot.user.name if bot.user else 'Unknown'}")
                 else:
@@ -1039,13 +1039,13 @@ async def check_due_reminders():
             print(f"❌ Could not get bot instance: {bot_e}")
             return
 
-        successful_deliveries = 0
-        failed_deliveries = 0
+        successful_deliveries=0
+        failed_deliveries=0
 
         for reminder in due_reminders:
             try:
-                reminder_id = reminder.get('id')
-                reminder_text = reminder.get('reminder_text', '')
+                reminder_id=reminder.get('id')
+                reminder_text=reminder.get('reminder_text', '')
                 print(
                     f"📤 Delivering reminder {reminder_id}: {reminder_text[:50]}...")
 
@@ -1087,14 +1087,14 @@ async def check_due_reminders():
         traceback.print_exc()
 
 
-@tasks.loop(minutes=1)  # Check for auto-actions every minute
+@ tasks.loop(minutes=1)  # Check for auto-actions every minute
 async def check_auto_actions():
     """Check for reminders that need auto-actions triggered"""
     try:
         from ..database import get_database
-        db = get_database()
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
-        auto_action_reminders = db.get_reminders_awaiting_auto_action(  # type: ignore
+        db=get_database()
+        uk_now=datetime.now(ZoneInfo("Europe/London"))
+        auto_action_reminders=db.get_reminders_awaiting_auto_action(  # type: ignore
             uk_now)  # type: ignore
 
         if not auto_action_reminders:
@@ -1124,30 +1124,30 @@ async def check_auto_actions():
 # Run every hour to cleanup old recommendation messages
 
 
-@tasks.loop(hours=1)
+@ tasks.loop(hours=1)
 async def cleanup_game_recommendations():
     """Clean up user recommendation messages older than 24 hours in #game-recommendation channel"""
     try:
-        uk_now = datetime.now(ZoneInfo("Europe/London"))
-        cutoff_time = uk_now - timedelta(hours=24)
+        uk_now=datetime.now(ZoneInfo("Europe/London"))
+        cutoff_time=uk_now - timedelta(hours=24)
 
         print(f"🧹 Game recommendation cleanup starting at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
 
         # Also cleanup stale weekly announcement approvals
         try:
             from ..handlers.conversation_handler import cleanup_weekly_announcement_approvals
-            expired_count = cleanup_weekly_announcement_approvals()
+            expired_count=cleanup_weekly_announcement_approvals()
             if expired_count > 0:
                 print(f"🧹 Cleaned up {expired_count} stale weekly announcement approvals")
         except Exception as cleanup_error:
             print(f"⚠️ Error cleaning up weekly announcement approvals: {cleanup_error}")
 
         # Improved bot instance checking with multiple fallback methods
-        bot_instance = None
+        bot_instance=None
 
         # Method 1: Use global get_bot_instance() if available
         if get_bot_instance() and hasattr(get_bot_instance(), 'user') and get_bot_instance().user:  # type: ignore
-            bot_instance = get_bot_instance()
+            bot_instance=get_bot_instance()
             print("✅ Using global bot instance for cleanup")
         else:
             # Method 2: Try to find bot instance from imported modules
@@ -1155,7 +1155,7 @@ async def cleanup_game_recommendations():
             import sys
             for module_name, module in sys.modules.items():
                 if hasattr(module, 'bot') and hasattr(module.bot, 'user') and module.bot.user:
-                    bot_instance = module.bot
+                    bot_instance=module.bot
                     print(f"✅ Found bot instance in module: {module_name}")
                     break
 
@@ -1164,27 +1164,27 @@ async def cleanup_game_recommendations():
                 print("💡 This is normal during bot startup or if scheduled tasks start before bot is ready")
                 return
 
-        guild = bot_instance.get_guild(GUILD_ID)  # type: ignore
+        guild=bot_instance.get_guild(GUILD_ID)  # type: ignore
         if not guild:
             print("❌ Guild not found for game recommendation cleanup")
             return
 
         # Get the game recommendation channel
-        game_rec_channel = bot_instance.get_channel(GAME_RECOMMENDATION_CHANNEL_ID)  # type: ignore
+        game_rec_channel=bot_instance.get_channel(GAME_RECOMMENDATION_CHANNEL_ID)  # type: ignore
         if not game_rec_channel or not isinstance(game_rec_channel, discord.TextChannel):
             print("❌ Game recommendation channel not found for cleanup")
             return
 
         # Check bot permissions in the channel
-        bot_member = guild.get_member(bot_instance.user.id) if bot_instance.user else None  # type: ignore
+        bot_member=guild.get_member(bot_instance.user.id) if bot_instance.user else None  # type: ignore
         if bot_member:
-            permissions = game_rec_channel.permissions_for(bot_member)
+            permissions=game_rec_channel.permissions_for(bot_member)
             if not permissions.manage_messages:
                 print("⚠️ Bot lacks 'Manage Messages' permission for game recommendation cleanup")
                 return
 
-        deleted_count = 0
-        checked_count = 0
+        deleted_count=0
+        checked_count=0
 
         # Check messages in the channel, going back 25 hours to be safe
         async for message in game_rec_channel.history(limit=200, before=uk_now - timedelta(hours=23)):
@@ -1233,9 +1233,9 @@ async def notify_scheduled_message_error(task_name: str, error_message: str, tim
             print("❌ Bot instance not available for scheduled message error notification")
             return
 
-        user = await get_bot_instance().fetch_user(JAM_USER_ID)  # type: ignore
+        user=await get_bot_instance().fetch_user(JAM_USER_ID)  # type: ignore
         if user:
-            error_notification = (
+            error_notification=(
                 f"⚠️ **Scheduled Message Error**\n\n"
                 f"**Task:** {task_name}\n"
                 f"**Error:** {error_message}\n"
@@ -1259,49 +1259,49 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
     """Deliver a reminder to the appropriate channel/user with enhanced reliability"""
     try:
         # Get bot instance using the same reliable method as check_due_reminders
-        bot = None
+        bot=None
         import sys
         for name, obj in sys.modules.items():
             if hasattr(obj, 'bot') and hasattr(obj.bot, 'user') and obj.bot.user:
-                bot = obj.bot
+                bot=obj.bot
                 break
 
         if not bot:
             # Fallback: use global bot instance
-            bot = get_bot_instance()
+            bot=get_bot_instance()
 
         if not bot:
             raise RuntimeError("Bot instance not available for reminder delivery")
 
-        user_id = reminder["user_id"]
-        reminder_text = reminder["reminder_text"]
-        delivery_type = reminder["delivery_type"]
-        delivery_channel_id = reminder.get("delivery_channel_id")
-        auto_action_enabled = reminder.get("auto_action_enabled", False)
-        reminder_id = reminder.get("id", "unknown")
+        user_id=reminder["user_id"]
+        reminder_text=reminder["reminder_text"]
+        delivery_type=reminder["delivery_type"]
+        delivery_channel_id=reminder.get("delivery_channel_id")
+        auto_action_enabled=reminder.get("auto_action_enabled", False)
+        reminder_id=reminder.get("id", "unknown")
 
         print(f"📋 Starting delivery for reminder {reminder_id} to user {user_id} via {delivery_type}")
 
         # Simple reminder message - just the content and reminder indicator
-        ash_message = f"📋 **Reminder:** {reminder_text}"
+        ash_message=f"📋 **Reminder:** {reminder_text}"
 
         # Add auto-action notice if enabled
         if auto_action_enabled and reminder.get("auto_action_type"):
-            auto_action_type = reminder["auto_action_type"]
+            auto_action_type=reminder["auto_action_type"]
             if auto_action_type == "youtube_post":
                 ash_message += f"\n\n⚡ **Auto-action will execute in 5 minutes if no response.**"
 
-        delivery_successful = False
+        delivery_successful=False
 
         if delivery_type == "dm":
-            user = None
+            user=None
             try:
                 # First try cache lookup for quick access
-                user = bot.get_user(user_id)
+                user=bot.get_user(user_id)
                 if not user:
                     # If not in cache, fetch from Discord API
                     print(f"🔍 User {user_id} not in cache, fetching from Discord API...")
-                    user = await bot.fetch_user(user_id) if bot else None
+                    user=await bot.fetch_user(user_id) if bot else None
 
                 if user:
                     print(f"✅ Successfully obtained user object for {user_id}: {user.name}")
@@ -1323,7 +1323,7 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
             try:
                 await user.send(ash_message)
                 print(f"✅ Delivered DM reminder to user {user_id} ({user.name})")
-                delivery_successful = True
+                delivery_successful=True
             except discord.Forbidden:
                 print(f"❌ User {user_id} ({user.name}) has DMs disabled or blocked the bot")
                 raise RuntimeError(f"User {user_id} has DMs disabled or blocked the bot")
@@ -1332,12 +1332,12 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
                 raise RuntimeError(f"Failed to deliver DM reminder to user {user_id}: {dm_error}")
 
         elif delivery_type == "channel" and delivery_channel_id:
-            channel = bot.get_channel(delivery_channel_id)
+            channel=bot.get_channel(delivery_channel_id)
             if channel and isinstance(channel, discord.TextChannel):
                 try:
                     await channel.send(f"<@{user_id}> {ash_message}")
                     print(f"✅ Delivered channel reminder to channel {delivery_channel_id}")
-                    delivery_successful = True
+                    delivery_successful=True
                 except Exception as channel_error:
                     print(f"❌ Failed to send message to channel {delivery_channel_id}: {channel_error}")
                     raise RuntimeError(f"Failed to deliver reminder to channel {delivery_channel_id}: {channel_error}")
@@ -1345,7 +1345,7 @@ async def deliver_reminder(reminder: Dict[str, Any]) -> None:
                 print(f"❌ Could not access channel {delivery_channel_id} for reminder {reminder_id}")
                 raise RuntimeError(f"Could not access channel {delivery_channel_id} for reminder delivery")
         else:
-            error_msg = f"Invalid delivery configuration for reminder {reminder_id}: type={delivery_type}, channel_id={delivery_channel_id}"
+            error_msg=f"Invalid delivery configuration for reminder {reminder_id}: type={delivery_type}, channel_id={delivery_channel_id}"
             print(f"❌ {error_msg}")
             raise RuntimeError(error_msg)
 
@@ -1366,10 +1366,10 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
             print("❌ Bot instance not available for auto-action execution")
             return
 
-        auto_action_type = reminder.get("auto_action_type")
-        auto_action_data = reminder.get("auto_action_data", {})
-        user_id = reminder["user_id"]
-        delivery_channel_id = reminder.get("delivery_channel_id")
+        auto_action_type=reminder.get("auto_action_type")
+        auto_action_data=reminder.get("auto_action_data", {})
+        user_id=reminder["user_id"]
+        delivery_channel_id=reminder.get("delivery_channel_id")
 
         if auto_action_type == "youtube_post":
             await execute_youtube_auto_post(reminder, auto_action_data)
@@ -1384,13 +1384,13 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         # channel after reminder delivery
         if delivery_channel_id:
             try:
-                channel = get_bot_instance().get_channel(delivery_channel_id)  # type: ignore
+                channel=get_bot_instance().get_channel(delivery_channel_id)  # type: ignore
                 if channel and isinstance(channel, discord.TextChannel):
                     # Check messages since reminder delivery for mod
                     # intervention
-                    delivered_at = reminder.get("delivered_at")
+                    delivered_at=reminder.get("delivered_at")
                     if delivered_at:
-                        messages_after = []
+                        messages_after=[]
                         async for message in channel.history(limit=50, after=delivered_at):
                             # Check if author is a Member (has
                             # guild_permissions) and has manage_messages
@@ -1406,28 +1406,28 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
                     f"⚠️ Could not check for moderator intervention: {check_e}")
 
         # Get the guild and member
-        guild = get_bot_instance().get_guild(GUILD_ID)  # type: ignore
+        guild=get_bot_instance().get_guild(GUILD_ID)  # type: ignore
         if not guild:
             print(f"❌ Could not find guild for auto-action")
             return
 
         try:
-            member = await guild.fetch_member(user_id)
+            member=await guild.fetch_member(user_id)
         except Exception as e:
             print(f"❌ Could not fetch member {user_id} for auto-action: {e}")
             return
 
         # Execute the auto-action
-        reason = auto_action_data.get(
+        reason=auto_action_data.get(
             "reason", f"Auto-action triggered by reminder system")
-        action_result = "processed"  # Default value
+        action_result="processed"  # Default value
 
         if auto_action_type == "mute":
             try:
                 # Use Discord's timeout feature (30 minute timeout)
-                timeout_duration = timedelta(minutes=30)
+                timeout_duration=timedelta(minutes=30)
                 await member.timeout(timeout_duration, reason=reason)
-                action_result = f"timed out for 30 minutes"
+                action_result=f"timed out for 30 minutes"
             except Exception as e:
                 print(f"❌ Failed to timeout member: {e}")
                 return
@@ -1435,7 +1435,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         elif auto_action_type == "kick":
             try:
                 await member.kick(reason=reason)
-                action_result = "kicked from server"
+                action_result="kicked from server"
             except Exception as e:
                 print(f"❌ Failed to kick member: {e}")
                 return
@@ -1443,7 +1443,7 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         elif auto_action_type == "ban":
             try:
                 await member.ban(reason=reason, delete_message_days=0)
-                action_result = "banned from server"
+                action_result="banned from server"
             except Exception as e:
                 print(f"❌ Failed to ban member: {e}")
                 return
@@ -1451,9 +1451,9 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         # Log the auto-action in the channel where the reminder was set
         if delivery_channel_id:
             try:
-                channel = get_bot_instance().get_channel(delivery_channel_id)  # type: ignore
+                channel=get_bot_instance().get_channel(delivery_channel_id)  # type: ignore
                 if channel and isinstance(channel, discord.TextChannel):
-                    log_message = f"⚡ **Auto-action executed:** {member.mention} has been {action_result}.\n**Reason:** {reason}\n**Reminder ID:** {reminder['id']}"
+                    log_message=f"⚡ **Auto-action executed:** {member.mention} has been {action_result}.\n**Reason:** {reason}\n**Reminder ID:** {reminder['id']}"
                     await channel.send(log_message)
                     print(
                         f"✅ Auto-action logged in channel {delivery_channel_id}")
@@ -1467,55 +1467,55 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         raise
 
 
-@tasks.loop(time=time(hour=20, minute=15, tzinfo=ZoneInfo("Europe/London")))
+@ tasks.loop(time=time(hour=20, minute=15, tzinfo=ZoneInfo("Europe/London")))
 async def daily_clip_scan_task():
     """Scan clips channel for unprocessed clips every weekday evening"""
     if not _should_run_automated_tasks():
         return
 
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    uk_now=datetime.now(ZoneInfo("Europe/London"))
     if uk_now.weekday() > 4:  # 0-4 is Mon-Fri
         print("⏭️ Skipping daily clip scan (weekend)")
         return
 
     print("🎬 Starting daily clip scan task...")
-    bot = get_bot_instance()
+    bot=get_bot_instance()
     if not bot:
         return
 
-    channel_id = 1210874007591718982
-    channel = bot.get_channel(channel_id)
+    channel_id=1210874007591718982
+    channel=bot.get_channel(channel_id)
     if not channel or not isinstance(channel, discord.TextChannel):
         print("❌ Could not find clips channel for daily scan")
         return
 
-    cog = bot.get_cog("ClipTriviaCog")
+    cog=bot.get_cog("ClipTriviaCog")
     if not cog:
         print("❌ Could not find ClipTriviaCog for daily scan")
         return
 
-    db = get_database()
+    db=get_database()
     if not db:
         print("❌ Could not get database for daily scan")
         return
 
-    clips_to_process = []
+    clips_to_process=[]
 
     async for message in channel.history(limit=50):
         if message.author.bot:
             continue
 
-        match = cog.url_pattern.search(message.content)
+        match=cog.url_pattern.search(message.content)
         if match:
             from ..commands.clips import canonicalize_clip_url
-            clip_url = match.group(0)
-            canonical_url = canonicalize_clip_url(clip_url)
+            clip_url=match.group(0)
+            canonical_url=canonicalize_clip_url(clip_url)
 
             if not db.trivia.clip_lore_exists(canonical_url):
                 clips_to_process.append((message, clip_url))
             else:
                 # Clip already processed - ensure it has the ✅ reaction
-                has_tick = any(str(r.emoji) == "✅" for r in message.reactions)
+                has_tick=any(str(r.emoji) == "✅" for r in message.reactions)
                 if not has_tick:
                     try:
                         await message.add_reaction("✅")
@@ -1525,25 +1525,25 @@ async def daily_clip_scan_task():
                     except Exception:
                         pass
 
-    queued_count = len(clips_to_process)
+    queued_count=len(clips_to_process)
     if queued_count == 0:
         print("✅ Daily clip scan complete. No new clips found.")
         return
 
     print(f"🎬 Processing {queued_count} new clips...")
 
-    jam_user = None
+    jam_user=None
     try:
-        jam_user = await bot.fetch_user(JAM_USER_ID)
+        jam_user=await bot.fetch_user(JAM_USER_ID)
     except Exception as e:
         print(f"Failed to fetch Jam user for DMs: {e}")
 
-    quota_exhausted = False
+    quota_exhausted=False
     for idx, (msg, curl) in enumerate(clips_to_process):
         if quota_exhausted:
             break
 
-        success = False
+        success=False
 
         # Clear any old failure marks before retrying
         try:
@@ -1554,14 +1554,14 @@ async def daily_clip_scan_task():
 
         # Add a simple retry loop for Gemini 503 errors
         for attempt in range(3):
-            success = await cog.parser.process_clip(curl, msg)
+            success=await cog.parser.process_clip(curl, msg)
             if success:
                 break
 
             from ..handlers.ai_handler import primary_ai
             if primary_ai != "gemini":
                 print("🚫 Primary AI is exhausted or unavailable. Aborting clip batch.")
-                quota_exhausted = True
+                quota_exhausted=True
                 break
 
             print(f"⚠️ Clip processing failed (attempt {attempt + 1}/3). Retrying in 30s...")
@@ -1599,21 +1599,21 @@ async def daily_clip_scan_task():
 
         # Send DM update
         if jam_user:
-            date_str = msg.created_at.strftime("%Y-%m-%d")
+            date_str=msg.created_at.strftime("%Y-%m-%d")
             if success:
                 from ..commands.clips import canonicalize_clip_url
-                canonical_url = canonicalize_clip_url(curl)
-                clip_details = db.trivia.get_clip_lore(canonical_url)
+                canonical_url=canonicalize_clip_url(curl)
+                clip_details=db.trivia.get_clip_lore(canonical_url)
 
                 if clip_details:
-                    title = clip_details.get('game_title', 'Unknown Game')
-                    reaction = clip_details.get('reaction', 'Reaction')
-                    quote = clip_details.get('notable_quote', '')
-                    emotion = clip_details.get('emotion_category', '')
-                    outcome = clip_details.get('clip_outcome', '')
-                    characters = clip_details.get('characters_involved', '')
+                    title=clip_details.get('game_title', 'Unknown Game')
+                    reaction=clip_details.get('reaction', 'Reaction')
+                    quote=clip_details.get('notable_quote', '')
+                    emotion=clip_details.get('emotion_category', '')
+                    outcome=clip_details.get('clip_outcome', '')
+                    characters=clip_details.get('characters_involved', '')
 
-                    dm_msg = f"🔬 **Archive Update** [{idx + 1}/{queued_count}]\n"
+                    dm_msg=f"🔬 **Archive Update** [{idx + 1}/{queued_count}]\n"
                     dm_msg += f"I have processed the clip from {date_str}: **{title}**.\n"
                     dm_msg += f"Observed reaction: *{reaction}*."
                     if quote:
@@ -1627,9 +1627,9 @@ async def daily_clip_scan_task():
                         if characters:
                             dm_msg += f"\n• Characters: {characters}"
                 else:
-                    dm_msg = f"🔬 Processing... [{idx + 1}/{queued_count}] (Success)"
+                    dm_msg=f"🔬 Processing... [{idx + 1}/{queued_count}] (Success)"
             else:
-                dm_msg = f"⚠️ **Archive Update** [{idx + 1}/{queued_count}]\n"
+                dm_msg=f"⚠️ **Archive Update** [{idx + 1}/{queued_count}]\n"
                 dm_msg += f"I attempted to process the clip from {date_str}, but the analysis failed after 3 attempts."
 
             try:
@@ -1648,11 +1648,11 @@ def start_all_scheduled_tasks(bot):
     try:
         initialize_bot_instance(bot)
 
-        tasks_started = 0
-        tasks_failed = 0
+        tasks_started=0
+        tasks_failed=0
 
         # Try to start each task individually with error handling
-        tasks_to_start = [
+        tasks_to_start=[
             ## Weekly ##
             (monday_content_sync, "Weekly Content Sync (Monday 8.30am)"),
             (monday_morning_greeting, "Monday morning greeting task (9:00 AM UK time, Mondays)"),
@@ -1690,7 +1690,7 @@ def start_all_scheduled_tasks(bot):
         print(f"📊 Scheduled tasks startup summary: {tasks_started} started, {tasks_failed} failed")
 
 # Validate bot instance after starting tasks
-        bot_check = get_bot_instance()
+        bot_check=get_bot_instance()
         if bot_check:
             print(
                 f"✅ Bot instance validation: {bot_check.user.name}#{bot_check.user.discriminator} (ID: {bot_check.user.id})")
@@ -1707,9 +1707,9 @@ def start_all_scheduled_tasks(bot):
 def get_scheduled_tasks_status():
     """Get current status of all scheduled tasks"""
     try:
-        task_statuses = []
+        task_statuses=[]
 
-        tasks_to_check = [
+        tasks_to_check=[
             (monday_content_sync, "Weekly Content Sync (Monday 8am)"),
             (scheduled_midnight_restart, "Midnight Restart"),
             (check_due_reminders, "Reminder Check"),
@@ -1726,8 +1726,8 @@ def get_scheduled_tasks_status():
 
         for task, name in tasks_to_check:
             try:
-                is_running = task.is_running()  # type: ignore
-                next_run = getattr(task, 'next_iteration', None)
+                is_running=task.is_running()  # type: ignore
+                next_run=getattr(task, 'next_iteration', None)
                 task_statuses.append({
                     'name': name,
                     'running': is_running,
@@ -1741,8 +1741,8 @@ def get_scheduled_tasks_status():
                 })
 
         # Bot instance status
-        bot = get_bot_instance()
-        bot_status = {
+        bot=get_bot_instance()
+        bot_status={
             'available': bot is not None,
             'ready': bot.is_ready() if bot else False,
             'user': f"{bot.user.name}#{bot.user.discriminator}" if bot and bot.user else 'Unknown',
@@ -1762,7 +1762,7 @@ def get_scheduled_tasks_status():
 def stop_all_scheduled_tasks():
     """Stop all scheduled tasks"""
     try:
-        tasks_to_stop = [
+        tasks_to_stop=[
             monday_content_sync,
             scheduled_midnight_restart,
             daily_clip_scan_task,
