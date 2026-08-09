@@ -20,7 +20,7 @@ from ..ai_handler import (
 async def generate_ai_trivia_question(context: str = "trivia",
                                       avoid_questions: Optional[List[str]] = None,
                                       avoid_game_ids: Optional[List[int]] = None,
-                                      avoid_templates: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+                                      avoid_templates: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """
     Generate a trivia question using the Trivia Director system.
 
@@ -40,13 +40,13 @@ async def generate_ai_trivia_question(context: str = "trivia",
     # The new Trivia Director system doesn't use templates
     if not ai_enabled:
         print("❌ AI not enabled for trivia question generation")
-        return None
+        return []
 
     # Check if database is available (lazy init)
     current_db = _get_db()
     if current_db is None:
         print("❌ Database not available for AI trivia generation")
-        return None
+        return []
 
     try:
         print(f"🎬 TRIVIA DIRECTOR: Starting question generation with context: {context}")
@@ -85,7 +85,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
         all_games = current_db.get_all_played_games()
         if not all_games:
             print("❌ TRIVIA DIRECTOR: No games in database")
-            return None
+            return []
 
         # Filter out avoided game IDs
         if avoid_game_ids:
@@ -250,24 +250,26 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough death/failure clips for Clip_Famous_Last_Words")
                     continue
-                clip = random.choice(clips)
+                selected_clips = random.sample(clips, min(2, len(clips)))
                 correct_answer = None
                 is_json_response = True
-                print(f"✅ TRIVIA DIRECTOR: Got clip '{clip['trigger']}' for Clip_Famous_Last_Words")
+                print(f"✅ TRIVIA DIRECTOR: Got {len(selected_clips)} clip(s) for Clip_Famous_Last_Words")
 
-                category_prompt = f"""Write one multiple-choice trivia question for fans of Captain Jonesy's gaming channel.
+                clip_data_str = ""
+                for idx, c in enumerate(selected_clips):
+                    clip_data_str += f"\\nCLIP {idx+1}:\\nGame: {c['game_title']}\\nTrigger: {c['trigger']}\\nOutcome: {c['clip_outcome']}\\nQuote spoken right before outcome: \\\"{c['notable_quote']}\\\"\\n"
+
+                category_prompt = f"""Write 5 diverse trivia questions for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
 
-REAL CLIP DATA:
-Game: {clip['game_title']}
-Trigger: {clip['trigger']}
-Outcome: {clip['clip_outcome']}
-Quote spoken by Jonesy right before the outcome: "{clip['notable_quote']}"
+REAL CLIP DATA:{clip_data_str}
 
-Create a "Famous Last Words" style question. Example: "Right before falling off the map in Elden Ring, what did Jonesy confidently tell the chat?" or "Which boss was Jonesy fighting when she yelled [Quote] right before a Game Over?"
-The correct answer must be the quote OR the game/boss depending on how you phrase it.
-Provide 3 believable but incorrect decoy options.
-Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "...", "explanation": "Brief explanation."}}"""
+Create 5 "Famous Last Words" style questions based on these clips. Example: "Right before falling off the map in Elden Ring, what did Jonesy confidently tell the chat?"
+Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
+Return strictly as a JSON array of 5 objects:
+[
+  {{"question_text": "...", "question_type": "multiple_choice", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "..."}}
+]"""
                 selected_category = cat
 
             elif cat == 'Clip_Vibe_Check':
@@ -276,22 +278,26 @@ Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "dec
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough clips for Clip_Vibe_Check")
                     continue
-                clip = random.choice(clips)
+                selected_clips = random.sample(clips, min(2, len(clips)))
                 correct_answer = None
                 is_json_response = True
-                print(f"✅ TRIVIA DIRECTOR: Got clip '{clip['trigger']}' for Clip_Vibe_Check")
+                print(f"✅ TRIVIA DIRECTOR: Got {len(selected_clips)} clip(s) for Clip_Vibe_Check")
 
-                category_prompt = f"""Write one multiple-choice trivia question for fans of Captain Jonesy's gaming channel.
+                clip_data_str = ""
+                for idx, c in enumerate(selected_clips):
+                    clip_data_str += f"\\nCLIP {idx+1}:\\nGame: {c['game_title']}\\nEmotion Displayed: {c['emotion_category']}\\nContext: {c['lore_summary']}\\n"
+
+                category_prompt = f"""Write 5 diverse trivia questions for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
 
-REAL CLIP DATA:
-Game: {clip['game_title']}
-Emotion Displayed: {clip['emotion_category']}
-Context: {clip['lore_summary']}
+REAL CLIP DATA:{clip_data_str}
 
-Create a "Vibe Check" question that asks which game generated this specific emotion, or which emotion was generated by this specific game event.
-Provide 3 believable but incorrect decoy options.
-Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "...", "explanation": "Brief explanation."}}"""
+Create 5 "Vibe Check" questions asking which game generated a specific emotion or vice versa.
+Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
+Return strictly as a JSON array of 5 objects:
+[
+  {{"question_text": "...", "question_type": "multiple_choice", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "..."}}
+]"""
                 selected_category = cat
 
             elif cat == 'Clip_Cause_And_Effect':
@@ -301,28 +307,30 @@ Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "dec
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough clips for Clip_Cause_And_Effect")
                     continue
-                clip = random.choice(clips)
+                selected_clips = random.sample(clips, min(2, len(clips)))
                 correct_answer = None
                 is_json_response = True
-                print(f"✅ TRIVIA DIRECTOR: Got clip '{clip['trigger']}' for Clip_Cause_And_Effect")
+                print(f"✅ TRIVIA DIRECTOR: Got {len(selected_clips)} clip(s) for Clip_Cause_And_Effect")
 
-                category_prompt = f"""Write one multiple-choice trivia question for fans of Captain Jonesy's gaming channel.
+                clip_data_str = ""
+                for idx, c in enumerate(selected_clips):
+                    clip_data_str += f"\\nCLIP {idx+1}:\\nGame: {c['game_title']}\\nCharacters: {c['characters_involved']}\\nCause: {c['trigger']}\\nEffect: {c['reaction']}\\n"
+
+                category_prompt = f"""Write 5 diverse trivia questions for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
 
-REAL CLIP DATA:
-Game: {clip['game_title']}
-Characters Involved: {clip['characters_involved']}
-Trigger (The Cause): {clip['trigger']}
-Jonesy's Reaction (The Effect): {clip['reaction']}
+REAL CLIP DATA:{clip_data_str}
 
-Create a "Cause and Effect" question linking what happened to how she reacted, or vice versa.
-Example: "What caused Jonesy to [Reaction] in {clip['game_title']}?" or "How did Jonesy react when [Trigger]?"
-Provide 3 believable but incorrect decoy options.
-Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "...", "explanation": "Brief explanation."}}"""
+Create 5 "Cause and Effect" questions linking what happened to how she reacted.
+Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
+Return strictly as a JSON array of 5 objects:
+[
+  {{"question_text": "...", "question_type": "multiple_choice", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "..."}}
+]"""
                 selected_category = cat
 
             elif cat == 'Franchise_Lore':
-                # AI-driven franchise question kept for variety - but fix pronouns
+                # AI-driven franchise question kept for variety
                 series_groups_fl: Dict[str, List[Dict]] = defaultdict(list)
                 for g in all_games:
                     series = g.get('series_name')
@@ -338,14 +346,17 @@ Return strictly as JSON: {{"question_text": "...", "correct_answer": "...", "dec
                     is_json_response = True
 
                     print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Franchise_Lore'")
-                    category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
-Jonesy uses she/her pronouns. Always refer to Jonesy as "she/her".
+                    category_prompt = f"""Write 5 diverse trivia questions for fans of Captain Jonesy's gaming channel.
+Jonesy uses she/her pronouns.
 
 Jonesy has played these {chosen_series_fl} games: {', '.join(game_names_fl)}
 
-Write ONE engaging trivia question about the {chosen_series_fl} franchise that tests knowledge of recurring characters, themes, or mechanics.
-Does NOT ask about release dates.
-Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_answer": "answer here"}}"""
+Write 5 engaging trivia questions about the {chosen_series_fl} franchise testing knowledge of recurring characters, themes, or mechanics. DO NOT ask about release dates.
+Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
+Return strictly as a JSON array of 5 objects:
+[
+  {{"question_text": "...", "question_type": "multiple_choice", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "..."}}
+]"""
                 elif all_games:
                     game_fl = random.choice(all_games)
                     source_games = [game_fl]
@@ -353,14 +364,17 @@ Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_a
                     is_json_response = True
 
                     print(f"✅ TRIVIA DIRECTOR: Got 1 game for 'Franchise_Lore' (fallback)")
-                    category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
-Jonesy uses she/her pronouns. Always refer to Jonesy as "she/her".
+                    category_prompt = f"""Write 5 diverse trivia questions for fans of Captain Jonesy's gaming channel.
+Jonesy uses she/her pronouns.
 
 Jonesy has played: {game_fl['canonical_name']} ({game_fl.get('genre', 'Unknown')})
 
-Write ONE engaging trivia question about {game_fl['canonical_name']} that tests memorable game knowledge.
-Does NOT ask about release dates.
-Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_answer": "answer here"}}"""
+Write 5 engaging trivia questions about {game_fl['canonical_name']} testing memorable game knowledge. DO NOT ask about release dates.
+Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
+Return strictly as a JSON array of 5 objects:
+[
+  {{"question_text": "...", "question_type": "multiple_choice", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "..."}}
+]"""
                 else:
                     continue  # Not enough data for Franchise_Lore, try next category
 
@@ -581,9 +595,13 @@ Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_a
                     break  # API failure - don't retry, preserve quota
 
                 if is_json_response:
-                    ai_question = robust_json_parse(response_text)
-                    if ai_question:
-                        ai_question["question_type"] = ai_question.get("question_type", "single_answer")
+                    parsed_response = robust_json_parse(response_text)
+                    if isinstance(parsed_response, list):
+                        raw_questions = parsed_response
+                    elif isinstance(parsed_response, dict):
+                        raw_questions = [parsed_response]
+                    else:
+                        raw_questions = []
                 else:
                     q_text = response_text.strip().strip('"').strip("'").strip()
                     for prefix in ['Question:', 'Here is a question:', "Here's a question:",
@@ -592,60 +610,73 @@ Return as JSON: {{"question_text": "Short question under 100 chars?", "correct_a
                             q_text = q_text[len(prefix):].strip()
                     if q_text and not q_text.endswith('?'):
                         q_text += '?'
-                    ai_question = {
-                        "question_text": q_text,
-                        "question_type": "single_answer",
-                        "correct_answer": correct_answer
-                    } if (10 <= len(q_text) <= 250) else None
+                    
+                    if 10 <= len(q_text) <= 250:
+                        raw_questions = [{
+                            "question_text": q_text,
+                            "question_type": "single_answer",
+                            "correct_answer": correct_answer
+                        }]
+                    else:
+                        raw_questions = []
 
-            if not ai_question or not all(
-                key in ai_question for key in ["question_text", "question_type", "correct_answer"]
-            ):
-                print(f"⚠️ TRIVIA DIRECTOR: AI response missing required fields")
+            # Validate and filter generated questions
+            valid_questions = []
+            for q_data in raw_questions:
+                if not q_data or not all(
+                    key in q_data for key in ["question_text", "question_type", "correct_answer"]
+                ):
+                    continue
+                
+                # Check for multiple_choice required fields
+                if q_data.get("question_type") == "multiple_choice":
+                    if not all(key in q_data for key in ["decoy_1", "decoy_2", "decoy_3"]):
+                        print(f"⚠️ TRIVIA DIRECTOR: Discarding multiple_choice question missing decoys")
+                        continue
+
+                # Check for duplicates before accepting
+                duplicate_info = current_db.check_question_duplicate(
+                    q_data["question_text"],
+                    similarity_threshold=0.8
+                )
+
+                if duplicate_info:
+                    print(
+                        f"🔍 TRIVIA DIRECTOR: Duplicate detected: "
+                        f"{duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']}")
+                    continue  # Skip this specific duplicate
+
+                # Add metadata
+                q_data.update({
+                    "generation_method": "trivia_director",
+                    "director_category": selected_category,
+                    "source_games": [
+                        {
+                            'id': g.get('id'),
+                            'name': g['canonical_name'],
+                            'genre': g.get('genre'),
+                            'year': g.get('release_year')
+                        } for g in source_games
+                    ],
+                    "temperature": temperature,
+                    "generation_timestamp": datetime.now(ZoneInfo('Europe/London')).isoformat()
+                })
+                valid_questions.append(q_data)
+
+            if not valid_questions:
+                print(f"⚠️ TRIVIA DIRECTOR: All parsed questions were invalid or duplicates")
                 continue  # Try different category
 
-            # Check for duplicates before accepting
-            duplicate_info = current_db.check_question_duplicate(
-                ai_question["question_text"],
-                similarity_threshold=0.8
-            )
-
-            if duplicate_info:
-                print(
-                    f"🔍 TRIVIA DIRECTOR: Duplicate detected (attempt {len(tried_categories)}/3): "
-                    f"{duplicate_info['similarity_score']:.2f} similarity to question #{duplicate_info['duplicate_id']} "
-                    f"- switching to different category...")
-                continue  # Try a genuinely different category on next iteration
-
-            # === SUCCESS - ADD METADATA ===
-            ai_question.update({
-                "generation_method": "trivia_director",
-                "director_category": selected_category,
-                "source_games": [
-                    {
-                        'id': g.get('id'),
-                        'name': g['canonical_name'],
-                        'genre': g.get('genre'),
-                        'year': g.get('release_year')
-                    } for g in source_games
-                ],
-                "temperature": temperature,
-                "generation_timestamp": datetime.now(ZoneInfo('Europe/London')).isoformat()
-            })
-
-            print(f"✅ TRIVIA DIRECTOR: Question generated successfully!")
-            print(f"   Category: {selected_category}")
-            print(f"   Games: {[g['canonical_name'] for g in source_games[:3]]}")
-            print(f"   Question: {ai_question['question_text'][:60]}...")
-            return ai_question
+            print(f"✅ TRIVIA DIRECTOR: Generated {len(valid_questions)} valid question(s) successfully!")
+            return valid_questions
 
         print(f"❌ TRIVIA DIRECTOR: All 3 generation attempts failed")
-        return None
+        return []
 
     except Exception as e:
         print(f"❌ Error in diverse trivia generation: {e}")
         traceback.print_exc()
-        return None
+        return []
 
 
 async def generate_trivia_batch(batch_size: int = 10, context: str = "batch_generation") -> Dict[str, Any]:

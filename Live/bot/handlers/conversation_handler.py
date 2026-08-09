@@ -2436,17 +2436,29 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                     print(f"✅ FIX: Queue empty after approval")
 
             elif content in ['2', 'modify', 'edit', 'change']:
-                # Switch to modification choice menu
-                conversation['step'] = 'modification_choice'
+                # Switch to template modification mode
+                conversation['step'] = 'template_modification'
+                original_data = data.get('question_data', {})
+                q_text = original_data.get('question_text', '')
+                q_ans = original_data.get('correct_answer', '')
+                q_type = original_data.get('question_type', 'single_answer')
+                
+                decoys_str = ""
+                if q_type == 'multiple_choice':
+                    options = original_data.get('multiple_choice_options', [])
+                    decoys = [opt for opt in options if opt != q_ans]
+                    decoys_str = " | ".join(decoys)
+                
                 await message.reply(
-                    f"✏️ **Modification Options**\n\n"
-                    f"What would you like to modify?\n\n"
-                    f"**1.** 📝 **Edit Question Text** - Modify the question only\n"
-                    f"**2.** 📝 **Edit Answer Only** - Modify the answer only\n"
-                    f"**3.** 📝 **Edit Both** - Modify question and answer\n"
-                    f"**4.** ↩️ **Back to Approval** - Return to approval menu\n\n"
-                    f"Please respond with **1**, **2**, **3**, or **4**.\n\n"
-                    f"*Select the modification scope for efficient editing.*"
+                    f"✏️ **Manual Question Editing**\n\n"
+                    f"Copy the text block below, make your changes, and send it back to apply the edits.\n"
+                    f"*(Make sure to keep the Question:, Answer:, Type:, and Decoys: prefixes)*\n\n"
+                    f"```text\n"
+                    f"Question: {q_text}\n"
+                    f"Answer: {q_ans}\n"
+                    f"Type: {q_type}\n"
+                    f"Decoys: {decoys_str}\n"
+                    f"```"
                 )
 
             elif content in ['3', 'reject', 'no', 'decline']:
@@ -2536,256 +2548,62 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                     f"*Precise input required for approval protocol execution.*"
                 )
 
-        elif step == 'modification_choice':
-            # Validate input first
-            valid_options = ['1', '2', '3', '4']
-            if not validate_numbered_input(content, valid_options):
-                await message.reply(create_invalid_input_message(content, valid_options, "question, answer, both, back"))
-                return
-
-            # Handle modification choice menu
-            if content in ['1', 'question', 'edit question']:
-                # Edit question only
-                conversation['step'] = 'modification'
-                current_question = data.get('question_data', {}).get('question_text', 'Unknown')
+        elif step == 'template_modification':
+            # Parse the incoming template
+            import re
+            
+            q_match = re.search(r'Question:\s*(.+)', content, re.IGNORECASE)
+            a_match = re.search(r'Answer:\s*(.+)', content, re.IGNORECASE)
+            t_match = re.search(r'Type:\s*(.+)', content, re.IGNORECASE)
+            d_match = re.search(r'Decoys:\s*(.+)', content, re.IGNORECASE)
+            
+            if not (q_match and a_match and t_match):
                 await message.reply(
-                    f"✏️ **Question Text Editing**\n\n"
-                    f"**Current Question:**\n"
-                    f"```\n{current_question}\n```\n\n"
-                    f"Please provide your revised question text (copy the above and edit as needed):"
-                )
-
-            elif content in ['2', 'answer', 'edit answer']:
-                # Edit answer only
-                conversation['step'] = 'answer_modification'
-                original_data = data.get('question_data', {})
-                current_answer = original_data.get('correct_answer', 'Dynamic calculation')
-                await message.reply(
-                    f"✏️ **Answer Editing**\n\n"
-                    f"**Current Answer:**\n"
-                    f"```\n{current_answer}\n```\n\n"
-                    f"Please provide the revised answer:"
-                )
-
-            elif content in ['3', 'both', 'edit both']:
-                # Edit both - start with question
-                conversation['step'] = 'modification'
-                data['edit_both'] = True  # Flag to continue to answer after question
-                current_question = data.get('question_data', {}).get('question_text', 'Unknown')
-                await message.reply(
-                    f"✏️ **Editing Both Question and Answer**\n\n"
-                    f"Let's start with the question text.\n\n"
-                    f"**Current Question:**\n"
-                    f"```\n{current_question}\n```\n\n"
-                    f"Please provide your revised question text (copy the above and edit as needed):"
-                )
-
-            elif content in ['4', 'back', 'cancel']:
-                # Return to approval menu
-                conversation['step'] = 'approval'
-                question_data = data.get('question_data', {})
-                question_text = question_data.get('question_text', 'Unknown question')
-                correct_answer = question_data.get('correct_answer', 'Dynamic calculation')
-
-                await message.reply(
-                    f"↩️ **Returned to Approval Menu**\n\n"
-                    f"**Question:** {question_text}\n\n"
-                    f"**Answer:** {correct_answer}\n\n"
-                    f"📚 **Available Actions:**\n"
-                    f"**1.** ✅ **Approve** - Add this question to the database as-is\n"
-                    f"**2.** ✏️ **Modify** - Edit question and/or answer\n"
-                    f"**3.** ❌ **Reject** - Discard this question and generate an alternative\n\n"
-                    f"Please respond with **1**, **2**, or **3**."
-                )
-
-            else:
-                await message.reply(
-                    f"⚠️ **Invalid choice.** Please respond with **1** (Edit Question), **2** (Edit Answer), **3** (Edit Both), or **4** (Back).\n\n"
-                    f"*Precise input required for modification selection.*"
-                )
-
-        elif step == 'modification':
-            # Handle question modification
-            data['modified_question'] = content
-            conversation['step'] = 'modification_preview'
-
-            # Show preview of modified question
-            original_data = data.get('question_data', {})
-            preview_msg = (
-                f"📋 **Modified Question Preview**\n\n"
-                f"**Original Question:** {original_data.get('question_text', 'Unknown')}\n\n"
-                f"**Your Modified Question:** {content}\n\n"
-                f"**Original Answer:** {original_data.get('correct_answer', 'Dynamic calculation')}\n\n"
-                f"📚 **Available Actions:**\n"
-                f"**1.** ✅ **Approve Modified Version** - Save this version to the database\n"
-                f"**2.** ✏️ **Edit Again** - Make further modifications\n"
-                f"**3.** ❌ **Cancel** - Discard modifications and reject original\n\n"
-                f"Please respond with **1**, **2**, or **3**.\n\n"
-                f"*Review modified question parameters before approval.*"
-            )
-
-            await message.reply(preview_msg)
-
-        elif step == 'modification_preview':
-            # Validate input first
-            valid_options = ['1', '2', '3']
-            if not validate_numbered_input(content, valid_options):
-                await message.reply(create_invalid_input_message(content, valid_options, "approve, edit, cancel"))
-                return
-
-            if content in ['1', 'approve', 'yes', 'save']:
-                # Ask if they want to edit the answer as well
-                conversation['step'] = 'answer_edit_prompt'
-                original_data = data.get('question_data', {})
-                current_answer = original_data.get('correct_answer', 'Dynamic calculation')
-
-                await message.reply(
-                    f"📝 **Answer Editing (Optional)**\n\n"
-                    f"**Current Answer:** {current_answer}\n\n"
-                    f"Would you like to edit the answer as well?\n\n"
-                    f"**1.** ✏️ **Edit Answer** - Modify the correct answer\n"
-                    f"**2.** ⏭️ **Skip** - Keep current answer and continue\n\n"
-                    f"Please respond with **1** or **2**."
-                )
-
-            elif content in ['2', 'edit', 'modify']:
-                # Return to modification mode
-                conversation['step'] = 'modification'
-                current_question = data.get(
-                    'modified_question', data.get(
-                        'question_data', {}).get(
-                        'question_text', 'Unknown'))
-                await message.reply(
-                    f"✏️ **Question Text Editing**\n\n"
-                    f"**Current Question:**\n"
-                    f"```\n{current_question}\n```\n\n"
-                    f"Please provide your revised question text (copy the above and edit as needed):"
-                )
-
-            elif content in ['3', 'cancel', 'reject']:
-                # Cancel modifications and reject original
-                await message.reply(
-                    f"❌ **Modifications Cancelled - Original Question Rejected**\n\n"
-                    f"Both the original and modified versions have been discarded. "
-                    f"The system will generate an alternative question for your review.\n\n"
-                    f"*Mission parameters updated. Alternative question generation initiated.*"
-                )
-
-                # Clean up conversation
-                if user_id in jam_approval_conversations:
-                    del jam_approval_conversations[user_id]
-
-                print(f"🔄 JAM cancelled modifications - replacement needed")
-
-            else:
-                await message.reply(
-                    f"⚠️ **Invalid command.** Please respond with **1** (Approve), **2** (Edit Again), or **3** (Cancel).\n\n"
-                    f"*Precise input required for modification protocol execution.*"
-                )
-
-        elif step == 'answer_edit_prompt':
-            # Validate input first
-            valid_options = ['1', '2']
-            if not validate_numbered_input(content, valid_options):
-                await message.reply(create_invalid_input_message(content, valid_options, "edit, skip"))
-                return
-
-            if content in ['1', 'edit', 'yes']:
-                # Edit the answer
-                conversation['step'] = 'answer_modification'
-                original_data = data.get('question_data', {})
-                current_answer = original_data.get('correct_answer', 'Dynamic calculation')
-
-                await message.reply(
-                    f"✏️ **Answer Editing**\n\n"
-                    f"**Current Answer:**\n"
-                    f"```\n{current_answer}\n```\n\n"
-                    f"Please provide the revised answer:"
-                )
-
-            elif content in ['2', 'skip', 'no']:
-                # Skip answer editing, go to question type prompt
-                conversation['step'] = 'type_edit_prompt'
-                original_data = data.get('question_data', {})
-                current_type = original_data.get('question_type', 'single_answer')
-
-                await message.reply(
-                    f"🔧 **Question Type Editing (Optional)**\n\n"
-                    f"**Current Type:** {current_type.replace('_', ' ').title()}\n\n"
-                    f"Would you like to change the question type?\n\n"
-                    f"**1.** 🔄 **Change Type** - Switch between single/multiple choice\n"
-                    f"**2.** ⏭️ **Finish** - Save all modifications\n\n"
-                    f"Please respond with **1** or **2**."
-                )
-            else:
-                await message.reply(
-                    f"⚠️ **Invalid response.** Please respond with **1** (Edit Answer) or **2** (Skip).\n\n"
-                    f"*Precise input required for modification workflow.*"
-                )
-
-        elif step == 'answer_modification':
-            # Store modified answer and go to type prompt
-            data['modified_answer'] = content
-            conversation['step'] = 'type_edit_prompt'
-
-            original_data = data.get('question_data', {})
-            current_type = original_data.get('question_type', 'single_answer')
-
-            await message.reply(
-                f"✅ **Answer Updated**\n\n"
-                f"**New Answer:** {content}\n\n"
-                f"🔧 **Question Type Editing (Optional)**\n\n"
-                f"**Current Type:** {current_type.replace('_', ' ').title()}\n\n"
-                f"Would you like to change the question type?\n\n"
-                f"**1.** 🔄 **Change Type** - Switch between single/multiple choice\n"
-                f"**2.** ⏭️ **Finish** - Save all modifications\n\n"
-                f"Please respond with **1** or **2**."
-            )
-
-        elif step == 'type_edit_prompt':
-            # Validate input first
-            valid_options = ['1', '2']
-            if not validate_numbered_input(content, valid_options):
-                await message.reply(create_invalid_input_message(content, valid_options, "change, finish"))
-                return
-
-            if content in ['1', 'change', 'edit', 'yes']:
-                # Edit the question type
-                conversation['step'] = 'type_modification'
-                original_data = data.get('question_data', {})
-                current_type = original_data.get('question_type', 'single_answer')
-
-                await message.reply(
-                    f"🔧 **Question Type Selection**\n\n"
-                    f"**Current Type:** {current_type.replace('_', ' ').title()}\n\n"
-                    f"**Available Types:**\n"
-                    f"**1.** 📝 **Single Answer** - One correct text answer\n"
-                    f"**2.** 🔤 **Multiple Choice** - Choose from A/B/C/D options\n\n"
-                    f"Please respond with **1** or **2**."
-                )
-
-            elif content in ['2', 'finish', 'save', 'no']:
-                # Save all modifications
-                await save_final_modifications(message, data, user_id)
-            else:
-                await message.reply(
-                    f"⚠️ **Invalid response.** Please respond with **1** (Change Type) or **2** (Finish).\n\n"
-                    f"*Precise input required for modification workflow.*"
-                )
-
-        elif step == 'type_modification':
-            if content in ['1', 'single', 'single answer']:
-                data['modified_type'] = 'single_answer'
-            elif content in ['2', 'multiple', 'multiple choice']:
-                data['modified_type'] = 'multiple_choice'
-            else:
-                await message.reply(
-                    f"⚠️ **Invalid type selection.** Please respond with **1** (Single Answer) or **2** (Multiple Choice).\n\n"
-                    f"*Precise input required for type modification.*"
+                    "⚠️ **Invalid Format**\n\n"
+                    "Could not parse your edits. Please ensure your message includes `Question:`, `Answer:`, and `Type:`."
                 )
                 return
-
-            # Save all modifications
+                
+            new_q = q_match.group(1).strip()
+            new_a = a_match.group(1).strip()
+            new_t = t_match.group(1).strip().lower().replace(' ', '_')
+            
+            if new_t not in ['single_answer', 'multiple_choice']:
+                await message.reply("⚠️ **Invalid Type**\n\nPlease use either `single_answer` or `multiple_choice` for the Type.")
+                return
+                
+            new_decoys_list = []
+            if new_t == 'multiple_choice':
+                d_str = ""
+                if d_match:
+                    d_str = d_match.group(1).strip()
+                
+                if not d_str or d_str.lower() == 'none' or d_str == '-':
+                    await message.reply("⚠️ **Missing Decoys**\n\nFor a `multiple_choice` question, you must provide exactly 3 decoys separated by `|` or `,`.")
+                    return
+                
+                # Split by | or ,
+                if '|' in d_str:
+                    new_decoys_list = [d.strip() for d in d_str.split('|') if d.strip()]
+                else:
+                    new_decoys_list = [d.strip() for d in d_str.split(',') if d.strip()]
+                    
+                if len(new_decoys_list) != 3:
+                    await message.reply(f"⚠️ **Invalid Decoys Count**\n\nYou provided {len(new_decoys_list)} decoys. Please provide exactly 3 decoys.")
+                    return
+                    
+            # Set values and call save
+            data['modified_question'] = new_q
+            data['modified_answer'] = new_a
+            data['modified_type'] = new_t
+            if new_t == 'multiple_choice':
+                import random
+                options = [new_a] + new_decoys_list
+                random.shuffle(options)
+                data['modified_options'] = options
+            else:
+                data['modified_options'] = None
+                
             await save_final_modifications(message, data, user_id)
 
         # Update conversation state
@@ -2812,12 +2630,16 @@ async def save_final_modifications(message, data: Dict[str, Any], user_id: int):
         final_question = data.get('modified_question', original_data.get('question_text', ''))
         final_answer = data.get('modified_answer', original_data.get('correct_answer'))
         final_type = data.get('modified_type', original_data.get('question_type', 'single_answer'))
+        
+        final_options = data.get('modified_options')
+        if final_options is None and final_type == 'multiple_choice':
+            final_options = original_data.get('multiple_choice_options')
 
         question_id = db.add_trivia_question(  # type: ignore
             question_text=final_question,
             question_type=final_type,
             correct_answer=final_answer,
-            multiple_choice_options=original_data.get('multiple_choice_options'),
+            multiple_choice_options=final_options,
             is_dynamic=original_data.get('is_dynamic', False),
             dynamic_query_type=original_data.get('dynamic_query_type'),
             category=original_data.get('category', 'ai_generated_modified'),

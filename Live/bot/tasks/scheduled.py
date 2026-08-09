@@ -38,14 +38,8 @@ from .greetings import (
 )
 from .sync_vods import monday_content_sync
 from .trivia_preflight import (
-    _background_question_generation,
-    _delayed_trivia_validation,
-    check_emergency_trivia_approval,
     pre_trivia_approval,
     pre_trivia_preflight_check,
-    schedule_delayed_trivia_validation,
-    trigger_emergency_trivia_approval,
-    validate_startup_trivia_questions,
 )
 from .utils import (
     _detect_bot_environment,

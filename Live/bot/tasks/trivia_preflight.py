@@ -231,6 +231,15 @@ async def _delayed_trivia_validation():
         print("🧠 DELAYED TRIVIA VALIDATION: 2-minute delay complete, starting validation...")
 
         # Execute the trivia validation with enhanced logging
+        try:
+            from .utils import _detect_bot_environment
+            is_live = _detect_bot_environment()
+            if is_live is False:
+                print("⚠️ DELAYED TRIVIA VALIDATION: Staging bot detected, skipping validation")
+                return
+        except Exception as env_error:
+            print(f"⚠️ DELAYED TRIVIA VALIDATION: Error checking environment: {env_error}")
+
         await validate_startup_trivia_questions()
 
         print("✅ DELAYED TRIVIA VALIDATION: Process completed")
@@ -487,6 +496,16 @@ async def validate_startup_trivia_questions():
         print("⏳ STARTUP TRIVIA VALIDATION: Validation already in progress, skipping duplicate")
         return
 
+    try:
+        from .utils import _detect_bot_environment
+        is_live = _detect_bot_environment()
+        if is_live is False:
+            print("⚠️ STARTUP TRIVIA VALIDATION: Staging bot detected, disabling automated trivia validation")
+            _startup_validation_completed = True
+            return
+    except Exception as env_error:
+        print(f"⚠️ STARTUP TRIVIA VALIDATION: Error checking environment: {env_error}")
+
     if _startup_validation_completed:
         print("✅ STARTUP TRIVIA VALIDATION: Validation already completed on this startup, skipping")
         return
@@ -672,11 +691,16 @@ async def _background_question_generation(current_question_count: int):
 
         print(f"🔄 BACKGROUND GENERATION: Generating {questions_needed} questions with pattern diversity...")
 
-        for i in range(questions_needed):
+        generation_attempts = 0
+        MAX_ATTEMPTS = 3  # Prevent infinite loop if we keep getting 1-question batches
+
+        while successful_generations < questions_needed and generation_attempts < MAX_ATTEMPTS:
+            generation_attempts += 1
+            
             # ✅ CIRCUIT BREAKER CHECK: Stop if too many consecutive failures
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 print(f"🚨 CIRCUIT BREAKER: Stopping generation after {consecutive_failures} consecutive failures")
-                print(f"⚠️ API quota preserved: {questions_needed - i} questions not attempted")
+                print(f"⚠️ API quota preserved: {questions_needed - successful_generations} questions not attempted")
 
                 # Notify JAM of the circuit breaker activation
                 try:
@@ -688,7 +712,7 @@ async def _background_question_generation(current_question_count: int):
                             await user.send(
                                 f"🚨 **Trivia Generation Circuit Breaker Activated**\n\n"
                                 f"Question generation stopped after {consecutive_failures} consecutive failures.\n"
-                                f"**API calls saved:** {questions_needed - i}\n"
+                                f"**API calls saved:** {questions_needed - successful_generations}\n"
                                 f"**Successful:** {successful_generations} questions\n"
                                 f"**Error:** Check logs for details\n\n"
                                 f"*Manual intervention may be required to fix underlying issue.*"
@@ -699,49 +723,56 @@ async def _background_question_generation(current_question_count: int):
                 break
 
             try:
-                print(f"🔄 BACKGROUND GENERATION: Generating question {i + 1}/{questions_needed}")
+                print(f"🔄 BACKGROUND GENERATION: Attempt {generation_attempts}/{MAX_ATTEMPTS} to reach {questions_needed} questions")
 
                 # ✅ FIX #1: Use unique context for each generation to avoid cache hits
-                unique_context = f"startup_validation_{i + 1}"
+                unique_context = f"startup_validation_{generation_attempts}"
 
                 # ✅ FIX #2: Pass recently generated questions AND templates to avoid repetition
                 print("🔄 BACKGROUND GENERATION: Using unified Trivia Director")
-                question_data = await generate_ai_trivia_question(
+                questions_list = await generate_ai_trivia_question(
                     unique_context,
                     avoid_questions=generated_question_texts,
                     avoid_templates=used_template_ids  # ✅ NEW: Prevent template reuse in batch
                 )
 
-                if question_data and isinstance(question_data, dict):
+                if questions_list and isinstance(questions_list, list):
                     # ✅ SUCCESS: Reset consecutive failure counter
                     consecutive_failures = 0
                     
-                    success, is_duplicate = _process_generated_question(
-                        question_data, 
-                        db, 
-                        i, 
-                        generated_question_texts, 
-                        used_template_ids
-                    )
-                    
-                    if success:
-                        successful_generations += 1
-                    else:
-                        failed_generations += 1
-                        if is_duplicate:
-                            duplicate_count += 1
+                    for q_data in questions_list:
+                        success, is_duplicate = _process_generated_question(
+                            q_data, 
+                            db, 
+                            successful_generations, 
+                            generated_question_texts, 
+                            used_template_ids
+                        )
+                        
+                        if success:
+                            successful_generations += 1
+                        else:
+                            failed_generations += 1
+                            if is_duplicate:
+                                duplicate_count += 1
+                        
+                        # Stop processing this batch if we've hit our quota
+                        if successful_generations >= questions_needed:
+                            break
                 else:
-                    print(f"⚠️ BACKGROUND GENERATION: Failed to generate valid question {i + 1}")
+                    print(f"⚠️ BACKGROUND GENERATION: Failed to generate valid questions on attempt {generation_attempts}")
                     failed_generations += 1
                     consecutive_failures += 1
 
             except Exception as generation_error:
-                print(f"❌ BACKGROUND GENERATION: Error generating question {i + 1}: {generation_error}")
+                print(f"❌ BACKGROUND GENERATION: Error on attempt {generation_attempts}: {generation_error}")
                 failed_generations += 1
+                consecutive_failures += 1
 
             # Delay between generations to respect Gemini free tier rate limit (5 RPM).
             # 15 seconds ensures we stay safely under 4 calls/minute for a 4-question batch.
-            await asyncio.sleep(15)
+            if successful_generations < questions_needed and generation_attempts < MAX_ATTEMPTS:
+                await asyncio.sleep(15)
 
         print(f"🧠 BACKGROUND GENERATION: Complete - {successful_generations} questions added to approval queue")
         print(
