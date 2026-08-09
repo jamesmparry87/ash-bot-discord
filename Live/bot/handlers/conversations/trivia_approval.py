@@ -1,7 +1,7 @@
 from .core import weekly_announcement_approvals, game_review_conversations, sync_approval_conversations
 from .utils import send_conversation_expired_message
 
-from .core import _get_bot_instance, db, jam_approval_conversations, jam_approval_queue
+from .core import _get_bot_instance, db, jam_approval_conversations, jam_approval_queue, mod_trivia_conversations, announcement_conversations
 from .utils import check_escape_command, check_conversation_health, track_conversation_step, increment_invalid_input_count, reset_invalid_input_count, validate_numbered_input, create_invalid_input_message, extract_expected_options_from_prompt, _infer_dynamic_query_type
 
 import asyncio

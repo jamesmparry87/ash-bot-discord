@@ -3,6 +3,11 @@ import re
 from datetime import datetime
 
 import requests
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from bot.config import TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, YOUTUBE_API_KEY
+
 
 # --- SMART MAPPINGS ---
 SMART_MAPPINGS = {

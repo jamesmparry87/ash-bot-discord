@@ -206,8 +206,8 @@ async def handle_statistical_query(
             else:
                 await message.reply("Database analysis complete. No completed games with playtime data found.")
 
-        elif ("longest" in lower_content and "game" in lower_content) or
-             ("most" in lower_content and ("hours" in lower_content or "playtime" in lower_content)) or
+        elif ("longest" in lower_content and "game" in lower_content) or \
+             ("most" in lower_content and ("hours" in lower_content or "playtime" in lower_content)) or \
              ("most" in lower_content and "game" in lower_content and any(word in lower_content for word in ["played", "play", "playing"])):
 
             # Handle ambiguous "most played" queries by providing both metrics

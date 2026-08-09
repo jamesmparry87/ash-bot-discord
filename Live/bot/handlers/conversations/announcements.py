@@ -1307,3 +1307,83 @@ async def cancel_sync(message: discord.Message, conv: Dict[str, Any]):
         print(f"❌ SYNC APPROVAL: Error cancelling sync: {e}")
         await message.channel.send(f"❌ Error: {str(e)}")
 
+
+
+async def show_next_game_for_review(message: discord.Message, conv: Dict[str, Any]):
+    """Show the next game in the review queue"""
+    try:
+        games = conv['games_to_review']
+        index = conv['review_index']
+        
+        # Skip auto-approved games
+        while index < len(games) and games[index] in conv.get('auto_approved', []):
+            index += 1
+            conv['review_index'] = index
+        
+        if index >= len(games):
+            # All games reviewed - commit
+            await finalize_individual_review(message, conv)
+            return
+        
+        game = games[index]
+        game_data = game['game_data']
+        
+        review_msg = f"­ƒöì **Game {index + 1}/{len(games)}**\n\n"
+        review_msg += f"**ID:** {game['id']}\n"
+        review_msg += f"**Name:** {game_data['canonical_name']}\n"
+        review_msg += f"**Action:** {game['action_type']}\n"
+        review_msg += f"**Platform:** {game.get('source_platform', 'unknown').title()}\n"
+        review_msg += f"**Episodes:** {game_data.get('total_episodes', 0)}\n"
+        review_msg += f"**Playtime:** {game_data.get('total_playtime_minutes', 0)//60}h {game_data.get('total_playtime_minutes', 0)%60}m\n"
+        review_msg += f"**Confidence:** {int(game.get('confidence_score', 1.0)*100)}%\n\n"
+        
+        review_msg += "**Choose an action:**\n"
+        review_msg += "Ô£à **1** - Approve as-is\n"
+        review_msg += "Ô£Å´©Å **2** - Edit game name\n"
+        review_msg += "ÔÅ¡´©Å **3** - Skip this game\n"
+        review_msg += "ÔØî **cancel** - Cancel review\n"
+        
+        await message.channel.send(review_msg)
+        
+    except Exception as e:
+        print(f"ÔØî SYNC APPROVAL: Error showing game for review: {e}")
+        await message.channel.send(f"ÔØî Error: {str(e)}")
+
+
+
+async def finalize_individual_review(message: discord.Message, conv: Dict[str, Any]):
+    """Finalize review and commit approved games"""
+    try:
+        sync_session_id = conv['sync_session_id']
+        
+        await message.channel.send("ÔÅ│ Committing approved games to database...")
+        
+        # Commit approved games
+        counts = db.games.commit_staged_games(sync_session_id)
+        
+        # Clear staging
+        db.games.clear_staging_session(sync_session_id)
+        
+        # Build summary
+        summary_msg = f"Ô£à **Individual Review Complete!**\n\n"
+        summary_msg += f"­ƒôè **Results:**\n"
+        summary_msg += f"ÔÇó {counts['added']} new games added\n"
+        summary_msg += f"ÔÇó {counts['updated']} games updated\n"
+        summary_msg += f"ÔÇó {counts['skipped']} skipped\n"
+        
+        if conv.get('auto_approved'):
+            summary_msg += f"ÔÇó {len(conv['auto_approved'])} auto-approved (high confidence)\n"
+        
+        summary_msg += f"\nAll approved changes have been committed to the database."
+        
+        await message.channel.send(summary_msg)
+        
+        print(f"Ô£à SYNC APPROVAL: Individual review complete (session {sync_session_id})")
+        
+        # Clean up conversation
+        del sync_approval_conversations[message.author.id]
+        
+    except Exception as e:
+        print(f"ÔØî SYNC APPROVAL: Error finalizing review: {e}")
+        await message.channel.send(f"ÔØî Error during finalization: {str(e)}")
+
