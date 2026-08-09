@@ -56,7 +56,6 @@ class TriviaDatabase:
         """Get database connection from the database manager"""
         return self.db.get_connection()
 
-
     def add_trivia_question(
         self,
         question_text: str,
@@ -744,12 +743,6 @@ class TriviaDatabase:
             logger.error(f"Error getting trivia session answers: {e}")
             return []
 
-
-
-
-
-
-
     def get_trivia_question_by_id(
             self, question_id: int) -> Optional[Dict[str, Any]]:
         """Get a specific trivia question by ID"""
@@ -1037,8 +1030,6 @@ class TriviaDatabase:
             logger.error(f"Error getting trivia question statistics: {e}")
             return {}
 
-
-
     def get_trivia_participant_stats_for_week(self) -> Dict[str, Any]:
         """Gets key stats from the most recent Trivia Tuesday session."""
         conn = self.get_connection()
@@ -1244,8 +1235,6 @@ class TriviaDatabase:
         filtered_words = [word for word in words if word not in filler_words]
 
         return ' '.join(filtered_words)
-
-
 
     def ensure_minimum_question_pool(self, minimum_count: int = 5) -> Dict[str, Any]:
         """Ensure there are at least minimum_count available questions in the pool"""
