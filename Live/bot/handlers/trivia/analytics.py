@@ -1,3 +1,8 @@
+
+from typing import Optional, List, cast
+from psycopg2.extras import RealDictRow
+import logging
+logger = logging.getLogger(__name__)
 import re
 from collections import Counter
 import json
@@ -465,7 +470,7 @@ def calculate_dynamic_answer(db, dynamic_query_type: str, parameter: Optional[st
             logger.error(f"Error calculating dynamic answer for {dynamic_query_type}: {e}")
             return None
 
-def get_recent_question_patterns(limit: int = 10) -> List[str]:
+def get_recent_question_patterns(db, limit: int = 10) -> List[str]:
         """
         ✅ FIX #3: Get recently used question patterns for diversity enforcement
 

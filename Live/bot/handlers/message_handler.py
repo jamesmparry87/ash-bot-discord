@@ -45,7 +45,7 @@ from .context_manager import (
     detect_follow_up_intent,
     get_or_create_context,
 )
-from .conversation_handler import start_announcement_conversation
+from .conversations import start_announcement_conversation
 from .queries.comparisons import handle_comparison_query, handle_platform_comparison_query
 from .queries.context import _handle_ranking_follow_up, handle_context_aware_query
 from .queries.details import (
@@ -527,7 +527,7 @@ async def handle_dm_conversations(message: discord.Message) -> bool:
 
         # Import conversation handlers
         try:
-            from .conversation_handler import (
+            from .conversations import (
                 announcement_conversations,
                 game_review_conversations,
                 handle_announcement_conversation,

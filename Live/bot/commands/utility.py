@@ -629,7 +629,7 @@ class UtilityCommands(commands.Cog):
             return
 
         try:
-            from ..handlers.conversation_handler import (
+            from ..handlers.conversations import (
                 game_review_conversations,
                 get_queue_length,
                 jam_approval_conversations,

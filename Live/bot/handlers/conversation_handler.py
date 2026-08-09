@@ -1851,7 +1851,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
                 if inferred_query_type:
                     if db:
                         from bot.handlers.trivia.analytics import calculate_dynamic_answer
-                        answer = calculate_dynamic_answer(db, (inferred_query_type, parameter)
+                        answer = calculate_dynamic_answer(db, inferred_query_type, parameter)
                         if answer:
                             calculated_answer = answer
                         else:
@@ -2274,7 +2274,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                     # Calculate dynamic answer if needed
                     if next_question.get('is_dynamic') and next_question.get('dynamic_query_type'):
                         from bot.handlers.trivia.analytics import calculate_dynamic_answer
-                        calculated_answer = calculate_dynamic_answer(db, (next_question['dynamic_query_type'])
+                        calculated_answer = calculate_dynamic_answer(db, next_question['dynamic_query_type'])
                         next_question['correct_answer'] = calculated_answer
 
                     # Start new approval workflow for replacement question

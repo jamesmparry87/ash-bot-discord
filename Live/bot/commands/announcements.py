@@ -148,14 +148,14 @@ class AnnouncementsCommands(commands.Cog):
     async def start_announcement_update(self, ctx):
         """Start interactive announcement creation process (Captain Jonesy and Sir Decent Jam only)"""
         # Import conversation handler
-        from ..handlers.conversation_handler import start_announcement_conversation
+        from ..handlers.conversations import start_announcement_conversation
         await start_announcement_conversation(ctx)
 
     @commands.command(name="createannouncement")
     async def create_announcement(self, ctx):
         """Alternative command to start announcement creation (Captain Jonesy and Sir Decent Jam only)"""
         # Import conversation handler
-        from ..handlers.conversation_handler import start_announcement_conversation
+        from ..handlers.conversations import start_announcement_conversation
         await start_announcement_conversation(ctx)
 
     @commands.command(name="generatemonday")
@@ -166,7 +166,7 @@ class AnnouncementsCommands(commands.Cog):
             return  # Silent ignore for unauthorized users
 
         try:
-            from ..handlers.conversation_handler import start_weekly_announcement_approval
+            from ..handlers.conversations import start_weekly_announcement_approval
             from ..tasks.scheduled import perform_full_content_sync
 
             uk_now = datetime.now(ZoneInfo("Europe/London"))
@@ -244,7 +244,7 @@ class AnnouncementsCommands(commands.Cog):
             import discord
 
             from ..config import CHIT_CHAT_CHANNEL_ID, GAME_RECOMMENDATION_CHANNEL_ID
-            from ..handlers.conversation_handler import start_weekly_announcement_approval
+            from ..handlers.conversations import start_weekly_announcement_approval
 
             uk_now = datetime.now(ZoneInfo("Europe/London"))
 

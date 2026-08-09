@@ -218,7 +218,7 @@ message_handler_functions = None
 
 # Import conversation handlers for DM functionality
 try:
-    from bot.handlers.conversation_handler import (
+    from bot.handlers.conversations import (
         announcement_conversations,
         cleanup_announcement_conversations,
         cleanup_jam_approval_conversations,
@@ -317,7 +317,7 @@ async def initialize_modular_components():
 
     # 2.1. Initialize Conversation Handler
     try:
-        from bot.handlers.conversation_handler import initialize_conversation_handler
+        from bot.handlers.conversations import initialize_conversation_handler
         initialize_conversation_handler(bot)
     except Exception as e:
         status_report["errors"].append(f"Conversation Handler: {e}")

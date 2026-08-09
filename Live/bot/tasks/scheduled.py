@@ -112,7 +112,7 @@ except ImportError:
         return []
 
 try:
-    from ..handlers.conversation_handler import notify_jam_weekly_message_failure, start_weekly_announcement_approval
+    from ..handlers.conversations import notify_jam_weekly_message_failure, start_weekly_announcement_approval
 except ImportError:
     print("⚠️ Conversation handlers not available for scheduled tasks")
 
@@ -357,7 +357,7 @@ async def trivia_tuesday():
         calculated_answer = None
         if question_data.get('is_dynamic'):
             from bot.handlers.trivia.analytics import calculate_dynamic_answer
-            calculated_answer = calculate_dynamic_answer(db, (question_data.get('dynamic_query_type', ''))
+            calculated_answer = calculate_dynamic_answer(db, question_data.get('dynamic_query_type', ''))
             if not calculated_answer:
                 await notify_scheduled_message_error("Trivia Tuesday", f"Failed to calculate dynamic answer for question #{question_id}.", uk_now)
                 return
@@ -834,7 +834,7 @@ async def scheduled_ai_refresh():
                     print(f"🔄 TRIVIA POOL: Generating {needed} questions...")
 
                     try:
-                        from ..handlers.conversation_handler import start_jam_question_approval
+                        from ..handlers.conversations import start_jam_question_approval
                         from ..handlers.trivia.generator import generate_ai_trivia_question
 
                         generated = 0
@@ -1135,7 +1135,7 @@ async def cleanup_game_recommendations():
 
         # Also cleanup stale weekly announcement approvals
         try:
-            from ..handlers.conversation_handler import cleanup_weekly_announcement_approvals
+            from ..handlers.conversations import cleanup_weekly_announcement_approvals
             expired_count = cleanup_weekly_announcement_approvals()
             if expired_count > 0:
                 print(f"🧹 Cleaned up {expired_count} stale weekly announcement approvals")

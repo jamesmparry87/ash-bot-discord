@@ -986,7 +986,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
 
                 # Trigger approval queue
                 try:
-                    from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
+                    from ..handlers.conversations import add_to_approval_queue, process_next_approval
                     from ..tasks.utils import get_bot_instance
 
                     summary = db_module.games.get_staging_session_summary(sync_session_id)
@@ -1440,7 +1440,7 @@ If you want to add any other comments, you can discuss the list in 🎮game-chat
             await status_msg.edit(content=report)
 
             # Trigger approval via conversation handler
-            from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
+            from ..handlers.conversations import add_to_approval_queue, process_next_approval
             summary = database.games.get_staging_session_summary(sync_session_id)
             add_to_approval_queue(
                 item_type='sync_approval',

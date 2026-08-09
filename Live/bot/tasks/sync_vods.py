@@ -40,7 +40,7 @@ except ImportError:
     fetch_playlist_based_content_since = None
 
 try:
-    from ..handlers.conversation_handler import notify_jam_weekly_message_failure, start_weekly_announcement_approval
+    from ..handlers.conversations import notify_jam_weekly_message_failure, start_weekly_announcement_approval
 except ImportError:
     notify_jam_weekly_message_failure = None
     start_weekly_announcement_approval = None
@@ -870,7 +870,7 @@ async def perform_full_content_sync(start_sync_time: datetime, is_scheduled: boo
     print(f"🔄 SYNC: Session {sync_session_id} complete - {summary['total_count']} games staged for approval")
 
     # --- Trigger Approval Conversation via Queue System ---
-    from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
+    from ..handlers.conversations import add_to_approval_queue, process_next_approval
 
     if bot:
         try:

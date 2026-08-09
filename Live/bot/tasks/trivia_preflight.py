@@ -30,7 +30,7 @@ async def pre_trivia_approval():
     print(f"🧠 Pre-trivia approval task triggered at {uk_now.strftime('%Y-%m-%d %H:%M:%S UK')}")
 
     try:
-        from ..handlers.conversation_handler import start_pre_trivia_approval
+        from ..handlers.conversations import start_pre_trivia_approval
 
         # Get next trivia question using existing priority logic
         if db is None:
@@ -44,7 +44,7 @@ async def pre_trivia_approval():
 
             # Try to generate an emergency question
             try:
-                from ..handlers.conversation_handler import start_jam_question_approval
+                from ..handlers.conversations import start_jam_question_approval
                 from ..handlers.trivia.generator import generate_ai_trivia_question
 
                 print("🔄 Attempting to generate emergency question for today's trivia")
@@ -92,7 +92,7 @@ async def pre_trivia_approval():
         # If it's a dynamic question, calculate the answer
         if selected_question.get('is_dynamic'):
             from bot.handlers.trivia.analytics import calculate_dynamic_answer
-            calculated_answer = calculate_dynamic_answer(db, (  # type: ignore
+            calculated_answer = calculate_dynamic_answer(db,   # type: ignore
                 selected_question.get('dynamic_query_type', ''))
             if calculated_answer:
                 selected_question['correct_answer'] = calculated_answer
@@ -331,7 +331,7 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
 
                 # Try to generate an emergency question
                 try:
-                    from ..handlers.conversation_handler import start_jam_question_approval
+                    from ..handlers.conversations import start_jam_question_approval
                     from ..handlers.trivia.generator import generate_ai_trivia_question
 
                     print("🔄 EMERGENCY APPROVAL: Generating emergency question")
@@ -379,7 +379,7 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
             if selected_question.get('is_dynamic'):
                 try:
                     from bot.handlers.trivia.analytics import calculate_dynamic_answer
-                    calculated_answer = calculate_dynamic_answer(db, (  # type: ignore
+                    calculated_answer = calculate_dynamic_answer(db,   # type: ignore
                         selected_question.get('dynamic_query_type', ''))
                     if calculated_answer:
                         selected_question['correct_answer'] = calculated_answer
@@ -390,7 +390,7 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
 
             # Send for emergency approval
             try:
-                from ..handlers.conversation_handler import start_jam_question_approval
+                from ..handlers.conversations import start_jam_question_approval
 
                 approval_sent = await start_jam_question_approval(selected_question)
 
@@ -445,7 +445,7 @@ async def _restore_pending_questions(db) -> list:
                 print(
                     f"🔄 STARTUP TRIVIA VALIDATION: Found {pending_count} orphaned questions awaiting approval from previous session")
                 try:
-                    from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
+                    from ..handlers.conversations import add_to_approval_queue, process_next_approval
                     restored_count = 0
                     for pending_q in pending_questions:
                         queue_position = add_to_approval_queue(
@@ -656,7 +656,7 @@ def _process_generated_question(question_data, db, index, generated_question_tex
             return False, False
 
     # ✅ FIX #2: Add to approval queue instead of manual sequential logic
-    from ..handlers.conversation_handler import add_to_approval_queue
+    from ..handlers.conversations import add_to_approval_queue
     queue_position = add_to_approval_queue(
         item_type='trivia_question',
         data=question_data,
@@ -679,7 +679,7 @@ async def _background_question_generation(current_question_count: int):
         # Check if AI handler is available
         try:
             from ..config import JAM_USER_ID
-            from ..handlers.conversation_handler import process_next_approval
+            from ..handlers.conversations import process_next_approval
             from ..handlers.trivia.generator import generate_ai_trivia_question
             print("✅ BACKGROUND GENERATION: AI handler and conversation handler loaded")
         except ImportError as import_error:
@@ -804,7 +804,7 @@ async def _background_question_generation(current_question_count: int):
                 if hasattr(get_bot_instance(), 'fetch_user') and get_bot_instance().user:
                     user = await get_bot_instance().fetch_user(JAM_USER_ID)
                     if user:
-                        from ..handlers.conversation_handler import get_queue_length
+                        from ..handlers.conversations import get_queue_length
                         remaining = get_queue_length()
 
                         summary_message = (

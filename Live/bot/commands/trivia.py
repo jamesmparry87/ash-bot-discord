@@ -25,7 +25,7 @@ from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..data.trivia_templates import DATABASE_QUESTION_TEMPLATES
 from ..database import DatabaseManager, get_database
 from ..handlers.ai_handler import call_ai_with_rate_limiting
-from ..handlers.conversation_handler import (
+from ..handlers.conversations import (
     force_reset_approval_session,
     jam_approval_conversations,
     start_jam_question_approval,
@@ -80,7 +80,7 @@ class TriviaCommands(commands.Cog):
 
             # If in DM, route to conversation handler for enhanced experience
             if ctx.guild is None:
-                from ..handlers.conversation_handler import start_trivia_conversation
+                from ..handlers.conversations import start_trivia_conversation
                 await start_trivia_conversation(ctx)
                 return
 
@@ -921,7 +921,7 @@ class TriviaCommands(commands.Cog):
     async def add_trivia_question_conversation(self, ctx):
         """Start interactive DM conversation for trivia question submission"""
         try:
-            from ..handlers.conversation_handler import start_trivia_conversation
+            from ..handlers.conversations import start_trivia_conversation
             await start_trivia_conversation(ctx)
         except ImportError:
             await ctx.send("❌ Trivia submission system not available - conversation handler not loaded.")
@@ -942,7 +942,7 @@ class TriviaCommands(commands.Cog):
 
             # Check if approval system is available
             try:
-                from ..handlers.conversation_handler import start_jam_question_approval
+                from ..handlers.conversations import start_jam_question_approval
             except ImportError:
                 await ctx.send("❌ **Approval system not available.** Conversation handler not loaded.")
                 return
@@ -1071,7 +1071,7 @@ class TriviaCommands(commands.Cog):
                 return
 
             from ..config import JAM_USER_ID
-            from ..handlers.conversation_handler import jam_approval_conversations
+            from ..handlers.conversations import jam_approval_conversations
 
             if JAM_USER_ID in jam_approval_conversations:
                 conversation = jam_approval_conversations[JAM_USER_ID]
@@ -1119,7 +1119,7 @@ class TriviaCommands(commands.Cog):
                 return
 
             from ..config import JAM_USER_ID
-            from ..handlers.conversation_handler import force_reset_approval_session
+            from ..handlers.conversations import force_reset_approval_session
 
             # Reset for JAM
             success = await force_reset_approval_session(JAM_USER_ID)
@@ -1472,7 +1472,7 @@ class TriviaCommands(commands.Cog):
 
             await ctx.send(f"🧠 **Manual Question Generation**\n\nGenerating {count} trivia question(s) for your approval... This may take a moment.")
 
-            from ..handlers.conversation_handler import start_jam_question_approval
+            from ..handlers.conversations import start_jam_question_approval
 
             successful_generations = 0
             failed_generations = 0
