@@ -287,6 +287,7 @@ async def format_announcement_content(
 
     return formatted
 
+
 async def _regenerate_weekly_announcement_content(analysis_cache: dict, day: str, original_content: str):
     from bot.config import JAM_USER_ID
     from bot.handlers.ai_handler import (
@@ -333,6 +334,6 @@ async def _regenerate_weekly_announcement_content(analysis_cache: dict, day: str
         if response_text:
             return filter_ai_response(response_text)
         return None
-    
+
     # Placeholder for Friday's regeneration logic
     return None
