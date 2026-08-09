@@ -1290,7 +1290,7 @@ async def start_sync_approval(sync_session_id: str, summary: Dict[str, Any]) -> 
 
 async def force_reset_approval_session(user_id: int) -> bool:
     """Force reset any active approval session for a user (manual override)"""
-    from bot.handlers.conversations.core import jam_approval_conversations, db
+    from bot.handlers.conversations.core import db, jam_approval_conversations
     try:
         print(f"?? FORCE RESET: Initiating manual reset for user {user_id}")
         reset_performed = False

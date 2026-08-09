@@ -458,11 +458,13 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
 
 async def start_trivia_conversation(ctx):
     """Start interactive DM conversation for trivia question submission"""
-    from bot.utils.permissions import user_is_mod_by_id
-    from bot.handlers.conversations.core import _get_bot_instance, mod_trivia_conversations
-    from bot.handlers.conversations.mod_trivia import cleanup_mod_trivia_conversations, handle_mod_trivia_conversation
     from datetime import datetime
     from zoneinfo import ZoneInfo
+
+    from bot.handlers.conversations.core import _get_bot_instance, mod_trivia_conversations
+    from bot.handlers.conversations.mod_trivia import cleanup_mod_trivia_conversations, handle_mod_trivia_conversation
+    from bot.utils.permissions import user_is_mod_by_id
+
     # Check if command is used in DM
     if ctx.guild is not None:
         await ctx.send(
