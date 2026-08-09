@@ -226,6 +226,7 @@ async def generate_ai_enhanced_question(prompt_data: dict, bot=None):
         logger.error(f"Error in AI-enhanced YouTube question generation: {e}")
         return None
 
+
 def _parse_ai_trivia_response(response_text: str) -> tuple[str, str]:
     """Parse AI trivia response using multiple strategies to extract question and answer."""
     question_text = ""

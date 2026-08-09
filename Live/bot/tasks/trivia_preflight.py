@@ -440,7 +440,8 @@ async def _restore_pending_questions(db) -> list:
             pending_count = len(pending_questions) if pending_questions else 0
 
             if pending_count > 0:
-                print(f"🔄 STARTUP TRIVIA VALIDATION: Found {pending_count} orphaned questions awaiting approval from previous session")
+                print(
+                    f"🔄 STARTUP TRIVIA VALIDATION: Found {pending_count} orphaned questions awaiting approval from previous session")
                 try:
                     from ..handlers.conversation_handler import add_to_approval_queue, process_next_approval
                     restored_count = 0
@@ -451,11 +452,13 @@ async def _restore_pending_questions(db) -> list:
                             priority=8,
                             source='startup_restoration'
                         )
-                        print(f"♻️ RESTORED: Question #{pending_q.get('id')} added to approval queue at position {queue_position}")
+                        print(
+                            f"♻️ RESTORED: Question #{pending_q.get('id')} added to approval queue at position {queue_position}")
                         restored_count += 1
 
                     if restored_count > 0:
-                        print(f"🔄 STARTUP TRIVIA VALIDATION: Triggering approval queue for {restored_count} restored questions")
+                        print(
+                            f"🔄 STARTUP TRIVIA VALIDATION: Triggering approval queue for {restored_count} restored questions")
                         await process_next_approval()
                         try:
                             if get_bot_instance():
@@ -472,7 +475,8 @@ async def _restore_pending_questions(db) -> list:
                                     )
                                     print("✅ STARTUP TRIVIA VALIDATION: Restoration notification sent to JAM")
                         except Exception as notify_error:
-                            print(f"⚠️ STARTUP TRIVIA VALIDATION: Failed to send restoration notification: {notify_error}")
+                            print(
+                                f"⚠️ STARTUP TRIVIA VALIDATION: Failed to send restoration notification: {notify_error}")
                 except Exception as restore_error:
                     print(f"❌ STARTUP TRIVIA VALIDATION: Failed to restore pending questions to queue: {restore_error}")
             else:
@@ -481,7 +485,7 @@ async def _restore_pending_questions(db) -> list:
             print("ℹ️ STARTUP TRIVIA VALIDATION: get_pending_approval_questions method not available")
     except Exception as pending_error:
         print(f"⚠️ STARTUP TRIVIA VALIDATION: Error checking for pending questions: {pending_error}")
-    
+
     return pending_questions
 
 
@@ -582,7 +586,8 @@ async def validate_startup_trivia_questions():
         print("🔓 STARTUP TRIVIA VALIDATION: Lock released, validation marked as completed")
 
 
-def _process_generated_question(question_data, db, index, generated_question_texts, used_template_ids) -> tuple[bool, bool]:
+def _process_generated_question(question_data, db, index, generated_question_texts,
+                                used_template_ids) -> tuple[bool, bool]:
     """Helper method to process, validate and queue a generated question.
     Returns (success, is_duplicate).
     """
@@ -591,7 +596,7 @@ def _process_generated_question(question_data, db, index, generated_question_tex
         missing_fields = [f for f in required_fields if f not in question_data]
         print(f"⚠️ BACKGROUND GENERATION: Generated question {index + 1} missing fields: {missing_fields}")
         return False, False
-        
+
     question_text = question_data.get('question_text', 'Unknown')
 
     # Check for duplicates before adding to queue
@@ -637,7 +642,8 @@ def _process_generated_question(question_data, db, index, generated_question_tex
             )
 
             if question_id:
-                print(f"💾 BACKGROUND GENERATION: Question persisted to DB as ID #{question_id} (status: pending_approval)")
+                print(
+                    f"💾 BACKGROUND GENERATION: Question persisted to DB as ID #{question_id} (status: pending_approval)")
                 # Add question_id to the data for the approval queue
                 question_data['id'] = question_id
             else:
@@ -656,8 +662,10 @@ def _process_generated_question(question_data, db, index, generated_question_tex
         source=f'startup_generation_{index + 1}'
     )
 
-    print(f"📋 BACKGROUND GENERATION: Question {index + 1} (ID #{question_id}) added to approval queue at position {queue_position}")
+    print(
+        f"📋 BACKGROUND GENERATION: Question {index + 1} (ID #{question_id}) added to approval queue at position {queue_position}")
     return True, False
+
 
 async def _background_question_generation(current_question_count: int):
     """Background task for generating trivia questions using the approval queue system"""
@@ -739,7 +747,6 @@ async def _background_question_generation(current_question_count: int):
                 if questions_list and isinstance(questions_list, list):
                     # ✅ SUCCESS: Reset consecutive failure counter
                     consecutive_failures = 0
-                    
                     for q_data in questions_list:
                         success, is_duplicate = _process_generated_question(
                             q_data, 

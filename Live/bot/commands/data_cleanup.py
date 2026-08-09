@@ -252,7 +252,7 @@ class DataCleanupCommands(commands.Cog):
         **Admin only command**
         """
         await ctx.send("🧹 **Clearing Trivia Queue...**")
-        
+
         try:
             deleted_count = self.db.trivia.clear_pending_trivia_questions()
             await ctx.send(f"✅ Successfully deleted {deleted_count} pending trivia questions.\nThe bot will generate fresh questions (including clip trivia) at the next opportunity.")

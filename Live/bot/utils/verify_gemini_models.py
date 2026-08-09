@@ -210,7 +210,8 @@ def print_summary(results: Dict[str, List[Dict]]):
 
         if len(results['working']) > 1:
             print("\n🛡️ REDUNDANCY:")
-            print(f"   • {len(results['working'])} working models provide {len(results['working']) - 1} backup level(s)")
+            print(
+                f"   • {len(results['working'])} working models provide {len(results['working']) - 1} backup level(s)")
             print("   • Automatic failover if primary fails")
             print(f"   • Models tested in order: {' → '.join([r['model'] for r in results['working']])}")
     else:

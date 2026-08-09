@@ -158,6 +158,7 @@ def _extract_from_markers(cleaned_title: str) -> Optional[str]:
             return cleanup_game_name(with_colon)
     return None
 
+
 def _extract_from_equals(cleaned_title: str) -> Optional[str]:
     """PRIORITY 0B: Handle "=" separator for creative titles"""
     if '=' in cleaned_title:
@@ -171,6 +172,7 @@ def _extract_from_equals(cleaned_title: str) -> Optional[str]:
             if len(after_equals) >= 3 and not is_generic_term(after_equals):
                 return after_equals
     return None
+
 
 def _extract_before_episode_marker(cleaned_title: str) -> Optional[str]:
     """PRIORITY 1 & 2: Extract game name that appears before day/part/episode indicators"""
@@ -211,8 +213,9 @@ def _extract_before_episode_marker(cleaned_title: str) -> Optional[str]:
             game_name = cleanup_game_name(match.group(1).strip())
             if len(game_name) >= 2 and not is_generic_term(game_name):
                 return game_name
-                
+
     return None
+
 
 def extract_game_name_from_title(title: str) -> Optional[str]:
     """
