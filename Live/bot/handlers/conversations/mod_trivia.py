@@ -455,3 +455,44 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
         # Clean up on error
         if user_id in mod_trivia_conversations:
             del mod_trivia_conversations[user_id]
+
+async def start_trivia_conversation(ctx):
+    """Start interactive DM conversation for trivia question submission"""
+    from bot.utils.permissions import user_is_mod_by_id
+    from bot.handlers.conversations.core import _get_bot_instance, mod_trivia_conversations
+    from bot.handlers.conversations.mod_trivia import cleanup_mod_trivia_conversations, handle_mod_trivia_conversation
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    # Check if command is used in DM
+    if ctx.guild is not None:
+        await ctx.send(
+            f"?? **Security protocol engaged.** Trivia question submission must be initiated via direct message. \n"
+            f"Please DM me with !addtriviaquestion to begin the secure submission process.\n\n"
+            f"*Confidential mission parameters require private channel authorization.*"
+        )
+        return
+
+    bot_instance = _get_bot_instance()
+
+    if not await user_is_mod_by_id(ctx.author.id, bot_instance):
+        await ctx.send(
+            f"? **Access denied.** Trivia question submission protocols are restricted to moderators only. "
+            f"Your clearance level is insufficient for trivia database modification capabilities.\n\n"
+            f"*Security protocols maintained. Unauthorized access logged.*"
+        )
+        return
+
+    # Clean up any existing conversation state for this user
+    cleanup_mod_trivia_conversations()
+
+    # Initialize conversation state
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    mod_trivia_conversations[ctx.author.id] = {
+        'step': 'initial',
+        'data': {},
+        'last_activity': uk_now,
+        'initiated_at': uk_now,
+    }
+
+    # Start with a direct question about adding trivia
+    await handle_mod_trivia_conversation(ctx.message)

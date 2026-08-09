@@ -1287,3 +1287,40 @@ async def start_sync_approval(sync_session_id: str, summary: Dict[str, Any]) -> 
         import traceback
         traceback.print_exc()
         return False
+
+async def force_reset_approval_session(user_id: int) -> bool:
+    """Force reset any active approval session for a user (manual override)"""
+    from bot.handlers.conversations.core import jam_approval_conversations, db
+    try:
+        print(f"?? FORCE RESET: Initiating manual reset for user {user_id}")
+        reset_performed = False
+
+        # 1. Clear in-memory conversation state
+        if user_id in jam_approval_conversations:
+            del jam_approval_conversations[user_id]
+            print(f"? FORCE RESET: Cleared in-memory conversation state")
+            reset_performed = True
+
+        # 2. Cancel any active database sessions
+        if db:
+            try:
+                # Find active sessions
+                active_sessions = db.get_all_active_approval_sessions()
+                user_sessions = [s for s in active_sessions if s['user_id'] == user_id]
+
+                for session in user_sessions:
+                    db.complete_approval_session(session['id'], 'cancelled_manual')
+                    print(f"? FORCE RESET: Cancelled database session {session['id']}")
+                    reset_performed = True
+            except Exception as e:
+                print(f"?? FORCE RESET: Error checking/cancelling database sessions: {e}")
+
+        if reset_performed:
+            print(f"? FORCE RESET: Successfully reset approval state for user {user_id}")
+        else:
+            print(f"?? FORCE RESET: No active sessions found for user {user_id}")
+            
+        return True
+    except Exception as e:
+        print(f"? FORCE RESET: Fatal error during reset for user {user_id}: {e}")
+        return False
