@@ -34,6 +34,7 @@ def check_escape_command(content: str) -> bool:
     escape_keywords = ['cancel', 'abort', 'quit', 'exit', 'stop', 'nevermind', 'never mind']
     return content.lower().strip() in escape_keywords
 
+
 def check_conversation_health(conversation: Dict[str, Any], max_age_minutes: int = 60) -> Tuple[bool, Optional[str]]:
     """
     ✅ FIX #1: Check if a conversation is healthy or should be auto-expired.
@@ -75,6 +76,7 @@ def check_conversation_health(conversation: Dict[str, Any], max_age_minutes: int
 
     return True, None
 
+
 def track_conversation_step(conversation: Dict[str, Any], new_step: str):
     """
     ✅ FIX #1: Track step transitions to detect loops.
@@ -91,6 +93,7 @@ def track_conversation_step(conversation: Dict[str, Any], new_step: str):
     if len(conversation['step_history']) > 25:
         conversation['step_history'] = conversation['step_history'][-25:]
 
+
 def increment_invalid_input_count(conversation: Dict[str, Any]):
     """
     ✅ FIX #1: Track invalid input attempts.
@@ -100,6 +103,7 @@ def increment_invalid_input_count(conversation: Dict[str, Any]):
     """
     conversation['invalid_input_count'] = conversation.get('invalid_input_count', 0) + 1
 
+
 def reset_invalid_input_count(conversation: Dict[str, Any]):
     """
     ✅ FIX #1: Reset invalid input counter after successful input.
@@ -108,6 +112,7 @@ def reset_invalid_input_count(conversation: Dict[str, Any]):
     preventing false positives for unstuck conversations.
     """
     conversation['invalid_input_count'] = 0
+
 
 def validate_numbered_input(content: str, valid_options: list[str]) -> bool:
     """
@@ -121,6 +126,7 @@ def validate_numbered_input(content: str, valid_options: list[str]) -> bool:
         True if input is valid, False otherwise
     """
     return content in valid_options
+
 
 def create_invalid_input_message(content: str, valid_numbers: list[str], example_text: Optional[str] = None) -> str:
     """
@@ -148,6 +154,7 @@ def create_invalid_input_message(content: str, valid_numbers: list[str], example
 
     return error_msg
 
+
 def extract_expected_options_from_prompt(prompt: str) -> list[str]:
     """
     Parse a prompt message to extract expected option numbers (for testing).
@@ -163,6 +170,7 @@ def extract_expected_options_from_prompt(prompt: str) -> list[str]:
     # Find all "**N.**" patterns
     matches = re.findall(r'\*\*(\d+)\.\*\*', prompt)
     return matches
+
 
 def _infer_dynamic_query_type(question_text: str) -> Tuple[Optional[str], Optional[str]]:
     """Infers the dynamic query type and an optional parameter from the question text."""
@@ -199,7 +207,6 @@ def _infer_dynamic_query_type(question_text: str) -> Tuple[Optional[str], Option
     return None, None
 
 
-
 async def send_conversation_expired_message(message: discord.Message, conversation_type: str, reason: str):
     """
     ✅ FIX #1: Send user-friendly expiration message with recovery instructions.
@@ -218,6 +225,7 @@ async def send_conversation_expired_message(message: discord.Message, conversati
         await message.reply(expired_msg)
     except Exception as e:
         print(f"⚠️ Failed to send expiration message: {e}")
+
 
 async def format_announcement_content(
         content: str,
@@ -278,4 +286,3 @@ async def format_announcement_content(
                       f"*Hope you enjoy the new functionality! - The Management* 🚀")
 
     return formatted
-

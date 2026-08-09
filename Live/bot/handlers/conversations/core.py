@@ -23,11 +23,13 @@ db = get_database()
 
 _bot_instance = None
 
+
 def initialize_conversation_handler(bot):
     """Initializes the conversation handler with a stable bot instance."""
     global _bot_instance
     _bot_instance = bot
     print("✅ Conversation handler initialized with bot instance.")
+
 
 def _get_bot_instance():
     """Gets the globally stored bot instance for conversation handlers."""
@@ -37,5 +39,5 @@ def _get_bot_instance():
     print("❌ Bot instance not available for conversation handler.")
     return None
 
-sync_approval_conversations = {}
 
+sync_approval_conversations = {}

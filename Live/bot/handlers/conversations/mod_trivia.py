@@ -45,11 +45,13 @@ def cleanup_mod_trivia_conversations():
         del mod_trivia_conversations[user_id]
         print(f"Cleaned up expired mod trivia conversation for user {user_id}")
 
+
 def update_mod_trivia_activity(user_id: int):
     """Update last activity time for mod trivia conversation"""
     if user_id in mod_trivia_conversations:
         mod_trivia_conversations[user_id]["last_activity"] = datetime.now(
             ZoneInfo("Europe/London"))
+
 
 async def handle_mod_trivia_conversation(message: discord.Message) -> None:
     """Handle the interactive DM conversation for mod trivia question submission"""
@@ -453,4 +455,3 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
         # Clean up on error
         if user_id in mod_trivia_conversations:
             del mod_trivia_conversations[user_id]
-

@@ -58,11 +58,13 @@ def cleanup_announcement_conversations():
         print(
             f"Cleaned up expired announcement conversation for user {user_id}")
 
+
 def update_announcement_activity(user_id: int):
     """Update last activity time for announcement conversation"""
     if user_id in announcement_conversations:
         announcement_conversations[user_id]["last_activity"] = datetime.now(
             ZoneInfo("Europe/London"))
+
 
 def cleanup_weekly_announcement_approvals():
     """Remove weekly announcement approval sessions inactive for more than 24 hours"""
@@ -93,6 +95,7 @@ def cleanup_weekly_announcement_approvals():
         del weekly_announcement_approvals[user_id]
 
     return len(expired_users)
+
 
 async def notify_jam_weekly_message_failure(day: str, error_type: str, details: str):
     """Send DM notification to JAM when weekly message generation fails"""
@@ -127,6 +130,7 @@ async def notify_jam_weekly_message_failure(day: str, error_type: str, details: 
         print(f"❌ Error sending failure notification to JAM: {e}")
         return False
 
+
 async def start_weekly_announcement_approval(announcement_id: int, content: str, day: str):
     """Starts the approval workflow for a weekly announcement (via queue system)."""
     try:
@@ -154,6 +158,7 @@ async def start_weekly_announcement_approval(announcement_id: int, content: str,
 
     except Exception as e:
         print(f"❌ Error queueing weekly announcement approval: {e}")
+
 
 async def handle_weekly_announcement_approval(message: discord.Message):
     """Handles the state machine for the weekly announcement approval conversation."""
@@ -397,6 +402,7 @@ async def handle_weekly_announcement_approval(message: discord.Message):
             f"Please respond with **1, 2, 3, 4, or 5**."
         )
         await message.reply(approval_msg)
+
 
 async def handle_announcement_conversation(message: discord.Message) -> None:
     """Handle the interactive DM conversation for announcement creation"""
@@ -817,6 +823,7 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
         if user_id in announcement_conversations:
             del announcement_conversations[user_id]
 
+
 async def start_announcement_conversation(message):
     """Start interactive DM conversation for announcement creation"""
     # Check if command is used in DM
@@ -865,6 +872,7 @@ async def start_announcement_conversation(message):
         f"*Mission parameters await your tactical decision.*")
 
     await message.reply(channel_msg)
+
 
 async def handle_game_review_conversation(message: discord.Message) -> None:
     """Handle game review approval conversation"""
@@ -1009,6 +1017,7 @@ async def handle_game_review_conversation(message: discord.Message) -> None:
         if user_id in game_review_conversations:
             del game_review_conversations[user_id]
 
+
 async def handle_sync_approval_conversation(message: discord.Message) -> bool:
     """
     Handle JAM's responses in sync approval conversation.
@@ -1068,7 +1077,6 @@ async def handle_sync_approval_conversation(message: discord.Message) -> bool:
         return True
 
 
-
 async def bulk_approve_sync(message: discord.Message, conv: Dict[str, Any]):
     """Approve all games and commit to database"""
     try:
@@ -1113,6 +1121,7 @@ async def bulk_approve_sync(message: discord.Message, conv: Dict[str, Any]):
         print(f"❌ SYNC APPROVAL: Error in bulk approval: {e}")
         await message.channel.send(f"❌ Error during bulk approval: {str(e)}")
 
+
 async def start_individual_review(message: discord.Message, conv: Dict[str, Any]):
     """Start individual game review process"""
     try:
@@ -1129,6 +1138,7 @@ async def start_individual_review(message: discord.Message, conv: Dict[str, Any]
     except Exception as e:
         print(f"❌ SYNC APPROVAL: Error starting individual review: {e}")
         await message.channel.send(f"❌ Error: {str(e)}")
+
 
 async def process_individual_review_ids(message: discord.Message, conv: Dict[str, Any]):
     """Process the game IDs to review"""
@@ -1189,6 +1199,7 @@ async def process_individual_review_ids(message: discord.Message, conv: Dict[str
     except Exception as e:
         print(f"❌ SYNC APPROVAL: Error processing review IDs: {e}")
         await message.channel.send(f"❌ Error: {str(e)}")
+
 
 async def process_game_review_action(message: discord.Message, conv: Dict[str, Any]):
     """Process user's choice for current game"""
@@ -1268,6 +1279,7 @@ async def process_game_review_action(message: discord.Message, conv: Dict[str, A
         print(f"❌ SYNC APPROVAL: Error processing review action: {e}")
         await message.channel.send(f"❌ Error: {str(e)}")
 
+
 async def process_game_name_edit(message: discord.Message, conv: Dict[str, Any]):
     """Process edited game name"""
     try:
@@ -1306,6 +1318,7 @@ async def process_game_name_edit(message: discord.Message, conv: Dict[str, Any])
         print(f"❌ SYNC APPROVAL: Error processing name edit: {e}")
         await message.channel.send(f"❌ Error: {str(e)}")
 
+
 async def cancel_sync(message: discord.Message, conv: Dict[str, Any]):
     """Cancel the entire sync"""
     try:
@@ -1327,4 +1340,3 @@ async def cancel_sync(message: discord.Message, conv: Dict[str, Any]):
     except Exception as e:
         print(f"❌ SYNC APPROVAL: Error cancelling sync: {e}")
         await message.channel.send(f"❌ Error: {str(e)}")
-
