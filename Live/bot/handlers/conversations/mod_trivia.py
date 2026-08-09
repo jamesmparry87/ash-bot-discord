@@ -456,6 +456,7 @@ async def handle_mod_trivia_conversation(message: discord.Message) -> None:
         if user_id in mod_trivia_conversations:
             del mod_trivia_conversations[user_id]
 
+
 async def start_trivia_conversation(ctx):
     """Start interactive DM conversation for trivia question submission"""
     from datetime import datetime
