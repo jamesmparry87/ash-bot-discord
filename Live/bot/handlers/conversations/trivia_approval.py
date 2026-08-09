@@ -85,10 +85,12 @@ def add_to_approval_queue(item_type: str, data: Dict[str, Any], priority: int = 
 
     return len(jam_approval_queue) - 1 if not inserted else i
 
+
 def get_queue_length() -> int:
     """Get the current length of the approval queue."""
     global jam_approval_queue
     return len(jam_approval_queue)
+
 
 def get_queue_status() -> Dict[str, Any]:
     """
@@ -113,6 +115,7 @@ def get_queue_status() -> Dict[str, Any]:
         ]
     }
 
+
 def clear_approval_queue() -> int:
     """
     Clear all items from the approval queue (admin function).
@@ -127,6 +130,7 @@ def clear_approval_queue() -> int:
     print(f"🧹 Cleared approval queue ({count} items removed)")
 
     return count
+
 
 async def process_next_approval() -> bool:
     """
@@ -218,6 +222,7 @@ async def process_next_approval() -> bool:
         traceback.print_exc()
         return False
 
+
 def cleanup_jam_approval_conversations():
     """Remove JAM approval conversations inactive for more than 24 hours (extended for late responses)"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
@@ -235,11 +240,13 @@ def cleanup_jam_approval_conversations():
             f"Cleaned up JAM approval conversation for user {user_id} after {conversation_age_hours:.1f} hours of inactivity")
         del jam_approval_conversations[user_id]
 
+
 def update_jam_approval_activity(user_id: int):
     """Update last activity time for JAM approval conversation"""
     if user_id in jam_approval_conversations:
         jam_approval_conversations[user_id]["last_activity"] = datetime.now(
             ZoneInfo("Europe/London"))
+
 
 async def handle_jam_approval_conversation(message: discord.Message) -> None:
     """Handle the interactive DM conversation for JAM approval of trivia questions"""
@@ -680,6 +687,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
         if user_id in jam_approval_conversations:
             del jam_approval_conversations[user_id]
 
+
 async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
     """Start JAM approval workflow for a generated trivia question with persistent storage"""
     try:
@@ -852,6 +860,7 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
 
         return False
 
+
 async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
     """Start pre-trivia approval workflow (1 hour before Trivia Tuesday)"""
     try:
@@ -946,7 +955,6 @@ async def start_pre_trivia_approval(question_data: Dict[str, Any]) -> bool:
         return False
 
 
-
 def is_jam_approval_active() -> bool:
     """Check if JAM currently has an active approval conversation."""
     global jam_approval_active
@@ -963,6 +971,7 @@ def is_jam_approval_active() -> bool:
     jam_approval_active = has_active_conversation
 
     return has_active_conversation
+
 
 async def _send_weekly_announcement_approval(announcement_id: int, content: str, day: str):
     """Internal function to actually send weekly announcement approval to JAM."""
@@ -1022,6 +1031,7 @@ async def _send_weekly_announcement_approval(announcement_id: int, content: str,
         print(f"✅ Sent {day.title()} announcement to JAM for approval.")
     except Exception as e:
         print(f"❌ Error sending weekly announcement approval: {e}")
+
 
 async def save_final_modifications(message, data: Dict[str, Any], user_id: int):
     """Save all final modifications to the database"""
@@ -1089,6 +1099,7 @@ async def save_final_modifications(message, data: Dict[str, Any], user_id: int):
         await process_next_approval()
     else:
         print(f"✅ QUEUE: Empty after modifications")
+
 
 async def start_game_review_approval(game_data: Dict[str, Any]) -> bool:
     """Start game review approval workflow for low-confidence matches"""
@@ -1181,6 +1192,7 @@ async def start_game_review_approval(game_data: Dict[str, Any]) -> bool:
     except Exception as e:
         print(f"❌ Error starting game review: {e}")
         return False
+
 
 async def start_sync_approval(sync_session_id: str, summary: Dict[str, Any]) -> bool:
     """
@@ -1275,4 +1287,3 @@ async def start_sync_approval(sync_session_id: str, summary: Dict[str, Any]) -> 
         import traceback
         traceback.print_exc()
         return False
-

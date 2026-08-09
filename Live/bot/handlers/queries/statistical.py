@@ -211,29 +211,29 @@ async def handle_statistical_query(
              ("most" in lower_content and "game" in lower_content and any(word in lower_content for word in ["played", "play", "playing"])):
 
             # Handle ambiguous "most played" queries by providing both metrics
-            playtime_stats=db.get_games_by_playtime('DESC', limit=1)
-            episode_stats=db.get_games_by_episode_count('DESC', limit=1)
+            playtime_stats = db.get_games_by_playtime('DESC', limit=1)
+            episode_stats = db.get_games_by_episode_count('DESC', limit=1)
 
             if not playtime_stats and not episode_stats:
                 await message.reply("Database analysis complete. Insufficient playtime and episode data available for engagement ranking.")
                 return
 
-            response="Analysis complete. The term 'most played' can be interpreted in two ways:\n\n"
+            response = "Analysis complete. The term 'most played' can be interpreted in two ways:\n\n"
 
             if playtime_stats:
-                top_playtime_game=playtime_stats[0]
-                hours=round(top_playtime_game['total_playtime_minutes'] / 60, 1)
+                top_playtime_game = playtime_stats[0]
+                hours = round(top_playtime_game['total_playtime_minutes'] / 60, 1)
                 response += f"▶️ **By Playtime:** '{top_playtime_game['canonical_name']}' has the most playtime with **{hours} hours**.\n"
 
             if episode_stats:
-                top_episode_game=episode_stats[0]
-                episodes=top_episode_game['total_episodes']
+                top_episode_game = episode_stats[0]
+                episodes = top_episode_game['total_episodes']
                 response += f"▶️ **By Episodes:** '{top_episode_game['canonical_name']}' has the most episodes with **{episodes} parts**."
 
             response += "\n\nPlease specify which metric you require for further analysis."
 
             # NEW: Store clarification state in context (Issue #1 Fix)
-            context=get_or_create_context(message.author.id, message.channel.id)
+            context = get_or_create_context(message.author.id, message.channel.id)
             context.set_pending_clarification("playtime_vs_episodes", {
                 'playtime_stats': db.get_games_by_playtime('DESC', limit=5),
                 'episode_stats': db.get_games_by_episode_count('DESC', limit=5)
