@@ -2442,13 +2442,13 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 q_text = original_data.get('question_text', '')
                 q_ans = original_data.get('correct_answer', '')
                 q_type = original_data.get('question_type', 'single_answer')
-                
+
                 decoys_str = ""
                 if q_type == 'multiple_choice':
                     options = original_data.get('multiple_choice_options', [])
                     decoys = [opt for opt in options if opt != q_ans]
                     decoys_str = " | ".join(decoys)
-                
+
                 await message.reply(
                     f"✏️ **Manual Question Editing**\n\n"
                     f"Copy the text block below, make your changes, and send it back to apply the edits.\n"
@@ -2551,47 +2551,47 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
         elif step == 'template_modification':
             # Parse the incoming template
             import re
-            
+
             q_match = re.search(r'Question:\s*(.+)', content, re.IGNORECASE)
             a_match = re.search(r'Answer:\s*(.+)', content, re.IGNORECASE)
             t_match = re.search(r'Type:\s*(.+)', content, re.IGNORECASE)
             d_match = re.search(r'Decoys:\s*(.+)', content, re.IGNORECASE)
-            
+
             if not (q_match and a_match and t_match):
                 await message.reply(
                     "⚠️ **Invalid Format**\n\n"
                     "Could not parse your edits. Please ensure your message includes `Question:`, `Answer:`, and `Type:`."
                 )
                 return
-                
+
             new_q = q_match.group(1).strip()
             new_a = a_match.group(1).strip()
             new_t = t_match.group(1).strip().lower().replace(' ', '_')
-            
+
             if new_t not in ['single_answer', 'multiple_choice']:
                 await message.reply("⚠️ **Invalid Type**\n\nPlease use either `single_answer` or `multiple_choice` for the Type.")
                 return
-                
+
             new_decoys_list = []
             if new_t == 'multiple_choice':
                 d_str = ""
                 if d_match:
                     d_str = d_match.group(1).strip()
-                
+
                 if not d_str or d_str.lower() == 'none' or d_str == '-':
                     await message.reply("⚠️ **Missing Decoys**\n\nFor a `multiple_choice` question, you must provide exactly 3 decoys separated by `|` or `,`.")
                     return
-                
+
                 # Split by | or ,
                 if '|' in d_str:
                     new_decoys_list = [d.strip() for d in d_str.split('|') if d.strip()]
                 else:
                     new_decoys_list = [d.strip() for d in d_str.split(',') if d.strip()]
-                    
+
                 if len(new_decoys_list) != 3:
                     await message.reply(f"⚠️ **Invalid Decoys Count**\n\nYou provided {len(new_decoys_list)} decoys. Please provide exactly 3 decoys.")
                     return
-                    
+
             # Set values and call save
             data['modified_question'] = new_q
             data['modified_answer'] = new_a
@@ -2603,7 +2603,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 data['modified_options'] = options
             else:
                 data['modified_options'] = None
-                
+
             await save_final_modifications(message, data, user_id)
 
         # Update conversation state
@@ -2630,7 +2630,7 @@ async def save_final_modifications(message, data: Dict[str, Any], user_id: int):
         final_question = data.get('modified_question', original_data.get('question_text', ''))
         final_answer = data.get('modified_answer', original_data.get('correct_answer'))
         final_type = data.get('modified_type', original_data.get('question_type', 'single_answer'))
-        
+
         final_options = data.get('modified_options')
         if final_options is None and final_type == 'multiple_choice':
             final_options = original_data.get('multiple_choice_options')

@@ -610,7 +610,7 @@ Return strictly as a JSON array of 5 objects:
                             q_text = q_text[len(prefix):].strip()
                     if q_text and not q_text.endswith('?'):
                         q_text += '?'
-                    
+
                     if 10 <= len(q_text) <= 250:
                         raw_questions = [{
                             "question_text": q_text,
@@ -627,7 +627,7 @@ Return strictly as a JSON array of 5 objects:
                     key in q_data for key in ["question_text", "question_type", "correct_answer"]
                 ):
                     continue
-                
+
                 # Check for multiple_choice required fields
                 if q_data.get("question_type") == "multiple_choice":
                     if not all(key in q_data for key in ["decoy_1", "decoy_2", "decoy_3"]):

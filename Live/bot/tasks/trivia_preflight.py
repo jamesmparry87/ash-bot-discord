@@ -704,7 +704,7 @@ async def _background_question_generation(current_question_count: int):
 
         while successful_generations < questions_needed and generation_attempts < MAX_ATTEMPTS:
             generation_attempts += 1
-            
+
             # ✅ CIRCUIT BREAKER CHECK: Stop if too many consecutive failures
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 print(f"🚨 CIRCUIT BREAKER: Stopping generation after {consecutive_failures} consecutive failures")
@@ -731,7 +731,8 @@ async def _background_question_generation(current_question_count: int):
                 break
 
             try:
-                print(f"🔄 BACKGROUND GENERATION: Attempt {generation_attempts}/{MAX_ATTEMPTS} to reach {questions_needed} questions")
+                print(
+                    f"🔄 BACKGROUND GENERATION: Attempt {generation_attempts}/{MAX_ATTEMPTS} to reach {questions_needed} questions")
 
                 # ✅ FIX #1: Use unique context for each generation to avoid cache hits
                 unique_context = f"startup_validation_{generation_attempts}"
@@ -749,25 +750,26 @@ async def _background_question_generation(current_question_count: int):
                     consecutive_failures = 0
                     for q_data in questions_list:
                         success, is_duplicate = _process_generated_question(
-                            q_data, 
-                            db, 
-                            successful_generations, 
-                            generated_question_texts, 
+                            q_data,
+                            db,
+                            successful_generations,
+                            generated_question_texts,
                             used_template_ids
                         )
-                        
+
                         if success:
                             successful_generations += 1
                         else:
                             failed_generations += 1
                             if is_duplicate:
                                 duplicate_count += 1
-                        
+
                         # Stop processing this batch if we've hit our quota
                         if successful_generations >= questions_needed:
                             break
                 else:
-                    print(f"⚠️ BACKGROUND GENERATION: Failed to generate valid questions on attempt {generation_attempts}")
+                    print(
+                        f"⚠️ BACKGROUND GENERATION: Failed to generate valid questions on attempt {generation_attempts}")
                     failed_generations += 1
                     consecutive_failures += 1
 
