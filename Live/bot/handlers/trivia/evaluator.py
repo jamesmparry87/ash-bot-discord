@@ -1,10 +1,9 @@
-from typing import Tuple
-import re
 import difflib
 import random
+import re
 from collections import Counter
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from ..ai_handler import _get_db, pacific_tz

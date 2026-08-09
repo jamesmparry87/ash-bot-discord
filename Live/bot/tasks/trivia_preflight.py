@@ -93,7 +93,7 @@ async def pre_trivia_approval():
         if selected_question.get('is_dynamic'):
             from bot.handlers.trivia.analytics import calculate_dynamic_answer
             calculated_answer = calculate_dynamic_answer(db,   # type: ignore
-                selected_question.get('dynamic_query_type', ''))
+                                                         selected_question.get('dynamic_query_type', ''))
             if calculated_answer:
                 selected_question['correct_answer'] = calculated_answer
 
@@ -380,7 +380,7 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
                 try:
                     from bot.handlers.trivia.analytics import calculate_dynamic_answer
                     calculated_answer = calculate_dynamic_answer(db,   # type: ignore
-                        selected_question.get('dynamic_query_type', ''))
+                                                                 selected_question.get('dynamic_query_type', ''))
                     if calculated_answer:
                         selected_question['correct_answer'] = calculated_answer
                         print(
