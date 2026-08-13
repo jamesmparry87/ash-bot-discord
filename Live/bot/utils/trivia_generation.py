@@ -164,6 +164,7 @@ async def generate_ai_enhanced_question(prompt_data: dict, bot=None):
             f"Total Views: {prompt_data['total_views']:,}\n"
             f"Episodes: {prompt_data['episodes']}\n"
             f"Average Views per Episode: {prompt_data.get('avg_views', 0):,}\n\n"
+            f"CRITICAL: Captain Jonesy is female. ALWAYS use she/her pronouns when referring to Jonesy.\n"
             f"Create a question that fans could reasonably answer about this game's popularity or viewership. "
             f"Use the real data but make it accessible (e.g., 'over 2 million views' instead of exact numbers). "
             f"Focus on what viewers would notice: high popularity, many episodes, successful series, etc.\n\n"
@@ -306,6 +307,7 @@ async def generate_ai_question_fallback(db=None, bot=None, avoid_questions=None,
                 'type': 'fan_observable', 'prompt': (
                     "Generate a trivia question about Captain Jonesy's gaming that fans could answer from watching streams.\n\n"
                     "STRICT REQUIREMENTS:\n"
+                    "- CRITICAL: Captain Jonesy is female. ALWAYS use she/her pronouns when referring to Jonesy.\n"
                     "- Question must be answerable by regular viewers\n"
                     "- Avoid exact statistics (episode counts, view numbers)\n"
                     "- Focus on patterns: genres, series, preferences\n"
@@ -318,6 +320,7 @@ async def generate_ai_question_fallback(db=None, bot=None, avoid_questions=None,
                 'type': 'gaming_knowledge', 'prompt': (
                     "Generate general gaming trivia related to games Captain Jonesy has played.\n\n"
                     "STRICT REQUIREMENTS:\n"
+                    "- CRITICAL: Captain Jonesy is female. ALWAYS use she/her pronouns when referring to Jonesy.\n"
                     "- Focus on gaming industry knowledge\n"
                     "- Must relate to games Jonesy has streamed\n"
                     "- ONE clear factual answer\n"
@@ -330,6 +333,7 @@ async def generate_ai_question_fallback(db=None, bot=None, avoid_questions=None,
                         'type': 'broad_trends', 'prompt': (
                             "Generate a trivia question about observable trends in Captain Jonesy's gaming.\n\n"
                             "STRICT REQUIREMENTS:\n"
+                            "- CRITICAL: Captain Jonesy is female. ALWAYS use she/her pronouns when referring to Jonesy.\n"
                             "- Use broad categories (action vs RPG, horror vs platformer)\n"
                             "- Avoid exact numbers or dates\n"
                             "- Focus on comparative questions\n"

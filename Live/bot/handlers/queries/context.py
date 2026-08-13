@@ -401,11 +401,11 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
                 # Context resolution didn't lead to a valid query, provide
                 # helpful feedback
                 if context_info.get('game_resolved'):
-                    await message.reply(f"Sir Decent Jam, I resolved your reference to '{context_info['game_resolved']}', however insufficient information provided for specific analysis. Please clarify your query parameters for accurate data retrieval.")
+                    await message.reply(f"{message.author.display_name}, I resolved your reference to '{context_info['game_resolved']}', however insufficient information provided for specific analysis. Please clarify your query parameters for accurate data retrieval.")
                 elif context_info.get('subject_resolved'):
-                    await message.reply(f"Sir Decent Jam, accessing player data. I understand you're referencing Captain Jonesy, however insufficient information provided. Please specify the game title or analysis type for accurate data retrieval.")
+                    await message.reply(f"{message.author.display_name}, accessing player data. I understand you're referencing Captain Jonesy, however insufficient information provided. Please specify the game title or analysis type for accurate data retrieval.")
                 else:
-                    await message.reply(f"Sir Decent Jam, context parameters detected but query resolution incomplete. Please provide additional specificity for accurate mission data analysis.")
+                    await message.reply(f"{message.author.display_name}, context parameters detected but query resolution incomplete. Please provide additional specificity for accurate mission data analysis.")
 
                 context.add_message(message.content, "user")
                 context.add_message("context_resolution_failed", "bot")
@@ -415,7 +415,7 @@ async def handle_context_aware_query(message: discord.Message) -> bool:
         from ..context_manager import should_use_context
         if should_use_context(message.content):
             # Provide helpful error message indicating missing context
-            await message.reply(f"Sir Decent Jam, accessing player data. insufficient information provided. Please specify the \"she\" and the game title for accurate playtime retrieval.")
+            await message.reply(f"{message.author.display_name}, accessing player data. insufficient information provided. Please specify the \"she\" and the game title for accurate playtime retrieval.")
 
             context.add_message(message.content, "user")
             context.add_message("insufficient_context", "bot")

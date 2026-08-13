@@ -1,4 +1,4 @@
-﻿import difflib
+import difflib
 import random
 import re
 from collections import Counter
@@ -69,7 +69,7 @@ def normalize_trivia_answer(answer_text: str) -> str:
     return normalized
 
 
-def evaluate_answer(user_answer: str, correct_answer: str, question_type: str) -> Tuple[float, str]:
+def evaluate_answer(user_answer: str, correct_answer: str, question_type: str, multiple_choice_options: Optional[List[str]] = None) -> Tuple[float, str]:
     """
     Evaluate a trivia answer with enhanced fuzzy matching.
     Returns: (score, match_type) where score is 0.0-1.0
@@ -79,6 +79,18 @@ def evaluate_answer(user_answer: str, correct_answer: str, question_type: str) -
     # Clean up inputs
     user_clean = user_answer.strip()
     correct_clean = correct_answer.strip()
+    
+    # Handle multiple choice letter mappings (A, B, C, D)
+    if question_type == 'multiple_choice' and multiple_choice_options:
+        import re
+        # Check if the user answer is exactly a letter A-D (case insensitive), with optional period/parenthesis
+        match = re.match(r'^([a-dA-D])[\.\)]?$', user_clean)
+        if match:
+            letter = match.group(1).upper()
+            index = ord(letter) - ord('A')
+            if 0 <= index < len(multiple_choice_options):
+                # Replace user's letter guess with the actual full text from the options
+                user_clean = multiple_choice_options[index].strip()
 
     # Normalize answers for better matching
     user_normalized = normalize_trivia_answer(user_clean)

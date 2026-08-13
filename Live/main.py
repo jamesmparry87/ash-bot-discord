@@ -865,18 +865,8 @@ async def is_moderator_channel(channel_id: int) -> bool:
 
 
 async def is_trivia_answer_reply(message):
-    """Check if message is a reply to an active trivia question"""
+    """Check if message is a reply to an active trivia question or a standalone multiple-choice guess"""
     try:
-        # Check if this message is a reply
-        if not hasattr(message, 'reference') or not message.reference:
-            return False, None
-
-        # Get the message being replied to
-        try:
-            replied_to_message = await message.channel.fetch_message(message.reference.message_id)
-        except (discord.NotFound, discord.Forbidden):
-            return False, None
-
         # Check if we have database connection
         if db is None:
             return False, None
@@ -889,15 +879,35 @@ async def is_trivia_answer_reply(message):
         except Exception:
             return False, None
 
-        # Check if the replied-to message matches our tracked trivia messages
-        replied_to_id = replied_to_message.id
-        session_question_msg_id = active_session.get('question_message_id')
-        session_confirmation_msg_id = active_session.get('confirmation_message_id')
+        # Check if this message is a reply
+        is_reply = False
+        if hasattr(message, 'reference') and message.reference:
+            try:
+                replied_to_message = await message.channel.fetch_message(message.reference.message_id)
+                replied_to_id = replied_to_message.id
+                session_question_msg_id = active_session.get('question_message_id')
+                session_confirmation_msg_id = active_session.get('confirmation_message_id')
+                
+                if replied_to_id == session_question_msg_id or replied_to_id == session_confirmation_msg_id:
+                    is_reply = True
+            except (discord.NotFound, discord.Forbidden):
+                pass
+                
+        is_in_trivia_channel = getattr(message.channel, 'id', None) == MEMBERS_CHANNEL_ID
 
-        if replied_to_id == session_question_msg_id or replied_to_id == session_confirmation_msg_id:
-            print(
-                f"🧠 TRIVIA: Detected answer reply from user {message.author.id}: '{message.content}' → session {active_session['id']}")
+        if is_reply:
+            print(f"🧠 TRIVIA: Detected answer reply from user {message.author.id}: '{message.content}' → session {active_session['id']}")
             return True, active_session
+            
+        if is_in_trivia_channel:
+            msg_content = message.content.strip().upper()
+            q_type = active_session.get('question_type', '')
+            
+            # Allow standalone A, B, C, D answers if it's multiple choice
+            if q_type == 'multiple_choice':
+                if re.match(r'^[A-D][\.\)]?$', msg_content):
+                    print(f"🧠 TRIVIA: Detected standalone multiple-choice answer from user {message.author.id}: '{message.content}' → session {active_session['id']}")
+                    return True, active_session
 
         return False, None
 

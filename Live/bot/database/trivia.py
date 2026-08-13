@@ -368,6 +368,31 @@ class TriviaDatabase:
             logger.error(f"Error getting trivia session by message ID {message_id}: {e}")
             return None
 
+    def get_latest_trivia_session(self) -> Optional[Dict[str, Any]]:
+        """Get the most recent trivia session, whether active or completed"""
+        conn = self.get_connection()
+        if not conn:
+            return None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT ts.*, tq.question_text, tq.question_type, tq.correct_answer,
+                           tq.multiple_choice_options, tq.is_dynamic, tq.dynamic_query_type,
+                           tq.submitted_by_user_id, tq.category, ts.calculated_answer
+                    FROM trivia_sessions ts
+                    JOIN trivia_questions tq ON ts.question_id = tq.id
+                    ORDER BY ts.started_at DESC
+                    LIMIT 1
+                    """
+                )
+                result = cur.fetchone()
+                return dict(result) if result else None
+        except Exception as e:
+            logger.error(f"Error getting latest trivia session: {e}")
+            return None
+
     def update_trivia_session_messages(
         self,
         session_id: int,
@@ -544,6 +569,8 @@ class TriviaDatabase:
 
                         session_dict = dict(session)
                         correct_answer = session_dict.get("calculated_answer") or session_dict.get("correct_answer")
+                        question_type = session_dict.get("question_type", "single")
+                        multiple_choice_options = session_dict.get("multiple_choice_options")
 
                         if not correct_answer:
                             logger.error(f"❌ FIX #5: No correct answer for session {session_id}")
@@ -581,7 +608,7 @@ class TriviaDatabase:
                             # Evaluate answer
                             from bot.handlers.trivia.evaluator import evaluate_answer
                             score, match_type = evaluate_answer(
-                                original_answer, correct_answer, 'single'
+                                original_answer, correct_answer, question_type, multiple_choice_options
                             )
 
                             is_correct = score >= 1.0
