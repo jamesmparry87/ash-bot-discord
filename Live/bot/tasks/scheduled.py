@@ -356,7 +356,7 @@ async def trivia_tuesday():
         # 2. Handle dynamic questions by calculating the answer now
         calculated_answer = None
         if question_data.get('is_dynamic'):
-            from bot.handlers.trivia.analytics import calculate_dynamic_answer
+            from ..handlers.trivia.analytics import calculate_dynamic_answer
             calculated_answer = calculate_dynamic_answer(db, question_data.get('dynamic_query_type', ''))
             if not calculated_answer:
                 await notify_scheduled_message_error("Trivia Tuesday", f"Failed to calculate dynamic answer for question #{question_id}.", uk_now)
@@ -475,6 +475,24 @@ async def check_stale_trivia_sessions():
                         value=f"**{session_results['correct_answer']}**",
                         inline=False
                     )
+
+                    # Add Visual Evidence for clip-based questions
+                    cat = session_results.get('category', '')
+                    if cat and cat.startswith('Clip_') and session_results.get('dynamic_query_type'):
+                        try:
+                            import json
+                            dq_data = json.loads(session_results['dynamic_query_type'])
+                            clip_url = dq_data.get('clip_url')
+                            commentary = dq_data.get('commentary')
+                            if clip_url and commentary:
+                                embed.add_field(
+                                    name="📹 **Visual Evidence**",
+                                    value=f"{commentary}\n{clip_url}",
+                                    inline=False
+                                )
+                        except Exception as e:
+                            print(f"⚠️ Error parsing dynamic_query_type for clip evidence: {e}")
+
 
                     # Show winner if present
                     winner_id = session_results.get('first_correct', {}).get(
@@ -854,8 +872,9 @@ async def scheduled_ai_refresh():
                                 break
 
                             try:
-                                question_data = await generate_ai_trivia_question(f"auto_replenish_{i}")
-                                if question_data:
+                                question_list = await generate_ai_trivia_question(f"auto_replenish_{i}")
+                                if question_list and len(question_list) > 0:
+                                    question_data = question_list[0]
                                     if await start_jam_question_approval(question_data):
                                         generated += 1
                                         consecutive_failures = 0  # ✅ Reset on success
@@ -1501,7 +1520,7 @@ async def daily_clip_scan_task():
 
     clips_to_process = []
 
-    async for message in channel.history(limit=50):
+    async for message in channel.history(limit=None):
         if message.author.bot:
             continue
 

@@ -81,7 +81,7 @@ class ClipParsingService:
         # Pre-flight check
         if self.db.trivia.clip_lore_exists(canonical_url):
             logger.info(f"Clip {canonical_url} already exists in Lore Compendium. Skipping.")
-            return False
+            return True
 
         file_id = f"clip_{message.id}"
         local_filename = f"temp/{file_id}.mp4"

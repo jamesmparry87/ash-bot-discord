@@ -48,9 +48,10 @@ async def pre_trivia_approval():
                 from ..handlers.trivia.generator import generate_ai_trivia_question
 
                 print("🔄 Attempting to generate emergency question for today's trivia")
-                emergency_question = await generate_ai_trivia_question()
+                emergency_list = await generate_ai_trivia_question()
 
-                if emergency_question:
+                if emergency_list and len(emergency_list) > 0:
+                    emergency_question = emergency_list[0]
                     # Send emergency question directly to JAM for urgent approval
                     emergency_sent = await start_jam_question_approval(emergency_question)
                     if emergency_sent:
@@ -335,7 +336,8 @@ async def trigger_emergency_trivia_approval(minutes_remaining: float):
                     from ..handlers.trivia.generator import generate_ai_trivia_question
 
                     print("🔄 EMERGENCY APPROVAL: Generating emergency question")
-                    emergency_question = await generate_ai_trivia_question("emergency_approval")
+                    emergency_list = await generate_ai_trivia_question("emergency_approval")
+                    emergency_question = emergency_list[0] if (emergency_list and len(emergency_list) > 0) else None
 
                     if emergency_question:
                         approval_sent = await start_jam_question_approval(emergency_question)

@@ -1859,6 +1859,35 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
             # Build dynamic context using new structured format
             dynamic_context = build_ash_context(user_context)
 
+            # === ENHANCEMENT: Add recent trivia context ===
+            current_db = _get_db()
+            if current_db and hasattr(current_db.trivia, 'get_latest_trivia_session'):
+                try:
+                    latest_trivia = current_db.trivia.get_latest_trivia_session()
+                    if latest_trivia:
+                        trivia_context = "\n\n--- RECENT TRIVIA SESSION ---\n"
+                        trivia_context += f"The most recent trivia question asked was: \"{latest_trivia.get('question_text')}\"\n"
+                        trivia_context += f"The correct answer was: {latest_trivia.get('correct_answer')}\n"
+                        
+                        cat = latest_trivia.get('category', '')
+                        if cat.startswith('Clip_') and latest_trivia.get('dynamic_query_type'):
+                            import json
+                            try:
+                                dq_data = json.loads(latest_trivia['dynamic_query_type'])
+                                clip_url = dq_data.get('clip_url')
+                                commentary = dq_data.get('commentary')
+                                if clip_url and commentary:
+                                    trivia_context += f"This question was based on a clip. You provided this commentary: \"{commentary}\"\n"
+                                    trivia_context += f"The clip URL is: {clip_url}\n"
+                            except Exception:
+                                pass
+                                
+                        trivia_context += "If the user asks about the recent trivia, use this information to answer.\n"
+                        trivia_context += "--- END RECENT TRIVIA ---\n"
+                        dynamic_context += trivia_context
+                except Exception as trivia_context_error:
+                    pass
+
             # === ENHANCEMENT: Add gaming timeline context for temporal questions ===
             current_db = _get_db()
             if current_db and hasattr(current_db, 'get_gaming_timeline'):

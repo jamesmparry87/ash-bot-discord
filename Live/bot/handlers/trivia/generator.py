@@ -257,7 +257,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
 
             elif cat == 'Clip_Famous_Last_Words':
                 clips = current_db.trivia.get_random_clip_lore(
-                    limit=10, required_fields=['notable_quote', 'clip_outcome'])
+                    limit=10, required_fields=['notable_quote', 'clip_outcome', 'canonical_url', 'lore_summary', 'characters_involved', 'submitted_by_discord_id'])
                 clips = [c for c in clips if c['clip_outcome'].lower() in ('death', 'failure')]
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough death/failure clips for Clip_Famous_Last_Words")
@@ -269,7 +269,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
 
                 clip_data_str = ""
                 for idx, c in enumerate(selected_clips):
-                    clip_data_str += f"\\nCLIP {idx+1}:\\nGame: {c['game_title']}\\nTrigger: {c['trigger']}\\nOutcome: {c['clip_outcome']}\\nQuote spoken right before outcome: \\\"{c['notable_quote']}\\\"\\n"
+                    clip_data_str += f"\\nCLIP {idx+1}:\\nURL: {c.get('canonical_url', 'Unknown')}\\nGame: {c['game_title']}\\nCharacters Involved: {c['characters_involved']}\\nContext (Lore): {c['lore_summary']}\\nTrigger: {c['trigger']}\\nOutcome: {c['clip_outcome']}\\nQuote spoken right before outcome: \\\"{c['notable_quote']}\\\"\\nSubmitted By: {c['submitted_by_discord_id']}\\n"
 
                 category_prompt = f"""Write 5 diverse trivia questions for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
@@ -277,16 +277,19 @@ Jonesy uses she/her pronouns.
 REAL CLIP DATA:{clip_data_str}
 
 Create 5 "Famous Last Words" style questions based on these clips. Example: "Right before falling off the map in Elden Ring, what did Jonesy confidently tell the chat?"
+Use the provided Characters Involved and Context to create rich, specific questions.
 Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
+Additionally, for each question, include the "clip_url" from the clip it was based on, and write a custom Ash "commentary" string to be displayed alongside the answer.
+IMPORTANT: You MUST credit the discord user who submitted the clip in your commentary using their Discord ID. (e.g. "I can confirm Jonesy was in a state of alarm. I have prepared this visual evidence for review, courtesy of Archival Agent <@123456789>.")
 Return strictly as a JSON array of 5 objects:
 [
-  {{"question_text": "...", "question_type": "multiple_choice", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "..."}}
+  {{"question_text": "...", "question_type": "multiple_choice", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "...", "clip_url": "...", "commentary": "..."}}
 ]"""
                 selected_category = cat
 
             elif cat == 'Clip_Vibe_Check':
                 clips = current_db.trivia.get_random_clip_lore(
-                    limit=10, required_fields=['emotion_category', 'game_title'])
+                    limit=10, required_fields=['emotion_category', 'game_title', 'canonical_url', 'lore_summary', 'characters_involved', 'submitted_by_discord_id'])
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough clips for Clip_Vibe_Check")
                     continue
@@ -297,25 +300,28 @@ Return strictly as a JSON array of 5 objects:
 
                 clip_data_str = ""
                 for idx, c in enumerate(selected_clips):
-                    clip_data_str += f"\\nCLIP {idx+1}:\\nGame: {c['game_title']}\\nEmotion Displayed: {c['emotion_category']}\\nContext: {c['lore_summary']}\\n"
+                    clip_data_str += f"\\nCLIP {idx+1}:\\nURL: {c.get('canonical_url', 'Unknown')}\\nGame: {c['game_title']}\\nCharacters Involved: {c['characters_involved']}\\nEmotion Displayed: {c['emotion_category']}\\nContext: {c['lore_summary']}\\nSubmitted By: {c['submitted_by_discord_id']}\\n"
 
                 category_prompt = f"""Write 5 diverse trivia questions for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
 
 REAL CLIP DATA:{clip_data_str}
 
-Create 5 "Vibe Check" questions asking which game generated a specific emotion or vice versa.
+Create 5 "Vibe Check" questions about Jonesy's reactions. Example: "During a tense moment in Resident Evil, what emotion did Jonesy primarily display?"
+Use the provided Characters Involved and Context to create rich, specific questions.
 Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
+Additionally, for each question, include the "clip_url" from the clip it was based on, and write a custom Ash "commentary" string to be displayed alongside the answer.
+IMPORTANT: You MUST credit the discord user who submitted the clip in your commentary using their Discord ID. (e.g. "I can confirm Jonesy was in a state of alarm. I have prepared this visual evidence for review, courtesy of Archival Agent <@123456789>.")
 Return strictly as a JSON array of 5 objects:
 [
-  {{"question_text": "...", "question_type": "multiple_choice", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "..."}}
+  {{"question_text": "...", "question_type": "multiple_choice", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "...", "clip_url": "...", "commentary": "..."}}
 ]"""
                 selected_category = cat
 
             elif cat == 'Clip_Cause_And_Effect':
                 clips = current_db.trivia.get_random_clip_lore(
                     limit=10, required_fields=[
-                        'trigger', 'reaction', 'characters_involved'])
+                        'trigger', 'reaction', 'characters_involved', 'game_title', 'canonical_url', 'lore_summary', 'submitted_by_discord_id'])
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough clips for Clip_Cause_And_Effect")
                     continue
@@ -326,18 +332,21 @@ Return strictly as a JSON array of 5 objects:
 
                 clip_data_str = ""
                 for idx, c in enumerate(selected_clips):
-                    clip_data_str += f"\\nCLIP {idx+1}:\\nGame: {c['game_title']}\\nCharacters: {c['characters_involved']}\\nCause: {c['trigger']}\\nEffect: {c['reaction']}\\n"
+                    clip_data_str += f"\\nCLIP {idx+1}:\\nURL: {c.get('canonical_url', 'Unknown')}\\nGame: {c['game_title']}\\nCharacters Involved: {c['characters_involved']}\\nContext (Lore): {c['lore_summary']}\\nEvent (Cause): {c['trigger']}\\nJonesy's Reaction (Effect): {c['reaction']}\\nSubmitted By: {c['submitted_by_discord_id']}\\n"
 
                 category_prompt = f"""Write 5 diverse trivia questions for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
 
 REAL CLIP DATA:{clip_data_str}
 
-Create 5 "Cause and Effect" questions linking what happened to how she reacted.
+Create 5 "Cause and Effect" questions. Example: "What caused Jonesy to drop her controller during her Phasmophobia stream?"
+Use the provided Characters Involved and Context to create rich, specific questions.
 Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
+Additionally, for each question, include the "clip_url" from the clip it was based on, and write a custom Ash "commentary" string to be displayed alongside the answer.
+IMPORTANT: You MUST credit the discord user who submitted the clip in your commentary using their Discord ID. (e.g. "I can confirm Jonesy was in a state of alarm. I have prepared this visual evidence for review, courtesy of Archival Agent <@123456789>.")
 Return strictly as a JSON array of 5 objects:
 [
-  {{"question_text": "...", "question_type": "multiple_choice", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "..."}}
+  {{"question_text": "...", "question_type": "multiple_choice", "correct_answer": "...", "decoy_1": "...", "decoy_2": "...", "decoy_3": "...", "clip_url": "...", "commentary": "..."}}
 ]"""
                 selected_category = cat
 
@@ -703,6 +712,17 @@ Return strictly as a JSON array of 5 objects:
                     "temperature": temperature,
                     "generation_timestamp": datetime.now(ZoneInfo('Europe/London')).isoformat()
                 })
+
+                if selected_category and selected_category.startswith("Clip_"):
+                    clip_url = q_data.pop("clip_url", None)
+                    commentary = q_data.pop("commentary", None)
+                    if clip_url and commentary:
+                        import json
+                        q_data["dynamic_query_type"] = json.dumps({
+                            "clip_url": clip_url,
+                            "commentary": commentary
+                        })
+
                 valid_questions.append(q_data)
 
             if not valid_questions:

@@ -1416,7 +1416,7 @@ class TriviaDatabase:
                 if success:
                     # Get the updated results after enhanced evaluation
                     cur.execute("""
-                        SELECT ts.*, tq.question_text, ts.calculated_answer, tq.correct_answer
+                        SELECT ts.*, tq.question_text, ts.calculated_answer, tq.correct_answer, tq.category, tq.dynamic_query_type
                         FROM trivia_sessions ts
                         JOIN trivia_questions tq ON ts.question_id = tq.id
                         WHERE ts.id = %s
@@ -1473,6 +1473,8 @@ class TriviaDatabase:
                             'correct_answers': correct_count,
                             'accuracy_rate': accuracy_rate,
                             'first_correct': first_correct_user,
+                            'category': updated_session_dict.get('category'),
+                            'dynamic_query_type': updated_session_dict.get('dynamic_query_type'),
                             # Enhanced data for community engagement
                             'correct_user_ids': correct_user_ids,
                             'incorrect_user_ids': incorrect_user_ids,

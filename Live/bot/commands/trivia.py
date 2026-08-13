@@ -446,6 +446,24 @@ class TriviaCommands(commands.Cog):
                         value=f"**{session_results['correct_answer']}**",
                         inline=False)
 
+                    # Add Visual Evidence for clip-based questions
+                    cat = session_results.get('category', '')
+                    if cat and cat.startswith('Clip_') and session_results.get('dynamic_query_type'):
+                        try:
+                            import json
+                            dq_data = json.loads(session_results['dynamic_query_type'])
+                            clip_url = dq_data.get('clip_url')
+                            commentary = dq_data.get('commentary')
+                            if clip_url and commentary:
+                                embed.add_field(
+                                    name="📹 **Visual Evidence**",
+                                    value=f"{commentary}\n{clip_url}",
+                                    inline=False
+                                )
+                        except Exception as e:
+                            print(f"⚠️ Error parsing dynamic_query_type for clip evidence: {e}")
+
+
                     # --- Enhanced Community Engagement Section ---
                     # Process participant lists
                     winner_id = session_results.get('first_correct', {}).get(
@@ -1274,7 +1292,7 @@ class TriviaCommands(commands.Cog):
                     try:
                         # Test the answer evaluation directly
                         if True:
-                            from bot.handlers.trivia.evaluator import evaluate_answer
+                            from ..handlers.trivia.evaluator import evaluate_answer
                             score, match_type = evaluate_answer(
                                 test_answer,
                                 test_question_data['correct_answer'],
