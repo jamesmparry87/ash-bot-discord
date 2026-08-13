@@ -50,10 +50,10 @@ async def generate_ai_trivia_question(context: str = "trivia",
 
     try:
         print(f"🎬 TRIVIA DIRECTOR: Starting question generation with context: {context}")
-        
+
         if avoid_questions is None:
             avoid_questions = []
-            
+
         # Fetch recently generated questions from the database to avoid repetition across manual triggers
         try:
             with current_db.get_connection().cursor() as cur:
