@@ -1576,8 +1576,8 @@ async def daily_clip_scan_task():
             if success:
                 break
 
-            from ..handlers.ai_handler import primary_ai
-            if primary_ai != "gemini":
+            from ..handlers.ai_handler import ai_usage_stats, primary_ai
+            if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini":
                 print("🚫 Primary AI is exhausted or unavailable. Aborting clip batch.")
                 quota_exhausted = True
                 break

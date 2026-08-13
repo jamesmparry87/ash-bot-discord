@@ -50,6 +50,20 @@ async def generate_ai_trivia_question(context: str = "trivia",
 
     try:
         print(f"🎬 TRIVIA DIRECTOR: Starting question generation with context: {context}")
+        
+        if avoid_questions is None:
+            avoid_questions = []
+            
+        # Fetch recently generated questions from the database to avoid repetition across manual triggers
+        try:
+            with current_db.get_connection().cursor() as cur:
+                cur.execute("SELECT question_text FROM trivia_questions ORDER BY id DESC LIMIT 15")
+                rows = cur.fetchall()
+                recent_questions = [row['question_text'] for row in rows if row and 'question_text' in row]
+                avoid_questions.extend(recent_questions)
+        except Exception as e:
+            print(f"Error fetching recent questions for avoidance: {e}")
+
         if avoid_questions:
             print(f"   Avoiding {len(avoid_questions)} recent pattern(s)")
         if avoid_game_ids:

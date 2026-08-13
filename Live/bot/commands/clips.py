@@ -270,8 +270,8 @@ class ClipTriviaCog(commands.Cog):
 
                 success = await self.parser.process_clip(curl, msg)
 
-                from bot.handlers.ai_handler import primary_ai
-                if primary_ai != "gemini":
+                from bot.handlers.ai_handler import ai_usage_stats, primary_ai
+                if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini":
                     await ctx.send("🚫 **AI Quota Exhausted!** Aborting the remainder of the clip scan to avoid spamming the API. We'll pick up the rest tomorrow!")
                     # Clean up the 👀 reaction from the aborted clip
                     try:
