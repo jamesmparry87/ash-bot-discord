@@ -276,7 +276,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
 
                 clip_data_str = ""
                 for idx, c in enumerate(selected_clips):
-                    clip_data_str += f"\\nCLIP {idx+1}:\\nURL: {c.get('canonical_url', 'Unknown')}\\nGame: {c['game_title']}\\nCharacters Involved: {c['characters_involved']}\\nContext (Lore): {c['lore_summary']}\\nTrigger: {c['trigger']}\\nOutcome: {c['clip_outcome']}\\nQuote spoken right before outcome: \\\"{c['notable_quote']}\\\"\\nSubmitted By: {c['submitted_by_discord_id']}\\n"
+                    clip_data_str += f"\\nCLIP {idx+1}:\\nURL: {c.get('canonical_url', 'Unknown')}\\nGame: {c.get('game_title', 'Unknown')}\\nCharacters Involved: {c.get('characters_involved', 'None')}\\nContext (Lore): {c.get('lore_summary', 'None')}\\nTrigger: {c.get('trigger', 'Unknown')}\\nOutcome: {c.get('clip_outcome', 'Unknown')}\\nQuote spoken right before outcome: \\\"{c.get('notable_quote', '')}\\\"\\nSubmitted By: {c.get('submitted_by_discord_id', 'Unknown')}\\n"
 
                 category_prompt = f"""Write 5 diverse trivia questions for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
@@ -314,7 +314,7 @@ Return strictly as a JSON array of 5 objects:
 
                 clip_data_str = ""
                 for idx, c in enumerate(selected_clips):
-                    clip_data_str += f"\\nCLIP {idx+1}:\\nURL: {c.get('canonical_url', 'Unknown')}\\nGame: {c['game_title']}\\nCharacters Involved: {c['characters_involved']}\\nEmotion Displayed: {c['emotion_category']}\\nContext: {c['lore_summary']}\\nSubmitted By: {c['submitted_by_discord_id']}\\n"
+                    clip_data_str += f"\\nCLIP {idx+1}:\\nURL: {c.get('canonical_url', 'Unknown')}\\nGame: {c.get('game_title', 'Unknown')}\\nCharacters Involved: {c.get('characters_involved', 'None')}\\nEmotion Displayed: {c.get('emotion_category', 'Unknown')}\\nContext: {c.get('lore_summary', 'None')}\\nSubmitted By: {c.get('submitted_by_discord_id', 'Unknown')}\\n"
 
                 category_prompt = f"""Write 5 diverse trivia questions for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
@@ -353,7 +353,7 @@ Return strictly as a JSON array of 5 objects:
 
                 clip_data_str = ""
                 for idx, c in enumerate(selected_clips):
-                    clip_data_str += f"\\nCLIP {idx+1}:\\nURL: {c.get('canonical_url', 'Unknown')}\\nGame: {c['game_title']}\\nCharacters Involved: {c['characters_involved']}\\nContext (Lore): {c['lore_summary']}\\nEvent (Cause): {c['trigger']}\\nJonesy's Reaction (Effect): {c['reaction']}\\nSubmitted By: {c['submitted_by_discord_id']}\\n"
+                    clip_data_str += f"\\nCLIP {idx+1}:\\nURL: {c.get('canonical_url', 'Unknown')}\\nGame: {c.get('game_title', 'Unknown')}\\nCharacters Involved: {c.get('characters_involved', 'None')}\\nContext (Lore): {c.get('lore_summary', 'None')}\\nEvent (Cause): {c.get('trigger', 'Unknown')}\\nJonesy's Reaction (Effect): {c.get('reaction', 'Unknown')}\\nSubmitted By: {c.get('submitted_by_discord_id', 'Unknown')}\\n"
 
                 category_prompt = f"""Write 5 diverse trivia questions for fans of Captain Jonesy's gaming channel.
 Jonesy uses she/her pronouns.
@@ -639,6 +639,7 @@ Return strictly as a JSON array of 5 objects:
                     "question_type": "single_answer",
                     "correct_answer": correct_answer
                 }
+                raw_questions = [ai_question]
             else:
                 # FRANCHISE_LORE OR OTHER AI CATEGORY
                 prompt = category_prompt
