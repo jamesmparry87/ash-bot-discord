@@ -29,15 +29,15 @@ jobs:
           - 5432:5432
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     
     - name: Set up Python 3.11
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: 3.11
     
     - name: Cache pip packages
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/requirements-test.txt') }}
@@ -128,7 +128,7 @@ jobs:
                          -v --cov=Live --cov-report=term-missing --cov-report=xml --tb=short
     
     - name: Upload coverage to GitHub
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: coverage-report
         path: coverage.xml
@@ -160,13 +160,13 @@ jobs:
       repository-projects: read  # Allow reading repository metadata
     
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0  # Fetch all history for proper branch operations
     
     - name: Set up Python 3.11
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: 3.11
     
