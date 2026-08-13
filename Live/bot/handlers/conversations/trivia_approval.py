@@ -631,7 +631,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
             await save_final_modifications(message, data, user_id)
             return  # ✅ CRITICAL FIX: Return immediately to prevent overwriting next item in queue
-            
+
         # Update conversation state
         conversation['data'] = data
         jam_approval_conversations[user_id] = conversation

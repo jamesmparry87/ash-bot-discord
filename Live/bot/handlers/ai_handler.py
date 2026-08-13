@@ -2230,8 +2230,6 @@ def robust_json_parse(response_text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-
-
 async def create_ai_announcement_content(
         user_content: str,
         target_channel: str,

@@ -196,7 +196,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
                 game_list_gc = ', '.join(genre_game_names_gc[chosen_genre_gc][:8])
 
                 print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Genre_Census'")
-                
+
                 phrasing_gc = random.choice([
                     f"How many {chosen_genre_gc} games has Jonesy played on her channel?",
                     f"What is the total number of {chosen_genre_gc} games Jonesy has played?",
@@ -209,7 +209,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
                 ])
                 final_question_text = phrasing_gc
                 category_prompt = None
-                
+
                 selected_category = cat
                 # No break - fall through to AI call section below
 
@@ -238,7 +238,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
                     for g in source_games
                 ])
                 print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Series_Comparison'")
-                
+
                 phrasing_sc = random.choice([
                     f"Which {chosen_series_sc} game did Jonesy play the most episodes of?",
                     f"Out of her {chosen_series_sc} playthroughs, which one took the most episodes?",
@@ -251,7 +251,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
                 ])
                 final_question_text = phrasing_sc
                 category_prompt = None
-                
+
                 selected_category = cat
                 # No break - fall through to AI call section below
 

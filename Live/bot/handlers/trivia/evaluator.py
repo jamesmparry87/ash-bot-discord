@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from ..ai_handler import _get_db, pacific_tz
 
+
 def normalize_trivia_answer(answer_text: str) -> str:
     """Enhanced normalization for trivia answers with fuzzy matching support"""
     import re
@@ -69,7 +70,8 @@ def normalize_trivia_answer(answer_text: str) -> str:
     return normalized
 
 
-def evaluate_answer(user_answer: str, correct_answer: str, question_type: str, multiple_choice_options: Optional[List[str]] = None) -> Tuple[float, str]:
+def evaluate_answer(user_answer: str, correct_answer: str, question_type: str,
+                    multiple_choice_options: Optional[List[str]] = None) -> Tuple[float, str]:
     """
     Evaluate a trivia answer with enhanced fuzzy matching.
     Returns: (score, match_type) where score is 0.0-1.0
@@ -79,10 +81,11 @@ def evaluate_answer(user_answer: str, correct_answer: str, question_type: str, m
     # Clean up inputs
     user_clean = user_answer.strip()
     correct_clean = correct_answer.strip()
-    
+
     # Handle multiple choice letter mappings (A, B, C, D)
     if question_type == 'multiple_choice' and multiple_choice_options:
         import re
+
         # Check if the user answer is exactly a letter A-D (case insensitive), with optional period/parenthesis
         match = re.match(r'^([a-dA-D])[\.\)]?$', user_clean)
         if match:
