@@ -2201,14 +2201,6 @@ def robust_json_parse(response_text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-# Question diversity tracking
-question_history = {
-    "used_patterns": [],
-    "category_cooldowns": {},
-    "template_usage": {},
-    "last_questions": [],
-    "pattern_weights": {}
-}
 
 
 async def create_ai_announcement_content(

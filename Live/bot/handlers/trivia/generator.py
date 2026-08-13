@@ -74,9 +74,9 @@ async def generate_ai_trivia_question(context: str = "trivia",
             'YouTube_Views_Champ': {'weight': 0.2},
             # --- AI-creative & Clips (moderate weight for variety) ---
             'Franchise_Lore': {'weight': 0.5},  # Lore question, AI provides answer
-            'Clip_Famous_Last_Words': {'weight': 1.0},
-            'Clip_Vibe_Check': {'weight': 1.0},
-            'Clip_Cause_And_Effect': {'weight': 1.0},
+            'Clip_Famous_Last_Words': {'weight': 2.0},
+            'Clip_Vibe_Check': {'weight': 2.0},
+            'Clip_Cause_And_Effect': {'weight': 2.0},
         }
 
         categories = list(TRIVIA_CATEGORIES.keys())
@@ -142,7 +142,13 @@ async def generate_ai_trivia_question(context: str = "trivia",
                 names_ep = [g['canonical_name'] for g in source_games]
                 phrasing_ep = random.choice([
                     f"Which of these {chosen_genre_ep} games did Jonesy play the most episodes of?",
-                    f"Out of these {chosen_genre_ep} games, which one has the highest episode count?"
+                    f"Out of these {chosen_genre_ep} games, which one has the highest episode count?",
+                    f"Jonesy loves a good {chosen_genre_ep}, but which of these options kept her busy for the most episodes?",
+                    f"If you count up all the episodes, which of these {chosen_genre_ep} games takes the top spot?",
+                    f"Which of the following {chosen_genre_ep} titles is Jonesy's longest playthrough by episode count?",
+                    f"Looking at these {chosen_genre_ep} games, which one resulted in the most episodes for the channel?",
+                    f"She played all of these {chosen_genre_ep} games, but which one holds the record for most episodes?",
+                    f"Which of these {chosen_genre_ep} titles had Jonesy hitting the 'record' button the most times?"
                 ])
                 final_question_text = f"{phrasing_ep} Options: {', '.join(names_ep)}"
                 selected_category = cat
@@ -190,17 +196,20 @@ async def generate_ai_trivia_question(context: str = "trivia",
                 game_list_gc = ', '.join(genre_game_names_gc[chosen_genre_gc][:8])
 
                 print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Genre_Census'")
-                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
-Jonesy uses she/her pronouns.
-
-REAL DATA from our database:
-Jonesy has played exactly {count_gc} {chosen_genre_gc} game(s) on her channel: {game_list_gc}
-
-THE CORRECT ANSWER IS: {count_gc}
-
-Write a short question (under 120 characters) asking how many {chosen_genre_gc} games Jonesy has played on her channel.
-Good phrasing: "How many {chosen_genre_gc} games has Jonesy played on her channel?"
-Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                
+                phrasing_gc = random.choice([
+                    f"How many {chosen_genre_gc} games has Jonesy played on her channel?",
+                    f"What is the total number of {chosen_genre_gc} games Jonesy has played?",
+                    f"Jonesy has played a few {chosen_genre_gc} games on the channel. How many exactly?",
+                    f"If you check the archives, how many {chosen_genre_gc} titles has Jonesy streamed?",
+                    f"Can you guess the exact number of {chosen_genre_gc} games Jonesy has covered?",
+                    f"Between YouTube and Twitch, how many {chosen_genre_gc} games has Jonesy played?",
+                    f"What's the official count of {chosen_genre_gc} games played by Captain Jonesy?",
+                    f"How many times has Jonesy dived into a {chosen_genre_gc} game on stream?"
+                ])
+                final_question_text = phrasing_gc
+                category_prompt = None
+                
                 selected_category = cat
                 # No break - fall through to AI call section below
 
@@ -229,17 +238,20 @@ Return ONLY the question sentence, nothing else. No JSON, no explanation."""
                     for g in source_games
                 ])
                 print(f"✅ TRIVIA DIRECTOR: Got {len(source_games)} game(s) for 'Series_Comparison'")
-                category_prompt = f"""Write one trivia question for fans of Captain Jonesy's gaming channel.
-Jonesy uses she/her pronouns.
-
-REAL DATA - Jonesy's {chosen_series_sc} games (episode counts from our database):
-{game_lines_sc}
-
-THE CORRECT ANSWER IS: {correct_answer}
-
-Write a short question (under 120 characters) asking which {chosen_series_sc} game Jonesy spent the most episodes on.
-Good phrasing: "Which {chosen_series_sc} game did Jonesy play the most episodes of?"
-Return ONLY the question sentence, nothing else. No JSON, no explanation."""
+                
+                phrasing_sc = random.choice([
+                    f"Which {chosen_series_sc} game did Jonesy play the most episodes of?",
+                    f"Out of her {chosen_series_sc} playthroughs, which one took the most episodes?",
+                    f"Which game in the {chosen_series_sc} series has the highest episode count on Jonesy's channel?",
+                    f"Jonesy is a big {chosen_series_sc} fan, but which game took the most episodes to get through?",
+                    f"Of all the {chosen_series_sc} games Jonesy has played, which holds the record for most episodes?",
+                    f"Which entry in the {chosen_series_sc} franchise kept Jonesy occupied for the most episodes?",
+                    f"If you look at Jonesy's {chosen_series_sc} videos, which specific game has the most episodes?",
+                    f"Which {chosen_series_sc} title resulted in the longest episodic series for Jonesy?"
+                ])
+                final_question_text = phrasing_sc
+                category_prompt = None
+                
                 selected_category = cat
                 # No break - fall through to AI call section below
 
@@ -409,6 +421,11 @@ Return strictly as a JSON array of 5 objects:
                     f"Which of Jonesy's completed {chosen_genre_qc} games did she finish in the fewest episodes?",
                     f"Jonesy's {chosen_genre_qc} completions — which game wrapped up in the least episodes?",
                     f"Among Jonesy's {chosen_genre_qc} games, which did she complete most quickly by episode count?",
+                    f"What was Jonesy's fastest {chosen_genre_qc} game completion in terms of total episodes?",
+                    f"Which {chosen_genre_qc} game did Jonesy manage to beat in the fewest number of episodes?",
+                    f"Of all the {chosen_genre_qc} games she's finished, which one had the shortest episode list?",
+                    f"Which {chosen_genre_qc} title did Jonesy speed through with the lowest episode count?",
+                    f"Looking at completed {chosen_genre_qc} games, which one took the fewest episodes to beat?"
                 ])
                 final_question_text = phrasing_qc
                 selected_category = cat
@@ -441,6 +458,11 @@ Return strictly as a JSON array of 5 objects:
                     f"What was the first {chosen_genre_gp} game Jonesy played on her channel?",
                     f"Which {chosen_genre_gp} game kicked off Jonesy's journey in that genre?",
                     f"Of all Jonesy's {chosen_genre_gp} games, which did she play first on the channel?",
+                    f"If we look back, what was Jonesy's very first foray into the {chosen_genre_gp} genre?",
+                    f"Which game holds the title of Jonesy's first ever {chosen_genre_gp} playthrough?",
+                    f"Going back to the beginning, what was the first {chosen_genre_gp} game featured on the channel?",
+                    f"What {chosen_genre_gp} game did Jonesy play before any others in that genre?",
+                    f"Which title introduced the {chosen_genre_gp} genre to Jonesy's channel?"
                 ])
                 final_question_text = phrasing_gp
                 selected_category = cat
@@ -469,6 +491,11 @@ Return strictly as a JSON array of 5 objects:
                     f"How many total episodes has Jonesy played across all her {chosen_series_ste} games?",
                     f"Combined across every {chosen_series_ste} game, how many episodes has Jonesy recorded?",
                     f"What's the total episode count for Jonesy's entire {chosen_series_ste} playthrough series?",
+                    f"If you add up every episode of {chosen_series_ste} Jonesy has ever made, what's the total?",
+                    f"How many times has Jonesy hit record while playing a {chosen_series_ste} game?",
+                    f"What is the grand total of {chosen_series_ste} episodes available on Jonesy's channel?",
+                    f"Across the entire {chosen_series_ste} franchise, how many episodes has Jonesy uploaded?",
+                    f"Add up all the {chosen_series_ste} games — how many episodes in total did Jonesy play?"
                 ])
                 final_question_text = phrasing_ste
                 selected_category = cat
@@ -492,6 +519,11 @@ Return strictly as a JSON array of 5 objects:
                     f"Which game has Jonesy spent more total hours on — {game1_pb['canonical_name']} or {game2_pb['canonical_name']}?",
                     f"Total hours logged: did Jonesy put more time into {game1_pb['canonical_name']} or {game2_pb['canonical_name']}?",
                     f"{game1_pb['canonical_name']} vs {game2_pb['canonical_name']} — which has more of Jonesy's playtime hours?",
+                    f"Between {game1_pb['canonical_name']} and {game2_pb['canonical_name']}, which game consumed more of Jonesy's time?",
+                    f"Which of these two games boasts a higher playtime on the channel: {game1_pb['canonical_name']} or {game2_pb['canonical_name']}?",
+                    f"Did Jonesy rack up more total hours playing {game1_pb['canonical_name']} or {game2_pb['canonical_name']}?",
+                    f"In a battle of playtime, who wins out: {game1_pb['canonical_name']} or {game2_pb['canonical_name']}?",
+                    f"Which game stole more hours of Jonesy's life: {game1_pb['canonical_name']} or {game2_pb['canonical_name']}?"
                 ])
                 final_question_text = phrasing_pb
                 selected_category = cat
@@ -513,6 +545,11 @@ Return strictly as a JSON array of 5 objects:
                     f"In what year was {chosen_game_ry['canonical_name']} originally released?",
                     f"When did {chosen_game_ry['canonical_name']} launch — what year was it released?",
                     f"What's the release year of {chosen_game_ry['canonical_name']}, one of Jonesy's games?",
+                    f"Do you know what year {chosen_game_ry['canonical_name']} first hit the shelves?",
+                    f"Which year did the game {chosen_game_ry['canonical_name']} officially come out?",
+                    f"Jonesy played {chosen_game_ry['canonical_name']}, but what year was it originally published?",
+                    f"What year did {chosen_game_ry['canonical_name']} make its debut in the gaming world?",
+                    f"Can you name the exact release year of {chosen_game_ry['canonical_name']}?"
                 ])
                 final_question_text = phrasing_ry
                 selected_category = cat
@@ -542,6 +579,11 @@ Return strictly as a JSON array of 5 objects:
                     f"Which of these games has the most YouTube views on Jonesy's channel?",
                     f"On YouTube, which of these Jonesy playthroughs has the highest view count?",
                     f"Which game tops the YouTube view count on Jonesy's channel out of these options?",
+                    f"Out of these titles, which one racked up the most views on Jonesy's YouTube channel?",
+                    f"Which of these games was the biggest hit on YouTube by view count?",
+                    f"If you check the YouTube stats, which of these Jonesy playthroughs is the most viewed?",
+                    f"Which of the following games drew the largest YouTube audience for Jonesy?",
+                    f"Out of this list, which game's playlist has the most total views on YouTube?"
                 ])
                 final_question_text = f"{phrasing_yt} Options: {', '.join(names_yt)}"
                 selected_category = cat

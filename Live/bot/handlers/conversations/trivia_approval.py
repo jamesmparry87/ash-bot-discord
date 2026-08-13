@@ -6,16 +6,7 @@ from typing import Any, Dict, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 import discord
-from bot.config import (
-    ANNOUNCEMENTS_CHANNEL_ID,
-    JAM_USER_ID,
-    JONESY_USER_ID,
-    MOD_ALERT_CHANNEL_ID,
-    YOUTUBE_UPLOADS_CHANNEL_ID,
-)
-from bot.database import get_database
-from bot.handlers.ai_handler import ai_enabled, call_ai_with_rate_limiting, filter_ai_response
-from bot.utils.permissions import get_user_communication_tier, user_is_mod_by_id
+from bot.config import JAM_USER_ID
 from discord.ext import commands
 
 from .core import (
@@ -30,17 +21,14 @@ from .core import (
     weekly_announcement_approvals,
 )
 from .utils import (
-    _infer_dynamic_query_type,
     check_conversation_health,
     check_escape_command,
     create_invalid_input_message,
-    extract_expected_options_from_prompt,
-    increment_invalid_input_count,
-    reset_invalid_input_count,
     send_conversation_expired_message,
-    track_conversation_step,
     validate_numbered_input,
 )
+
+jam_approval_active = False
 
 
 def add_to_approval_queue(item_type: str, data: Dict[str, Any], priority: int = 0, source: str = 'unknown') -> int:
@@ -56,7 +44,6 @@ def add_to_approval_queue(item_type: str, data: Dict[str, Any], priority: int = 
     Returns:
         Queue position (0-indexed)
     """
-    global jam_approval_queue
 
     uk_now = datetime.now(ZoneInfo("Europe/London"))
 
@@ -88,7 +75,6 @@ def add_to_approval_queue(item_type: str, data: Dict[str, Any], priority: int = 
 
 def get_queue_length() -> int:
     """Get the current length of the approval queue."""
-    global jam_approval_queue
     return len(jam_approval_queue)
 
 
@@ -99,7 +85,6 @@ def get_queue_status() -> Dict[str, Any]:
     Returns:
         Dictionary with queue statistics and item details
     """
-    global jam_approval_queue
 
     return {
         'queue_length': len(jam_approval_queue),
@@ -123,10 +108,9 @@ def clear_approval_queue() -> int:
     Returns:
         Number of items that were cleared
     """
-    global jam_approval_queue
 
     count = len(jam_approval_queue)
-    jam_approval_queue = []
+    jam_approval_queue.clear()
     print(f"🧹 Cleared approval queue ({count} items removed)")
 
     return count
@@ -139,7 +123,7 @@ async def process_next_approval() -> bool:
     Returns:
         True if an item was sent, False otherwise
     """
-    global jam_approval_queue, jam_approval_active
+    global jam_approval_active
 
     # Check if JAM is busy
     if is_jam_approval_active():
@@ -552,7 +536,6 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                     print(f"⚠️ REJECTION: Question has no ID, cannot mark as rejected in database")
 
                 # ✅ NEW: Purge any remaining questions in the queue that have the same rejected category
-                global jam_approval_queue
                 rejected_category = question_data.get('category')
 
                 # Determine how many items we are about to remove
@@ -564,7 +547,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
                 if rejected_category and items_to_remove:
                     # Actually filter the queue
-                    jam_approval_queue = [item for item in jam_approval_queue if item not in items_to_remove]
+                    jam_approval_queue[:] = [item for item in jam_approval_queue if item not in items_to_remove]
 
                     # Also mark them as rejected in the DB so they don't linger in pending_approval
                     for item in items_to_remove:
@@ -676,7 +659,8 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 data['modified_options'] = None
 
             await save_final_modifications(message, data, user_id)
-
+            return  # ✅ CRITICAL FIX: Return immediately to prevent overwriting next item in queue
+            
         # Update conversation state
         conversation['data'] = data
         jam_approval_conversations[user_id] = conversation
