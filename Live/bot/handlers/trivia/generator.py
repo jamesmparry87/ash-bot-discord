@@ -257,7 +257,14 @@ async def generate_ai_trivia_question(context: str = "trivia",
 
             elif cat == 'Clip_Famous_Last_Words':
                 clips = current_db.trivia.get_random_clip_lore(
-                    limit=10, required_fields=['notable_quote', 'clip_outcome', 'canonical_url', 'lore_summary', 'characters_involved', 'submitted_by_discord_id'])
+                    limit=10,
+                    required_fields=[
+                        'notable_quote',
+                        'clip_outcome',
+                        'canonical_url',
+                        'lore_summary',
+                        'characters_involved',
+                        'submitted_by_discord_id'])
                 clips = [c for c in clips if c['clip_outcome'].lower() in ('death', 'failure')]
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough death/failure clips for Clip_Famous_Last_Words")
@@ -289,7 +296,14 @@ Return strictly as a JSON array of 5 objects:
 
             elif cat == 'Clip_Vibe_Check':
                 clips = current_db.trivia.get_random_clip_lore(
-                    limit=10, required_fields=['emotion_category', 'game_title', 'canonical_url', 'lore_summary', 'characters_involved', 'submitted_by_discord_id'])
+                    limit=10,
+                    required_fields=[
+                        'emotion_category',
+                        'game_title',
+                        'canonical_url',
+                        'lore_summary',
+                        'characters_involved',
+                        'submitted_by_discord_id'])
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough clips for Clip_Vibe_Check")
                     continue
@@ -320,8 +334,15 @@ Return strictly as a JSON array of 5 objects:
 
             elif cat == 'Clip_Cause_And_Effect':
                 clips = current_db.trivia.get_random_clip_lore(
-                    limit=10, required_fields=[
-                        'trigger', 'reaction', 'characters_involved', 'game_title', 'canonical_url', 'lore_summary', 'submitted_by_discord_id'])
+                    limit=10,
+                    required_fields=[
+                        'trigger',
+                        'reaction',
+                        'characters_involved',
+                        'game_title',
+                        'canonical_url',
+                        'lore_summary',
+                        'submitted_by_discord_id'])
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough clips for Clip_Cause_And_Effect")
                     continue

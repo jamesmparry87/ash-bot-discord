@@ -463,7 +463,6 @@ class TriviaCommands(commands.Cog):
                         except Exception as e:
                             print(f"⚠️ Error parsing dynamic_query_type for clip evidence: {e}")
 
-
                     # --- Enhanced Community Engagement Section ---
                     # Process participant lists
                     winner_id = session_results.get('first_correct', {}).get(

@@ -1868,7 +1868,7 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                         trivia_context = "\n\n--- RECENT TRIVIA SESSION ---\n"
                         trivia_context += f"The most recent trivia question asked was: \"{latest_trivia.get('question_text')}\"\n"
                         trivia_context += f"The correct answer was: {latest_trivia.get('correct_answer')}\n"
-                        
+
                         cat = latest_trivia.get('category', '')
                         if cat.startswith('Clip_') and latest_trivia.get('dynamic_query_type'):
                             import json
@@ -1881,7 +1881,7 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
                                     trivia_context += f"The clip URL is: {clip_url}\n"
                             except Exception:
                                 pass
-                                
+
                         trivia_context += "If the user asks about the recent trivia, use this information to answer.\n"
                         trivia_context += "--- END RECENT TRIVIA ---\n"
                         dynamic_context += trivia_context

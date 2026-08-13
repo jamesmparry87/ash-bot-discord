@@ -493,7 +493,6 @@ async def check_stale_trivia_sessions():
                         except Exception as e:
                             print(f"⚠️ Error parsing dynamic_query_type for clip evidence: {e}")
 
-
                     # Show winner if present
                     winner_id = session_results.get('first_correct', {}).get(
                         'user_id') if session_results.get('first_correct') else None
