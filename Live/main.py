@@ -887,26 +887,28 @@ async def is_trivia_answer_reply(message):
                 replied_to_id = replied_to_message.id
                 session_question_msg_id = active_session.get('question_message_id')
                 session_confirmation_msg_id = active_session.get('confirmation_message_id')
-                
+
                 if replied_to_id == session_question_msg_id or replied_to_id == session_confirmation_msg_id:
                     is_reply = True
             except (discord.NotFound, discord.Forbidden):
                 pass
-                
+
         is_in_trivia_channel = getattr(message.channel, 'id', None) == MEMBERS_CHANNEL_ID
 
         if is_reply:
-            print(f"🧠 TRIVIA: Detected answer reply from user {message.author.id}: '{message.content}' → session {active_session['id']}")
+            print(
+                f"🧠 TRIVIA: Detected answer reply from user {message.author.id}: '{message.content}' → session {active_session['id']}")
             return True, active_session
-            
+
         if is_in_trivia_channel:
             msg_content = message.content.strip().upper()
             q_type = active_session.get('question_type', '')
-            
+
             # Allow standalone A, B, C, D answers if it's multiple choice
             if q_type == 'multiple_choice':
                 if re.match(r'^[A-D][\.\)]?$', msg_content):
-                    print(f"🧠 TRIVIA: Detected standalone multiple-choice answer from user {message.author.id}: '{message.content}' → session {active_session['id']}")
+                    print(
+                        f"🧠 TRIVIA: Detected standalone multiple-choice answer from user {message.author.id}: '{message.content}' → session {active_session['id']}")
                     return True, active_session
 
         return False, None
