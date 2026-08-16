@@ -685,6 +685,7 @@ async def fetch_comprehensive_twitch_games(
                         game_series[game_name] = {
                             'canonical_name': game_name,
                             'first_stream_date': created_at,
+                            'latest_stream_date': created_at,
                             'completed_date': None,
                             'completion_status': 'in_progress',
                             'total_episodes': 0,
@@ -702,15 +703,31 @@ async def fetch_comprehensive_twitch_games(
                     # Update first stream date if earlier
                     if created_at < series_info['first_stream_date']:
                         series_info['first_stream_date'] = created_at
+                        
+                    # Update latest stream date if later
+                    if created_at > series_info['latest_stream_date']:
+                        series_info['latest_stream_date'] = created_at
 
                     # Detect completion
-                    finale_keywords = ['finale', 'final episode', 'the end', 'part final']
+                    finale_keywords = [
+                        'finale', 'final episode', 'the end', 'part final', 
+                        'final boss', 'ending', 'roll credits', 'credits',
+                        'last episode'
+                    ]
                     title_lower = title.lower()
                     if any(kw in title_lower for kw in finale_keywords):
                         series_info['completion_status'] = 'completed'
                         # Use the latest date found among finale videos
                         if not series_info['completed_date'] or created_at > series_info['completed_date']:
                             series_info['completed_date'] = created_at
+
+            # Second pass: If a game was streamed AFTER its completion date, revert it to in_progress
+            for game_name, series_info in game_series.items():
+                if series_info['completion_status'] == 'completed' and series_info['completed_date']:
+                    # If there's a stream at least 1 day after the completed date, assume DLC/post-game
+                    from datetime import timedelta
+                    if series_info['latest_stream_date'] > (series_info['completed_date'] + timedelta(days=1)):
+                        series_info['completion_status'] = 'in_progress'
 
             # Convert series data to game data format
             for game_name, series_info in game_series.items():

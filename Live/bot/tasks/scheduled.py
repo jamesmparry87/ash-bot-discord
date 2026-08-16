@@ -191,8 +191,10 @@ _startup_validation_completed = False
 # ---------------------------------------------------------
 # IMPORT TASK MODULES HERE TO AVOID CIRCULAR IMPORTS
 # ---------------------------------------------------------
+from .sync_youtube_vods import sync_youtube_vods_channel
 
 monday_content_sync = tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))(monday_content_sync)
+monday_vods_sync = tasks.loop(time=time(8, 45, tzinfo=ZoneInfo("Europe/London")))(sync_youtube_vods_channel)
 monday_morning_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(monday_morning_greeting)
 tuesday_trivia_greeting = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(tuesday_trivia_greeting)
 pre_trivia_approval = tasks.loop(time=time(9, 0, tzinfo=ZoneInfo("Europe/London")))(pre_trivia_approval)
@@ -1673,6 +1675,7 @@ def start_all_scheduled_tasks(bot):
         tasks_to_start = [
             ## Weekly ##
             (monday_content_sync, "Weekly Content Sync (Monday 8.30am)"),
+            (monday_vods_sync, "Weekly VODs Sync (Monday 8.45am)"),
             (monday_morning_greeting, "Monday morning greeting task (9:00 AM UK time, Mondays)"),
             (tuesday_trivia_greeting, "Tuesday trivia greeting task (9:00 AM UK time, Tuesdays)"),
             (pre_trivia_approval, "Pre-trivia approval task (10:00 AM UK time, Tuesdays)"),
@@ -1729,6 +1732,7 @@ def get_scheduled_tasks_status():
 
         tasks_to_check = [
             (monday_content_sync, "Weekly Content Sync (Monday 8am)"),
+            (monday_vods_sync, "Weekly VODs Sync"),
             (scheduled_midnight_restart, "Midnight Restart"),
             (check_due_reminders, "Reminder Check"),
             (check_auto_actions, "Auto Actions"),
@@ -1782,6 +1786,7 @@ def stop_all_scheduled_tasks():
     try:
         tasks_to_stop = [
             monday_content_sync,
+            monday_vods_sync,
             scheduled_midnight_restart,
             daily_clip_scan_task,
             check_due_reminders,

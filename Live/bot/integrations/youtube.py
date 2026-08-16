@@ -759,6 +759,7 @@ async def playlist_has_new_content(session, playlist_id: str, start_timestamp: d
         return False
 
 
+
 def extract_youtube_urls(text: str) -> List[str]:
     """Extract YouTube URLs from text"""
     youtube_url_pattern = r'https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)'
@@ -1191,3 +1192,105 @@ def has_youtube_content(text: str) -> bool:
     """Check if text contains YouTube-related content"""
     youtube_urls = extract_youtube_urls(text)
     return len(youtube_urls) > 0 or "youtube" in text.lower()
+
+
+def generate_youtube_oauth_url() -> str:
+    """Generate the OAuth2 authorization URL"""
+    return get_youtube_oauth_url()
+
+
+async def fetch_vods_channel_recent_videos(channel_id: str) -> List[Dict[str, Any]]:
+    """
+    Fetches recent videos from the VODs channel uploads playlist.
+    Parses canonical game names, total playtime, and strict completion markers.
+    """
+    youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+    if not youtube_api_key:
+        raise Exception("YOUTUBE_API_KEY not configured")
+
+    videos_data = []
+
+    async with aiohttp.ClientSession() as session:
+        try:
+            # 1. Get the 'uploads' playlist ID for the channel
+            url = f"https://www.googleapis.com/youtube/v3/channels"
+            params = {
+                'part': 'contentDetails',
+                'id': channel_id,
+                'key': youtube_api_key
+            }
+
+            async with session.get(url, params=params) as response:
+                if response.status != 200:
+                    raise Exception(f"YouTube API error: {response.status}")
+                data = await response.json()
+                if not data.get('items'):
+                    print(f"⚠️ YouTube VODs Sync: Channel {channel_id} not found")
+                    return []
+                
+                uploads_playlist_id = data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+
+            # 2. Fetch the 50 most recent videos
+            url = f"https://www.googleapis.com/youtube/v3/playlistItems"
+            params = {
+                'part': 'snippet,contentDetails',
+                'playlistId': uploads_playlist_id,
+                'maxResults': 50,
+                'key': youtube_api_key
+            }
+
+            video_ids = []
+            video_snippets = {}
+
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    for item in data.get('items', []):
+                        vid_id = item['contentDetails']['videoId']
+                        title = item['snippet']['title']
+                        video_ids.append(vid_id)
+                        video_snippets[vid_id] = title
+                        
+            if not video_ids:
+                return []
+
+            # 3. Fetch video durations
+            url = f"https://www.googleapis.com/youtube/v3/videos"
+            params = {
+                'part': 'contentDetails',
+                'id': ','.join(video_ids),
+                'key': youtube_api_key
+            }
+
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    import isodate
+                    for item in data.get('items', []):
+                        vid_id = item['id']
+                        title = video_snippets.get(vid_id, '')
+                        
+                        duration_iso = item['contentDetails']['duration']
+                        duration_td = isodate.parse_duration(duration_iso)
+                        playtime_minutes = int(duration_td.total_seconds() // 60)
+                        
+                        canonical_name = extract_game_name_from_title(title)
+                        if not canonical_name:
+                            continue
+                            
+                        # Strict completion marker check
+                        is_completed = False
+                        if "COMPLETE PLAYTHROUGH" in title.upper() or "FULL PLAYTHROUGH" in title.upper() or "FULL GAME" in title.upper():
+                            is_completed = True
+                            
+                        videos_data.append({
+                            'canonical_name': canonical_name,
+                            'title': title,
+                            'playtime_minutes': playtime_minutes,
+                            'is_completed': is_completed
+                        })
+
+        except Exception as e:
+            print(f"❌ Failed to fetch VODs channel videos: {str(e)}")
+
+    return videos_data

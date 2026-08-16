@@ -1595,6 +1595,29 @@ class GamesDatabase:
             total_episodes=estimated_episodes,
             notes=notes)
 
+    def update_vod_playtime(self, canonical_name: str, playtime_minutes: int, is_completed: bool) -> bool:
+        """
+        Targeted update from the VODs channel sync.
+        Updates playtime and, if explicit, completion status.
+        Bypasses the complex bulk_import logic.
+        """
+        game = self.get_played_game(canonical_name)
+        if not game:
+            return False
+
+        update_kwargs = {'total_playtime_minutes': playtime_minutes}
+        if is_completed:
+            update_kwargs['completion_status'] = 'completed'
+            
+        existing_notes = game.get('notes') or ''
+        if "Auto-imported from YouTube VODs" not in existing_notes:
+            if existing_notes:
+                update_kwargs['notes'] = existing_notes + " | Auto-imported from YouTube VODs."
+            else:
+                update_kwargs['notes'] = "Auto-imported from YouTube VODs."
+
+        return self.update_played_game(game['id'], **update_kwargs)
+
     def update_game_episodes(
             self,
             canonical_name: str,
