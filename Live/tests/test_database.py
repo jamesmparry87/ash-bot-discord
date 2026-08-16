@@ -478,35 +478,35 @@ class TestBulkOperations:
     def test_bulk_import_played_games_playlist_match(self, db_with_mock_connection):
         """Test bulk importing respects youtube_playlist_url matching."""
         db, mock_cursor = db_with_mock_connection
-        
+
         existing_game = {
             'id': 1,
             'canonical_name': 'Original Game',
             'youtube_playlist_url': 'https://youtube.com/playlist?list=ABC',
             'total_playtime_minutes': 100
         }
-        
+
         mock_cursor.fetchall.return_value = [existing_game]
-        
+
         with patch.object(db.games, 'get_played_game', return_value=None), \
-             patch.object(db.games, 'update_played_game', return_value=True) as mock_update:
-            
+                patch.object(db.games, 'update_played_game', return_value=True) as mock_update:
+
             game_data = [{
                 'canonical_name': 'New Game Alias',
                 'youtube_playlist_url': 'https://youtube.com/playlist?list=ABC',
                 'total_playtime_minutes': 120
             }]
-            
+
             result = db.games.bulk_import_played_games(game_data)
-            
+
             assert result == 1
             # Should call update instead of insert due to URL match
             mock_update.assert_called_once()
-            
+
     def test_update_vod_playtime(self, db_with_mock_connection):
         """Test the VOD playtime lock logic."""
         db, mock_cursor = db_with_mock_connection
-        
+
         # Test 1: Updating an existing game adds the lock note
         existing_game = {
             'id': 1,
@@ -514,20 +514,20 @@ class TestBulkOperations:
             'total_playtime_minutes': 100,
             'notes': 'Some older note'
         }
-        
+
         with patch.object(db.games, 'get_played_game', return_value=existing_game), \
-             patch.object(db.games, 'update_played_game', return_value=True) as mock_update:
-            
+                patch.object(db.games, 'update_played_game', return_value=True) as mock_update:
+
             result = db.games.update_vod_playtime('Test Game', 200, True)
             assert result is True
-            
+
             mock_update.assert_called_once_with(
-                1, 
-                total_playtime_minutes=200, 
+                1,
+                total_playtime_minutes=200,
                 completion_status='completed',
                 notes='Some older note | Auto-imported from YouTube VODs.'
             )
-            
+
         # Test 2: The lock prevents Twitch from overwriting (using bulk_import)
         locked_game = {
             'id': 1,
@@ -535,21 +535,23 @@ class TestBulkOperations:
             'total_playtime_minutes': 200,
             'notes': 'Some older note | Auto-imported from YouTube VODs.'
         }
-        
+
         with patch.object(db.games, 'get_played_game', return_value=locked_game), \
-             patch.object(db.games, 'update_played_game', return_value=True) as mock_update:
-            
+                patch.object(db.games, 'update_played_game', return_value=True) as mock_update:
+
             # Simulate twitch incoming data with more playtime (300)
             incoming_twitch = [{
                 'canonical_name': 'Test Game',
                 'total_playtime_minutes': 300,
                 'source': 'twitch'  # Bulk import logic currently doesn't check source directly, it relies on note check
             }]
-            
+
             db.games.bulk_import_played_games(incoming_twitch)
-            
+
             # The update should NOT be called at all because bulk_import checks notes
             assert not mock_update.called
+
+
 class TestStatisticsAndQueries:
     """Test statistical and complex query operations."""
 

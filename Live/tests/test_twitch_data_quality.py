@@ -80,7 +80,7 @@ class TestGameNameExtraction:
     async def test_game_extraction_aliases_and_emojis(self):
         """Test extraction correctly applies aliases and strips emojis/symbols"""
         from bot.utils.text_processing import cleanup_game_name
-        
+
         test_cases = [
             # Emjois and trailing symbols
             ("Elden Ring 💀🔪", "Elden Ring"),
@@ -91,23 +91,24 @@ class TestGameNameExtraction:
             ("Read Dead 2 HUNTING", "Red Dead Redemption 2"),
             ("Halo 2: Anniversary", "Halo 2")
         ]
-        
+
         for input_text, expected in test_cases:
             cleaned = cleanup_game_name(input_text)
             assert cleaned == expected, f"Expected '{expected}' from '{input_text}', got '{cleaned}'"
 
+
 class TestTwitchCompletionLogic:
     """Test the completion status parsing and 24-hour DLC reversion rule."""
-    
+
     @pytest.mark.asyncio
     async def test_finale_keyword_detection(self):
         """Test that finale keywords trigger completion status."""
         # Using the same logic block extracted from fetch_comprehensive_twitch_games
         from datetime import datetime, timedelta
         from zoneinfo import ZoneInfo
-        
+
         now = datetime.now(ZoneInfo("UTC"))
-        
+
         # Simulate the game_series object state inside fetch_comprehensive_twitch_games
         game_series = {
             'Elden Ring': {
@@ -122,19 +123,19 @@ class TestTwitchCompletionLogic:
                 'video_titles': []
             }
         }
-        
+
         # Test final boss keyword
         title = "Beating the final boss! - Elden Ring"
         finale_keywords = [
-            'finale', 'final episode', 'the end', 'part final', 
+            'finale', 'final episode', 'the end', 'part final',
             'final boss', 'ending', 'roll credits', 'credits',
             'last episode'
         ]
-        
+
         if any(kw in title.lower() for kw in finale_keywords):
             game_series['Elden Ring']['completion_status'] = 'completed'
             game_series['Elden Ring']['completed_date'] = now
-            
+
         assert game_series['Elden Ring']['completion_status'] == 'completed'
         assert game_series['Elden Ring']['completed_date'] == now
 
@@ -143,10 +144,10 @@ class TestTwitchCompletionLogic:
         """Test that streams 24 hours after completion revert status to in_progress."""
         from datetime import datetime, timedelta
         from zoneinfo import ZoneInfo
-        
+
         now = datetime.now(ZoneInfo("UTC"))
-        completed_time = now - timedelta(days=5) # Completed 5 days ago
-        
+        completed_time = now - timedelta(days=5)  # Completed 5 days ago
+
         # Simulate the second pass logic inside fetch_comprehensive_twitch_games
         game_series = {
             'Elden Ring': {
@@ -155,13 +156,14 @@ class TestTwitchCompletionLogic:
                 'latest_stream_date': now  # A stream happened TODAY, 5 days after completion!
             }
         }
-        
+
         for game_name, series_info in game_series.items():
             if series_info['completion_status'] == 'completed' and series_info['completed_date']:
                 if series_info['latest_stream_date'] > (series_info['completed_date'] + timedelta(days=1)):
                     series_info['completion_status'] = 'in_progress'
-                    
+
         assert game_series['Elden Ring']['completion_status'] == 'in_progress'
+
 
 class TestIGDBValidation:
     """Test IGDB integration and validation"""

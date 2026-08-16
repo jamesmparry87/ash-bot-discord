@@ -11,6 +11,7 @@ Handles all background scheduled tasks including:
 - Trivia Tuesday automation
 """
 
+from .sync_youtube_vods import sync_youtube_vods_channel
 import asyncio
 import json
 import uuid
@@ -191,7 +192,6 @@ _startup_validation_completed = False
 # ---------------------------------------------------------
 # IMPORT TASK MODULES HERE TO AVOID CIRCULAR IMPORTS
 # ---------------------------------------------------------
-from .sync_youtube_vods import sync_youtube_vods_channel
 
 monday_content_sync = tasks.loop(time=time(8, 30, tzinfo=ZoneInfo("Europe/London")))(monday_content_sync)
 monday_vods_sync = tasks.loop(time=time(8, 45, tzinfo=ZoneInfo("Europe/London")))(sync_youtube_vods_channel)

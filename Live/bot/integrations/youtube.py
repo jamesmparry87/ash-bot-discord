@@ -759,7 +759,6 @@ async def playlist_has_new_content(session, playlist_id: str, start_timestamp: d
         return False
 
 
-
 def extract_youtube_urls(text: str) -> List[str]:
     """Extract YouTube URLs from text"""
     youtube_url_pattern = r'https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)'
@@ -1227,7 +1226,7 @@ async def fetch_vods_channel_recent_videos(channel_id: str) -> List[Dict[str, An
                 if not data.get('items'):
                     print(f"⚠️ YouTube VODs Sync: Channel {channel_id} not found")
                     return []
-                
+
                 uploads_playlist_id = data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
 
             # 2. Fetch the 50 most recent videos
@@ -1250,7 +1249,7 @@ async def fetch_vods_channel_recent_videos(channel_id: str) -> List[Dict[str, An
                         title = item['snippet']['title']
                         video_ids.append(vid_id)
                         video_snippets[vid_id] = title
-                        
+
             if not video_ids:
                 return []
 
@@ -1269,20 +1268,20 @@ async def fetch_vods_channel_recent_videos(channel_id: str) -> List[Dict[str, An
                     for item in data.get('items', []):
                         vid_id = item['id']
                         title = video_snippets.get(vid_id, '')
-                        
+
                         duration_iso = item['contentDetails']['duration']
                         duration_td = isodate.parse_duration(duration_iso)
                         playtime_minutes = int(duration_td.total_seconds() // 60)
-                        
+
                         canonical_name = extract_game_name_from_title(title)
                         if not canonical_name:
                             continue
-                            
+
                         # Strict completion marker check
                         is_completed = False
                         if "COMPLETE PLAYTHROUGH" in title.upper() or "FULL PLAYTHROUGH" in title.upper() or "FULL GAME" in title.upper():
                             is_completed = True
-                            
+
                         videos_data.append({
                             'canonical_name': canonical_name,
                             'title': title,
