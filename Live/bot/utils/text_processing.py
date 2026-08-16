@@ -64,12 +64,32 @@ def cleanup_game_name(name: str) -> str:
     Returns:
         Cleaned game name string
     """
+    # Remove emojis and special symbols (keep alphanumeric, accents, spaces, and common punctuation)
+    name = re.sub(r'[^\w\s\-\:\.\,\'\"\!\?\&]+', '', name)
+
     # Clean up whitespace and punctuation
     name = re.sub(r'\s+', ' ', name).strip()
     name = name.strip(' -|:')
 
     # Remove trailing metadata
     name = re.sub(r'\s+(?:Thanks|Thx|@|#).*$', '', name, flags=re.IGNORECASE)
+
+    # Map known edge cases
+    GAME_TITLE_ALIASES = {
+        'read dead 2 hunting': 'Red Dead Redemption 2',
+        'red dead 2 hunting': 'Red Dead Redemption 2',
+        'read dead 2': 'Red Dead Redemption 2',
+        'red dead 2': 'Red Dead Redemption 2',
+        'read dead 1': 'Red Dead Redemption',
+        'red dead 1': 'Red Dead Redemption',
+        'read dead redemption': 'Red Dead Redemption',
+        'halo 2: anniversary': 'Halo 2',
+        'halo 2 anniversary': 'Halo 2',
+    }
+    
+    lower_name = name.lower()
+    if lower_name in GAME_TITLE_ALIASES:
+        name = GAME_TITLE_ALIASES[lower_name]
 
     return name
 

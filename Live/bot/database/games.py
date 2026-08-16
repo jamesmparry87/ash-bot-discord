@@ -1148,22 +1148,35 @@ class GamesDatabase:
                 # queries
                 canonical_names_to_check = [
                     g.get('canonical_name') for g in games_data if g.get('canonical_name')]
+                
+                youtube_playlists_to_check = [
+                    g.get('youtube_playlist_url') for g in games_data if g.get('youtube_playlist_url')]
 
-                if not canonical_names_to_check:
+                if not canonical_names_to_check and not youtube_playlists_to_check:
                     return 0
 
-                # Single query to fetch all existing games
-                cur.execute(
-                    "SELECT * FROM played_games WHERE canonical_name = ANY(%s)",
-                    (canonical_names_to_check,
-                     ))
+                # Single query to fetch all existing games by name OR playlist
+                query = "SELECT * FROM played_games WHERE canonical_name = ANY(%s)"
+                params = [canonical_names_to_check]
+                if youtube_playlists_to_check:
+                    query += " OR (youtube_playlist_url IS NOT NULL AND youtube_playlist_url = ANY(%s))"
+                    params.append(youtube_playlists_to_check)
+
+                cur.execute(query, tuple(params))
                 existing_games_list = cur.fetchall()
-                existing_games_map = {}
+                
+                existing_games_by_name = {}
+                existing_games_by_playlist = {}
+                
                 for game in existing_games_list:
                     game_dict = dict(game)
                     canonical_name = game_dict.get('canonical_name')
                     if canonical_name:
-                        existing_games_map[canonical_name] = game_dict
+                        existing_games_by_name[canonical_name] = game_dict
+                        
+                    playlist_url = game_dict.get('youtube_playlist_url')
+                    if playlist_url:
+                        existing_games_by_playlist[playlist_url] = game_dict
 
                 imported_count = 0
                 for game_data in games_data:
@@ -1172,9 +1185,18 @@ class GamesDatabase:
                         if not canonical_name:
                             continue
 
-                        # Fast lookup from pre-fetched map instead of
-                        # individual database query
-                        existing_game = existing_games_map.get(canonical_name)
+                        # Fast lookup from pre-fetched maps
+                        existing_game = None
+                        
+                        # PRIORITY 1: Match exactly by YouTube Playlist URL if it exists
+                        # This prevents duplicate games from the same playlist with different parsed titles
+                        playlist_url = game_data.get('youtube_playlist_url')
+                        if playlist_url and playlist_url in existing_games_by_playlist:
+                            existing_game = existing_games_by_playlist[playlist_url]
+                            
+                        # PRIORITY 2: Match by Canonical Name
+                        if not existing_game:
+                            existing_game = existing_games_by_name.get(canonical_name)
 
                         # Convert TEXT fields to arrays for compatibility if
                         # game exists

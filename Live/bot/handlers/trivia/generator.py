@@ -277,8 +277,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
                         'clip_outcome',
                         'canonical_url',
                         'lore_summary',
-                        'characters_involved',
-                        'submitted_by_discord_id'])
+                        'characters_involved'])
                 clips = [c for c in clips if c['clip_outcome'].lower() in ('death', 'failure')]
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough death/failure clips for Clip_Famous_Last_Words")
@@ -316,8 +315,7 @@ Return strictly as a JSON array of 5 objects:
                         'game_title',
                         'canonical_url',
                         'lore_summary',
-                        'characters_involved',
-                        'submitted_by_discord_id'])
+                        'characters_involved'])
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough clips for Clip_Vibe_Check")
                     continue
@@ -355,8 +353,7 @@ Return strictly as a JSON array of 5 objects:
                         'characters_involved',
                         'game_title',
                         'canonical_url',
-                        'lore_summary',
-                        'submitted_by_discord_id'])
+                        'lore_summary'])
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough clips for Clip_Cause_And_Effect")
                     continue
@@ -659,7 +656,8 @@ Return strictly as a JSON array of 5 objects:
                 prompt = category_prompt
                 if avoid_questions:
                     avoid_text = "\\n\\n🚫 AVOID questions similar to:\\n"
-                    avoid_text += "\\n".join([f"  - {q[:60]}..." for q in avoid_questions[-5:]])
+                    # Use up to 15 questions, taking the newest ones from the front
+                    avoid_text += "\\n".join([f"  - {q[:60]}..." for q in avoid_questions[:15]])
                     prompt = prompt + avoid_text
 
                 CATEGORY_TEMPERATURES = {
