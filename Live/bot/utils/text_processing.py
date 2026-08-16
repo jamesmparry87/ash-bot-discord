@@ -86,7 +86,7 @@ def cleanup_game_name(name: str) -> str:
         'halo 2: anniversary': 'Halo 2',
         'halo 2 anniversary': 'Halo 2',
     }
-    
+
     lower_name = name.lower()
     if lower_name in GAME_TITLE_ALIASES:
         name = GAME_TITLE_ALIASES[lower_name]
