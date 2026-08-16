@@ -15,7 +15,7 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-import aiohttp # type: ignore
+import aiohttp  # type: ignore
 
 # Database import
 from ..database import DatabaseManager, get_database
@@ -1265,7 +1265,7 @@ async def fetch_vods_channel_recent_videos(channel_id: str) -> List[Dict[str, An
             async with session.get(url, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
-                    import isodate # type: ignore
+                    import isodate  # type: ignore
                     for item in data.get('items', []):
                         vid_id = item['id']
                         title = video_snippets.get(vid_id, '')
