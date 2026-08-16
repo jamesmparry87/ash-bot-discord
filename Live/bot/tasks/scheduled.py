@@ -11,7 +11,6 @@ Handles all background scheduled tasks including:
 - Trivia Tuesday automation
 """
 
-from .sync_youtube_vods import sync_youtube_vods_channel
 import asyncio
 import json
 import uuid
@@ -38,6 +37,7 @@ from .greetings import (
     tuesday_trivia_greeting,
 )
 from .sync_vods import monday_content_sync
+from .sync_youtube_vods import sync_youtube_vods_channel
 from .trivia_preflight import (
     pre_trivia_approval,
     pre_trivia_preflight_check,
