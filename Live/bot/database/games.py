@@ -1607,14 +1607,14 @@ class GamesDatabase:
 
         update_kwargs = {'total_playtime_minutes': playtime_minutes}
         if is_completed:
-            update_kwargs['completion_status'] = 'completed'
+            update_kwargs['completion_status'] = 'completed' # type: ignore
             
         existing_notes = game.get('notes') or ''
         if "Auto-imported from YouTube VODs" not in existing_notes:
             if existing_notes:
-                update_kwargs['notes'] = existing_notes + " | Auto-imported from YouTube VODs."
+                update_kwargs['notes'] = existing_notes + " | Auto-imported from YouTube VODs." # type: ignore
             else:
-                update_kwargs['notes'] = "Auto-imported from YouTube VODs."
+                update_kwargs['notes'] = "Auto-imported from YouTube VODs." # type: ignore
 
         return self.update_played_game(game['id'], **update_kwargs)
 

@@ -50,7 +50,7 @@ async def sync_youtube_vods_channel():
             
             if game:
                 # Targeted playtime update bypasses standard merge logic
-                success = db.update_vod_playtime(canonical_name, playtime, is_completed)
+                success = db.games.update_vod_playtime(canonical_name, playtime, is_completed)
                 if success:
                     print(f"✅ VODS SYNC: Updated '{canonical_name}' (Playtime: {playtime}m, Completed: {is_completed})")
             else:

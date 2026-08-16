@@ -15,7 +15,7 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-import aiohttp
+import aiohttp # type: ignore
 
 # Database import
 from ..database import DatabaseManager, get_database
@@ -1196,7 +1196,7 @@ def has_youtube_content(text: str) -> bool:
 
 def generate_youtube_oauth_url() -> str:
     """Generate the OAuth2 authorization URL"""
-    return get_youtube_oauth_url()
+    raise NotImplementedError("OAuth URL generation not yet implemented")
 
 
 async def fetch_vods_channel_recent_videos(channel_id: str) -> List[Dict[str, Any]]:
@@ -1265,7 +1265,7 @@ async def fetch_vods_channel_recent_videos(channel_id: str) -> List[Dict[str, An
             async with session.get(url, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
-                    import isodate
+                    import isodate # type: ignore
                     for item in data.get('items', []):
                         vid_id = item['id']
                         title = video_snippets.get(vid_id, '')
