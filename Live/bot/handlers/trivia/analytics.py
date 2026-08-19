@@ -556,4 +556,4 @@ def should_avoid_pattern(pattern: str, recent_patterns: List[str], threshold: in
     return should_avoid
 
 
-from ...utils.text_processing import extract_question_concepts, calculate_concept_similarity
+from ...utils.text_processing import calculate_concept_similarity, extract_question_concepts

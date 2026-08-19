@@ -8,7 +8,8 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 from zoneinfo import ZoneInfo
 
 from psycopg2.extras import RealDictRow
-from ..utils.text_processing import normalize_trivia_answer, extract_question_concepts, calculate_concept_similarity
+
+from ..utils.text_processing import calculate_concept_similarity, extract_question_concepts, normalize_trivia_answer
 
 """
 Database Trivia Module - Trivia System

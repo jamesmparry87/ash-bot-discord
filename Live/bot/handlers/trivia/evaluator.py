@@ -6,10 +6,8 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from ..ai_handler import _get_db, pacific_tz
-
-
 from ...utils.text_processing import normalize_trivia_answer
+from ..ai_handler import _get_db, pacific_tz
 
 
 def evaluate_answer(user_answer: str, correct_answer: str, question_type: str,

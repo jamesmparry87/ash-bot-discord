@@ -13,8 +13,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import discord
-from discord.ext import commands
 from bot.utils.text_processing import normalize_trivia_answer  # type: ignore
+from discord.ext import commands
 
 # Import configuration directly from environment and fallback file
 try:
