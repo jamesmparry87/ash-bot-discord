@@ -352,3 +352,145 @@ def extract_game_name_from_title(title: str) -> Optional[str]:
         return None
 
     return cleaned_title
+
+
+def normalize_trivia_answer(answer_text: str) -> str:
+    """Enhanced normalization for trivia answers with fuzzy matching support"""
+    import re
+
+    # Start with the original text
+    normalized = answer_text.strip()
+
+    # Remove common punctuation but preserve important chars like hyphens in compound words
+    normalized = re.sub(r'[.,!?;:"\'()[\]{}]', '', normalized)
+
+    # Handle common game/media abbreviations and variations
+    abbreviation_map = {
+        'gta': 'grand theft auto',
+        'cod': 'call of duty',
+        'gtav': 'grand theft auto v',
+        'gtaiv': 'grand theft auto iv',
+        'rdr': 'red dead redemption',
+        'rdr2': 'red dead redemption 2',
+        'gow': 'god of war',
+        'tlou': 'the last of us',
+        'botw': 'breath of the wild',
+        'totk': 'tears of the kingdom',
+        'ff': 'final fantasy',
+        'ffvii': 'final fantasy vii',
+        'ffx': 'final fantasy x',
+        'mgs': 'metal gear solid',
+        'loz': 'legend of zelda',
+        'zelda': 'legend of zelda',
+        'pokemon': 'pokémon',
+        'mario': 'super mario',
+        'doom': 'doom',
+        'halo': 'halo',
+        'fallout': 'fallout'
+    }
+
+    # Apply abbreviation expansions (case insensitive)
+    words = normalized.lower().split()
+    expanded_words = []
+    for word in words:
+        if word in abbreviation_map:
+            expanded_words.extend(abbreviation_map[word].split())
+        else:
+            expanded_words.append(word)
+    normalized = ' '.join(expanded_words)
+
+    # Remove filler words that don't change meaning
+    filler_words = ['and', 'the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by',
+                    'about', 'approximately', 'roughly', 'around', 'over', 'under', 'just',
+                    'exactly', 'precisely', 'nearly', 'almost', 'close to', 'more than', 'less than']
+
+    # Split into words and filter out filler words
+    words = normalized.split()
+    filtered_words = [word for word in words if word not in filler_words]
+
+    # Rejoin and clean up extra spaces
+    normalized = ' '.join(filtered_words)
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+
+    return normalized
+
+
+def extract_question_concepts(question_text: str) -> set:
+    """
+    ✅ FIX #2: Extract key concepts from a question for semantic similarity
+
+    Identifies: game titles, series, metrics (episodes, playtime), comparisons, completion status
+    """
+    import re
+
+    concepts = set()
+    text_lower = question_text.lower()
+
+    # Key metrics and data points
+    metrics = [
+        'episodes',
+        'playtime',
+        'views',
+        'time',
+        'hours',
+        'completed',
+        'finished',
+        'first',
+        'longest',
+        'shortest',
+        'most',
+        'least']
+    for metric in metrics:
+        if metric in text_lower:
+            concepts.add(f"metric:{metric}")
+
+    # Completion-related concepts
+    if any(word in text_lower for word in ['completed', 'finished', 'beat', 'completion']):
+        concepts.add('concept:completion')
+
+    # Comparison-related concepts
+    if any(word in text_lower for word in [' or ', ' vs ', 'between', 'compare']):
+        concepts.add('concept:comparison')
+
+    # Time-related concepts
+    if any(word in text_lower for word in ['first', 'last', 'recent', 'oldest', 'newest', 'before', 'after']):
+        concepts.add('concept:temporal')
+
+    # Superlative concepts (most/least)
+    if any(
+        word in text_lower for word in [
+            'most',
+            'least',
+            'highest',
+            'lowest',
+            'best',
+            'worst',
+            'longest',
+            'shortest']):
+        concepts.add('concept:superlative')
+
+    # Extract potential game/series names (capitalized words or quoted text)
+    capitalized_words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', question_text)
+    for word in capitalized_words:
+        if word.lower() not in ['jonesy', 'captain', 'youtube', 'twitch']:
+            concepts.add(f"entity:{word.lower()}")
+
+    return concepts
+
+
+def calculate_concept_similarity(concepts1: set, concepts2: set) -> float:
+    """
+    ✅ FIX #2: Calculate similarity based on concept overlap
+
+    Uses Jaccard similarity: intersection / union
+    """
+    if not concepts1 or not concepts2:
+        return 0.0
+
+    intersection = len(concepts1.intersection(concepts2))
+    union = len(concepts1.union(concepts2))
+
+    if union == 0:
+        return 0.0
+
+    return intersection / union

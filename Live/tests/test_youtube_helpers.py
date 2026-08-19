@@ -63,7 +63,7 @@ async def test_fetch_vods_channel_logic():
             elif 'playlistItems' in url:
                 return MockResponse({
                     'items': [
-                        {'contentDetails': {'videoId': 'v1'}, 'snippet': {'title': 'Elden Ring part 1'}},
+                        {'contentDetails': {'videoId': 'v1'}, 'snippet': {'title': 'Elden Ring (part 1)'}},
                         {'contentDetails': {'videoId': 'v2'}, 'snippet': {'title': 'First Time Playing Metro 2033 - COMPLETE PLAYTHROUGH'}}
                     ]
                 })

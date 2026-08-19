@@ -35,14 +35,29 @@ async def generate_youtube_analytics_question(db=None):
             # First, try to get overall most viewed data
             overall_data = await get_most_viewed_game_overall()
 
-            if overall_data and 'most_viewed_game' in overall_data:
+            if overall_data and 'full_rankings' in overall_data and len(overall_data['full_rankings']) > 0:
                 logger.info("YouTube analytics data retrieved successfully")
 
                 # Question type options based on available data
                 question_types = []
 
-                most_viewed = overall_data['most_viewed_game']
-                runner_up = overall_data.get('runner_up')
+                most_viewed_raw = overall_data['full_rankings'][0]
+                runner_up_raw = overall_data['full_rankings'][1] if len(overall_data['full_rankings']) > 1 else None
+
+                most_viewed = {
+                    'name': most_viewed_raw['canonical_name'],
+                    'total_views': most_viewed_raw['youtube_views'],
+                    'total_episodes': most_viewed_raw['total_episodes'],
+                    'average_views_per_episode': most_viewed_raw['youtube_views'] // most_viewed_raw['total_episodes'] if most_viewed_raw['total_episodes'] else 0
+                }
+                
+                runner_up = None
+                if runner_up_raw:
+                    runner_up = {
+                        'name': runner_up_raw['canonical_name'],
+                        'total_views': runner_up_raw['youtube_views'],
+                        'total_episodes': runner_up_raw['total_episodes']
+                    }
 
                 # Direct fact questions about most viewed game
                 question_types.extend([

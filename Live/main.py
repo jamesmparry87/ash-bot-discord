@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 import discord
 from discord.ext import commands
+from bot.utils.text_processing import normalize_trivia_answer  # type: ignore
 
 # Import configuration directly from environment and fallback file
 try:
@@ -66,7 +67,7 @@ db: Any = None
 
 # Import the NEW modular database system
 try:
-    from bot.database import get_database
+    from bot.database import get_database  # type: ignore
     db = get_database()
     print("✅ Database manager loaded successfully (MODULAR)")
 except ImportError as e:
@@ -74,7 +75,7 @@ except ImportError as e:
 
 # Import ModeratorFAQHandler system
 try:
-    from bot.handlers.moderator_faq_handler import ModeratorFAQHandler
+    from bot.handlers.moderator_faq_handler import ModeratorFAQHandler  # type: ignore
 
     # Initialize the FAQ handler with current configuration
     moderator_faq_handler = ModeratorFAQHandler(
@@ -218,7 +219,7 @@ message_handler_functions = None
 
 # Import conversation handlers for DM functionality
 try:
-    from bot.handlers.conversations import (
+    from bot.handlers.conversations import (  # type: ignore
         announcement_conversations,
         cleanup_announcement_conversations,
         cleanup_jam_approval_conversations,
@@ -250,7 +251,7 @@ except ImportError as e:
 
 # Import role handler for trainee promotion system
 try:
-    from bot.handlers.role_handler import check_trainee_promotion
+    from bot.handlers.role_handler import check_trainee_promotion  # type: ignore
     print("✅ Role handler imported successfully (trainee promotion system active)")
 except ImportError as e:
     print(f"⚠️ Role handler not available: {e}")
@@ -306,7 +307,7 @@ async def initialize_modular_components():
 
     # 2. Initialize AI Handler
     try:
-        from bot.handlers.ai_handler import get_ai_status, initialize_ai
+        from bot.handlers.ai_handler import get_ai_status, initialize_ai  # type: ignore
         initialize_ai()
         ai_status = get_ai_status()
         status_report["ai_handler"] = True
@@ -317,7 +318,7 @@ async def initialize_modular_components():
 
     # 2.1. Initialize Conversation Handler
     try:
-        from bot.handlers.conversations import initialize_conversation_handler
+        from bot.handlers.conversations import initialize_conversation_handler  # type: ignore
         initialize_conversation_handler(bot)
     except Exception as e:
         status_report["errors"].append(f"Conversation Handler: {e}")
@@ -413,13 +414,13 @@ async def initialize_modular_components():
     try:
         # Import message handler functions
         global message_handler_functions
-        from bot.handlers.message_handler import (
+        from bot.handlers.message_handler import (  # type: ignore
             handle_dm_conversations,
             handle_general_conversation,
             handle_strike_detection,
             process_gaming_query_with_context,
         )
-        from bot.persona.sarcasm import handle_pineapple_pizza_enforcement
+        from bot.persona.sarcasm import handle_pineapple_pizza_enforcement  # type: ignore
 
         message_handler_functions = {
             'handle_strike_detection': handle_strike_detection,
@@ -439,8 +440,8 @@ async def initialize_modular_components():
 
     # 5. Start Scheduled Tasks
     try:
-        from bot.tasks.scheduled import start_all_scheduled_tasks
-        from bot.tasks.trivia_preflight import schedule_delayed_trivia_validation
+        from bot.tasks.scheduled import start_all_scheduled_tasks  # type: ignore
+        from bot.tasks.trivia_preflight import schedule_delayed_trivia_validation  # type: ignore
         start_all_scheduled_tasks(bot)
         print("✅ Scheduled tasks started successfully")
 
@@ -638,7 +639,7 @@ async def on_ready():
 
     # CRITICAL: Initialize AI with async model testing
     try:
-        from bot.handlers.ai_handler import safe_initialize_ai_async
+        from bot.handlers.ai_handler import safe_initialize_ai_async  # type: ignore
         print("🤖 Starting async AI initialization with model testing...")
         ai_success = await safe_initialize_ai_async()
         if ai_success:
@@ -651,8 +652,8 @@ async def on_ready():
         traceback.print_exc()
 
     try:
-        from bot.handlers import message_handler
-        from bot.utils.game_series import initialize_series_list
+        from bot.handlers import message_handler  # type: ignore
+        from bot.utils.game_series import initialize_series_list  # type: ignore
         initialize_series_list()
     except Exception as e:
         print(f"⚠️ Failed to initialize dynamic series list: {e}")
@@ -995,7 +996,7 @@ async def process_trivia_answer(message, trivia_session):
         answer_text = message.content.strip()
 
         # Enhanced normalization for fuzzy matching
-        normalized_answer = db.normalize_trivia_answer(answer_text)
+        normalized_answer = normalize_trivia_answer(answer_text)
 
         print(f"🧠 TRIVIA: Processing answer - Original: '{answer_text}' → Normalized: '{normalized_answer}'")
 
@@ -1094,7 +1095,7 @@ async def on_message(message):
     # STAGING BOT RESTRICTION: Only allow Discord Mods channel + DMs to James
     try:
         # Import staging detection
-        from bot.tasks.utils import _detect_bot_environment
+        from bot.tasks.utils import _detect_bot_environment  # type: ignore
 
         is_live = _detect_bot_environment()
         if is_live is False:  # Explicitly check for staging bot

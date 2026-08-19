@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 from zoneinfo import ZoneInfo
 
 from psycopg2.extras import RealDictRow
+from ..utils.text_processing import normalize_trivia_answer, extract_question_concepts, calculate_concept_similarity
 
 """
 Database Trivia Module - Trivia System
@@ -606,7 +607,7 @@ class TriviaDatabase:
                                 continue
 
                             # Evaluate answer
-                            from bot.handlers.trivia.evaluator import evaluate_answer
+                            from ..handlers.trivia.evaluator import evaluate_answer
                             score, match_type = evaluate_answer(
                                 original_answer, correct_answer, question_type, multiple_choice_options
                             )
@@ -1139,7 +1140,7 @@ class TriviaDatabase:
 
                 # ✅ FIX #3: PHASE 1 - Check for answer-based duplicates FIRST (strictest filter)
                 if question_answer:
-                    normalized_new_answer = self.normalize_trivia_answer(question_answer).lower()
+                    normalized_new_answer = normalize_trivia_answer(question_answer).lower()
 
                     for existing in existing_questions:
                         existing_dict = dict(existing)
@@ -1149,7 +1150,7 @@ class TriviaDatabase:
                         if not existing_answer:
                             continue
 
-                        normalized_existing_answer = self.normalize_trivia_answer(existing_answer).lower()
+                        normalized_existing_answer = normalize_trivia_answer(existing_answer).lower()
 
                         # Check if answers match
                         if normalized_new_answer == normalized_existing_answer:
@@ -1189,7 +1190,7 @@ class TriviaDatabase:
                 new_question_normalized = self._normalize_question_text(question_text)
 
                 # ✅ FIX #2: Extract key concepts from the question
-                new_question_concepts = self._extract_question_concepts(question_text)
+                new_question_concepts = extract_question_concepts(question_text)
 
                 # Check each existing question
                 import difflib
@@ -1208,8 +1209,8 @@ class TriviaDatabase:
                     ).ratio()
 
                     # ✅ FIX #2: Calculate semantic similarity (concept overlap)
-                    existing_concepts = self._extract_question_concepts(existing_text)
-                    concept_similarity = self._calculate_concept_similarity(
+                    existing_concepts = extract_question_concepts(existing_text)
+                    concept_similarity = calculate_concept_similarity(
                         new_question_concepts, existing_concepts
                     )
 
