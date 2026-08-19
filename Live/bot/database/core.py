@@ -984,7 +984,6 @@ class DatabaseManager:
         """Delegate to trivia module - safe add trivia question"""
         return self.trivia.safe_add_trivia_question(**kwargs)
 
-
     # ========== ANNOUNCEMENT DELEGATIONS (to config module) ==========
 
     def create_weekly_announcement(self, day, content, analysis_cache=None):

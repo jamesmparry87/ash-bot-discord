@@ -48,9 +48,8 @@ async def generate_youtube_analytics_question(db=None):
                     'name': most_viewed_raw['canonical_name'],
                     'total_views': most_viewed_raw['youtube_views'],
                     'total_episodes': most_viewed_raw['total_episodes'],
-                    'average_views_per_episode': most_viewed_raw['youtube_views'] // most_viewed_raw['total_episodes'] if most_viewed_raw['total_episodes'] else 0
-                }
-                
+                    'average_views_per_episode': most_viewed_raw['youtube_views'] // most_viewed_raw['total_episodes'] if most_viewed_raw['total_episodes'] else 0}
+
                 runner_up = None
                 if runner_up_raw:
                     runner_up = {

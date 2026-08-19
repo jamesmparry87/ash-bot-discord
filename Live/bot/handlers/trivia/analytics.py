@@ -1,4 +1,5 @@
 
+from ...utils.text_processing import calculate_concept_similarity, extract_question_concepts
 import json
 import logging
 import re
@@ -554,6 +555,3 @@ def should_avoid_pattern(pattern: str, recent_patterns: List[str], threshold: in
         logger.info(f"Pattern '{pattern}' overused ({pattern_count}/{len(recent_patterns)}), avoiding")
 
     return should_avoid
-
-
-from ...utils.text_processing import calculate_concept_similarity, extract_question_concepts
