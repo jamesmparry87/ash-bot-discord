@@ -75,19 +75,19 @@ async def generate_ai_trivia_question(context: str = "trivia",
         # This prevents hallucinated lore/release-date questions entirely.
         TRIVIA_CATEGORIES = {
             # --- Channel stats (factual, answer-first) ---
-            'Episode_Champion': {'weight': 2.0},  # Most episodes in a genre
-            'Quickest_Completion': {'weight': 1.5},  # Fewest episodes to finish in a genre
-            'Channel_Timeline': {'weight': 2.0},  # Which game Jonesy played first
-            'Genre_Census': {'weight': 1.5},  # How many games of a genre
-            'Genre_Pioneer': {'weight': 1.5},  # First game in a genre by play date
+            # 'Episode_Champion': {'weight': 2.0},  # Most episodes in a genre
+            # 'Quickest_Completion': {'weight': 1.5},  # Fewest episodes to finish in a genre
+            # 'Channel_Timeline': {'weight': 2.0},  # Which game Jonesy played first
+            # 'Genre_Census': {'weight': 1.5},  # How many games of a genre
+            # 'Genre_Pioneer': {'weight': 1.5},  # First game in a genre by play date
             'Series_Comparison': {'weight': 1.5},  # Which series game had most episodes
             'Series_Total_Episodes': {'weight': 1.5},  # Total episodes across a whole franchise
             'Playtime_Battle': {'weight': 1.5},  # Which of 2 games has more playtime hours
-            'Release_Year': {'weight': 1.5},  # What year was a specific game released?
+            # 'Release_Year': {'weight': 1.5},  # What year was a specific game released?
             # Most YouTube views (YouTube-only, reduced weight to prevent repetition)
             'YouTube_Views_Champ': {'weight': 0.2},
             # --- AI-creative & Clips (moderate weight for variety) ---
-            'Franchise_Lore': {'weight': 0.5},  # Lore question, AI provides answer
+            # 'Franchise_Lore': {'weight': 0.5},  # Lore question, AI provides answer
             'Clip_Famous_Last_Words': {'weight': 2.0},
             'Clip_Vibe_Check': {'weight': 2.0},
             'Clip_Cause_And_Effect': {'weight': 2.0},
