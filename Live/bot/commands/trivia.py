@@ -1490,7 +1490,6 @@ class TriviaCommands(commands.Cog):
             await ctx.send(f"🧠 **Manual Question Generation**\n\nGenerating {count} trivia question(s) for your approval... This may take a moment.")
 
             from ..handlers.conversations import start_jam_question_approval
-
             from ..handlers.trivia.generator import generate_ai_trivia_question
 
             successful_generations = 0
