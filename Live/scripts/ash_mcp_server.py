@@ -1,11 +1,11 @@
-from mcp.server.fastmcp import FastMCP
-from bot.database import get_database
 import asyncio
 import os
 import sys
 from typing import Optional
 
 import aiohttp
+from bot.database import get_database
+from mcp.server.fastmcp import FastMCP
 
 # Determine the absolute path to the Live directory
 LIVE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
