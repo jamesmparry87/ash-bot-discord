@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ash_bot_context": {
+      "command": "python",
+      "args": ["c:/Users/james/Git/discord/Live/scripts/ash_mcp_server.py"],
+      "env": {}
+    }
+  }
+}
