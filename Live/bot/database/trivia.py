@@ -1993,7 +1993,7 @@ class TriviaDatabase:
                         'emotion_category': row['emotion_category'],
                         'characters_involved': row['characters_involved'],
                         'clip_outcome': row['clip_outcome'],
-                        'submitted_by': row['submitted_by_discord_id'],
+                        'submitted_by_discord_id': row['submitted_by_discord_id'],
                         'message_id': row['message_id']
                     })
                 return results
