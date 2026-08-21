@@ -1,8 +1,9 @@
 import asyncio
 import os
 import sys
-import aiohttp
 from typing import Optional
+
+import aiohttp
 
 # Determine the absolute path to the Live directory
 LIVE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,8 +19,8 @@ if os.path.exists(env_path):
                 key, val = line.split('=', 1)
                 os.environ[key.strip()] = val.strip()
 
-from mcp.server.fastmcp import FastMCP
 from bot.database import get_database
+from mcp.server.fastmcp import FastMCP
 
 # Initialize MCP server
 mcp = FastMCP("AshBotContext")
