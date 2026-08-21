@@ -319,8 +319,19 @@ Additionally, for each question, include the "clip_url" from the clip it was bas
 IMPORTANT: Ash uses he/him pronouns. You MUST credit the discord user who submitted the clip in your commentary using their Discord ID. (e.g. "I can confirm Jonesy was in a state of alarm. I have prepared this visual evidence for review, courtesy of Archival Agent <@123456789>.")
 Return strictly as a raw JSON array containing exactly 5 generated questions.
 DO NOT output a schema or placeholder text. You must generate REAL trivia questions based on the clip data.
-Each object in the JSON array MUST have the following keys:
-"question_text", "question_type", "correct_answer", "decoy_1", "decoy_2", "decoy_3", "clip_url", "commentary"
+Each object in the JSON array MUST follow this exact format:
+[
+  {
+    "question_text": "Write the actual question here based on the clip",
+    "question_type": "multiple_choice",
+    "correct_answer": "The real answer",
+    "decoy_1": "A real fake option",
+    "decoy_2": "Another real fake option",
+    "decoy_3": "A third real fake option",
+    "clip_url": "The provided URL",
+    "commentary": "Ash's commentary"
+  }
+]
 """
                 selected_category = cat
 
@@ -362,8 +373,19 @@ Additionally, for each question, include the "clip_url" from the clip it was bas
 IMPORTANT: Ash uses he/him pronouns. You MUST credit the discord user who submitted the clip in your commentary using their Discord ID. (e.g. "I can confirm Jonesy was in a state of alarm. I have prepared this visual evidence for review, courtesy of Archival Agent <@123456789>.")
 Return strictly as a raw JSON array containing exactly 5 generated questions.
 DO NOT output a schema or placeholder text. You must generate REAL trivia questions based on the clip data.
-Each object in the JSON array MUST have the following keys:
-"question_text", "question_type", "correct_answer", "decoy_1", "decoy_2", "decoy_3", "clip_url", "commentary"
+Each object in the JSON array MUST follow this exact format:
+[
+  {
+    "question_text": "Write the actual question here based on the clip",
+    "question_type": "multiple_choice",
+    "correct_answer": "The real answer",
+    "decoy_1": "A real fake option",
+    "decoy_2": "Another real fake option",
+    "decoy_3": "A third real fake option",
+    "clip_url": "The provided URL",
+    "commentary": "Ash's commentary"
+  }
+]
 """
                 selected_category = cat
 
@@ -402,8 +424,19 @@ Additionally, for each question, include the "clip_url" from the clip it was bas
 IMPORTANT: Ash uses he/him pronouns. You MUST credit the discord user who submitted the clip in your commentary using their Discord ID. (e.g. "I can confirm Jonesy was in a state of alarm. I have prepared this visual evidence for review, courtesy of Archival Agent <@123456789>.")
 Return strictly as a raw JSON array containing exactly 5 generated questions.
 DO NOT output a schema or placeholder text. You must generate REAL trivia questions based on the clip data.
-Each object in the JSON array MUST have the following keys:
-"question_text", "question_type", "correct_answer", "decoy_1", "decoy_2", "decoy_3", "clip_url", "commentary"
+Each object in the JSON array MUST follow this exact format:
+[
+  {
+    "question_text": "Write the actual question here based on the clip",
+    "question_type": "multiple_choice",
+    "correct_answer": "The real answer",
+    "decoy_1": "A real fake option",
+    "decoy_2": "Another real fake option",
+    "decoy_3": "A third real fake option",
+    "clip_url": "The provided URL",
+    "commentary": "Ash's commentary"
+  }
+]
 """
                 selected_category = cat
 
@@ -442,8 +475,19 @@ Additionally, for each question, include the "clip_url" from the clip it was bas
 IMPORTANT: Ash uses he/him pronouns. You MUST credit the discord user who submitted the clip in your commentary using their Discord ID. (e.g. "I can confirm Jonesy was in a state of alarm. I have prepared this visual evidence for review, courtesy of Archival Agent <@123456789>.")
 Return strictly as a raw JSON array containing exactly 5 generated questions.
 DO NOT output a schema or placeholder text. You must generate REAL trivia questions based on the clip data.
-Each object in the JSON array MUST have the following keys:
-"question_text", "question_type", "correct_answer", "decoy_1", "decoy_2", "decoy_3", "clip_url", "commentary"
+Each object in the JSON array MUST follow this exact format:
+[
+  {
+    "question_text": "Write the actual question here based on the clip",
+    "question_type": "multiple_choice",
+    "correct_answer": "The real answer",
+    "decoy_1": "A real fake option",
+    "decoy_2": "Another real fake option",
+    "decoy_3": "A third real fake option",
+    "clip_url": "The provided URL",
+    "commentary": "Ash's commentary"
+  }
+]
 """
                 selected_category = cat
 
@@ -485,8 +529,19 @@ Additionally, for each question, include the "clip_url" from the clip it was bas
 IMPORTANT: Ash uses he/him pronouns. You MUST credit the discord user who submitted the clip in your commentary using their Discord ID. (e.g. "I can confirm Jonesy was in a state of alarm. I have prepared this visual evidence for review, courtesy of Archival Agent <@123456789>.")
 Return strictly as a raw JSON array containing exactly 5 generated questions.
 DO NOT output a schema or placeholder text. You must generate REAL trivia questions based on the clip data.
-Each object in the JSON array MUST have the following keys:
-"question_text", "question_type", "correct_answer", "decoy_1", "decoy_2", "decoy_3", "clip_url", "commentary"
+Each object in the JSON array MUST follow this exact format:
+[
+  {
+    "question_text": "Write the actual question here based on the clip",
+    "question_type": "multiple_choice",
+    "correct_answer": "The real answer",
+    "decoy_1": "A real fake option",
+    "decoy_2": "Another real fake option",
+    "decoy_3": "A third real fake option",
+    "clip_url": "The provided URL",
+    "commentary": "Ash's commentary"
+  }
+]
 """
                 selected_category = cat
 
@@ -516,8 +571,17 @@ Write 5 engaging trivia questions about the {chosen_series_fl} franchise testing
 Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
 Return strictly as a raw JSON array containing exactly 5 generated questions.
 DO NOT output a schema or placeholder text. You must generate REAL trivia questions based on the games data.
-Each object in the JSON array MUST have the following keys:
-"question_text", "question_type", "correct_answer", "decoy_1", "decoy_2", "decoy_3"
+Each object in the JSON array MUST follow this exact format:
+[
+  {
+    "question_text": "Write the actual question here",
+    "question_type": "multiple_choice",
+    "correct_answer": "The real answer",
+    "decoy_1": "A real fake option",
+    "decoy_2": "Another real fake option",
+    "decoy_3": "A third real fake option"
+  }
+]
 """
                 elif all_games:
                     game_fl = random.choice(all_games)
@@ -535,8 +599,17 @@ Write 5 engaging trivia questions about {game_fl['canonical_name']} testing memo
 Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
 Return strictly as a raw JSON array containing exactly 5 generated questions.
 DO NOT output a schema or placeholder text. You must generate REAL trivia questions based on the games data.
-Each object in the JSON array MUST have the following keys:
-"question_text", "question_type", "correct_answer", "decoy_1", "decoy_2", "decoy_3"
+Each object in the JSON array MUST follow this exact format:
+[
+  {
+    "question_text": "Write the actual question here",
+    "question_type": "multiple_choice",
+    "correct_answer": "The real answer",
+    "decoy_1": "A real fake option",
+    "decoy_2": "Another real fake option",
+    "decoy_3": "A third real fake option"
+  }
+]
 """
                 else:
                     continue  # Not enough data for Franchise_Lore, try next category
