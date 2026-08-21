@@ -292,8 +292,8 @@ class ClipTriviaCog(commands.Cog):
                     if success:
                         break
                     
-                    from bot.handlers.ai_handler import ai_usage_stats, primary_ai
                     from bot.config import MAX_DAILY_REQUESTS
+                    from bot.handlers.ai_handler import ai_usage_stats, primary_ai
                     
                     daily_used = ai_usage_stats.get("daily_requests", 0)
                     if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
@@ -303,8 +303,8 @@ class ClipTriviaCog(commands.Cog):
                         logger.warning(f"⚠️ Clip processing failed (attempt {attempt + 1}/3). Retrying in 30s...")
                         await asyncio.sleep(30.0)
 
-                from bot.handlers.ai_handler import ai_usage_stats, primary_ai
                 from bot.config import MAX_DAILY_REQUESTS
+                from bot.handlers.ai_handler import ai_usage_stats, primary_ai
                 
                 daily_used = ai_usage_stats.get("daily_requests", 0)
                 if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
