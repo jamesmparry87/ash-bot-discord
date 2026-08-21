@@ -1312,13 +1312,15 @@ async def call_ai_for_generation(
                 print(
                     f"🤖 Making lightweight Gemini generation request (daily: {ai_usage_stats['daily_requests']}/{MAX_DAILY_REQUESTS})")
 
-                generation_config = {
-                    "max_output_tokens": 2000,  # Smaller than conversational (3000)
-                    "temperature": temperature
-                }
+                from google.genai import types
+                generation_config = types.GenerateContentConfig(
+                    max_output_tokens=2000,
+                    temperature=temperature,
+                    response_mime_type="application/json"
+                )
 
                 if system_instruction:
-                    generation_config["system_instruction"] = system_instruction
+                    generation_config.system_instruction = system_instruction
 
                 # Shorter timeout for generation tasks
                 timeout_duration = 40.0  # Increased for trivia generation
@@ -1353,6 +1355,7 @@ async def call_ai_for_generation(
                         response_text = response.text
                         record_ai_request()
                         print(f"✅ Lightweight generation successful ({len(response_text)} chars)")
+                        print(f"DEBUG RESPONSE: {response_text}")
 
                         # Cache the response
                         if CACHE_AVAILABLE and get_cache is not None and response_text:
