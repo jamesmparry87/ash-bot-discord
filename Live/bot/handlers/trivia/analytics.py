@@ -1,5 +1,4 @@
 
-from ...utils.text_processing import calculate_concept_similarity, extract_question_concepts
 import json
 import logging
 import re
@@ -8,6 +7,8 @@ from datetime import datetime
 from typing import List, Optional, cast
 
 from psycopg2.extras import RealDictRow
+
+from ...utils.text_processing import calculate_concept_similarity, extract_question_concepts
 
 logger = logging.getLogger(__name__)
 

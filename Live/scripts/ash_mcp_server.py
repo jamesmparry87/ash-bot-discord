@@ -1,8 +1,11 @@
+from mcp.server.fastmcp import FastMCP
+from bot.database import get_database
 import asyncio
 import os
 import sys
-import aiohttp
 from typing import Optional
+
+import aiohttp
 
 # Determine the absolute path to the Live directory
 LIVE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,8 +21,6 @@ if os.path.exists(env_path):
                 key, val = line.split('=', 1)
                 os.environ[key.strip()] = val.strip()
 
-from mcp.server.fastmcp import FastMCP
-from bot.database import get_database
 
 # Initialize MCP server
 mcp = FastMCP("AshBotContext")
@@ -29,20 +30,21 @@ db = get_database()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
+
 @mcp.tool()
 async def get_played_games(series_name: Optional[str] = None) -> str:
     """Fetch played games from the Ash Bot PostgreSQL database.
-    
+
     Args:
         series_name: Optional filter for a specific game series franchise.
     """
     if not db.database_url:
         return "Error: DATABASE_URL not configured. Cannot access database."
-        
+
     games = await asyncio.to_thread(db.games.get_all_played_games, series_name)
     if not games:
         return f"No games found{' for series ' + series_name if series_name else ''}."
-    
+
     result = ["# Played Games Data\n"]
     for g in games:
         result.append(
@@ -54,58 +56,60 @@ async def get_played_games(series_name: Optional[str] = None) -> str:
         )
     return "\n".join(result)
 
+
 @mcp.tool()
 async def get_user_strikes(user_id: int) -> str:
     """Fetch strike count for a specific user ID from the database.
-    
+
     Args:
         user_id: The Discord user ID to look up.
     """
     if not db.database_url:
         return "Error: DATABASE_URL not configured. Cannot access database."
-        
+
     strikes = await asyncio.to_thread(db.users.get_user_strikes, user_id)
     return f"User {user_id} currently has {strikes} strike(s)."
+
 
 @mcp.tool()
 async def get_discord_channel_history(channel_id: str, limit: int = 50) -> str:
     """Fetch recent messages from a Discord channel.
-    
+
     Args:
         channel_id: The Discord Channel ID to fetch messages from.
         limit: Number of messages to retrieve (max 100).
     """
     if not DISCORD_TOKEN:
         return "Error: DISCORD_TOKEN environment variable not set. Cannot authenticate with Discord API."
-    
+
     # Cap limit to prevent rate limits or abuse
     limit = min(max(1, limit), 100)
-    
+
     headers = {
         "Authorization": f"Bot {DISCORD_TOKEN}",
         "User-Agent": "DiscordBot (Ash MCP Server, 1.0)"
     }
-    
+
     url = f"https://discord.com/api/v10/channels/{channel_id}/messages?limit={limit}"
-    
+
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=headers) as response:
             if response.status != 200:
                 error_text = await response.text()
                 return f"Error fetching channel history: HTTP {response.status}\n{error_text}"
-            
+
             messages = await response.json()
-            
+
             if not messages:
                 return "No messages found in this channel."
-                
+
             result = [f"# Channel {channel_id} History (Last {len(messages)} messages)\n"]
             # Messages come newest first, reverse them for chronological reading
             for msg in reversed(messages):
                 author = msg.get("author", {}).get("username", "Unknown")
                 content = msg.get("content", "")
                 result.append(f"**[{author}]**: {content}")
-            
+
             return "\n".join(result)
 
 if __name__ == "__main__":
@@ -114,6 +118,6 @@ if __name__ == "__main__":
         print("⚠️ Warning: DISCORD_TOKEN environment variable not found. Channel history will not work.", file=sys.stderr)
     if not os.getenv("DATABASE_URL"):
         print("⚠️ Warning: DATABASE_URL environment variable not found. Database features will not work.", file=sys.stderr)
-        
+
     print("🚀 Ash Bot MCP Server is ready. Waiting for connections over stdio...", file=sys.stderr)
     mcp.run(transport='stdio')
