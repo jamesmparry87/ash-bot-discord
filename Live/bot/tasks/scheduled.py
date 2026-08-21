@@ -761,7 +761,165 @@ async def friday_community_analysis():
             f'An unexpected error occurred during the Friday community analysis: {str(e)[:200]}'
         )
 
+@tasks.loop(time=time(hour=20, minute=15, tzinfo=ZoneInfo("Europe/London")))
+async def daily_clip_scan_task():
+    """Scan clips channel for unprocessed clips every weekday evening"""
+    if not _should_run_automated_tasks():
+        return
+
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    if uk_now.weekday() > 4:  # 0-4 is Mon-Fri
+        print("⏭️ Skipping daily clip scan (weekend)")
+        return
+
+    print("🎬 Starting daily clip scan task...")
+    bot = get_bot_instance()
+    if not bot:
+        return
+
+    channel_id = 1210874007591718982
+    channel = bot.get_channel(channel_id)
+    if not channel or not isinstance(channel, discord.TextChannel):
+        print("❌ Could not find clips channel for daily scan")
+        return
+
+    cog = bot.get_cog("ClipTriviaCog")
+    if not cog:
+        print("❌ Could not find ClipTriviaCog for daily scan")
+        return
+
+    db = get_database()
+    if not db:
+        print("❌ Could not get database for daily scan")
+        return
+
+    clips_to_process = []
+
+    async for message in channel.history(limit=100):
+        if message.author.bot:
+            continue
+
+        match = cog.url_pattern.search(message.content)
+        if match:
+            from ..commands.clips import canonicalize_clip_url
+            clip_url = match.group(0)
+            canonical_url = canonicalize_clip_url(clip_url)
+
+            if not db.trivia.clip_lore_exists(canonical_url):
+                clips_to_process.append((message, clip_url))
+            else:
+                # Clip already processed - ensure it has the ✅ reaction
+                has_tick = any(str(r.emoji) == "✅" for r in message.reactions)
+                if not has_tick:
+                    try:
+                        await message.add_reaction("✅")
+                        if bot.user:
+                            await message.remove_reaction("👀", bot.user)
+                            await message.remove_reaction("❌", bot.user)
+                    except Exception:
+                        pass
+
+    queued_count = len(clips_to_process)
+    if queued_count == 0:
+        print("✅ Daily clip scan complete. No new clips found.")
+        return
+
+    print(f"🎬 Processing {queued_count} new clips...")
+
+    jam_user = None
+    try:
+        jam_user = await bot.fetch_user(JAM_USER_ID)
+    except Exception as e:
+        print(f"Failed to fetch Jam user for DMs: {e}")
+
+    quota_exhausted = False
+    for idx, (msg, curl) in enumerate(clips_to_process):
+        if quota_exhausted:
+            break
+
+        success = False
+
+        # Clear any old failure marks before retrying
+        try:
+            if bot.user:
+                await msg.remove_reaction("❌", bot.user)
+        except Exception:
+            pass
+
+        # Add a simple retry loop for Gemini 503 errors
+        for attempt in range(3):
+            success = await cog.parser.process_clip(curl, msg)
+            if success:
+                break
+
+            from ..handlers.ai_handler import ai_usage_stats, primary_ai
+            from ..config import MAX_DAILY_REQUESTS
+            daily_used = ai_usage_stats.get("daily_requests", 0)
+            if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
+                print("🚫 Primary AI is exhausted or unavailable. Aborting clip batch.")
+                quota_exhausted = True
+                break
+
+            print(f"⚠️ Clip processing failed (attempt {attempt + 1}/3). Retrying in 30s...")
+            await asyncio.sleep(30.0)
+
+        if quota_exhausted:
+            # Send a DM saying we aborted
+            if jam_user:
+                await jam_user.send(f"⚠️ **Clip Processing Aborted**\nThe AI quota was exhausted while processing clip {idx + 1}/{queued_count}. The remaining {queued_count - idx} clips will be processed tomorrow.")
+            # Do not apply ✅ or ❌, just leave it for tomorrow
+            try:
+                if bot.user:
+                    await msg.remove_reaction("👀", bot.user)
+            except Exception:
+                pass
+            break
+
+        try:
+            if bot.user:
+                if success:
+                    await msg.add_reaction("✅")
+                else:
+                    await msg.add_reaction("❌")
+        except discord.Forbidden:
+            print(
+                f"Missing permissions to add ✅/❌ reaction in channel {msg.channel.id}")
+        except Exception as e:
+            print(f"Failed to add final reaction to clip {curl}: {e}")
+
+        # Sleep to respect rate limits if not the last clip
+        if idx < queued_count - 1:
+            await asyncio.sleep(60.0)
+
+    print("✅ Daily clip scan processing complete.")
+
 ## DAILY TASKS ##
+# Run at 21:15 UK time every day - Clip backlog processing
+@tasks.loop(time=time(21, 15, tzinfo=ZoneInfo("Europe/London")))
+async def process_clip_backlog():
+    """Nightly batch processing of the video clip backlog."""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    if not _should_run_automated_tasks():
+        print(f"⚠️ Clip backlog processing skipped - staging bot detected at {uk_now.strftime('%H:%M:%S UK')}")
+        return
+        
+    bot = get_bot_instance()
+    if not bot:
+        print("❌ process_clip_backlog: Bot instance not available")
+        return
+        
+    cog = bot.get_cog("ClipTriviaCog")
+    if not cog:
+        print("❌ process_clip_backlog: ClipTriviaCog not loaded")
+        return
+        
+    print(f"🎬 Starting nightly video clip backlog processing at {uk_now.strftime('%H:%M:%S UK')}")
+    try:
+        found, queued = await cog.process_backlog_batch(search_limit=200, max_process=25, ctx=None)
+        print(f"✅ Clip backlog processing completed. Found {found}, Queued {queued}.")
+    except Exception as e:
+        print(f"❌ Error in process_clip_backlog: {e}")
+
 # Run at 00:00 PT (midnight Pacific Time) every day
 
 
@@ -1487,117 +1645,6 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
         raise
 
 
-@tasks.loop(time=time(hour=20, minute=15, tzinfo=ZoneInfo("Europe/London")))
-async def daily_clip_scan_task():
-    """Scan clips channel for unprocessed clips every weekday evening"""
-    if not _should_run_automated_tasks():
-        return
-
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() > 4:  # 0-4 is Mon-Fri
-        print("⏭️ Skipping daily clip scan (weekend)")
-        return
-
-    print("🎬 Starting daily clip scan task...")
-    bot = get_bot_instance()
-    if not bot:
-        return
-
-    channel_id = 1210874007591718982
-    channel = bot.get_channel(channel_id)
-    if not channel or not isinstance(channel, discord.TextChannel):
-        print("❌ Could not find clips channel for daily scan")
-        return
-
-    cog = bot.get_cog("ClipTriviaCog")
-    if not cog:
-        print("❌ Could not find ClipTriviaCog for daily scan")
-        return
-
-    db = get_database()
-    if not db:
-        print("❌ Could not get database for daily scan")
-        return
-
-    clips_to_process = []
-
-    async for message in channel.history(limit=None):
-        if message.author.bot:
-            continue
-
-        match = cog.url_pattern.search(message.content)
-        if match:
-            from ..commands.clips import canonicalize_clip_url
-            clip_url = match.group(0)
-            canonical_url = canonicalize_clip_url(clip_url)
-
-            if not db.trivia.clip_lore_exists(canonical_url):
-                clips_to_process.append((message, clip_url))
-            else:
-                # Clip already processed - ensure it has the ✅ reaction
-                has_tick = any(str(r.emoji) == "✅" for r in message.reactions)
-                if not has_tick:
-                    try:
-                        await message.add_reaction("✅")
-                        if bot.user:
-                            await message.remove_reaction("👀", bot.user)
-                            await message.remove_reaction("❌", bot.user)
-                    except Exception:
-                        pass
-
-    queued_count = len(clips_to_process)
-    if queued_count == 0:
-        print("✅ Daily clip scan complete. No new clips found.")
-        return
-
-    print(f"🎬 Processing {queued_count} new clips...")
-
-    jam_user = None
-    try:
-        jam_user = await bot.fetch_user(JAM_USER_ID)
-    except Exception as e:
-        print(f"Failed to fetch Jam user for DMs: {e}")
-
-    quota_exhausted = False
-    for idx, (msg, curl) in enumerate(clips_to_process):
-        if quota_exhausted:
-            break
-
-        success = False
-
-        # Clear any old failure marks before retrying
-        try:
-            if bot.user:
-                await msg.remove_reaction("❌", bot.user)
-        except Exception:
-            pass
-
-        # Add a simple retry loop for Gemini 503 errors
-        for attempt in range(3):
-            success = await cog.parser.process_clip(curl, msg)
-            if success:
-                break
-
-            from ..handlers.ai_handler import ai_usage_stats, primary_ai
-            if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini":
-                print("🚫 Primary AI is exhausted or unavailable. Aborting clip batch.")
-                quota_exhausted = True
-                break
-
-            print(f"⚠️ Clip processing failed (attempt {attempt + 1}/3). Retrying in 30s...")
-            await asyncio.sleep(30.0)
-
-        if quota_exhausted:
-            # Send a DM saying we aborted
-            if jam_user:
-                await jam_user.send(f"⚠️ **Clip Processing Aborted**\nThe AI quota was exhausted while processing clip {idx + 1}/{queued_count}. The remaining {queued_count - idx} clips will be processed tomorrow.")
-            # Do not apply ✅ or ❌, just leave it for tomorrow
-            try:
-                if bot.user:
-                    await msg.remove_reaction("👀", bot.user)
-            except Exception:
-                pass
-            break
 
         try:
             if bot.user:
@@ -1687,6 +1734,7 @@ def start_all_scheduled_tasks(bot):
             (scheduled_midnight_restart, "Scheduled midnight restart task (00:00 PT daily)"),
             (scheduled_ai_refresh, "AI module refresh task (8:15 AM UK time daily)"),
             (daily_clip_scan_task, "Daily clip scan task (20:15 UK time weekdays)"),
+            (process_clip_backlog, "Nightly clip backlog processor (21:15 UK time)"),
             ## Hourly ##
             (cleanup_game_recommendations, "Game recommendation cleanup task (every hour)"),
             ## Every 15 minutes ##
@@ -1739,6 +1787,7 @@ def get_scheduled_tasks_status():
             (trivia_tuesday, "Trivia Tuesday"),
             (scheduled_ai_refresh, "AI Refresh"),
             (daily_clip_scan_task, "Daily Clip Scan"),
+            (process_clip_backlog, "Nightly Clip Backlog"),
             (monday_morning_greeting, "Monday Greeting"),
             (tuesday_trivia_greeting, "Tuesday Greeting"),
             (friday_morning_greeting, "Friday Greeting"),

@@ -62,7 +62,7 @@ class ClipParsingService:
         ydl_opts = {
             'outtmpl': output_path,
             # Fallback to /best[ext=mp4]/best because Twitch clips often don't have separate video/audio tracks
-            'format': 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'format': 'bestvideo[ext=mp4][height<=480]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             'quiet': True,
             'no_warnings': True,
         }
@@ -191,10 +191,16 @@ class ClipTriviaCog(commands.Cog):
             await ctx.send("❌ Unauthorized.")
             return
 
+    async def process_backlog_batch(self, search_limit: int = 200, max_process: int = 25, ctx=None) -> tuple[int, int]:
+        """Scans the clips channel history for unprocessed clips backwards through time.
+        Returns (found_count, queued_count)."""
         channel = self.bot.get_channel(self.target_channel_id)
         if not channel or not isinstance(channel, discord.TextChannel):
-            await ctx.send("❌ Could not find clips channel or it is not a text channel.")
-            return
+            if ctx:
+                await ctx.send("❌ Could not find clips channel or it is not a text channel.")
+            else:
+                logger.error("Could not find clips channel or it is not a text channel.")
+            return 0, 0
 
         # Load state
         state_file = "data/clip_scan_state.json"
@@ -210,10 +216,16 @@ class ClipTriviaCog(commands.Cog):
 
         before_obj = discord.Object(id=last_scanned_id) if last_scanned_id else None
 
-        if last_scanned_id:
-            await ctx.send(f"🔍 Resuming scan from where we left off. Scanning {limit} older messages in <#{self.target_channel_id}>...")
+        if ctx:
+            if last_scanned_id:
+                await ctx.send(f"🔍 Resuming scan from where we left off. Scanning up to {search_limit} older messages in <#{self.target_channel_id}>...")
+            else:
+                await ctx.send(f"🔍 Scanning the most recent {search_limit} messages in <#{self.target_channel_id}> for clips...")
         else:
-            await ctx.send(f"🔍 Scanning the most recent {limit} messages in <#{self.target_channel_id}> for clips...")
+            if last_scanned_id:
+                logger.info(f"🔍 Resuming scan from where we left off. Scanning up to {search_limit} older messages...")
+            else:
+                logger.info(f"🔍 Scanning the most recent {search_limit} messages for clips...")
 
         found_count = 0
         db = get_database()
@@ -223,7 +235,7 @@ class ClipTriviaCog(commands.Cog):
 
         clips_to_queue = []
 
-        async for message in channel.history(limit=limit, before=before_obj):
+        async for message in channel.history(limit=search_limit, before=before_obj):
             oldest_message_id = message.id
             oldest_message_date = message.created_at
 
@@ -238,6 +250,8 @@ class ClipTriviaCog(commands.Cog):
 
                 if not db.trivia.clip_lore_exists(canonical_url):
                     clips_to_queue.append((message, clip_url))
+                    if len(clips_to_queue) >= max_process:
+                        break
                 else:
                     # Clip already processed - ensure it has the ✅ reaction
                     has_tick = any(str(r.emoji) == "✅" for r in message.reactions)
@@ -254,7 +268,10 @@ class ClipTriviaCog(commands.Cog):
         queued_count = len(clips_to_queue)
         if queued_count > 0:
             for idx, (msg, curl) in enumerate(clips_to_queue):
-                await ctx.send(f"🎬 Processing clip {idx + 1}/{queued_count}: {curl}")
+                if ctx:
+                    await ctx.send(f"🎬 Processing clip {idx + 1}/{queued_count}: {curl}")
+                else:
+                    logger.info(f"🎬 Processing clip {idx + 1}/{queued_count}: {curl}")
 
                 # Acknowledge processing and clear any old failure marks
                 try:
@@ -268,11 +285,34 @@ class ClipTriviaCog(commands.Cog):
                 except Exception:
                     pass
 
-                success = await self.parser.process_clip(curl, msg)
+                # Add a simple retry loop for Gemini 503 errors
+                success = False
+                for attempt in range(3):
+                    success = await self.parser.process_clip(curl, msg)
+                    if success:
+                        break
+                    
+                    from bot.handlers.ai_handler import ai_usage_stats, primary_ai
+                    from bot.config import MAX_DAILY_REQUESTS
+                    
+                    daily_used = ai_usage_stats.get("daily_requests", 0)
+                    if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
+                        break
+                        
+                    if attempt < 2:
+                        logger.warning(f"⚠️ Clip processing failed (attempt {attempt + 1}/3). Retrying in 30s...")
+                        await asyncio.sleep(30.0)
 
                 from bot.handlers.ai_handler import ai_usage_stats, primary_ai
-                if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini":
-                    await ctx.send("🚫 **AI Quota Exhausted!** Aborting the remainder of the clip scan to avoid spamming the API. We'll pick up the rest tomorrow!")
+                from bot.config import MAX_DAILY_REQUESTS
+                
+                daily_used = ai_usage_stats.get("daily_requests", 0)
+                if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
+                    msg_text = "🚫 **AI Quota Exhausted or Too Close to Limit!** Aborting the remainder of the clip scan to avoid spamming the API. We'll pick up the rest tomorrow!"
+                    if ctx:
+                        await ctx.send(msg_text)
+                    else:
+                        logger.warning(msg_text)
                     # Clean up the 👀 reaction from the aborted clip
                     try:
                         await msg.remove_reaction("👀", self.bot.user)
@@ -293,7 +333,8 @@ class ClipTriviaCog(commands.Cog):
                         await msg.add_reaction("❌")
                 except discord.Forbidden:
                     logger.error(f"Missing permissions to add ✅/❌ reaction in channel {msg.channel.id}")
-                    await ctx.send(f"⚠️ **Permission Error:** I don't have the 'Add Reactions' permission in this channel to react to {curl}!")
+                    if ctx:
+                        await ctx.send(f"⚠️ **Permission Error:** I don't have the 'Add Reactions' permission in this channel to react to {curl}!")
                 except Exception as e:
                     logger.error(f"Failed to add final reaction to clip {curl}: {e}")
 
@@ -310,11 +351,28 @@ class ClipTriviaCog(commands.Cog):
                 logger.error(f"Error writing clip scan state: {e}")
 
             date_str = oldest_message_date.strftime("%Y-%m-%d")
-            await ctx.send(f"✅ Scan complete. Found {found_count} clips. Added {queued_count} new clips to the processing queue.\n"
-                           f"🕒 We scanned back as far as **{date_str}**. Run `!scan_clips` again to keep going backwards in time!")
+            if ctx:
+                await ctx.send(f"✅ Scan complete. Found {found_count} clips. Added {queued_count} new clips to the processing queue.\n"
+                               f"🕒 We scanned back as far as **{date_str}**. Run `!scan_clips` again to keep going backwards in time!")
+            else:
+                logger.info(f"✅ Scan complete. Found {found_count} clips. Added {queued_count} new clips. Scanned back to {date_str}.")
         else:
             # Optionally reset tracker if we hit the beginning
-            await ctx.send("✅ Scan complete. Found 0 clips. Reached the beginning of the channel!")
+            if ctx:
+                await ctx.send("✅ Scan complete. Found 0 clips. Reached the beginning of the channel!")
+            else:
+                logger.info("✅ Scan complete. Found 0 clips. Reached the beginning of the channel!")
+                
+        return found_count, queued_count
+
+    @commands.command(name="scan_clips")
+    async def scan_clips(self, ctx, limit: int = 20):
+        """[Admin] Scans the clips channel history for unprocessed clips backwards through time."""
+        if ctx.author.id not in [JAM_USER_ID, JONESY_USER_ID]:
+            await ctx.send("❌ Unauthorized.")
+            return
+
+        await self.process_backlog_batch(search_limit=limit, max_process=limit, ctx=ctx)
 
     @commands.command(name="reset_clips")
     async def reset_clips(self, ctx):
