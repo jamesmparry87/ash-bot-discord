@@ -291,23 +291,25 @@ class ClipTriviaCog(commands.Cog):
                     success = await self.parser.process_clip(curl, msg)
                     if success:
                         break
-                    
+
                     from bot.config import MAX_DAILY_REQUESTS
                     from bot.handlers.ai_handler import ai_usage_stats, primary_ai
-                    
+
                     daily_used = ai_usage_stats.get("daily_requests", 0)
-                    if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
+                    if ai_usage_stats.get("quota_exhausted",
+                                          False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
                         break
-                        
+
                     if attempt < 2:
                         logger.warning(f"⚠️ Clip processing failed (attempt {attempt + 1}/3). Retrying in 30s...")
                         await asyncio.sleep(30.0)
 
                 from bot.config import MAX_DAILY_REQUESTS
                 from bot.handlers.ai_handler import ai_usage_stats, primary_ai
-                
+
                 daily_used = ai_usage_stats.get("daily_requests", 0)
-                if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
+                if ai_usage_stats.get("quota_exhausted",
+                                      False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
                     msg_text = "🚫 **AI Quota Exhausted or Too Close to Limit!** Aborting the remainder of the clip scan to avoid spamming the API. We'll pick up the rest tomorrow!"
                     if ctx:
                         await ctx.send(msg_text)
@@ -355,14 +357,15 @@ class ClipTriviaCog(commands.Cog):
                 await ctx.send(f"✅ Scan complete. Found {found_count} clips. Added {queued_count} new clips to the processing queue.\n"
                                f"🕒 We scanned back as far as **{date_str}**. Run `!scan_clips` again to keep going backwards in time!")
             else:
-                logger.info(f"✅ Scan complete. Found {found_count} clips. Added {queued_count} new clips. Scanned back to {date_str}.")
+                logger.info(
+                    f"✅ Scan complete. Found {found_count} clips. Added {queued_count} new clips. Scanned back to {date_str}.")
         else:
             # Optionally reset tracker if we hit the beginning
             if ctx:
                 await ctx.send("✅ Scan complete. Found 0 clips. Reached the beginning of the channel!")
             else:
                 logger.info("✅ Scan complete. Found 0 clips. Reached the beginning of the channel!")
-                
+
         return found_count, queued_count
 
     @commands.command(name="scan_clips")
