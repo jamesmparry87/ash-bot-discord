@@ -69,7 +69,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
                             dq = json.loads(row['dynamic_query_type'])
                             if isinstance(dq, dict) and 'clip_url' in dq:
                                 avoid_clips.append(dq['clip_url'])
-                        except:
+                        except BaseException:
                             pass
         except Exception as e:
             print(f"Error fetching recent questions for avoidance: {e}")
@@ -291,7 +291,8 @@ async def generate_ai_trivia_question(context: str = "trivia",
                         'characters_involved',
                         'game_title',
                         'trigger'])
-                clips = [c for c in clips if c['clip_outcome'].lower() in ('death', 'failure') and c.get('canonical_url') not in avoid_clips]
+                clips = [c for c in clips if c['clip_outcome'].lower() in (
+                    'death', 'failure') and c.get('canonical_url') not in avoid_clips]
                 if not clips:
                     print("⚠️ TRIVIA DIRECTOR: Not enough death/failure clips for Clip_Famous_Last_Words")
                     continue
@@ -309,7 +310,7 @@ Jonesy uses she/her pronouns.
 
 REAL CLIP DATA:{clip_data_str}
 
-Create 5 "Famous Last Words" style questions based on these clips. 
+Create 5 "Famous Last Words" style questions based on these clips.
 Example: "While fighting the final boss in Elden Ring, Jonesy confidently told chat 'I have this in the bag'. What happened next?"
 The question text MUST include the specific Game Title and Context (Lore) so the audience can reasonably guess.
 Use the provided Characters Involved and Context to create rich, specific questions. The correct answer should relate to the Quote or the Outcome.
@@ -470,10 +471,10 @@ Jonesy uses she/her pronouns.
 
 REAL CLIP DATA:{clip_data_str}
 
-Create 5 "What happened next?" questions. 
+Create 5 "What happened next?" questions.
 Example: "In Lethal Company, Jonesy confidently told the team 'I'll check the basement' and walked into the darkness. What happened next?"
-The question text MUST act as a narrator, setting the scene using the Game Title, Context, and Trigger. It must end with "What happened next?" (or a similar phrasing). 
-The correct answer must be a description of the actual Outcome/Reaction. 
+The question text MUST act as a narrator, setting the scene using the Game Title, Context, and Trigger. It must end with "What happened next?" (or a similar phrasing).
+The correct answer must be a description of the actual Outcome/Reaction.
 You must invent 3 highly plausible decoy outcomes for the multiple choice options.
 Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
 Additionally, for each question, include the "clip_url" from the clip it was based on, and write a custom Ash "commentary" string to be displayed alongside the answer.
