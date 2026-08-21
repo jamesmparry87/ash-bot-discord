@@ -1507,13 +1507,14 @@ class TriviaCommands(commands.Cog):
                         for question_data in question_list:
                             if successful_generations >= count:
                                 break
-                                
+
                             # Send each question for approval
                             approval_sent = await start_jam_question_approval(question_data)
 
                             if approval_sent:
                                 successful_generations += 1
-                                logger.info(f"Generated and sent question {successful_generations}/{count} for approval")
+                                logger.info(
+                                    f"Generated and sent question {successful_generations}/{count} for approval")
 
                                 # Brief delay between questions to avoid overwhelming
                                 if successful_generations < count:
