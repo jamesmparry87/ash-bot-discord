@@ -681,7 +681,7 @@ async def friday_community_analysis():
         # Module C: General Activity (Fallback)
         # Always available as long as there are messages, guarantees Friday greeting generates
         if all_messages:
-            activity_recap = f"Total communication volume across monitored channels registered at **{len(all_messages)} transmissions** this week. Processing complete."
+            activity_recap = f"Total communication volume across the primary public server channels registered at **{len(all_messages)} transmissions** over the past 7 days. Processing complete."
             analysis_modules.append({
                 "type": "general_activity",
                 "data": {"total_messages": len(all_messages)},

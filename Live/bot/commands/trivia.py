@@ -1491,31 +1491,40 @@ class TriviaCommands(commands.Cog):
 
             from ..handlers.conversations import start_jam_question_approval
 
+            from ..handlers.trivia.generator import generate_ai_trivia_question
+
             successful_generations = 0
             failed_generations = 0
 
-            for i in range(count):
+            # Generate questions until we hit the requested count, or max 3 API calls
+            api_calls = 0
+            while successful_generations < count and api_calls < 3:
+                api_calls += 1
                 try:
-                    # Use our internal AI generation method
-                    question_data = await generate_ai_question_fallback(db=get_database(), bot=self.bot)
+                    # Use our new internal AI generation method
+                    question_list = await generate_ai_trivia_question(context=f"manual_gen_{successful_generations}")
 
-                    if question_data:
-                        # Send each question for approval
-                        approval_sent = await start_jam_question_approval(question_data)
+                    if question_list:
+                        for question_data in question_list:
+                            if successful_generations >= count:
+                                break
+                                
+                            # Send each question for approval
+                            approval_sent = await start_jam_question_approval(question_data)
 
-                        if approval_sent:
-                            successful_generations += 1
-                            logger.info(f"Generated and sent question {i+1}/{count} for approval")
+                            if approval_sent:
+                                successful_generations += 1
+                                logger.info(f"Generated and sent question {successful_generations}/{count} for approval")
 
-                            # Brief delay between questions to avoid overwhelming
-                            if i < count - 1:
-                                await asyncio.sleep(3)
-                        else:
-                            failed_generations += 1
-                            logger.warning(f"Failed to send question {i+1}/{count} for approval")
+                                # Brief delay between questions to avoid overwhelming
+                                if successful_generations < count:
+                                    await asyncio.sleep(3)
+                            else:
+                                failed_generations += 1
+                                logger.warning(f"Failed to send question for approval")
                     else:
                         failed_generations += 1
-                        logger.warning(f"Failed to generate question {i+1}/{count}")
+                        logger.warning(f"Failed to generate questions on API call {api_calls}")
 
                 except Exception as gen_error:
                     failed_generations += 1
