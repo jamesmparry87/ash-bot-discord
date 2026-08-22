@@ -761,6 +761,7 @@ async def friday_community_analysis():
             f'An unexpected error occurred during the Friday community analysis: {str(e)[:200]}'
         )
 
+
 @tasks.loop(time=time(hour=20, minute=15, tzinfo=ZoneInfo("Europe/London")))
 async def daily_clip_scan_task():
     """Scan clips channel for unprocessed clips every weekday evening"""
@@ -852,10 +853,11 @@ async def daily_clip_scan_task():
             if success:
                 break
 
-            from ..handlers.ai_handler import ai_usage_stats, primary_ai
             from ..config import MAX_DAILY_REQUESTS
+            from ..handlers.ai_handler import ai_usage_stats, primary_ai
             daily_used = ai_usage_stats.get("daily_requests", 0)
-            if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
+            if ai_usage_stats.get("quota_exhausted",
+                                  False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
                 print("🚫 Primary AI is exhausted or unavailable. Aborting clip batch.")
                 quota_exhausted = True
                 break
@@ -895,6 +897,8 @@ async def daily_clip_scan_task():
 
 ## DAILY TASKS ##
 # Run at 21:15 UK time every day - Clip backlog processing
+
+
 @tasks.loop(time=time(21, 15, tzinfo=ZoneInfo("Europe/London")))
 async def process_clip_backlog():
     """Nightly batch processing of the video clip backlog."""
@@ -902,17 +906,17 @@ async def process_clip_backlog():
     if not _should_run_automated_tasks():
         print(f"⚠️ Clip backlog processing skipped - staging bot detected at {uk_now.strftime('%H:%M:%S UK')}")
         return
-        
+
     bot = get_bot_instance()
     if not bot:
         print("❌ process_clip_backlog: Bot instance not available")
         return
-        
+
     cog = bot.get_cog("ClipTriviaCog")
     if not cog:
         print("❌ process_clip_backlog: ClipTriviaCog not loaded")
         return
-        
+
     print(f"🎬 Starting nightly video clip backlog processing at {uk_now.strftime('%H:%M:%S UK')}")
     try:
         found, queued = await cog.process_backlog_batch(search_limit=200, max_process=25, ctx=None)
@@ -1643,8 +1647,6 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
     except Exception as e:
         print(f"❌ Error executing auto-action: {e}")
         raise
-
-
 
         try:
             if bot.user:
