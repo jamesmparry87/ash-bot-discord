@@ -1,18 +1,20 @@
 import asyncio
 import os
 import re
+
 import requests
 
 # Load environment
 token = os.getenv("DISCORD_TOKEN")
 
 import sys
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from bot.commands.clips import ClipParsingService, canonicalize_clip_url
 from bot.database import get_database
-
 from bot.handlers.ai_handler import initialize_ai_async
+
 
 class MockUser:
     def __init__(self, id):
