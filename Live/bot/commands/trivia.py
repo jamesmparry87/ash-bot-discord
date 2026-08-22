@@ -1469,7 +1469,7 @@ class TriviaCommands(commands.Cog):
             await ctx.send(f"❌ **Comprehensive trivia test failed:** {str(e)}")
 
     @commands.command(name="generatequestions")
-    async def generate_questions_manually(self, ctx, count: int = 1):
+    async def generate_questions_manually(self, ctx, count: int = 1, category: Optional[str] = None):
         """Manually generate trivia questions for testing and approval (moderators only)"""
         try:
             # Check if user is a moderator (works in both DM and server context)
@@ -1487,7 +1487,8 @@ class TriviaCommands(commands.Cog):
                 await ctx.send("❌ **Invalid count.** Please specify 1-5 questions to generate.")
                 return
 
-            await ctx.send(f"🧠 **Manual Question Generation**\n\nGenerating {count} trivia question(s) for your approval... This may take a moment.")
+            cat_msg = f" for category **{category}**" if category else ""
+            await ctx.send(f"🧠 **Manual Question Generation**\n\nGenerating {count} trivia question(s){cat_msg} for your approval... This may take a moment.")
 
             from ..handlers.conversations import start_jam_question_approval
             from ..handlers.trivia.generator import generate_ai_trivia_question
@@ -1501,7 +1502,10 @@ class TriviaCommands(commands.Cog):
                 api_calls += 1
                 try:
                     # Use our new internal AI generation method
-                    question_list = await generate_ai_trivia_question(context=f"manual_gen_{successful_generations}")
+                    question_list = await generate_ai_trivia_question(
+                        context=f"manual_gen_{successful_generations}",
+                        force_category=category
+                    )
 
                     if question_list:
                         for question_data in question_list:

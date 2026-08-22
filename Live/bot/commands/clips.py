@@ -375,7 +375,7 @@ class ClipTriviaCog(commands.Cog):
             await ctx.send("❌ Unauthorized.")
             return
 
-        await self.process_backlog_batch(search_limit=limit, max_process=limit, ctx=ctx)
+        await self.process_backlog_batch(search_limit=2000, max_process=limit, ctx=ctx)
 
     @commands.command(name="reset_clips")
     async def reset_clips(self, ctx):

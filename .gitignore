@@ -79,3 +79,7 @@ recommend_list_message_id.txt
 Live/scripts/audit_database.py
 audit_report.json
 **/audit_report*.json
+
+# Temporary files
+
+Live/temp

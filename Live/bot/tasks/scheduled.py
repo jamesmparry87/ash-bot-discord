@@ -498,8 +498,8 @@ async def check_stale_trivia_sessions():
                     # Show winner if present
                     winner_id = session_results.get('first_correct', {}).get(
                         'user_id') if session_results.get('first_correct') else None
-                    correct_user_ids = session_results.get('correct_user_ids', [])
-                    incorrect_user_ids = session_results.get('incorrect_user_ids', [])
+                    correct_user_ids: list[int] = session_results.get('correct_user_ids', [])  # type: ignore
+                    incorrect_user_ids: list[int] = session_results.get('incorrect_user_ids', [])  # type: ignore
 
                     other_correct_ids = [uid for uid in correct_user_ids if uid !=
                                          winner_id] if winner_id else correct_user_ids
@@ -1176,7 +1176,8 @@ async def check_due_reminders():
 
         # Get due reminders - only log if found or if error occurs
         try:
-            due_reminders = db.get_due_reminders(uk_now)  # type: ignore
+            from typing import Any
+            due_reminders: list[dict[str, Any]] = db.get_due_reminders(uk_now)  # type: ignore
 
             # Only log when there are actually reminders to process
             if due_reminders and len(due_reminders) > 0:

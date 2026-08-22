@@ -20,7 +20,8 @@ from ..ai_handler import (
 async def generate_ai_trivia_question(context: str = "trivia",
                                       avoid_questions: Optional[List[str]] = None,
                                       avoid_game_ids: Optional[List[int]] = None,
-                                      avoid_templates: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+                                      avoid_templates: Optional[List[str]] = None,
+                                      force_category: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Generate a trivia question using the Trivia Director system.
 
@@ -32,6 +33,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
         avoid_questions: List of recently generated question texts to avoid patterns
         avoid_game_ids: List of game IDs to avoid using in generation
         avoid_templates: DEPRECATED - kept for backward compatibility, no longer used
+        force_category: Optional specific category to generate
 
     Returns:
         Dict with question data or None if generation failed
@@ -105,6 +107,11 @@ async def generate_ai_trivia_question(context: str = "trivia",
         }
 
         categories = list(TRIVIA_CATEGORIES.keys())
+        if force_category:
+            if force_category.lower() == 'clip':
+                categories = [c for c in categories if c.startswith('Clip_')]
+            elif force_category in TRIVIA_CATEGORIES:
+                categories = [force_category]
 
         # Get all games - we compute answers ourselves from real data
         all_games = current_db.get_all_played_games()
@@ -130,6 +137,7 @@ async def generate_ai_trivia_question(context: str = "trivia",
             correct_answer = None
             source_games: List[Dict] = []
             is_json_response = False
+            raw_questions: List[Dict[str, Any]] = []
 
             remaining = [c for c in categories if c not in tried_categories]
             if not remaining:
@@ -841,7 +849,7 @@ Each object in the JSON array MUST follow this exact format:
                     avoid_text = "\\n\\n🚫 AVOID questions similar to:\\n"
                     # Use up to 15 questions, taking the newest ones from the front
                     avoid_text += "\\n".join([f"  - {q[:60]}..." for q in avoid_questions[:15]])
-                    prompt = prompt + avoid_text
+                    prompt = str(prompt) + avoid_text  # type: ignore
 
                 CATEGORY_TEMPERATURES = {
                     'Franchise_Lore': 0.9,
@@ -897,14 +905,14 @@ Each object in the JSON array MUST follow this exact format:
                     continue
 
                 # Check for multiple_choice required fields
-                if q_data.get("question_type") == "multiple_choice":
+                if q_data.get("question_type") == "multiple_choice":  # type: ignore
                     if not all(key in q_data for key in ["decoy_1", "decoy_2", "decoy_3"]):
                         print(f"⚠️ TRIVIA DIRECTOR: Discarding multiple_choice question missing decoys")
                         continue
 
                 # Check for duplicates before accepting
                 duplicate_info = current_db.check_question_duplicate(
-                    q_data["question_text"],
+                    q_data["question_text"],  # type: ignore
                     similarity_threshold=0.8
                 )
 
@@ -915,7 +923,7 @@ Each object in the JSON array MUST follow this exact format:
                     continue  # Skip this specific duplicate
 
                 # Add metadata
-                q_data.update({
+                q_data.update({  # type: ignore
                     "generation_method": "trivia_director",
                     "director_category": selected_category,
                     "source_games": [
@@ -931,11 +939,11 @@ Each object in the JSON array MUST follow this exact format:
                 })
 
                 if selected_category and selected_category.startswith("Clip_"):
-                    clip_url = q_data.pop("clip_url", None)
-                    commentary = q_data.pop("commentary", None)
+                    clip_url = q_data.pop("clip_url", None)  # type: ignore
+                    commentary = q_data.pop("commentary", None)  # type: ignore
                     if clip_url and commentary:
                         import json
-                        q_data["dynamic_query_type"] = json.dumps({
+                        q_data["dynamic_query_type"] = json.dumps({  # type: ignore
                             "clip_url": clip_url,
                             "commentary": commentary
                         })

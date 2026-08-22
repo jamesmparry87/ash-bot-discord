@@ -425,7 +425,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                         if existing_question_id:
                             # Question was already persisted with pending_approval status - just update status
                             try:
-                                success = db.approve_trivia_question(existing_question_id)  # type: ignore
+                                success = db.trivia.approve_trivia_question(existing_question_id)  # type: ignore
                                 if success:
                                     question_id = existing_question_id
                                     print(
@@ -466,6 +466,8 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
 
                             if queue_length > 0:
                                 approval_response += f"📬 **Processing next question...** ({queue_length} remaining in queue)\n\n"
+                            else:
+                                approval_response += f"ℹ️ *Queue empty. Use `!generatequestions <count> [category]` to make more!*\n\n"
 
                             approval_response += "*Mission intelligence database updated. Question approved for deployment.*"
 
@@ -553,7 +555,7 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                 if queue_length > 0:
                     rejection_msg += f"📬 **Processing next question...** ({queue_length} remaining in queue)"
                 else:
-                    rejection_msg += f"*No more questions pending approval.*"
+                    rejection_msg += f"ℹ️ *No more questions pending approval. Use `!generatequestions <count> [category]` to make more.*"
 
                 await message.reply(rejection_msg)
 
