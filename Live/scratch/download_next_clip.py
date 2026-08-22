@@ -1,12 +1,12 @@
-from bot.database import get_database
-from bot.commands.clips import ClipParsingService, canonicalize_clip_url
-import sys
 import asyncio
 import json
 import os
 import re
+import sys
 
 import requests
+from bot.commands.clips import ClipParsingService, canonicalize_clip_url
+from bot.database import get_database
 
 # Load environment
 token = os.getenv("DISCORD_TOKEN")
