@@ -531,7 +531,7 @@ Return strictly as a raw JSON array containing exactly 5 generated questions.
 DO NOT output a schema or placeholder text. You must generate REAL trivia questions based on the clip data.
 Each object in the JSON array MUST follow this exact format:
 [
-  {
+  {{
     "question_text": "Write the actual question here based on the clip",
     "question_type": "multiple_choice",
     "correct_answer": "The real answer",
@@ -540,7 +540,7 @@ Each object in the JSON array MUST follow this exact format:
     "decoy_3": "A third real fake option",
     "clip_url": "The provided URL",
     "commentary": "Ash's commentary"
-  }
+  }}
 ]
 """
                 selected_category = cat
