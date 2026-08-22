@@ -280,7 +280,8 @@ async def handle_weekly_announcement_approval(message: discord.Message):
             original_content = convo['original_content']
 
             # Call the regeneration helper function
-            new_content = await _regenerate_weekly_announcement_content(analysis_cache, convo['day'], original_content)  # type: ignore
+            # type: ignore
+            new_content = await _regenerate_weekly_announcement_content(analysis_cache, convo['day'], original_content)
 
             if new_content:
                 # Update the conversation state with the new content
@@ -537,7 +538,8 @@ async def handle_announcement_conversation(message: discord.Message) -> None:
                 )
 
                 # Use AI to create content in Ash's style
-                enhanced_content = await create_ai_announcement_content(content, target_channel, user_id)  # type: ignore
+                # type: ignore
+                enhanced_content = await create_ai_announcement_content(content, target_channel, user_id)
 
                 if enhanced_content and enhanced_content.strip():
                     # Store both AI and raw content
