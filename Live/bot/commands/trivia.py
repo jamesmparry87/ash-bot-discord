@@ -1473,7 +1473,7 @@ class TriviaCommands(commands.Cog):
         """Manually generate trivia questions for testing and approval (moderators only)"""
         count = 1
         category = None
-        
+
         if len(args) == 1:
             if args[0].isdigit():
                 count = int(args[0])
