@@ -1,13 +1,15 @@
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from bot.database import get_database
-from bot.commands.clips import ClipParsingService, canonicalize_clip_url
 import asyncio
 import json
 import re
 import requests
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# pyrefly: ignore [missing-import]
+from bot.database import get_database
+# pyrefly: ignore [missing-import]
+from bot.commands.clips import ClipParsingService, canonicalize_clip_url
 
 # Load environment
 token = os.getenv("DISCORD_TOKEN")
