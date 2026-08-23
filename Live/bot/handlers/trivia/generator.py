@@ -909,6 +909,16 @@ Each object in the JSON array MUST follow this exact format:
                     if not all(key in q_data for key in ["decoy_1", "decoy_2", "decoy_3"]):
                         print(f"⚠️ TRIVIA DIRECTOR: Discarding multiple_choice question missing decoys")
                         continue
+                    
+                    # Compile options
+                    opts = [
+                        q_data["correct_answer"],
+                        q_data["decoy_1"],
+                        q_data["decoy_2"],
+                        q_data["decoy_3"]
+                    ]
+                    random.shuffle(opts)
+                    q_data["multiple_choice_options"] = opts
 
                 # Check for duplicates before accepting
                 duplicate_info = current_db.check_question_duplicate(
