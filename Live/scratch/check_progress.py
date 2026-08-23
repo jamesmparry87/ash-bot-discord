@@ -1,11 +1,12 @@
 import asyncio
+import json
 import os
 import sys
-import json
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # pyrefly: ignore [missing-import]
 from bot.database import get_database
+
 
 def main():
     db = get_database()
