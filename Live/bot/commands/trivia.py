@@ -1469,8 +1469,24 @@ class TriviaCommands(commands.Cog):
             await ctx.send(f"❌ **Comprehensive trivia test failed:** {str(e)}")
 
     @commands.command(name="generatequestions")
-    async def generate_questions_manually(self, ctx, count: int = 1, category: Optional[str] = None):
+    async def generate_questions_manually(self, ctx, *args):
         """Manually generate trivia questions for testing and approval (moderators only)"""
+        count = 1
+        category = None
+        
+        if len(args) == 1:
+            if args[0].isdigit():
+                count = int(args[0])
+            else:
+                category = args[0]
+        elif len(args) >= 2:
+            if args[0].isdigit():
+                count = int(args[0])
+                category = args[1]
+            elif args[1].isdigit():
+                count = int(args[1])
+                category = args[0]
+
         try:
             # Check if user is a moderator (works in both DM and server context)
             from ..utils.permissions import user_is_mod_by_id
@@ -1529,10 +1545,12 @@ class TriviaCommands(commands.Cog):
                     else:
                         failed_generations += 1
                         logger.warning(f"Failed to generate questions on API call {api_calls}")
+                        await asyncio.sleep(2)
 
                 except Exception as gen_error:
                     failed_generations += 1
-                    logger.error(f"Error generating question {i+1}/{count}: {gen_error}")
+                    logger.error(f"Error generating question {api_calls}/{count}: {gen_error}")
+                    await asyncio.sleep(2)
 
             # Send summary
             if successful_generations > 0:

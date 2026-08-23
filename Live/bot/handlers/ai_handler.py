@@ -1314,7 +1314,7 @@ async def call_ai_for_generation(
 
                 from google.genai import types
                 generation_config = types.GenerateContentConfig(
-                    max_output_tokens=2000,
+                    max_output_tokens=4000,
                     temperature=temperature,
                     response_mime_type="application/json"
                 )

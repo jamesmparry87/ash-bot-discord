@@ -1,19 +1,19 @@
 {
     "clip_info": {
-        "message_id": "1508877198826799367",
+        "message_id": "1508877179247656960",
         "author_id": "154550873790349312",
-        "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/ScrumptiousIntelligentTrayTwitchRPG-wCol2aVJrcPVGfi9",
-        "canonical_url": "https://clips.twitch.tv/scrumptiousintelligenttraytwitchrpg-wcol2avjrcpvgfi9",
-        "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1508877198826799367.mp4"
+        "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/ZealousFineDragonflyPMSTwin-pE9O9m1y05EOSJDF",
+        "canonical_url": "https://clips.twitch.tv/zealousfinedragonflypmstwin-pe9o9m1y05eosjdf",
+        "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1508877179247656960.mp4"
     },
     "ai_analysis": {
         "game_title": "Hitman 3",
-        "reaction": "panicked as her stealth plan instantly fell apart",
-        "trigger": "botched a stealth takedown in a bush, alerting a second guard and forcing a frantic double-takedown",
-        "lore_summary": "Jonesy's attempt at a stealthy bush takedown in Hitman 3 went horribly wrong, resulting in a panicked struggle with multiple guards.",
-        "notable_quote": "Shit! What happened?! ... Oh shit. So much just happened in the space of...",
-        "emotion_category": "Panic",
+        "reaction": "gasped in surprise as the building exploded behind her",
+        "trigger": "randomly deciding to 'Release Gas' before escaping out a window, leading to a massive explosion",
+        "lore_summary": "In Hitman 3, Jonesy randomly released gas in a building without knowing why, and was shocked when it blew up right after she escaped out the window.",
+        "notable_quote": "I don't know why I'm doing this, but...",
+        "emotion_category": "Surprise",
         "characters_involved": "Agent 47",
-        "clip_outcome": "Survived"
+        "clip_outcome": "Success"
     }
 }
