@@ -1,19 +1,19 @@
 {
     "clip_info": {
-        "message_id": "1516850174931111976",
+        "message_id": "1508877198826799367",
         "author_id": "154550873790349312",
-        "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/TriangularCreativeKalePartyTime-ECgB-9CvPZK1jY3j",
-        "canonical_url": "https://clips.twitch.tv/triangularcreativekalepartytime-ecgb-9cvpzk1jy3j",
-        "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1516850174931111976.mp4"
+        "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/ScrumptiousIntelligentTrayTwitchRPG-wCol2aVJrcPVGfi9",
+        "canonical_url": "https://clips.twitch.tv/scrumptiousintelligenttraytwitchrpg-wcol2avjrcpvgfi9",
+        "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1508877198826799367.mp4"
     },
     "ai_analysis": {
-        "game_title": "Middle-earth: Shadow of Mordor",
-        "reaction": "shouted happily and smiled",
-        "trigger": "performed a brutal execution on an orc just as she was considering running away",
-        "lore_summary": "During a fight where she thought she might need to run away, Jonesy instead performed a brutal execution and shouted in celebration.",
-        "notable_quote": "I think I need to run, there's a lot of them here... Execution!",
-        "emotion_category": "Joy",
-        "characters_involved": "Talion, Uruk",
-        "clip_outcome": "Success"
+        "game_title": "Hitman 3",
+        "reaction": "panicked as her stealth plan instantly fell apart",
+        "trigger": "botched a stealth takedown in a bush, alerting a second guard and forcing a frantic double-takedown",
+        "lore_summary": "Jonesy's attempt at a stealthy bush takedown in Hitman 3 went horribly wrong, resulting in a panicked struggle with multiple guards.",
+        "notable_quote": "Shit! What happened?! ... Oh shit. So much just happened in the space of...",
+        "emotion_category": "Panic",
+        "characters_involved": "Agent 47",
+        "clip_outcome": "Survived"
     }
 }

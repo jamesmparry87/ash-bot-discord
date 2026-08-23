@@ -1,18 +1,16 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from bot.database import get_database
 from bot.commands.clips import ClipParsingService, canonicalize_clip_url
-import sys
 import asyncio
 import json
-import os
 import re
-
 import requests
 
 # Load environment
 token = os.getenv("DISCORD_TOKEN")
-
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
 async def main():
