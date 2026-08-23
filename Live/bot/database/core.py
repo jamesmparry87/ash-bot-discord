@@ -467,7 +467,7 @@ class DatabaseManager:
                         correct_answer TEXT,
                         multiple_choice_options TEXT[],
                         is_dynamic BOOLEAN DEFAULT FALSE,
-                        dynamic_query_type VARCHAR(50),
+                        dynamic_query_type TEXT,
                         submitted_by_user_id BIGINT,
                         category VARCHAR(50),
                         difficulty_level INTEGER DEFAULT 1,
@@ -477,6 +477,17 @@ class DatabaseManager:
                         last_used_at TIMESTAMP,
                         usage_count INTEGER DEFAULT 0
                     )
+                """)
+
+                cur.execute("""
+                    DO $$
+                    BEGIN
+                        BEGIN
+                            ALTER TABLE trivia_questions ALTER COLUMN dynamic_query_type TYPE TEXT;
+                        EXCEPTION
+                            WHEN others THEN NULL;
+                        END;
+                    END $$;
                 """)
 
                 cur.execute("""
