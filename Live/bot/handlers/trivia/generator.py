@@ -909,7 +909,7 @@ Each object in the JSON array MUST follow this exact format:
                     if not all(key in q_data for key in ["decoy_1", "decoy_2", "decoy_3"]):
                         print(f"⚠️ TRIVIA DIRECTOR: Discarding multiple_choice question missing decoys")
                         continue
-                    
+
                     # Compile options
                     opts = [
                         q_data["correct_answer"],
