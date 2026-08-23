@@ -1,11 +1,12 @@
+from bot.database import get_database
 import asyncio
+import json
 import os
 import sys
-import json
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # pyrefly: ignore [missing-import]
-from bot.database import get_database
+
 
 def main():
     db = get_database()
@@ -14,16 +15,16 @@ def main():
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM clip_lore")
             total_processed = cur.fetchone()['count']
-            
+
             # Get the most recently processed ones
             cur.execute("SELECT game_title FROM clip_lore LIMIT 5")
             recent_clips = cur.fetchall()
-            
+
             print(f"Total Clips Processed and Saved: {total_processed}\n")
             print("Some Processed Clips:")
             for clip in recent_clips:
                 print(f" - {clip['game_title']}")
-                
+
     except Exception as e:
         print(f"Error querying database: {e}")
     finally:
@@ -35,6 +36,7 @@ def main():
             state = json.load(f)
             last_msg = state.get("last_scanned_message_id")
             print(f"\nPagination State: Currently scanning backwards from Discord Message ID: {last_msg}")
+
 
 if __name__ == "__main__":
     main()
