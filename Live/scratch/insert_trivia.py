@@ -3,9 +3,9 @@ import json
 import os
 import sys
 
-from bot.database import get_database
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from bot.database import get_database
 
 
 def main():

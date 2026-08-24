@@ -1,19 +1,19 @@
 {
     "clip_info": {
-        "message_id": "1508877179247656960",
+        "message_id": "1506685818553761914",
         "author_id": "154550873790349312",
-        "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/ZealousFineDragonflyPMSTwin-pE9O9m1y05EOSJDF",
-        "canonical_url": "https://clips.twitch.tv/zealousfinedragonflypmstwin-pe9o9m1y05eosjdf",
-        "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1508877179247656960.mp4"
+        "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/EphemeralWittyDillLitty-bVimUEZwwTtQWknV",
+        "canonical_url": "https://clips.twitch.tv/ephemeralwittydilllitty-bvimuezwwttqwknv",
+        "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1506685818553761914.mp4"
     },
     "ai_analysis": {
-        "game_title": "Hitman 3",
-        "reaction": "gasped in surprise as the building exploded behind her",
-        "trigger": "randomly deciding to 'Release Gas' before escaping out a window, leading to a massive explosion",
-        "lore_summary": "In Hitman 3, Jonesy randomly released gas in a building without knowing why, and was shocked when it blew up right after she escaped out the window.",
-        "notable_quote": "I don't know why I'm doing this, but...",
-        "emotion_category": "Surprise",
-        "characters_involved": "Agent 47",
-        "clip_outcome": "Success"
+        "question_text": "While carefully making her way up some snowy stairs in Metro, Jonesy was suddenly killed instantly and asked 'what did I step on?'. What actually killed her?",
+        "question_type": "multiple_choice",
+        "correct_answer": "A hidden tripwire trap that exploded",
+        "decoy_1": "A sniper who shot her from a distant window",
+        "decoy_2": "She fell through a broken step into a chasm",
+        "decoy_3": "A gargoyle-like mutant swooping down from the sky",
+        "clip_url": "https://clips.twitch.tv/ephemeralwittydilllitty-bvimuezwwttqwknv",
+        "commentary": "Situational awareness is critical in combat zones, especially when looking down. I have archived this unfortunate misstep."
     }
 }
