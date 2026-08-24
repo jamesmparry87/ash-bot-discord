@@ -83,3 +83,4 @@ audit_report.json
 # Temporary files
 
 Live/temp
+Live/scratch/
