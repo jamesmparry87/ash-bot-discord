@@ -791,7 +791,7 @@ async def daily_clip_scan_task():
 
     clips_to_process = []
 
-    async for message in channel.history(limit=None):
+    async for message in channel.history(limit=100):
         if message.author.bot:
             continue
 
