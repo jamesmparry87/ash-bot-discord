@@ -8,8 +8,8 @@ import requests
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from bot.database import get_database
 from bot.commands.clips import ClipParsingService, canonicalize_clip_url
+from bot.database import get_database
 
 # Load environment
 token = os.getenv("DISCORD_TOKEN")
