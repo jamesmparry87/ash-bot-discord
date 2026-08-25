@@ -451,7 +451,11 @@ async def check_stale_trivia_sessions():
             # Get the channel where trivia was posted
             channel_id = active_session.get('channel_id')
             if not channel_id:
-                print("❌ AUTO-END TRIVIA: No channel ID found for session")
+                print("❌ AUTO-END TRIVIA: No channel ID found for session. Ending silently in database to unblock queue.")
+                try:
+                    db.end_trivia_session(session_id, ended_by=bot.user.id if bot.user else 0)
+                except Exception as end_err:
+                    print(f"❌ Failed to end broken session: {end_err}")
                 return
 
             channel = bot.get_channel(channel_id)

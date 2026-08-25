@@ -1133,11 +1133,10 @@ async def call_ai_with_rate_limiting(prompt: str,
                     return response
 
                 try:
-                    # Use thread pool executor to prevent blocking the event loop
+                    # Use the default thread pool executor to prevent blocking the event loop
                     loop = asyncio.get_event_loop()
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                        future = loop.run_in_executor(executor, sync_gemini_call)
-                        response = await asyncio.wait_for(future, timeout=timeout_duration)
+                    future = loop.run_in_executor(None, sync_gemini_call)
+                    response = await asyncio.wait_for(future, timeout=timeout_duration)
 
                     if response and hasattr(response, "text") and response.text:
                         response_text = response.text
