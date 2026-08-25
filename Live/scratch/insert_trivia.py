@@ -1,4 +1,3 @@
-from bot.database import get_database
 import asyncio
 import json
 import os
@@ -6,17 +5,10 @@ import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from bot.database import get_database
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python insert_trivia.py <path_to_json>")
-        sys.exit(1)
 
-    json_path = sys.argv[1]
-    with open(json_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-
-    # The JSON should have two keys: 'clip_info' (from download_next_clip) and 'ai_analysis' (from Agent)
+def process_payload(data, db):
     clip_info = data.get("clip_info", {})
     ai_analysis = data.get("ai_analysis", {})
 
@@ -26,10 +18,8 @@ def main():
     author_id = clip_info.get("author_id")
 
     if not all([canonical_url, original_url, message_id]):
-        print("Error: Missing clip metadata (canonical_url, original_url, or message_id)")
-        sys.exit(1)
-
-    db = get_database()
+        print(f"Error: Missing clip metadata for {original_url}")
+        return False
 
     success = db.trivia.add_clip_lore(
         canonical_url=canonical_url,
@@ -50,7 +40,24 @@ def main():
         print(f"Successfully inserted clip lore for {canonical_url}")
     else:
         print(f"Failed to insert clip lore for {canonical_url} (maybe it already exists?)")
+    return success
 
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python insert_trivia.py <path_to_json>")
+        sys.exit(1)
+
+    json_path = sys.argv[1]
+    with open(json_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    db = get_database()
+
+    if isinstance(data, list):
+        for item in data:
+            process_payload(item, db)
+    else:
+        process_payload(data, db)
 
 if __name__ == "__main__":
     main()

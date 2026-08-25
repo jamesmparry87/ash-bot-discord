@@ -1,19 +1,192 @@
-{
-    "clip_info": {
-        "message_id": "1506685818553761914",
-        "author_id": "154550873790349312",
-        "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/EphemeralWittyDillLitty-bVimUEZwwTtQWknV",
-        "canonical_url": "https://clips.twitch.tv/ephemeralwittydilllitty-bvimuezwwttqwknv",
-        "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1506685818553761914.mp4"
+[
+    {
+        "clip_info": {
+            "message_id": "1504886365882679647",
+            "author_id": "154550873790349312",
+            "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/ResilientRespectfulWalletWholeWheat-WIvaar1QOqXBDGdT",
+            "canonical_url": "https://clips.twitch.tv/resilientrespectfulwalletwholewheat-wivaar1qoqxbdgdt",
+            "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1504886365882679647.mp4"
+        },
+        "ai_analysis": {
+            "game_title": "Metro",
+            "reaction": "Felt sympathy for the kid",
+            "trigger": "Finding a kid whose uncle had been killed by monsters",
+            "lore_summary": "While exploring the dark tunnels in Metro, Jonesy encountered a young boy named Sasha next to his dead uncle. The boy asked for help to escape the monsters.",
+            "notable_quote": "You don't look as strong as Uncle...",
+            "emotion_category": "Sadness",
+            "characters_involved": "Sasha, Uncle",
+            "clip_outcome": "Agreed to help the kid"
+        }
     },
-    "ai_analysis": {
-        "question_text": "While carefully making her way up some snowy stairs in Metro, Jonesy was suddenly killed instantly and asked 'what did I step on?'. What actually killed her?",
-        "question_type": "multiple_choice",
-        "correct_answer": "A hidden tripwire trap that exploded",
-        "decoy_1": "A sniper who shot her from a distant window",
-        "decoy_2": "She fell through a broken step into a chasm",
-        "decoy_3": "A gargoyle-like mutant swooping down from the sky",
-        "clip_url": "https://clips.twitch.tv/ephemeralwittydilllitty-bvimuezwwttqwknv",
-        "commentary": "Situational awareness is critical in combat zones, especially when looking down. I have archived this unfortunate misstep."
+    {
+        "clip_info": {
+            "message_id": "1504885947098202243",
+            "author_id": "154550873790349312",
+            "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/BlindingDependableLapwingAsianGlow-d4lKTBQx7AHCn6w3",
+            "canonical_url": "https://clips.twitch.tv/blindingdependablelapwingasianglow-d4lktbqx7ahcn6w3",
+            "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1504885947098202243.mp4"
+        },
+        "ai_analysis": {
+            "game_title": "Metro",
+            "reaction": "Disgusted and shocked",
+            "trigger": "A dead monster's eyeball popped out",
+            "lore_summary": "While navigating a dark train car, Jonesy found a dead monster. Suddenly, its eyeball popped out, causing her to exclaim in disgust.",
+            "notable_quote": "His eyeball flippin' popped out!",
+            "emotion_category": "Disgust",
+            "characters_involved": "Nosalis",
+            "clip_outcome": "The monster was already dead"
+        }
+    },
+    {
+        "clip_info": {
+            "message_id": "1504874227755647118",
+            "author_id": "154550873790349312",
+            "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/DullWisePonyMikeHogu-yvEX8rzZVM6vpeil",
+            "canonical_url": "https://clips.twitch.tv/dullwiseponymikehogu-yvex8rzzvm6vpeil",
+            "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1504874227755647118.mp4"
+        },
+        "ai_analysis": {
+            "game_title": "Metro",
+            "reaction": "Screamed in terror as she was shot at",
+            "trigger": "An enemy Panzer suddenly appeared on the tracks",
+            "lore_summary": "While walking down a train tunnel, Jonesy was suddenly confronted by a heavily armed Panzer that opened fire, causing her to scream in panic.",
+            "notable_quote": "Oh my God! It's a Panzer!",
+            "emotion_category": "Fear",
+            "characters_involved": "Panzer",
+            "clip_outcome": "Under heavy fire from a Panzer"
+        }
+    },
+    {
+        "clip_info": {
+            "message_id": "1504195947943690372",
+            "author_id": "154550873790349312",
+            "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/SlickAffluentCakeUWot-78WEhiIpbUr5--Fz",
+            "canonical_url": "https://clips.twitch.tv/slickaffluentcakeuwot-78wehiipbur5--fz",
+            "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1504195947943690372.mp4"
+        },
+        "ai_analysis": {
+            "game_title": "Grand Theft Auto V",
+            "reaction": "Frustrated but unsurprised by her failure",
+            "trigger": "Crashing a plane while trying to escape",
+            "lore_summary": "While attempting to fly a plane with an enemy on the wing, Jonesy accidentally crashed it into the ground, failing the mission and admitting she is terrible with planes.",
+            "notable_quote": "I flippin' knew that was gonna happen!",
+            "emotion_category": "Frustration",
+            "characters_involved": "Trevor",
+            "clip_outcome": "Mission failed due to crashing the plane"
+        }
+    },
+    {
+        "clip_info": {
+            "message_id": "1504153014674526431",
+            "author_id": "154550873790349312",
+            "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/ElegantFaithfulTermiteBleedPurple-kSHdwU8bV2hGY_oq",
+            "canonical_url": "https://clips.twitch.tv/elegantfaithfultermitebleedpurple-kshdwu8bv2hgy_oq",
+            "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1504153014674526431.mp4"
+        },
+        "ai_analysis": {
+            "game_title": "Grand Theft Auto V",
+            "reaction": "Laughed at the absurdity of her actions",
+            "trigger": "Running over a pedestrian while rushing to save her in-game wife",
+            "lore_summary": "In a desperate rush to save Amanda, Jonesy ran over an innocent man, hilariously justifying the vehicular assault by stating how important her wife is.",
+            "notable_quote": "See, this is how important my wife is to me!",
+            "emotion_category": "Amusement",
+            "characters_involved": "Michael",
+            "clip_outcome": "Ran over a pedestrian"
+        }
+    },
+    {
+        "clip_info": {
+            "message_id": "1504152985322917899",
+            "author_id": "154550873790349312",
+            "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/EsteemedBlushingClintmullinsCoolCat-b0kkj4MKDZ4ABEUN",
+            "canonical_url": "https://clips.twitch.tv/esteemedblushingclintmullinscoolcat-b0kkj4mkdz4abeun",
+            "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1504152985322917899.mp4"
+        },
+        "ai_analysis": {
+            "game_title": "Grand Theft Auto V",
+            "reaction": "Casually stole the car",
+            "trigger": "Deciding she needed a police car",
+            "lore_summary": "Needing to escape the cops, Jonesy ironically decided the best course of action was to drag a police officer out of his cruiser and steal it.",
+            "notable_quote": "I gotta get some hardware.",
+            "emotion_category": "Amusement",
+            "characters_involved": "Michael, Police Officer",
+            "clip_outcome": "Stole a police car"
+        }
+    },
+    {
+        "clip_info": {
+            "message_id": "1503453573118165123",
+            "author_id": "154550873790349312",
+            "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/FreezingSilkyCamelCorgiDerp-o1w9zsc3qZ-cIh-b",
+            "canonical_url": "https://clips.twitch.tv/freezingsilkycamelcorgiderp-o1w9zsc3qz-cih-b",
+            "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1503453573118165123.mp4"
+        },
+        "ai_analysis": {
+            "game_title": "Grand Theft Auto V",
+            "reaction": "Nonchalant apology after manslaughter",
+            "trigger": "Stealing a white sports car and backing over the owner",
+            "lore_summary": "Spotting a nice white sports car, Jonesy stole it and immediately backed over the owner, offering a very casual apology as she sped away.",
+            "notable_quote": "Sorry, had to take your car and then kill you, oopsie!",
+            "emotion_category": "Amusement",
+            "characters_involved": "Michael",
+            "clip_outcome": "Stole a car and ran over its owner"
+        }
+    },
+    {
+        "clip_info": {
+            "message_id": "1502371288537239604",
+            "author_id": "154550873790349312",
+            "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/WanderingBlatantArmadilloRitzMitz-7bT4aEMXECFhUgEt",
+            "canonical_url": "https://clips.twitch.tv/wanderingblatantarmadilloritzmitz-7bt4aemxecfhuget",
+            "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1502371288537239604.mp4"
+        },
+        "ai_analysis": {
+            "game_title": "MS Paint",
+            "reaction": "Focused on coloring",
+            "trigger": "Using the fill tool in MS Paint",
+            "lore_summary": "While drawing a magnificent MS Paint rendition of the Balrog from Lord of the Rings, Jonesy confidently asserted there were no gaps before using the fill tool.",
+            "notable_quote": "I don't see that there's any holes there.",
+            "emotion_category": "Neutral",
+            "characters_involved": "Balrog",
+            "clip_outcome": "Successfully painted a Balrog"
+        }
+    },
+    {
+        "clip_info": {
+            "message_id": "1502360753645027339",
+            "author_id": "154550873790349312",
+            "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/ConcernedFaintLampBrokeBack-hVQkwUuC4kVWr5HR",
+            "canonical_url": "https://clips.twitch.tv/concernedfaintlampbrokeback-hvqkwuuc4kvwr5hr",
+            "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1502360753645027339.mp4"
+        },
+        "ai_analysis": {
+            "game_title": "Metro",
+            "reaction": "Questioning if shooting a sleeping man counts as stealth",
+            "trigger": "Shooting a sleeping enemy point-blank",
+            "lore_summary": "Unsure how to execute a melee stealth kill, Jonesy opted to simply shoot a sleeping enemy point-blank, dubbing it 'kind of stealth'.",
+            "notable_quote": "I mean... kind of stealth?",
+            "emotion_category": "Amusement",
+            "characters_involved": "Sleeping Enemy",
+            "clip_outcome": "Enemy was killed, allegedly stealthily"
+        }
+    },
+    {
+        "clip_info": {
+            "message_id": "1501622753587888150",
+            "author_id": "154550873790349312",
+            "clip_url": "https://www.twitch.tv/jonesyspacecat/clip/SillyMoralBeaverHotPokket-xTOFfQ3DBjLJIC4k",
+            "canonical_url": "https://clips.twitch.tv/sillymoralbeaverhotpokket-xtoffq3dbjljic4k",
+            "local_path": "C:\\Users\\james\\Git\\discord\\Live\\temp\\clip_1501622753587888150.mp4"
+        },
+        "ai_analysis": {
+            "game_title": "Grand Theft Auto V",
+            "reaction": "Casual disregard for bodily harm",
+            "trigger": "Jumping off a balcony onto a stone path",
+            "lore_summary": "Instead of taking the stairs, Jonesy confidently vaulted Michael off a second-story balcony, declaring 'Bye ankles!' as he faceplanted onto the stone path.",
+            "notable_quote": "Bye ankles!",
+            "emotion_category": "Amusement",
+            "characters_involved": "Michael",
+            "clip_outcome": "Michael suffered significant fall damage but survived"
+        }
     }
-}
+]
