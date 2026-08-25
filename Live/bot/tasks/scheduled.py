@@ -764,13 +764,8 @@ async def friday_community_analysis():
 
 @tasks.loop(time=time(hour=20, minute=15, tzinfo=ZoneInfo("Europe/London")))
 async def daily_clip_scan_task():
-    """Scan clips channel for unprocessed clips every weekday evening"""
+    """Scan clips channel for unprocessed clips every evening"""
     if not _should_run_automated_tasks():
-        return
-
-    uk_now = datetime.now(ZoneInfo("Europe/London"))
-    if uk_now.weekday() > 4:  # 0-4 is Mon-Fri
-        print("⏭️ Skipping daily clip scan (weekend)")
         return
 
     print("🎬 Starting daily clip scan task...")
@@ -796,7 +791,7 @@ async def daily_clip_scan_task():
 
     clips_to_process = []
 
-    async for message in channel.history(limit=100):
+    async for message in channel.history(limit=None):
         if message.author.bot:
             continue
 
@@ -853,11 +848,8 @@ async def daily_clip_scan_task():
             if success:
                 break
 
-            from ..config import MAX_DAILY_REQUESTS
             from ..handlers.ai_handler import ai_usage_stats, primary_ai
-            daily_used = ai_usage_stats.get("daily_requests", 0)
-            if ai_usage_stats.get("quota_exhausted",
-                                  False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
+            if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini":
                 print("🚫 Primary AI is exhausted or unavailable. Aborting clip batch.")
                 quota_exhausted = True
                 break
