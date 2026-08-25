@@ -882,17 +882,13 @@ async def is_trivia_answer_reply(message):
 
         # Check if this message is a reply
         is_reply = False
-        if hasattr(message, 'reference') and message.reference:
-            try:
-                replied_to_message = await message.channel.fetch_message(message.reference.message_id)
-                replied_to_id = replied_to_message.id
-                session_question_msg_id = active_session.get('question_message_id')
-                session_confirmation_msg_id = active_session.get('confirmation_message_id')
+        if hasattr(message, 'reference') and message.reference and message.reference.message_id:
+            replied_to_id = message.reference.message_id
+            session_question_msg_id = active_session.get('question_message_id')
+            session_confirmation_msg_id = active_session.get('confirmation_message_id')
 
-                if replied_to_id == session_question_msg_id or replied_to_id == session_confirmation_msg_id:
-                    is_reply = True
-            except (discord.NotFound, discord.Forbidden):
-                pass
+            if replied_to_id == session_question_msg_id or replied_to_id == session_confirmation_msg_id:
+                is_reply = True
 
         is_in_trivia_channel = getattr(message.channel, 'id', None) == MEMBERS_CHANNEL_ID
 
