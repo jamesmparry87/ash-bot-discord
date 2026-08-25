@@ -1,3 +1,5 @@
+from bot.database import get_database
+from bot.commands.clips import ClipParsingService, canonicalize_clip_url
 import asyncio
 import json
 import os
@@ -8,8 +10,6 @@ import requests
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from bot.database import get_database
-from bot.commands.clips import ClipParsingService, canonicalize_clip_url
 
 # Load environment
 token = os.getenv("DISCORD_TOKEN")
@@ -92,7 +92,7 @@ async def main():
 
                     download_result = await asyncio.to_thread(parser._download_video_sync, clip_url, local_filename)
                     if not download_result or not os.path.exists(local_filename):
-                        continue # Skip failed downloads and keep looking
+                        continue  # Skip failed downloads and keep looking
 
                     results.append({
                         "message_id": msg_id,

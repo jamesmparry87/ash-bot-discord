@@ -1,11 +1,10 @@
+from bot.database import get_database
 import asyncio
 import json
 import os
 import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from bot.database import get_database
 
 
 def process_payload(data, db):
@@ -42,6 +41,7 @@ def process_payload(data, db):
         print(f"Failed to insert clip lore for {canonical_url} (maybe it already exists?)")
     return success
 
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python insert_trivia.py <path_to_json>")
@@ -58,6 +58,7 @@ def main():
             process_payload(item, db)
     else:
         process_payload(data, db)
+
 
 if __name__ == "__main__":
     main()
