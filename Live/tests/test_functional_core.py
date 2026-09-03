@@ -138,10 +138,8 @@ class TestConfiguration:
         from bot.config import (
             GUILD_ID,
             JONESY_USER_ID,
-            JAM_USER_ID,
-            MAX_DAILY_REQUESTS,
-            MAX_HOURLY_REQUESTS
-        )
+            JAM_USER_ID
+                    )
 
         # Verify critical IDs are present and valid
         assert GUILD_ID is not None, "GUILD_ID not configured"
@@ -149,10 +147,7 @@ class TestConfiguration:
         assert JAM_USER_ID is not None, "JAM_USER_ID not configured"
 
         # Verify rate limits are sensible
-        assert MAX_DAILY_REQUESTS > 0, "MAX_DAILY_REQUESTS must be positive"
-        assert MAX_HOURLY_REQUESTS > 0, "MAX_HOURLY_REQUESTS must be positive"
-        assert MAX_HOURLY_REQUESTS <= MAX_DAILY_REQUESTS, "Hourly limit can't exceed daily limit"
-
+                        
         print("✅ PASS: Config module loads and validates successfully")
 
 

@@ -853,8 +853,7 @@ async def daily_clip_scan_task():
             if success:
                 break
 
-            from ..handlers.ai_handler import ai_usage_stats, primary_ai
-            if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini":
+                        if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini":
                 print("🚫 Primary AI is exhausted or unavailable. Aborting clip batch.")
                 quota_exhausted = True
                 break
@@ -972,7 +971,7 @@ async def scheduled_ai_refresh():
         f"🤖 AI module refresh initiated at {uk_now.strftime(f'%Y-%m-%d %H:%M:%S {timezone_name}')} (post-quota reset)")
 
     try:
-        from ..handlers.ai_handler import get_ai_status, initialize_ai, reset_daily_usage
+        from ..handlers.ai_handler import get_ai_status, initialize_ai
 
         # Force reset daily usage counters
         reset_daily_usage()

@@ -1943,6 +1943,96 @@ class TriviaDatabase:
         finally:
             conn.close()
 
+    
+    def add_pending_batch_clip(self, canonical_url: str, video_title: str) -> bool:
+        """Add a clip to clip_lore as PENDING for batch processing"""
+        try:
+            with self.get_cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO clip_lore (
+                        canonical_url, video_title, batch_status
+                    ) VALUES (%s, %s, 'PENDING')
+                    ON CONFLICT (canonical_url) DO UPDATE
+                    SET batch_status = 'PENDING'
+                    """,
+                    (canonical_url, video_title)
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print(f"Error adding pending batch clip: {e}")
+            return False
+
+    def get_pending_batch_clips(self) -> list:
+        try:
+            with self.get_cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT canonical_url, video_title FROM clip_lore 
+                    WHERE batch_status = 'PENDING'
+                    """
+                )
+                return cursor.fetchall()
+        except Exception as e:
+            print(f"Error getting pending clips: {e}")
+            return []
+
+    def update_clip_batch_job(self, canonical_url: str, batch_job_id: str) -> bool:
+        try:
+            with self.get_cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE clip_lore 
+                    SET batch_job_id = %s, batch_status = 'PROCESSING' 
+                    WHERE canonical_url = %s
+                    """,
+                    (batch_job_id, canonical_url)
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print(f"Error updating batch job: {e}")
+            return False
+            
+    def update_clip_lore_from_batch(self, canonical_url: str, data: dict) -> bool:
+        try:
+            with self.get_cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE clip_lore 
+                    SET 
+                        game_title = %s,
+                        reaction = %s,
+                        trigger = %s,
+                        lore_summary = %s,
+                        tags = %s,
+                        notable_quote = %s,
+                        emotion_category = %s,
+                        characters_involved = %s,
+                        clip_outcome = %s,
+                        batch_status = 'COMPLETED'
+                    WHERE canonical_url = %s
+                    """,
+                    (
+                        data.get('game_title', 'Unknown Game'),
+                        data.get('reaction', ''),
+                        data.get('trigger', ''),
+                        data.get('lore_summary', ''),
+                        ','.join(data.get('tags', [])),
+                        data.get('notable_quote', ''),
+                        data.get('emotion_category', ''),
+                        data.get('characters_involved', ''),
+                        data.get('clip_outcome', ''),
+                        canonical_url
+                    )
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print(f"Error updating from batch: {e}")
+            return False
+
     def get_random_clip_lore(self, limit: int = 1, required_fields: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Retrieve random clip lore entries, optionally filtering for non-empty fields."""
         conn = self.db.get_connection()

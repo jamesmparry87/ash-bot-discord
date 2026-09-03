@@ -293,7 +293,7 @@ class ClipTriviaCog(commands.Cog):
                         break
 
                     from bot.config import MAX_DAILY_REQUESTS
-                    from bot.handlers.ai_handler import ai_usage_stats, primary_ai
+                    
 
                     daily_used = ai_usage_stats.get("daily_requests", 0)
                     if ai_usage_stats.get("quota_exhausted",
@@ -305,7 +305,7 @@ class ClipTriviaCog(commands.Cog):
                         await asyncio.sleep(30.0)
 
                 from bot.config import MAX_DAILY_REQUESTS
-                from bot.handlers.ai_handler import ai_usage_stats, primary_ai
+                
 
                 daily_used = ai_usage_stats.get("daily_requests", 0)
                 if ai_usage_stats.get("quota_exhausted",

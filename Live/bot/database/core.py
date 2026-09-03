@@ -453,6 +453,8 @@ class DatabaseManager:
                             ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS emotion_category TEXT;
                             ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS characters_involved TEXT;
                             ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS clip_outcome TEXT;
+                            ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS batch_job_id TEXT;
+                            ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS batch_status TEXT;
                         EXCEPTION
                             WHEN duplicate_column THEN RAISE NOTICE 'columns already exist in clip_lore.';
                         END;

@@ -123,18 +123,12 @@ RATE_LIMIT_COOLDOWNS = {
     "persistent": 300  # 5 minutes for persistent violations
 }
 
-# AI Configuration - Corrected for Gemini Flash limits
-MAX_DAILY_REQUESTS = 1500  # Gemini Flash tier limit
-MAX_HOURLY_REQUESTS = 150  # Allows steady processing of clips backlog
-MIN_REQUEST_INTERVAL = 2.0
-RATE_LIMIT_COOLDOWN = 30
+# AI Configuration - Dual Project Architecture
+GEMINI_LIVE_API_KEY = os.getenv('GEMINI_LIVE_API_KEY')
+GEMINI_BATCH_API_KEY = os.getenv('GEMINI_BATCH_API_KEY')
 
-# Gemini model cascade configuration (priority order)
-# These models are tested on startup and used with automatic fallback
-GEMINI_MODEL_CASCADE = [
-    'gemini-3.6-flash',       # Primary: Latest, fastest
-    'gemini-3.5-flash',       # Backup: Stable, reliable
-]
+MAX_CONVERSATION_TURNS = 5
+INACTIVITY_TTL_MINUTES = 15
 
 # Enhanced Standard Messages with Ash Character Voice
 BUSY_MESSAGE = "My apologies, I am currently engaged in a critical diagnostic procedure. I will re-evaluate your request upon the completion of this vital task. *[Processing capacity temporarily exceeded.]*"
