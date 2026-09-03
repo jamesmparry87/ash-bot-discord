@@ -214,7 +214,8 @@ def _extract_before_episode_marker(cleaned_title: str) -> Optional[str]:
         game_name = cleanup_game_name(game_name)
 
         if re.search(r'\d+$', game_name):
-            marker_text = day_marker_match.group(0) if day_marker_match else bracket_marker_match.group(0)  # type: ignore
+            marker_text = day_marker_match.group(
+                0) if day_marker_match else bracket_marker_match.group(0)  # type: ignore
             marker_number_match = re.search(r'\d+', marker_text)
             if marker_number_match and game_name.endswith(marker_number_match.group(0)):
                 return None

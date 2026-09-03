@@ -502,7 +502,8 @@ async def check_stale_trivia_sessions():
                     correct_user_ids: list[int] = session_results.get('correct_user_ids', [])  # type: ignore
                     incorrect_user_ids: list[int] = session_results.get('incorrect_user_ids', [])  # type: ignore
 
-                    other_correct_ids = [uid for uid in correct_user_ids if uid != winner_id] if winner_id else correct_user_ids  # type: ignore
+                    other_correct_ids = [uid for uid in correct_user_ids if uid !=
+                                         winner_id] if winner_id else correct_user_ids  # type: ignore
 
                     if winner_id:
                         try:

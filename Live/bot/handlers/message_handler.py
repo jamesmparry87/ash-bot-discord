@@ -454,11 +454,11 @@ async def handle_trivia_reply(message: discord.Message) -> bool:
             # Extract the user's answer and normalize (e.g., 'a', 'A.', 'a)')
             import re
             raw_answer = message.content.strip().upper()
-            
+
             # Check if it's essentially just a single letter answer with optional punctuation
             match = re.match(r'^([A-E])\W*$', raw_answer)
             user_answer = match.group(1) if match else raw_answer
-            
+
             if user_answer == "E":
                 try:
                     await message.reply("I assure you, there is no option 'E'. Please recalibrate your visual sensors and try again. 🤖")
