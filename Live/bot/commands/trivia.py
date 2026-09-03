@@ -446,20 +446,17 @@ class TriviaCommands(commands.Cog):
                         value=f"**{session_results['correct_answer']}**",
                         inline=False)
 
-                    # Add Visual Evidence for clip-based questions
-                    cat = session_results.get('category', '')
-                    if cat and cat.startswith('Clip_') and session_results.get('dynamic_query_type'):
+                    # Add Visual Evidence for clip-based questions (Store to send as a follow-up message)
+                    clip_evidence_msg = None
+                    if session_results.get('dynamic_query_type'):
                         try:
                             import json
                             dq_data = json.loads(session_results['dynamic_query_type'])
                             clip_url = dq_data.get('clip_url')
                             commentary = dq_data.get('commentary')
-                            if clip_url and commentary:
-                                embed.add_field(
-                                    name="📹 **Visual Evidence**",
-                                    value=f"{commentary}\n{clip_url}",
-                                    inline=False
-                                )
+                            if clip_url:
+                                commentary_text = f"*{commentary}*\n" if commentary else ""
+                                clip_evidence_msg = f"📹 **Visual Evidence**\n{commentary_text}{clip_url}"
                         except Exception as e:
                             print(f"⚠️ Error parsing dynamic_query_type for clip evidence: {e}")
 
@@ -524,6 +521,10 @@ class TriviaCommands(commands.Cog):
                         text=f"Session #{active_session['id']} ended by {ctx.author.display_name} | Use !trivialeaderboard to see the full standings!")
 
                     await ctx.send(embed=embed)
+
+                    # Send clip evidence as a separate message so the video unfurls
+                    if clip_evidence_msg:
+                        await ctx.send(clip_evidence_msg)
 
                     # NEW: Check if bonus round should be triggered (Ash is "annoyed")
                     if session_results.get('bonus_round_triggered', False):
@@ -637,15 +638,10 @@ class TriviaCommands(commands.Cog):
             print(f"❌ Error in endtrivia command: {e}")
             await ctx.send("❌ System error occurred while ending trivia.")
 
-    @commands.command(name="trivialeaderboard")
+    @commands.command(name="trivialeaderboard", aliases=["leaderboard"])
     async def trivia_leaderboard(self, ctx, timeframe: str = "all"):
-        """Show trivia participation and success statistics (moderators only)"""
+        """Show trivia participation and success statistics"""
         try:
-            # Check if user is a moderator (works in both DM and server context)
-            from ..utils.permissions import user_is_mod_by_id
-            if not await user_is_mod_by_id(ctx.author.id, self.bot):
-                await ctx.send("❌ **Access denied.** This command requires moderator privileges.")
-                return
 
             if db is None:
                 await ctx.send("❌ **Database offline.** Cannot show leaderboard without database connection.")

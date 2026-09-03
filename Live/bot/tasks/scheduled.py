@@ -62,7 +62,7 @@ except ImportError:
 
 # Database and config imports
 try:
-    from ..database import DatabaseManager, get_database
+    from ..database import DatabaseManager, get_database  # type: ignore
     print("✅ Scheduled tasks: Database module imported successfully")
 except Exception as db_error:
     print(f"⚠️ Scheduled tasks: Database import failed - {db_error}")
@@ -482,20 +482,17 @@ async def check_stale_trivia_sessions():
                         inline=False
                     )
 
-                    # Add Visual Evidence for clip-based questions
-                    cat = session_results.get('category', '')
-                    if cat and cat.startswith('Clip_') and session_results.get('dynamic_query_type'):
+                    # Add Visual Evidence for clip-based questions (Store to send as a follow-up message)
+                    clip_evidence_msg = None
+                    if session_results.get('dynamic_query_type'):
                         try:
                             import json
                             dq_data = json.loads(session_results['dynamic_query_type'])
                             clip_url = dq_data.get('clip_url')
                             commentary = dq_data.get('commentary')
-                            if clip_url and commentary:
-                                embed.add_field(
-                                    name="📹 **Visual Evidence**",
-                                    value=f"{commentary}\n{clip_url}",
-                                    inline=False
-                                )
+                            if clip_url:
+                                commentary_text = f"*{commentary}*\n" if commentary else ""
+                                clip_evidence_msg = f"📹 **Visual Evidence**\n{commentary_text}{clip_url}"
                         except Exception as e:
                             print(f"⚠️ Error parsing dynamic_query_type for clip evidence: {e}")
 
@@ -505,8 +502,7 @@ async def check_stale_trivia_sessions():
                     correct_user_ids: list[int] = session_results.get('correct_user_ids', [])  # type: ignore
                     incorrect_user_ids: list[int] = session_results.get('incorrect_user_ids', [])  # type: ignore
 
-                    other_correct_ids = [uid for uid in correct_user_ids if uid !=
-                                         winner_id] if winner_id else correct_user_ids
+                    other_correct_ids = [uid for uid in correct_user_ids if uid != winner_id] if winner_id else correct_user_ids  # type: ignore
 
                     if winner_id:
                         try:
@@ -551,6 +547,10 @@ async def check_stale_trivia_sessions():
                         text=f"Session #{session_id} auto-ended after 2 hours | Use !trivialeaderboard to see standings")
 
                     await channel.send(embed=embed)
+
+                    # Send clip evidence as a separate message so the video unfurls
+                    if clip_evidence_msg:
+                        await channel.send(clip_evidence_msg)
                     print(f"✅ AUTO-END TRIVIA: Successfully auto-ended session {session_id} and posted results")
 
                 else:

@@ -14,7 +14,7 @@ import discord
 def create_trivia_question_embed(
     question_data: dict,
     session_id: int,
-    started_by: str = None
+    started_by: str = None  # type: ignore
 ) -> discord.Embed:
     """
     Create a standardized Discord Embed for trivia question display.

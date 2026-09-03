@@ -127,6 +127,7 @@ def format_large_number(number: int) -> str:
         return f"{number / 1_000_000:.1f}M"
     if number >= 1_000:
         return f"{number / 1_000:.1f}K"
+    return str(number)
 
 
 def format_percentage(value: float, total: float) -> str:

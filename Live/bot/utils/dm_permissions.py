@@ -27,7 +27,7 @@ def is_moderator_or_authorized():
 
         # In guilds, check for manage_messages permission
         if ctx.guild and hasattr(ctx.author, 'guild_permissions'):
-            return ctx.author.guild_permissions.manage_messages
+            return ctx.author.guild_permissions.manage_messages  # type: ignore
 
         return False
 

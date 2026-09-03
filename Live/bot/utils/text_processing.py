@@ -200,7 +200,7 @@ def _extract_before_episode_marker(cleaned_title: str) -> Optional[str]:
     bracket_marker_match = re.search(r'\[[^\]]*(?:day|part|episode|ep)\s+\d+[^\]]*\]', cleaned_title, re.IGNORECASE)
 
     if day_marker_match or bracket_marker_match:
-        marker_pos = day_marker_match.start() if day_marker_match else bracket_marker_match.start()
+        marker_pos = day_marker_match.start() if day_marker_match else bracket_marker_match.start()  # type: ignore
         before_marker = cleaned_title[:marker_pos].strip()
 
         if ' - ' in before_marker or ' | ' in before_marker:
@@ -214,7 +214,7 @@ def _extract_before_episode_marker(cleaned_title: str) -> Optional[str]:
         game_name = cleanup_game_name(game_name)
 
         if re.search(r'\d+$', game_name):
-            marker_text = day_marker_match.group(0) if day_marker_match else bracket_marker_match.group(0)
+            marker_text = day_marker_match.group(0) if day_marker_match else bracket_marker_match.group(0)  # type: ignore
             marker_number_match = re.search(r'\d+', marker_text)
             if marker_number_match and game_name.endswith(marker_number_match.group(0)):
                 return None

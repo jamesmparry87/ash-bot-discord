@@ -1861,6 +1861,21 @@ def _build_full_system_instruction(user_id: int, user_input: str = "", member_ob
             # Build dynamic context using new structured format
             dynamic_context = build_ash_context(user_context)
 
+            # === ENHANCEMENT: Add active trivia block ===
+            current_db = _get_db()
+            if current_db and hasattr(current_db, 'get_active_trivia_session'):
+                try:
+                    active_trivia = current_db.get_active_trivia_session()
+                    if active_trivia:
+                        trivia_block = "\n\n--- ACTIVE TRIVIA SESSION ---\n"
+                        trivia_block += f"A trivia question is currently active: \"{active_trivia.get('question_text')}\"\n"
+                        trivia_block += "CRITICAL DIRECTIVE: Under no circumstances should you provide the answer to this question. "
+                        trivia_block += "If asked about it, snarkily redirect the user to participate in the active Trivia Tuesday session instead of trying to cheat by asking you.\n"
+                        trivia_block += "--- END ACTIVE TRIVIA ---\n"
+                        dynamic_context += trivia_block
+                except Exception:
+                    pass
+
             # === ENHANCEMENT: Add recent trivia context ===
             current_db = _get_db()
             if current_db and hasattr(current_db.trivia, 'get_latest_trivia_session'):
@@ -2314,12 +2329,12 @@ async def generate_weekly_report(day: str, stats_data: dict) -> Optional[str]:
             return None
 
         prompt = f"""You are Ash, the ship's AI (analytical, slightly clinical, but helpful). Write the {day.capitalize()} community report.
-Here is the data from the week:
+Here is the combined YouTube and Twitch data from the week:
 """
         if day == 'monday':
-            prompt += f"- New broadcasts: {stats_data.get('new_content_count', 0)}\n"
+            prompt += f"- New broadcasts (YT/Twitch combined): {stats_data.get('new_content_count', 0)}\n"
             prompt += f"- New broadcast hours: {stats_data.get('new_hours', 0)}\n"
-            prompt += f"- New viewer engagements: {stats_data.get('new_views', 0)}\n"
+            prompt += f"- New viewer engagements (YT/Twitch combined): {stats_data.get('new_views', 0)}\n"
             completed = stats_data.get('completed_games', [])
             if completed:
                 prompt += f"- Missions Completed: {', '.join([g['series_name'] for g in completed])}\n"

@@ -451,8 +451,20 @@ async def handle_trivia_reply(message: discord.Message) -> bool:
 
             print(f"✅ TRIVIA REPLY: Detected reply to trivia message from user {message.author.id}")
 
-            # Extract the user's answer
-            user_answer = message.content.strip()
+            # Extract the user's answer and normalize (e.g., 'a', 'A.', 'a)')
+            import re
+            raw_answer = message.content.strip().upper()
+            
+            # Check if it's essentially just a single letter answer with optional punctuation
+            match = re.match(r'^([A-E])\W*$', raw_answer)
+            user_answer = match.group(1) if match else raw_answer
+            
+            if user_answer == "E":
+                try:
+                    await message.reply("I assure you, there is no option 'E'. Please recalibrate your visual sensors and try again. 🤖")
+                except Exception:
+                    pass
+                return True
 
             # Submit answer to database
             try:
@@ -782,8 +794,8 @@ async def handle_general_conversation(message: discord.Message, bot: commands.Bo
             match = url_pattern.search(content)
             if match:
                 clip_url = match.group(0)
-                from bot.commands.clips import ClipParsingService, canonicalize_clip_url
-                from bot.database import get_database
+                from ..commands.clips import ClipParsingService, canonicalize_clip_url
+                from ..database import get_database
                 canonical_url = canonicalize_clip_url(clip_url)
                 db = get_database()
                 clip_lore = db.trivia.get_clip_lore(canonical_url)
