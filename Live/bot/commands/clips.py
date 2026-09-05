@@ -96,7 +96,7 @@ class ClipParsingService:
 
             # Prepare dynamic prompt with known games list
             played_games = self.db.games.get_all_played_games()
-            game_titles = [g.get('canonical_name') for g in played_games if g.get('canonical_name')]
+            game_titles = [str(g.get('canonical_name')) for g in played_games if g.get('canonical_name')]
             prompt = TRIVIA_PROMPT
 
             if game_titles:
@@ -253,8 +253,8 @@ class ClipTriviaCog(commands.Cog):
                     if not has_tick:
                         try:
                             await message.add_reaction("✅")
-                            await message.remove_reaction("👀", self.bot.user)
-                            await message.remove_reaction("❌", self.bot.user)
+                            await message.remove_reaction("👀", self.bot.user)  # type: ignore
+                            await message.remove_reaction("❌", self.bot.user)  # type: ignore
                         except Exception:
                             pass
 
@@ -397,12 +397,12 @@ class ClipTriviaCog(commands.Cog):
 
         db = get_database()
         try:
-            conn = db._get_connection()
-            cursor = conn.cursor()
+            conn = db.get_connection()
+            cursor = conn.cursor()  # type: ignore
             cursor.execute("DELETE FROM clip_lore")
             deleted_count = cursor.rowcount
-            conn.commit()
-            conn.close()
+            conn.commit()  # type: ignore
+            conn.close()  # type: ignore
 
             await ctx.send(f"✅ **Database Reset:** Successfully deleted **{deleted_count}** processed clips from the database.\n"
                            f"They will be picked up as 'new' clips and re-processed using the strict formatting rules on the next scan!")
