@@ -24,7 +24,7 @@ from ..config import (
     JONESY_USER_ID,
     MEMBER_ROLE_IDS,
     POPS_ARCADE_USER_ID,
-    GEMINI_LIVE_API_KEY,
+    GOOGLE_API_KEY,
     GEMINI_BATCH_API_KEY,
     MAX_CONVERSATION_TURNS,
     INACTIVITY_TTL_MINUTES,
@@ -60,8 +60,8 @@ def _get_db():
 def initialize_ai():
     global gemini_live_client, gemini_batch_client, ai_enabled, ai_status_message
     try:
-        if GEMINI_LIVE_API_KEY:
-            gemini_live_client = genai.Client(api_key=GEMINI_LIVE_API_KEY)
+        if GOOGLE_API_KEY:
+            gemini_live_client = genai.Client(api_key=GOOGLE_API_KEY)
             ai_enabled = True
             ai_status_message = "Online (Live Client)"
         if GEMINI_BATCH_API_KEY:

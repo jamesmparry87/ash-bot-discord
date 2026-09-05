@@ -124,7 +124,7 @@ RATE_LIMIT_COOLDOWNS = {
 }
 
 # AI Configuration - Dual Project Architecture
-GEMINI_LIVE_API_KEY = os.getenv('GEMINI_LIVE_API_KEY')
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 GEMINI_BATCH_API_KEY = os.getenv('GEMINI_BATCH_API_KEY')
 
 MAX_CONVERSATION_TURNS = 5
