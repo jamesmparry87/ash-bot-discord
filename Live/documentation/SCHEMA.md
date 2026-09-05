@@ -478,7 +478,7 @@ db.bulk_import_played_games(games_data)  # Import from JSON
 For schema questions, implementation details, or migration assistance:
 1. Check `Live/documentation/REFACTORING_GUIDE.md`
 2. Review existing migration scripts in `Live/scripts/sql/`
-3. Consult with maintainer (James) or AI assistants (Claude/Cline)
+3. Consult with maintainer (James) or AI assistants
 
 ---
 

@@ -20,7 +20,6 @@ class TestConfig:
         'DISCORD_TOKEN': 'test_discord_token_12345',
         'DATABASE_URL': 'postgresql://test:test@localhost/test_discord_bot',
         'GOOGLE_API_KEY': 'test_google_api_key_12345',
-        'ANTHROPIC_API_KEY': 'test_anthropic_api_key_12345',
         'YOUTUBE_API_KEY': 'test_youtube_api_key_12345',
         'TWITCH_CLIENT_ID': 'test_twitch_client_id_12345',
         'TWITCH_CLIENT_SECRET': 'test_twitch_client_secret_12345',
@@ -75,7 +74,6 @@ class TestConfig:
         """Get API keys for testing."""
         return {
             'google': os.getenv('GOOGLE_API_KEY', cls.DEFAULT_TEST_ENV['GOOGLE_API_KEY']),
-            'anthropic': os.getenv('ANTHROPIC_API_KEY', cls.DEFAULT_TEST_ENV['ANTHROPIC_API_KEY']),
             'youtube': os.getenv('YOUTUBE_API_KEY', cls.DEFAULT_TEST_ENV['YOUTUBE_API_KEY']),
             'twitch_client_id': os.getenv('TWITCH_CLIENT_ID', cls.DEFAULT_TEST_ENV['TWITCH_CLIENT_ID']),
             'twitch_client_secret': os.getenv('TWITCH_CLIENT_SECRET', cls.DEFAULT_TEST_ENV['TWITCH_CLIENT_SECRET'])
@@ -106,7 +104,6 @@ class TestConfig:
         # Check optional but recommended variables
         optional_vars = [
             'GOOGLE_API_KEY',
-            'ANTHROPIC_API_KEY',
             'YOUTUBE_API_KEY',
             'TWITCH_CLIENT_ID',
             'TWITCH_CLIENT_SECRET'
@@ -156,10 +153,6 @@ class MockServices:
             'gemini': {
                 'text': 'Test response from Science Officer Ash. Analysis complete.',
                 'safety_ratings': []
-            },
-            'claude': {
-                'content': [{'text': 'Test response from Science Officer Ash. Database query processed.'}],
-                'stop_reason': 'end_turn'
             }
         }
 

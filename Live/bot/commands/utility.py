@@ -145,8 +145,6 @@ class UtilityCommands(commands.Cog):
                 # Check for quota exhaustion or backup status
                 quota_exhausted = usage.get('quota_exhausted', False)
                 backup_active = usage.get('backup_active', False)
-                primary_ai_errors = usage.get('primary_ai_errors', 0)
-                backup_ai_errors = usage.get('backup_ai_errors', 0)
 
                 # Build status line with health indicators
                 status_indicator = "✅"
@@ -157,7 +155,7 @@ class UtilityCommands(commands.Cog):
                 elif primary_ai_errors > 0:
                     status_indicator = "⚠️"
 
-                ai_status_line = f"• **AI System**: {status_indicator} {ai_status.get('primary_ai', 'Unknown').title()}"
+                ai_status_line = f"• **AI System**: {status_indicator} Gemini"
 
                 # Add backup status if applicable
                 if backup_active and ai_status.get('backup_ai'):
@@ -171,8 +169,6 @@ class UtilityCommands(commands.Cog):
                 ai_status_line += f" ({daily}/{MAX_DAILY_REQUESTS} daily, {hourly}/{MAX_HOURLY_REQUESTS} hourly)"
 
                 # Add error information if present
-                if primary_ai_errors > 0 or backup_ai_errors > 0:
-                    ai_status_line += f" [Errors: P:{primary_ai_errors} B:{backup_ai_errors}]"
 
             status_lines.append(ai_status_line)
 

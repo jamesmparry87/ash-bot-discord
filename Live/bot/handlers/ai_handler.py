@@ -26,6 +26,7 @@ from ..config import (
     POPS_ARCADE_USER_ID,
     GOOGLE_API_KEY,
     GEMINI_BATCH_API_KEY,
+    GEMINI_MODEL_CASCADE,
     MAX_CONVERSATION_TURNS,
     INACTIVITY_TTL_MINUTES,
 )
@@ -41,7 +42,6 @@ gemini_live_client: Any = None
 gemini_batch_client: Any = None
 ai_enabled = False
 ai_status_message = "Offline"
-primary_ai = "gemini"
 
 # Sliding window tracking
 conversation_history: Dict[int, List[Dict[str, Any]]] = {}
@@ -137,11 +137,14 @@ async def call_ai_with_rate_limiting(prompt: str, context: Optional[str] = None,
         sys_instruction = ASH_SYSTEM_INSTRUCTION
         if context:
             sys_instruction += f"\n\n[ADDITIONAL CONTEXT]\n{context}"
+            
+        from bot.handlers.ai_tools import AI_TOOLS, search_clip_lore, query_game_recommendations, query_played_games
         
         config = types.GenerateContentConfig(
             system_instruction=sys_instruction,
             temperature=0.75,
-            max_output_tokens=500
+            max_output_tokens=500,
+            tools=AI_TOOLS
         )
         
         if user_id:
@@ -150,19 +153,46 @@ async def call_ai_with_rate_limiting(prompt: str, context: Optional[str] = None,
         else:
             contents = [{"role": "user", "parts": [{"text": prompt}]}]
             
-        response = await asyncio.to_thread(
-            gemini_live_client.models.generate_content,
-            model="gemini-2.5-flash",
-            contents=contents,
-            config=config
-        )
-        
+        last_error = None
+        response = None
+        for model_name in GEMINI_MODEL_CASCADE:
+            try:
+                # Use chats for automatic tool calling
+                # We need to construct proper Content objects for history
+                history = []
+                # Don't include the last message since we will send it via send_message
+                for msg in contents[:-1]:
+                    parts = [types.Part.from_text(text=p["text"]) for p in msg["parts"] if "text" in p]
+                    if parts:
+                        history.append(types.Content(role=msg["role"], parts=parts))
+                        
+                chat = gemini_live_client.chats.create(
+                    model=model_name,
+                    config=config,
+                    history=history
+                )
+                
+                response = await asyncio.to_thread(
+                    chat.send_message,
+                    prompt
+                )
+                break  # Success, exit fallback loop
+            except Exception as model_err:
+                last_error = model_err
+                print(f"Model {model_name} failed: {model_err}")
+                continue
+                
+        if not response:
+            raise Exception(f"All models in cascade failed. Last error: {last_error}")
+            
         reply = filter_ai_response(response.text)
         if user_id:
             _update_sliding_window(user_id, "model", reply)
             
         return reply, "success"
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"AI Call error: {e}")
         return ERROR_MESSAGE, "error"
 
@@ -175,13 +205,22 @@ async def call_ai_for_generation(prompt: str, system_instruction: str = None, te
             temperature=temperature,
             max_output_tokens=max_tokens
         )
-        response = await asyncio.to_thread(
-            gemini_live_client.models.generate_content,
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=config
-        )
-        return filter_ai_response(response.text), "success"
+        last_error = None
+        for model_name in GEMINI_MODEL_CASCADE:
+            try:
+                response = await asyncio.to_thread(
+                    gemini_live_client.models.generate_content,
+                    model=model_name,
+                    contents=prompt,
+                    config=config
+                )
+                return filter_ai_response(response.text), "success"
+            except Exception as model_err:
+                last_error = model_err
+                print(f"Model {model_name} generation failed: {model_err}")
+                continue
+                
+        raise Exception(f"All models in cascade failed. Last error: {last_error}")
     except Exception as e:
         print(f"Generation error: {e}")
         return None, "error"
@@ -201,15 +240,27 @@ async def upload_and_analyze_media(file_path: str, prompt: str, is_batch: bool =
             response_mime_type="application/json"
         )
         
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model="gemini-2.5-flash",
-            contents=[uploaded_file, prompt],
-            config=config
-        )
-        
+        last_error = None
+        response = None
+        for model_name in GEMINI_MODEL_CASCADE:
+            try:
+                response = await asyncio.to_thread(
+                    client.models.generate_content,
+                    model=model_name,
+                    contents=[uploaded_file, prompt],
+                    config=config
+                )
+                break
+            except Exception as model_err:
+                last_error = model_err
+                print(f"Model {model_name} media analysis failed: {model_err}")
+                continue
+                
         await asyncio.to_thread(client.files.delete, name=uploaded_file.name)
         
+        if not response:
+            raise Exception(f"All models in cascade failed. Last error: {last_error}")
+            
         return response.text, "success"
     except Exception as e:
         print(f"Media analysis error: {e}")

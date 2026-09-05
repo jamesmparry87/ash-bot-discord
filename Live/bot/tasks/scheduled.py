@@ -833,8 +833,7 @@ async def daily_clip_scan_task():
     except Exception as e:
         print(f"Failed to fetch Jam user for DMs: {e}")
 
-    quota_exhausted = False
-    for idx, (msg, curl) in enumerate(clips_to_process):
+        for idx, (msg, curl) in enumerate(clips_to_process):
         if quota_exhausted:
             break
 
@@ -851,11 +850,6 @@ async def daily_clip_scan_task():
         for attempt in range(3):
             success = await cog.parser.process_clip(curl, msg)
             if success:
-                break
-
-                        if ai_usage_stats.get("quota_exhausted", False) or primary_ai != "gemini":
-                print("🚫 Primary AI is exhausted or unavailable. Aborting clip batch.")
-                quota_exhausted = True
                 break
 
             print(f"⚠️ Clip processing failed (attempt {attempt + 1}/3). Retrying in 30s...")
@@ -1709,6 +1703,112 @@ async def execute_auto_action(reminder: Dict[str, Any]) -> None:
     print("✅ Daily clip scan completed successfully.")
 
 
+@tasks.loop(minutes=30)
+async def poll_gemini_batches():
+    """Polls Gemini Batch API for completed clip ingestion batches."""
+    uk_now = datetime.now(ZoneInfo("Europe/London"))
+    bot = get_bot_instance()
+    if not bot:
+        return
+        
+    db = get_database()
+    if not db:
+        return
+        
+    pending = db.trivia.get_pending_batch_clips()  # type: ignore
+    if not pending:
+        return
+        
+    # Get distinct batch IDs
+    batch_ids = list(set([row.get('batch_job_id') for row in pending if row.get('batch_job_id')]))
+    if not batch_ids:
+        return
+        
+    from bot.handlers.ai_handler import gemini_batch_client
+    if not gemini_batch_client:
+        return
+        
+    for job_id in batch_ids:
+        try:
+            batch = await asyncio.to_thread(gemini_batch_client.batches.get, name=job_id)
+            if batch.state == "SUCCEEDED":
+                print(f"🎬 Batch {job_id} completed successfully! Processing output...")
+                # Download output
+                import urllib.request
+                import json
+                
+                output_uri = batch.output_uri
+                req = urllib.request.Request(output_uri)
+                with urllib.request.urlopen(req) as response:
+                    output_data = response.read().decode('utf-8')
+                
+                channel = bot.get_channel(bot.get_cog("ClipTriviaCog").target_channel_id) if bot.get_cog("ClipTriviaCog") else None
+                
+                # Parse JSONL output
+                for line in output_data.strip().split("\\n"):
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        custom_id = obj.get("id")
+                        canonical_url, msg_id_str = custom_id.split("|", 1)
+                        msg_id = int(msg_id_str)
+                        
+                        response_text = obj.get("response", {}).get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        
+                        if response_text:
+                            # Clean up markdown
+                            clean_text = response_text.strip()
+                            if clean_text.startswith("```json"):
+                                clean_text = clean_text[7:]
+                            if clean_text.endswith("```"):
+                                clean_text = clean_text[:-3]
+                                
+                            data = json.loads(clean_text)
+                            
+                            # DB update
+                            success = db.trivia.update_clip_lore_from_batch(canonical_url, {
+                                "game_title": data.get("game_title", "Unknown"),
+                                "reaction": data.get("reaction", ""),
+                                "trigger": data.get("trigger", ""),
+                                "lore_summary": data.get("lore_summary", ""),
+                                "notable_quote": data.get("notable_quote", ""),
+                                "emotion_category": data.get("emotion_category", ""),
+                                "characters_involved": data.get("characters_involved", ""),
+                                "clip_outcome": data.get("clip_outcome", ""),
+                                "message_id": msg_id
+                            })
+                            
+                            # Retroactive React
+                            if channel and success:
+                                try:
+                                    msg = await channel.fetch_message(msg_id)
+                                    await msg.add_reaction("✅")
+                                    await msg.remove_reaction("👀", bot.user)
+                                except Exception as e:
+                                    print(f"Failed to react to parsed batch message {msg_id}: {e}")
+                                    
+                    except Exception as e:
+                        print(f"Error parsing batch result for line: {e}")
+                
+                # Clean up Gemini API Files to save space
+                try:
+                    await asyncio.to_thread(gemini_batch_client.batches.delete, name=job_id)
+                except Exception as del_err:
+                    print(f"Failed to delete batch job from API: {del_err}")
+                            
+            elif batch.state == "FAILED":
+                print(f"❌ Batch {job_id} failed!")
+                # Mark them as failed in DB or remove pending status
+                for row in pending:  # type: ignore
+                    if row.get('batch_job_id') == job_id:
+                        # Revert status so it can be retried or debugged
+                        # db.trivia.update_clip_batch_job(row.get('canonical_url'), None) # Simplest approach
+                        pass
+        except Exception as e:
+            print(f"Error polling batch {job_id}: {e}")
+
+
 def start_all_scheduled_tasks(bot):
     """Start all scheduled tasks with enhanced monitoring"""
     try:
@@ -1728,6 +1828,7 @@ def start_all_scheduled_tasks(bot):
             (pre_trivia_preflight_check, "Pre-trivia pre-flight check task (10:45 AM UK time, Tuesdays)"),
             (trivia_tuesday, "Trivia Tuesday task (11:00 AM UK time, Tuesdays)"),
             (friday_community_analysis, "Friday Community Analysis (Friday 8.15am)"),
+            (poll_gemini_batches, "Poll Gemini Batches (every 30 mins)"),
             (friday_morning_greeting, "Friday morning greeting task (9:00 AM UK time, Fridays)"),
             ## Daily ##
             (scheduled_midnight_restart, "Scheduled midnight restart task (00:00 PT daily)"),

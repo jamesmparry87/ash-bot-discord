@@ -62,7 +62,6 @@ TEST_ENV_VARS = {
     'DISCORD_TOKEN': 'test_discord_token',
     'DATABASE_URL': 'postgresql://test:test@localhost/test_discord_bot',
     'GOOGLE_API_KEY': 'test_google_api_key',
-    'ANTHROPIC_API_KEY': 'test_anthropic_api_key',
     'YOUTUBE_API_KEY': 'test_youtube_api_key',
     'TWITCH_CLIENT_ID': 'test_twitch_client_id',
     'TWITCH_CLIENT_SECRET': 'test_twitch_client_secret',
@@ -312,28 +311,8 @@ def sample_strike_data() -> Dict[int, int]:
 def mock_ai_responses() -> Dict[str, Dict[str, Any]]:
     """Mock AI response data for testing."""
     return {
-        "gemini_response": {"text": "Test Gemini response from Science Officer Ash.", "safety_ratings": []},
-        "claude_response": {
-            "content": [{"text": "Test Claude response from Science Officer Ash."}],
-            "stop_reason": "end_turn",
-        },
-        'claude_response': {
-            'content': [{'text': 'Test Claude response from Science Officer Ash.'}],
-            'stop_reason': 'end_turn'
-        }
+        "gemini_response": {"text": "Test Gemini response from Science Officer Ash.", "safety_ratings": []}
     }
-
-# Mock API responses
-
-
-@pytest.fixture
-def mock_youtube_api_response() -> Dict[str, List[Dict[str, Any]]]:
-    """Mock YouTube API response."""
-    return {'items': [{"id": "test_playlist_id",
-                       "snippet": {"title": "Test Game Playlist",
-                                   "description": "Test game playlist description"},
-                       "contentDetails": {"itemCount": 5},
-                       }]}
 
 
 @pytest.fixture

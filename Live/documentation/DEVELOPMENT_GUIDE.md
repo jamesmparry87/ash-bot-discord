@@ -36,7 +36,7 @@ Live/
 │   │   ├── reminders.py  # Reminder system
 │   │   └── announcements.py # Announcement system
 │   ├── handlers/         # Message and event handlers
-│   │   ├── ai_handler.py        # AI integration (Gemini/Claude)
+│   │   ├── ai_handler.py        # AI integration (Gemini)
 │   │   ├── message_handler.py   # Message processing
 │   │   ├── conversation_handler.py # DM conversations
 │   │   └── context_manager.py   # Context management
@@ -173,7 +173,6 @@ normalize_trivia_answer() → Database Storage → Reaction Acknowledgment
 **Dual Provider Setup:**
 
 - Primary: Google Gemini 1.5 Flash
-- Fallback: Claude 3 Haiku (Hugging Face)
 
 **Key Functions:**
 

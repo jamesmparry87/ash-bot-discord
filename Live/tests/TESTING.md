@@ -39,7 +39,6 @@ DATABASE_URL=your_staging_postgresql_url
 
 # API Keys (can reuse production keys with quotas)
 GOOGLE_API_KEY=your_google_api_key
-ANTHROPIC_API_KEY=your_anthropic_api_key
 YOUTUBE_API_KEY=your_youtube_api_key
 TWITCH_CLIENT_ID=your_twitch_client_id
 TWITCH_CLIENT_SECRET=your_twitch_client_secret
@@ -164,8 +163,7 @@ Add these secrets to your GitHub repository:
 
 ```text
 TEST_DISCORD_TOKEN        # Staging bot token
-GOOGLE_API_KEY            # Google API key
-ANTHROPIC_API_KEY         # Anthropic API key  
+GOOGLE_API_KEY            # Google API key  
 YOUTUBE_API_KEY           # YouTube API key
 TWITCH_CLIENT_ID          # Twitch client ID
 TWITCH_CLIENT_SECRET      # Twitch client secret
@@ -190,7 +188,6 @@ DATABASE_URL=${{ Postgres.DATABASE_URL }}  # Railway PostgreSQL
 
 # API Keys (same as production)
 GOOGLE_API_KEY=your_google_api_key
-ANTHROPIC_API_KEY=your_anthropic_api_key
 YOUTUBE_API_KEY=your_youtube_api_key
 TWITCH_CLIENT_ID=your_twitch_client_id
 TWITCH_CLIENT_SECRET=your_twitch_client_secret

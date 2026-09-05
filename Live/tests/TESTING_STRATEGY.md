@@ -65,7 +65,6 @@
 **Coverage**: Response filtering, mock validation
 
 **Keep**: AI filtering tests  
-**Remove**: Deprecated backup AI tests
 
 ---
 

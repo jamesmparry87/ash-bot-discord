@@ -184,15 +184,10 @@ class ClipTriviaCog(commands.Cog):
             # Acknowledge visually so users know it's in the queue for 8 PM
             await message.add_reaction("👀")
 
-    @commands.command(name="scan_clips")
-    async def scan_clips(self, ctx, limit: int = 20):
-        """[Admin] Scans the clips channel history for unprocessed clips backwards through time."""
-        if ctx.author.id not in [JAM_USER_ID, JONESY_USER_ID]:
-            await ctx.send("❌ Unauthorized.")
-            return
 
-    async def process_backlog_batch(self, search_limit: int = 200, max_process: int = 25, ctx=None) -> tuple[int, int]:
+    async def process_backlog_batch(self, search_limit: int = 200, max_process: int = 50, ctx=None) -> tuple[int, int]:
         """Scans the clips channel history for unprocessed clips backwards through time.
+        Uploads clips to Gemini Files API and creates a batch job.
         Returns (found_count, queued_count)."""
         channel = self.bot.get_channel(self.target_channel_id)
         if not channel or not isinstance(channel, discord.TextChannel):
@@ -200,6 +195,17 @@ class ClipTriviaCog(commands.Cog):
                 await ctx.send("❌ Could not find clips channel or it is not a text channel.")
             else:
                 logger.error("Could not find clips channel or it is not a text channel.")
+            return 0, 0
+
+        db = get_database()
+        
+        # 1. Enforce only 1 batch job at a time
+        if db.trivia.has_pending_batch():
+            msg = "⏳ A clip batch job is currently PENDING. Aborting new batch creation."
+            if ctx:
+                await ctx.send(msg)
+            else:
+                logger.info(msg)
             return 0, 0
 
         # Load state
@@ -218,27 +224,16 @@ class ClipTriviaCog(commands.Cog):
 
         if ctx:
             if last_scanned_id:
-                await ctx.send(f"🔍 Resuming scan from where we left off. Scanning up to {search_limit} older messages in <#{self.target_channel_id}>...")
+                await ctx.send(f"🔍 Resuming scan. Scanning up to {search_limit} older messages in <#{self.target_channel_id}>...")
             else:
                 await ctx.send(f"🔍 Scanning the most recent {search_limit} messages in <#{self.target_channel_id}> for clips...")
-        else:
-            if last_scanned_id:
-                logger.info(f"🔍 Resuming scan from where we left off. Scanning up to {search_limit} older messages...")
-            else:
-                logger.info(f"🔍 Scanning the most recent {search_limit} messages for clips...")
 
         found_count = 0
-        db = get_database()
-
-        oldest_message_id = None
-        oldest_message_date = None
-
         clips_to_queue = []
+        oldest_message_id = None
 
         async for message in channel.history(limit=search_limit, before=before_obj):
             oldest_message_id = message.id
-            oldest_message_date = message.created_at
-
             if message.author.bot:
                 continue
 
@@ -249,7 +244,7 @@ class ClipTriviaCog(commands.Cog):
                 canonical_url = canonicalize_clip_url(clip_url)
 
                 if not db.trivia.clip_lore_exists(canonical_url):
-                    clips_to_queue.append((message, clip_url))
+                    clips_to_queue.append((message, clip_url, canonical_url))
                     if len(clips_to_queue) >= max_process:
                         break
                 else:
@@ -260,113 +255,129 @@ class ClipTriviaCog(commands.Cog):
                             await message.add_reaction("✅")
                             await message.remove_reaction("👀", self.bot.user)
                             await message.remove_reaction("❌", self.bot.user)
-                        except discord.Forbidden:
-                            logger.error(f"Missing permissions to add/remove reactions in channel {message.channel.id}")
-                        except Exception as e:
-                            logger.error(f"Failed to update retroactive reaction for {canonical_url}: {e}")
+                        except Exception:
+                            pass
 
         queued_count = len(clips_to_queue)
-        if queued_count > 0:
-            for idx, (msg, curl) in enumerate(clips_to_queue):
-                if ctx:
-                    await ctx.send(f"🎬 Processing clip {idx + 1}/{queued_count}: {curl}")
-                else:
-                    logger.info(f"🎬 Processing clip {idx + 1}/{queued_count}: {curl}")
-
-                # Acknowledge processing and clear any old failure marks
-                try:
-                    await msg.remove_reaction("❌", self.bot.user)
-                except Exception:
-                    pass
-                try:
-                    await msg.add_reaction("👀")
-                except discord.Forbidden:
-                    logger.error(f"Missing permissions to add 👀 reaction in channel {msg.channel.id}")
-                except Exception:
-                    pass
-
-                # Add a simple retry loop for Gemini 503 errors
-                success = False
-                for attempt in range(3):
-                    success = await self.parser.process_clip(curl, msg)
-                    if success:
-                        break
-
-                    from bot.config import MAX_DAILY_REQUESTS
-                    
-
-                    daily_used = ai_usage_stats.get("daily_requests", 0)
-                    if ai_usage_stats.get("quota_exhausted",
-                                          False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
-                        break
-
-                    if attempt < 2:
-                        logger.warning(f"⚠️ Clip processing failed (attempt {attempt + 1}/3). Retrying in 30s...")
-                        await asyncio.sleep(30.0)
-
-                from bot.config import MAX_DAILY_REQUESTS
-                
-
-                daily_used = ai_usage_stats.get("daily_requests", 0)
-                if ai_usage_stats.get("quota_exhausted",
-                                      False) or primary_ai != "gemini" or daily_used >= MAX_DAILY_REQUESTS - 50:
-                    msg_text = "🚫 **AI Quota Exhausted or Too Close to Limit!** Aborting the remainder of the clip scan to avoid spamming the API. We'll pick up the rest tomorrow!"
-                    if ctx:
-                        await ctx.send(msg_text)
-                    else:
-                        logger.warning(msg_text)
-                    # Clean up the 👀 reaction from the aborted clip
-                    try:
-                        await msg.remove_reaction("👀", self.bot.user)
-                    except Exception:
-                        pass
-                    break
-
-                # Update reactions based on success
-                try:
-                    await msg.remove_reaction("👀", self.bot.user)
-                except Exception:
-                    pass
-
-                try:
-                    if success:
-                        await msg.add_reaction("✅")
-                    else:
-                        await msg.add_reaction("❌")
-                except discord.Forbidden:
-                    logger.error(f"Missing permissions to add ✅/❌ reaction in channel {msg.channel.id}")
-                    if ctx:
-                        await ctx.send(f"⚠️ **Permission Error:** I don't have the 'Add Reactions' permission in this channel to react to {curl}!")
-                except Exception as e:
-                    logger.error(f"Failed to add final reaction to clip {curl}: {e}")
-
-                # Sleep to respect rate limits if not the last clip
-                if idx < queued_count - 1:
-                    await asyncio.sleep(60.0)
-
-        # Update state
-        if oldest_message_id and oldest_message_date:
-            try:
+        if queued_count == 0:
+            if ctx:
+                await ctx.send("✅ No unprocessed clips found in this scan segment.")
+            if oldest_message_id:
                 with open(state_file, 'w') as f:
                     json.dump({"last_scanned_message_id": oldest_message_id}, f)
-            except Exception as e:
-                logger.error(f"Error writing clip scan state: {e}")
+            return found_count, 0
 
-            date_str = oldest_message_date.strftime("%Y-%m-%d")
+        # Create batch job
+        import asyncio
+        from bot.handlers.ai_handler import gemini_batch_client
+        
+        if not gemini_batch_client:
+            msg = "❌ gemini_batch_client is not initialized. Cannot create batch."
+            logger.error(msg)
             if ctx:
-                await ctx.send(f"✅ Scan complete. Found {found_count} clips. Added {queued_count} new clips to the processing queue.\n"
-                               f"🕒 We scanned back as far as **{date_str}**. Run `!scan_clips` again to keep going backwards in time!")
-            else:
-                logger.info(
-                    f"✅ Scan complete. Found {found_count} clips. Added {queued_count} new clips. Scanned back to {date_str}.")
-        else:
-            # Optionally reset tracker if we hit the beginning
-            if ctx:
-                await ctx.send("✅ Scan complete. Found 0 clips. Reached the beginning of the channel!")
-            else:
-                logger.info("✅ Scan complete. Found 0 clips. Reached the beginning of the channel!")
+                await ctx.send(msg)
+            return found_count, 0
 
-        return found_count, queued_count
+        if ctx:
+            await ctx.send(f"🎬 Downloading and uploading {queued_count} clips for Batch processing...")
+
+        played_games = db.games.get_all_played_games()
+        game_titles = [str(g.get('canonical_name')) for g in played_games if g.get('canonical_name')]
+        prompt = TRIVIA_PROMPT
+        if game_titles:
+            game_list_str = ", ".join(game_titles)
+            prompt += f"\\n\\nCRITICAL INSTRUCTION FOR 'game_title': Whenever possible, match the game to one of our known played games: [{game_list_str}]. Only use a new name if it definitely does not match any game in this list."
+
+        os.makedirs("temp", exist_ok=True)
+        jsonl_lines = []
+        uploaded_files = []
+
+        try:
+            for idx, (msg, curl, canonical_url) in enumerate(clips_to_queue):
+                # Acknowledge visually
+                try:
+                    await msg.add_reaction("👀")
+                except Exception:
+                    pass
+
+                file_id = f"clip_{msg.id}"
+                local_filename = f"temp/{file_id}.mp4"
+                
+                # Download
+                logger.info(f"Downloading clip {idx+1}/{queued_count}: {curl}")
+                download_result = await asyncio.to_thread(self.parser._download_video_sync, curl, local_filename)
+                if not download_result or not os.path.exists(local_filename):
+                    logger.error(f"Failed to download video from {curl}")
+                    try:
+                        await msg.add_reaction("❌")
+                    except Exception:
+                        pass
+                    continue
+                    
+                # Upload to Files API
+                logger.info(f"Uploading clip {idx+1} to Gemini Files API")
+                uploaded_file = await asyncio.to_thread(gemini_batch_client.files.upload, file=local_filename)
+                uploaded_files.append(uploaded_file)
+                
+                # Append to JSONL
+                jsonl_obj = {
+                    "request": {
+                        "contents": [
+                            {"role": "user", "parts": [{"fileData": {"fileUri": uploaded_file.uri, "mimeType": "video/mp4"}}, {"text": prompt}]}
+                        ]
+                    },
+                    "id": f"{canonical_url}|{msg.id}"  # Store both URL and Discord message ID as custom_id
+                }
+                jsonl_lines.append(json.dumps(jsonl_obj))
+                
+                # Cleanup local file
+                os.remove(local_filename)
+                
+            if not jsonl_lines:
+                if ctx:
+                    await ctx.send("❌ All clips failed to download or upload.")
+                return found_count, 0
+                
+            # Create JSONL file
+            jsonl_path = "temp/batch_requests.jsonl"
+            with open(jsonl_path, "w") as f:
+                f.write("\\n".join(jsonl_lines))
+                
+            # Upload JSONL file
+            jsonl_upload = await asyncio.to_thread(gemini_batch_client.files.upload, file=jsonl_path)
+            uploaded_files.append(jsonl_upload)
+            
+            # Start batch
+            from google.genai import types
+            logger.info("Submitting batch job...")
+            batch_job = await asyncio.to_thread(gemini_batch_client.batches.create, src=jsonl_upload.uri)
+            job_id = batch_job.name
+            
+            # Add to DB
+            for msg, curl, canonical_url in clips_to_queue:
+                # Add a dummy row to track the batch ID
+                db.trivia.add_pending_batch_clip(canonical_url, "Batch Pending Video")
+                db.trivia.update_clip_batch_job(canonical_url, job_id)
+                
+            msg = f"🚀 Batch Job {job_id} successfully submitted with {len(jsonl_lines)} clips!"
+            logger.info(msg)
+            if ctx:
+                await ctx.send(msg)
+                
+            os.remove(jsonl_path)
+            
+            # Update state
+            if oldest_message_id:
+                with open(state_file, 'w') as f:
+                    json.dump({"last_scanned_message_id": oldest_message_id}, f)
+            
+            return found_count, len(jsonl_lines)
+            
+        except Exception as e:
+            logger.error(f"Batch processing error: {e}")
+            if ctx:
+                await ctx.send(f"❌ Error creating batch: {str(e)[:100]}")
+            return found_count, 0
 
     @commands.command(name="scan_clips")
     async def scan_clips(self, ctx, limit: int = 20):

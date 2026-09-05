@@ -105,7 +105,7 @@ bot = commands.Bot(
     case_insensitive=True
 )
 
-# Member Conversation Tracking System (from fallback)
+# Member Conversation Tracking System
 # Tracks daily conversation counts for members outside the members channel
 member_conversation_counts = {}  # user_id: {'count': int, 'date': str}
 
@@ -265,7 +265,7 @@ async def initialize_modular_components():
     This function handles the startup sequence for the modular Discord bot,
     loading each component with graceful fallback handling. Components include:
     - Database connection and management
-    - AI integration (Gemini + Claude fallback)
+    - AI integration (Gemini)
     - Command modules (strikes, games, trivia, etc.)
     - Message handlers for various response types
     - Scheduled tasks (database updates, cleanup)
@@ -277,7 +277,6 @@ async def initialize_modular_components():
             - commands (bool): Command system operational status
             - scheduled_tasks (bool): Background tasks started
             - message_handlers (bool): Message processing available
-            - fallback_mode (bool): Whether fallback mode is needed
             - errors (list): Critical errors that occurred
             - command_failures (list): Non-critical command loading issues
             - loaded_commands (list): Successfully loaded command modules
@@ -289,7 +288,6 @@ async def initialize_modular_components():
         "commands": False,
         "scheduled_tasks": False,
         "message_handlers": False,
-        "fallback_mode": False,
         "errors": [],
         "command_failures": [],
         "loaded_commands": [],

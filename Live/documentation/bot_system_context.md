@@ -106,7 +106,6 @@ The stability and execution of the bot rely on several critical external librari
 | `psycopg2` | PostgreSQL adapter for database transactions | **High** (Stops all stats/trivia if offline) |
 | `nltk` | Natural Language Toolkit for sentence segmentation and token filtering | **Medium** (Degrades truncation/nlp query analysis) |
 | **Google Gemini API** | Primary AI generation backend (Google Generative AI SDK) | **High** (Personality and AI trivia generation) |
-| **Hugging Face Hub** | Secondary AI provider fallback (Claude 3 Haiku) | **Medium** (Acts as rate-limit/outage fallback) |
 | **YouTube Data API** | Scans #clips channels and playlists for gaming statistics sync | **Medium** (Stops weekly stats updates) |
 | **Twitch / IGDB API** | Fetches official game names, genres, and platforms | **Medium** (Stops game name enrichment and verification) |
 
@@ -204,7 +203,7 @@ graph TD
                │
                ├─► 1. Check Rate Quota limits (daily/hourly tracking)
                ├─► 2. build_full_system_instruction() (Injects Ash character + user context)
-               ├─► 3. Call Google Gemini 1.5 Flash (Falls back to Claude via HF on failure)
+               ├─► 3. Call Google Gemini (Falls back to secondary model in cascade on failure)
                ├─► 4. filter_ai_response()
                ▼
         [ Send Response to User ]

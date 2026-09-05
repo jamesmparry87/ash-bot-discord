@@ -1561,6 +1561,20 @@ class GamesDatabase:
             conn.rollback()
             return 0
 
+
+    def get_recommendations(self, limit: int = 10) -> list:
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT game_title, submitted_by FROM game_recommendations ORDER BY created_at DESC LIMIT %s",
+                        (limit,)
+                    )
+                    rows = cur.fetchall()
+                    return [{"game_title": r[0], "submitted_by": r[1]} for r in rows]
+        except Exception as e:
+            print(f"Error getting recommendations: {e}")
+            return []
     def get_last_channel_check(self, channel_type: str) -> Optional[str]:
         """Get the last time we checked a channel for new games (YouTube/Twitch)"""
         return self.get_config_value(f"last_{channel_type}_check")

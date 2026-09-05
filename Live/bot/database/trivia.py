@@ -1856,6 +1856,30 @@ class TriviaDatabase:
                 'error': str(e)
             }
 
+
+    def search_clip_lore_by_game(self, game_title: str) -> list:
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT notable_quote, clip_outcome FROM clip_lore WHERE game_title ILIKE %s AND processed = true LIMIT 5",
+                        (f"%{game_title}%",)
+                    )
+                    rows = cur.fetchall()
+                    return [{"notable_quote": r[0], "clip_outcome": r[1]} for r in rows]
+        except Exception as e:
+            print(f"Error searching clip lore: {e}")
+            return []
+
+    def has_pending_batch(self) -> bool:
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT COUNT(*) FROM clip_lore WHERE batch_status = 'PENDING'")
+                    return cur.fetchone()[0] > 0
+        except Exception as e:
+            print(f"Error checking pending batches: {e}")
+            return False
     def clip_lore_exists(self, canonical_url: str) -> bool:
         """Check if a clip has already been analyzed and stored in the database."""
         conn = self.db.get_connection()
@@ -1946,8 +1970,9 @@ class TriviaDatabase:
     
     def add_pending_batch_clip(self, canonical_url: str, video_title: str) -> bool:
         """Add a clip to clip_lore as PENDING for batch processing"""
+        conn = self.db.get_connection()
         try:
-            with self.get_cursor() as cursor:
+            with conn.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO clip_lore (
@@ -1958,18 +1983,19 @@ class TriviaDatabase:
                     """,
                     (canonical_url, video_title)
                 )
-                self.conn.commit()
+                conn.commit()
                 return True
         except Exception as e:
             print(f"Error adding pending batch clip: {e}")
             return False
 
-    def get_pending_batch_clips(self) -> list:
+    def get_pending_batch_clips(self) -> List[Dict[str, Any]]:
+        conn = self.db.get_connection()
         try:
-            with self.get_cursor() as cursor:
+            with conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT canonical_url, video_title FROM clip_lore 
+                    SELECT canonical_url, video_title, batch_job_id FROM clip_lore 
                     WHERE batch_status = 'PENDING'
                     """
                 )
@@ -1979,8 +2005,9 @@ class TriviaDatabase:
             return []
 
     def update_clip_batch_job(self, canonical_url: str, batch_job_id: str) -> bool:
+        conn = self.db.get_connection()
         try:
-            with self.get_cursor() as cursor:
+            with conn.cursor() as cursor:
                 cursor.execute(
                     """
                     UPDATE clip_lore 
@@ -1989,15 +2016,16 @@ class TriviaDatabase:
                     """,
                     (batch_job_id, canonical_url)
                 )
-                self.conn.commit()
+                conn.commit()
                 return True
         except Exception as e:
             print(f"Error updating batch job: {e}")
             return False
             
     def update_clip_lore_from_batch(self, canonical_url: str, data: dict) -> bool:
+        conn = self.db.get_connection()
         try:
-            with self.get_cursor() as cursor:
+            with conn.cursor() as cursor:
                 cursor.execute(
                     """
                     UPDATE clip_lore 
@@ -2027,7 +2055,7 @@ class TriviaDatabase:
                         canonical_url
                     )
                 )
-                self.conn.commit()
+                conn.commit()
                 return True
         except Exception as e:
             print(f"Error updating from batch: {e}")

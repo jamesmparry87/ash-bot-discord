@@ -127,6 +127,12 @@ RATE_LIMIT_COOLDOWNS = {
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 GEMINI_BATCH_API_KEY = os.getenv('GEMINI_BATCH_API_KEY')
 
+# Gemini model cascade configuration (priority order)
+GEMINI_MODEL_CASCADE = [
+    'gemini-3.6-flash',       # Primary: Latest, fastest
+    'gemini-3.5-flash',       # Backup: Stable, reliable
+]
+
 MAX_CONVERSATION_TURNS = 5
 INACTIVITY_TTL_MINUTES = 15
 
