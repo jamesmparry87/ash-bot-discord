@@ -139,7 +139,7 @@ class TestConfiguration:
             GUILD_ID,
             JONESY_USER_ID,
             JAM_USER_ID
-                    )
+        )
 
         # Verify critical IDs are present and valid
         assert GUILD_ID is not None, "GUILD_ID not configured"
@@ -147,7 +147,7 @@ class TestConfiguration:
         assert JAM_USER_ID is not None, "JAM_USER_ID not configured"
 
         # Verify rate limits are sensible
-                        
+
         print("✅ PASS: Config module loads and validates successfully")
 
 

@@ -52,11 +52,13 @@ pacific_tz = ZoneInfo("US/Pacific")
 
 db: Any = None
 
+
 def _get_db():
     global db
     if db is None:
         db = get_database()
     return db
+
 
 def initialize_ai():
     global gemini_live_client, gemini_batch_client, ai_enabled, ai_status_message
@@ -72,6 +74,7 @@ def initialize_ai():
         ai_enabled = False
         ai_status_message = f"Error: {str(e)}"
 
+
 def safe_initialize_ai():
     try:
         initialize_ai()
@@ -79,11 +82,14 @@ def safe_initialize_ai():
     except Exception:
         return False
 
+
 async def safe_initialize_ai_async():
     return await asyncio.to_thread(safe_initialize_ai)
 
+
 def get_ai_status() -> str:
     return ai_status_message
+
 
 def toggle_ai_system() -> bool:
     global ai_enabled, ai_status_message
@@ -93,6 +99,7 @@ def toggle_ai_system() -> bool:
     ai_enabled = not ai_enabled
     ai_status_message = "Online" if ai_enabled else "Manually Disabled"
     return ai_enabled
+
 
 async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[str, Any]:
     # Hardcoded user overrides
@@ -104,6 +111,7 @@ async def detect_user_context(user_id: int, member_obj=None, bot=None) -> Dict[s
         return {"clearance": "MODERATOR", "relationship": "ANTAGONISTIC"}
     return {"clearance": "STANDARD", "relationship": "NEUTRAL"}
 
+
 def filter_ai_response(response: str) -> str:
     # Filter discord formatting and markdown if needed
     if not response:
@@ -113,47 +121,55 @@ def filter_ai_response(response: str) -> str:
     response = re.sub(r'<:([a-zA-Z0-9_]+):[0-9]+>', r'::', response)
     return response.strip()
 
+
 def _update_sliding_window(user_id: int, role: str, content: str):
     now = datetime.now(pacific_tz)
     # Check TTL
     if user_id in conversation_last_active:
         if now - conversation_last_active[user_id] > timedelta(minutes=INACTIVITY_TTL_MINUTES):
             conversation_history[user_id] = []
-            
+
     if user_id not in conversation_history:
         conversation_history[user_id] = []
-        
+
     conversation_history[user_id].append({"role": role, "parts": [{"text": content}]})
     conversation_last_active[user_id] = now
-    
+
     # Trim to max turns
     if len(conversation_history[user_id]) > MAX_CONVERSATION_TURNS * 2:
         conversation_history[user_id] = conversation_history[user_id][-(MAX_CONVERSATION_TURNS * 2):]
 
-async def call_ai_with_rate_limiting(prompt: str, context: Optional[str] = None, user_name: Optional[str] = None, priority: str = "medium", user_id: Optional[int] = None, context_data: Optional[Dict] = None) -> Tuple[Optional[str], str]:
+
+async def call_ai_with_rate_limiting(prompt: str,
+                                     context: Optional[str] = None,
+                                     user_name: Optional[str] = None,
+                                     priority: str = "medium",
+                                     user_id: Optional[int] = None,
+                                     context_data: Optional[Dict] = None) -> Tuple[Optional[str],
+                                                                                   str]:
     if not ai_enabled or not gemini_live_client:
         return random.choice(FALLBACK_GREETINGS), "fallback"
-        
+
     try:
         sys_instruction = ASH_SYSTEM_INSTRUCTION
         if context:
             sys_instruction += f"\n\n[ADDITIONAL CONTEXT]\n{context}"
-            
+
         from bot.handlers.ai_tools import AI_TOOLS, query_game_recommendations, query_played_games, search_clip_lore
-        
+
         config = types.GenerateContentConfig(
             system_instruction=sys_instruction,
             temperature=0.75,
             max_output_tokens=500,
             tools=AI_TOOLS
         )
-        
+
         if user_id:
             _update_sliding_window(user_id, "user", prompt)
             contents = conversation_history[user_id]
         else:
             contents = [{"role": "user", "parts": [{"text": prompt}]}]
-            
+
         last_error = None
         response = None
         for model_name in GEMINI_MODEL_CASCADE:
@@ -166,13 +182,13 @@ async def call_ai_with_rate_limiting(prompt: str, context: Optional[str] = None,
                     parts = [types.Part.from_text(text=p["text"]) for p in msg["parts"] if "text" in p]
                     if parts:
                         history.append(types.Content(role=msg["role"], parts=parts))
-                        
+
                 chat = gemini_live_client.chats.create(
                     model=model_name,
                     config=config,
                     history=history
                 )
-                
+
                 response = await asyncio.to_thread(
                     chat.send_message,
                     prompt
@@ -182,14 +198,14 @@ async def call_ai_with_rate_limiting(prompt: str, context: Optional[str] = None,
                 last_error = model_err
                 print(f"Model {model_name} failed: {model_err}")
                 continue
-                
+
         if not response:
             raise Exception(f"All models in cascade failed. Last error: {last_error}")
-            
+
         reply = filter_ai_response(response.text)
         if user_id:
             _update_sliding_window(user_id, "model", reply)
-            
+
         return reply, "success"
     except Exception as e:
         import traceback
@@ -197,7 +213,9 @@ async def call_ai_with_rate_limiting(prompt: str, context: Optional[str] = None,
         print(f"AI Call error: {e}")
         return ERROR_MESSAGE, "error"
 
-async def call_ai_for_generation(prompt: str, system_instruction: str = None, temperature: float = 0.7, max_tokens: int = 1000) -> Tuple[Optional[str], str]:
+
+async def call_ai_for_generation(prompt: str, system_instruction: str = None,
+                                 temperature: float = 0.7, max_tokens: int = 1000) -> Tuple[Optional[str], str]:
     if not ai_enabled or not gemini_live_client:
         return None, "offline"
     try:
@@ -220,27 +238,28 @@ async def call_ai_for_generation(prompt: str, system_instruction: str = None, te
                 last_error = model_err
                 print(f"Model {model_name} generation failed: {model_err}")
                 continue
-                
+
         raise Exception(f"All models in cascade failed. Last error: {last_error}")
     except Exception as e:
         print(f"Generation error: {e}")
         return None, "error"
 
+
 async def upload_and_analyze_media(file_path: str, prompt: str, is_batch: bool = True) -> Tuple[Optional[str], str]:
     client = gemini_batch_client if is_batch and gemini_batch_client else gemini_live_client
     if not client:
         return None, "offline"
-        
+
     try:
         uploaded_file = await asyncio.to_thread(
             client.files.upload, file=file_path
         )
-        
+
         config = types.GenerateContentConfig(
             temperature=0.4,
             response_mime_type="application/json"
         )
-        
+
         last_error = None
         response = None
         for model_name in GEMINI_MODEL_CASCADE:
@@ -256,28 +275,32 @@ async def upload_and_analyze_media(file_path: str, prompt: str, is_batch: bool =
                 last_error = model_err
                 print(f"Model {model_name} media analysis failed: {model_err}")
                 continue
-                
+
         await asyncio.to_thread(client.files.delete, name=uploaded_file.name)
-        
+
         if not response:
             raise Exception(f"All models in cascade failed. Last error: {last_error}")
-            
+
         return response.text, "success"
     except Exception as e:
         print(f"Media analysis error: {e}")
         return None, "error"
 
-async def generate_contextual_trivia(category: str, difficulty: str, context: Optional[str] = None) -> Tuple[Optional[str], str]:
+
+async def generate_contextual_trivia(category: str, difficulty: str,
+                                     context: Optional[str] = None) -> Tuple[Optional[str], str]:
     prompt = f"Generate a {difficulty} trivia question about {category}. Provide the question and correct answer."
     if context:
         prompt += f" Context: {context}"
     return await call_ai_for_generation(prompt, temperature=0.7)
+
 
 async def create_ai_announcement_content(topic: str, context: Optional[str] = None) -> Tuple[Optional[str], str]:
     prompt = f"Write an announcement about {topic}."
     if context:
         prompt += f" Context: {context}"
     return await call_ai_for_generation(prompt, temperature=0.75)
+
 
 async def generate_weekly_report(stats: Dict[str, Any]) -> Tuple[Optional[str], str]:
     prompt = f"Generate a weekly report summarizing these stats: {stats}"

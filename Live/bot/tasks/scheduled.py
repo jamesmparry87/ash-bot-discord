@@ -1708,24 +1708,24 @@ async def poll_gemini_batches():
     bot = get_bot_instance()
     if not bot:
         return
-        
+
     db = get_database()
     if not db:
         return
-        
+
     pending = db.trivia.get_pending_batch_clips()  # type: ignore
     if not pending:
         return
-        
+
     # Get distinct batch IDs
     batch_ids = list(set([row.get('batch_job_id') for row in list(pending) if row.get('batch_job_id')]))  # type: ignore
     if not batch_ids:
         return
-        
+
     from ..handlers.ai_handler import gemini_batch_client
     if not gemini_batch_client:
         return
-        
+
     for job_id in batch_ids:
         try:
             batch = await asyncio.to_thread(gemini_batch_client.batches.get, name=job_id)
@@ -1734,14 +1734,15 @@ async def poll_gemini_batches():
                 # Download output
                 import json
                 import urllib.request
-                
+
                 output_uri = batch.output_uri
                 req = urllib.request.Request(output_uri)
                 with urllib.request.urlopen(req) as response:
                     output_data = response.read().decode('utf-8')
-                
-                channel = bot.get_channel(bot.get_cog("ClipTriviaCog").target_channel_id) if bot.get_cog("ClipTriviaCog") else None
-                
+
+                channel = bot.get_channel(
+                    bot.get_cog("ClipTriviaCog").target_channel_id) if bot.get_cog("ClipTriviaCog") else None
+
                 # Parse JSONL output
                 for line in output_data.strip().split("\n"):
                     if not line:
@@ -1751,9 +1752,16 @@ async def poll_gemini_batches():
                         custom_id = obj.get("id")
                         canonical_url, msg_id_str = custom_id.split("|", 1)
                         msg_id = int(msg_id_str)
-                        
-                        response_text = obj.get("response", {}).get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                        
+
+                        response_text = obj.get(
+                            "response", {}).get(
+                            "candidates", [
+                                {}])[0].get(
+                            "content", {}).get(
+                            "parts", [
+                                {}])[0].get(
+                            "text", "")
+
                         if response_text:
                             # Clean up markdown
                             clean_text = response_text.strip()
@@ -1761,9 +1769,9 @@ async def poll_gemini_batches():
                                 clean_text = clean_text[7:]
                             if clean_text.endswith("```"):
                                 clean_text = clean_text[:-3]
-                                
+
                             data = json.loads(clean_text)
-                            
+
                             # DB update
                             success = db.trivia.update_clip_lore_from_batch(canonical_url, {
                                 "game_title": data.get("game_title", "Unknown"),
@@ -1776,7 +1784,7 @@ async def poll_gemini_batches():
                                 "clip_outcome": data.get("clip_outcome", ""),
                                 "message_id": msg_id
                             })
-                            
+
                             # Retroactive React
                             if channel and success:
                                 try:
@@ -1785,16 +1793,16 @@ async def poll_gemini_batches():
                                     await msg.remove_reaction("👀", bot.user)
                                 except Exception as e:
                                     print(f"Failed to react to parsed batch message {msg_id}: {e}")
-                                    
+
                     except Exception as e:
                         print(f"Error parsing batch result for line: {e}")
-                
+
                 # Clean up Gemini API Files to save space
                 try:
                     await asyncio.to_thread(gemini_batch_client.batches.delete, name=job_id)
                 except Exception as del_err:
                     print(f"Failed to delete batch job from API: {del_err}")
-                            
+
             elif batch.state == "FAILED":
                 print(f"❌ Batch {job_id} failed!")
                 # Mark them as failed in DB or remove pending status
