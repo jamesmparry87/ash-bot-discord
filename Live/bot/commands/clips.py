@@ -8,10 +8,11 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
 
 import discord
+from discord.ext import commands
+
 from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..database import get_database
 from ..handlers.ai_handler import upload_and_analyze_media
-from discord.ext import commands
 
 logger = logging.getLogger(__name__)
 
@@ -282,6 +283,7 @@ class ClipTriviaCog(commands.Cog):
 
         # Create batch job
         import asyncio
+
         from ..handlers.ai_handler import gemini_batch_client
         
         if not gemini_batch_client:

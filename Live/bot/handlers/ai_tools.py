@@ -4,7 +4,9 @@ AI Database Tools (Function Calling)
 This module provides tools that the AI can call to retrieve information from the Postgres database.
 """
 from typing import Optional
+
 from bot.database import get_database
+
 
 def search_clip_lore(game_title: str) -> str:
     """

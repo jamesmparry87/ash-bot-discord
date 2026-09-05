@@ -14,28 +14,29 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
+import google.genai as genai
+from google.genai import types
+
 from ..config import (
     ERROR_MESSAGE,
     FALLBACK_GREETINGS,
     FALLBACK_STATUS_RESPONSES,
     FALLBACK_WELCOME_RESPONSES,
-    GUILD_ID,
-    JAM_USER_ID,
-    JONESY_USER_ID,
-    MEMBER_ROLE_IDS,
-    POPS_ARCADE_USER_ID,
-    GOOGLE_API_KEY,
     GEMINI_BATCH_API_KEY,
     GEMINI_MODEL_CASCADE,
-    MAX_CONVERSATION_TURNS,
+    GOOGLE_API_KEY,
+    GUILD_ID,
     INACTIVITY_TTL_MINUTES,
+    JAM_USER_ID,
+    JONESY_USER_ID,
+    MAX_CONVERSATION_TURNS,
+    MEMBER_ROLE_IDS,
+    POPS_ARCADE_USER_ID,
 )
 from ..database import get_database
 from ..persona.context_builder import build_ash_context
 from ..persona.examples import ASH_FEW_SHOT_EXAMPLES
 from ..persona.prompts import ASH_SYSTEM_INSTRUCTION
-import google.genai as genai
-from google.genai import types
 
 # AI Configuration
 gemini_live_client: Any = None
@@ -138,7 +139,7 @@ async def call_ai_with_rate_limiting(prompt: str, context: Optional[str] = None,
         if context:
             sys_instruction += f"\n\n[ADDITIONAL CONTEXT]\n{context}"
             
-        from bot.handlers.ai_tools import AI_TOOLS, search_clip_lore, query_game_recommendations, query_played_games
+        from bot.handlers.ai_tools import AI_TOOLS, query_game_recommendations, query_played_games, search_clip_lore
         
         config = types.GenerateContentConfig(
             system_instruction=sys_instruction,

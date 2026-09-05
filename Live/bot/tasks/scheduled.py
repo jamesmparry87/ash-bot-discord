@@ -1732,8 +1732,8 @@ async def poll_gemini_batches():
             if batch.state == "SUCCEEDED":
                 print(f"🎬 Batch {job_id} completed successfully! Processing output...")
                 # Download output
-                import urllib.request
                 import json
+                import urllib.request
                 
                 output_uri = batch.output_uri
                 req = urllib.request.Request(output_uri)
