@@ -8,9 +8,9 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
 
 import discord
-from bot.config import JAM_USER_ID, JONESY_USER_ID
-from bot.database import get_database
-from bot.handlers.ai_handler import upload_and_analyze_media
+from ..config import JAM_USER_ID, JONESY_USER_ID
+from ..database import get_database
+from ..handlers.ai_handler import upload_and_analyze_media
 from discord.ext import commands
 
 logger = logging.getLogger(__name__)
@@ -185,7 +185,7 @@ class ClipTriviaCog(commands.Cog):
             await message.add_reaction("👀")
 
 
-    async def process_backlog_batch(self, search_limit: int = 200, max_process: int = 50, ctx=None) -> tuple[int, int]:
+    async def process_backlog_batch(self, search_limit: int = 200, max_process: int = 50, ctx=None, dryrun: bool = False) -> tuple[int, int]:
         """Scans the clips channel history for unprocessed clips backwards through time.
         Uploads clips to Gemini Files API and creates a batch job.
         Returns (found_count, queued_count)."""
@@ -200,7 +200,7 @@ class ClipTriviaCog(commands.Cog):
         db = get_database()
         
         # 1. Enforce only 1 batch job at a time
-        if db.trivia.has_pending_batch():
+        if not dryrun and db.trivia.has_pending_batch():
             msg = "⏳ A clip batch job is currently PENDING. Aborting new batch creation."
             if ctx:
                 await ctx.send(msg)
@@ -267,9 +267,22 @@ class ClipTriviaCog(commands.Cog):
                     json.dump({"last_scanned_message_id": oldest_message_id}, f)
             return found_count, 0
 
+        if dryrun:
+            msg = f"🏜️ **DRY RUN COMPLETE** 🏜️\nFound **{found_count}** total clip URLs in the scan range.\nQueued **{queued_count}** clips that need processing.\n\n"
+            if queued_count > 0:
+                msg += "**Clips that would be processed in this batch:**\n"
+                for m, curl, canon in clips_to_queue[:10]:
+                    msg += f"- <{canon}>\n"
+                if queued_count > 10:
+                    msg += f"...and {queued_count - 10} more."
+            
+            if ctx:
+                await ctx.send(msg)
+            return found_count, queued_count
+
         # Create batch job
         import asyncio
-        from bot.handlers.ai_handler import gemini_batch_client
+        from ..handlers.ai_handler import gemini_batch_client
         
         if not gemini_batch_client:
             msg = "❌ gemini_batch_client is not initialized. Cannot create batch."
@@ -286,7 +299,7 @@ class ClipTriviaCog(commands.Cog):
         prompt = TRIVIA_PROMPT
         if game_titles:
             game_list_str = ", ".join(game_titles)
-            prompt += f"\\n\\nCRITICAL INSTRUCTION FOR 'game_title': Whenever possible, match the game to one of our known played games: [{game_list_str}]. Only use a new name if it definitely does not match any game in this list."
+            prompt += f"\n\nCRITICAL INSTRUCTION FOR 'game_title': Whenever possible, match the game to one of our known played games: [{game_list_str}]. Only use a new name if it definitely does not match any game in this list."
 
         os.makedirs("temp", exist_ok=True)
         jsonl_lines = []
@@ -341,7 +354,7 @@ class ClipTriviaCog(commands.Cog):
             # Create JSONL file
             jsonl_path = "temp/batch_requests.jsonl"
             with open(jsonl_path, "w") as f:
-                f.write("\\n".join(jsonl_lines))
+                f.write("\n".join(jsonl_lines))
                 
             # Upload JSONL file
             jsonl_upload = await asyncio.to_thread(gemini_batch_client.files.upload, file=jsonl_path)
@@ -387,6 +400,15 @@ class ClipTriviaCog(commands.Cog):
             return
 
         await self.process_backlog_batch(search_limit=2000, max_process=limit, ctx=ctx)
+
+    @commands.command(name="scan_clips_dryrun")
+    async def scan_clips_dryrun(self, ctx, limit: int = 20):
+        """[Admin] Performs a dry run of the clip backlog scan without actually downloading or submitting to Gemini."""
+        if ctx.author.id not in [JAM_USER_ID, JONESY_USER_ID]:
+            await ctx.send("❌ Unauthorized.")
+            return
+
+        await self.process_backlog_batch(search_limit=2000, max_process=limit, ctx=ctx, dryrun=True)
 
     @commands.command(name="reset_clips")
     async def reset_clips(self, ctx):

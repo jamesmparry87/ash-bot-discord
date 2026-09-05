@@ -2039,6 +2039,7 @@ class TriviaDatabase:
                         emotion_category = %s,
                         characters_involved = %s,
                         clip_outcome = %s,
+                        message_id = %s,
                         batch_status = 'COMPLETED'
                     WHERE canonical_url = %s
                     """,
@@ -2052,6 +2053,7 @@ class TriviaDatabase:
                         data.get('emotion_category', ''),
                         data.get('characters_involved', ''),
                         data.get('clip_outcome', ''),
+                        data.get('message_id'),
                         canonical_url
                     )
                 )

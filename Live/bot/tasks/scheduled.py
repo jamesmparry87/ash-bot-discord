@@ -502,8 +502,8 @@ async def check_stale_trivia_sessions():
                     correct_user_ids: list[int] = session_results.get('correct_user_ids', [])  # type: ignore
                     incorrect_user_ids: list[int] = session_results.get('incorrect_user_ids', [])  # type: ignore
 
-                    other_correct_ids = [uid for uid in correct_user_ids if uid !=
-                                         winner_id] if winner_id else correct_user_ids  # type: ignore
+                    other_correct_ids = [uid for uid in list(correct_user_ids) if uid !=  # type: ignore
+                                         winner_id] if winner_id else list(correct_user_ids)  # type: ignore
 
                     if winner_id:
                         try:
@@ -707,7 +707,7 @@ async def friday_community_analysis():
         from ..handlers.ai_handler import generate_weekly_report
 
         # Try dynamic AI generation first
-        debrief = await generate_weekly_report('friday', analysis_cache)
+        debrief = await generate_weekly_report(analysis_cache)
 
         if not debrief:
             # Fallback to static message if AI is disabled or fails
@@ -833,7 +833,8 @@ async def daily_clip_scan_task():
     except Exception as e:
         print(f"Failed to fetch Jam user for DMs: {e}")
 
-        for idx, (msg, curl) in enumerate(clips_to_process):
+    quota_exhausted = False
+    for idx, (msg, curl) in enumerate(clips_to_process):
         if quota_exhausted:
             break
 
@@ -967,9 +968,7 @@ async def scheduled_ai_refresh():
     try:
         from ..handlers.ai_handler import get_ai_status, initialize_ai
 
-        # Force reset daily usage counters
-        reset_daily_usage()
-        print("✅ AI usage counters reset")
+        print("✅ AI usage counters reset (Not applicable in new framework)")
 
         # Re-initialize AI connections to refresh quota status
         initialize_ai()
@@ -978,12 +977,11 @@ async def scheduled_ai_refresh():
         ai_status = get_ai_status()
 
         print(
-            f"🔄 AI refresh completed - Status: {ai_status['status_message']}")
+            f"🔄 AI refresh completed - Status: {ai_status}")
 
         # Only send notification if there were previous issues or this is the
         # first refresh of the day
-        usage_stats = ai_status.get('usage_stats', {})
-        previous_errors = usage_stats.get('consecutive_errors', 0)
+        previous_errors = 0
 
         # NEW: Trivia Pool Validation and Auto-Replenishment
         pool_status_message = ""
@@ -1074,7 +1072,7 @@ async def scheduled_ai_refresh():
                 if previous_errors > 0:
                     notification_msg = (
                         f"🤖 **AI Module Refresh Complete**\n"
-                        f"• Status: {ai_status['status_message']}\n"
+                        f"• Status: {ai_status}\n"
                         f"• Previous errors cleared: {previous_errors}\n"
                         f"• Daily quota reset at {uk_now.strftime(f'%H:%M {timezone_name}')}\n\n"
                         f"{pool_status_message}\n\n"
@@ -1083,7 +1081,7 @@ async def scheduled_ai_refresh():
                 else:
                     notification_msg = (
                         f"🤖 **Daily System Refresh - {uk_now.strftime(f'%H:%M {timezone_name}')}**\n"
-                        f"• AI Status: {ai_status['status_message']}\n"
+                        f"• AI Status: {ai_status}\n"
                         f"• {pool_status_message}\n\n"
                         f"*All systems refreshed post-quota reset.*"
                     )
@@ -1720,11 +1718,11 @@ async def poll_gemini_batches():
         return
         
     # Get distinct batch IDs
-    batch_ids = list(set([row.get('batch_job_id') for row in pending if row.get('batch_job_id')]))
+    batch_ids = list(set([row.get('batch_job_id') for row in list(pending) if row.get('batch_job_id')]))  # type: ignore
     if not batch_ids:
         return
         
-    from bot.handlers.ai_handler import gemini_batch_client
+    from ..handlers.ai_handler import gemini_batch_client
     if not gemini_batch_client:
         return
         
@@ -1745,7 +1743,7 @@ async def poll_gemini_batches():
                 channel = bot.get_channel(bot.get_cog("ClipTriviaCog").target_channel_id) if bot.get_cog("ClipTriviaCog") else None
                 
                 # Parse JSONL output
-                for line in output_data.strip().split("\\n"):
+                for line in output_data.strip().split("\n"):
                     if not line:
                         continue
                     try:
