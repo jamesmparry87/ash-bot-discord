@@ -37,18 +37,21 @@ def canonicalize_clip_url(url: str) -> str:
 
         # Specific logic for Twitch clips to handle both clips.twitch.tv and twitch.tv/streamer/clip formats
         if 'twitch.tv' in parsed.netloc:
+            clip_id = None
             if 'clips.twitch.tv' in parsed.netloc:
                 clip_id = parsed.path.strip('/')
-                return f"https://clips.twitch.tv/{clip_id}".lower()
             elif '/clip/' in parsed.path:
                 clip_id = parsed.path.split('/clip/')[-1].strip('/')
-                return f"https://clips.twitch.tv/{clip_id}".lower()
+            
+            if clip_id:
+                # We standardise all clips to the long format as it presents better in Discord
+                return f"https://www.twitch.tv/jonesyspacecat/clip/{clip_id}"
 
         # Reconstruct without query parameters or fragments
         canonical = urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', '', ''))
-        return canonical.lower()
+        return canonical
     except Exception:
-        return url.lower()
+        return url
 
 
 class ClipParsingService:
