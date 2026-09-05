@@ -1561,7 +1561,6 @@ class GamesDatabase:
             conn.rollback()
             return 0
 
-
     def get_recommendations(self, limit: int = 10) -> list:
         try:
             with self.get_connection() as conn:
@@ -1575,6 +1574,7 @@ class GamesDatabase:
         except Exception as e:
             print(f"Error getting recommendations: {e}")
             return []
+
     def get_last_channel_check(self, channel_type: str) -> Optional[str]:
         """Get the last time we checked a channel for new games (YouTube/Twitch)"""
         return self.get_config_value(f"last_{channel_type}_check")

@@ -8,10 +8,11 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
 
 import discord
+from discord.ext import commands
+
 from ..config import JAM_USER_ID, JONESY_USER_ID
 from ..database import get_database
 from ..handlers.ai_handler import upload_and_analyze_media
-from discord.ext import commands
 
 logger = logging.getLogger(__name__)
 
@@ -187,8 +188,8 @@ class ClipTriviaCog(commands.Cog):
             # Acknowledge visually so users know it's in the queue for 8 PM
             await message.add_reaction("👀")
 
-
-    async def process_backlog_batch(self, search_limit: int = 200, max_process: int = 50, ctx=None, dryrun: bool = False) -> tuple[int, int]:
+    async def process_backlog_batch(self, search_limit: int = 200, max_process: int = 50,
+                                    ctx=None, dryrun: bool = False) -> tuple[int, int]:
         """Scans the clips channel history for unprocessed clips backwards through time.
         Uploads clips to Gemini Files API and creates a batch job.
         Returns (found_count, queued_count)."""
@@ -201,7 +202,7 @@ class ClipTriviaCog(commands.Cog):
             return 0, 0
 
         db = get_database()
-        
+
         # 1. Enforce only 1 batch job at a time
         if not dryrun and db.trivia.has_pending_batch():
             msg = "⏳ A clip batch job is currently PENDING. Aborting new batch creation."
@@ -278,15 +279,16 @@ class ClipTriviaCog(commands.Cog):
                     msg += f"- <{canon}>\n"
                 if queued_count > 10:
                     msg += f"...and {queued_count - 10} more."
-            
+
             if ctx:
                 await ctx.send(msg)
             return found_count, queued_count
 
         # Create batch job
         import asyncio
+
         from ..handlers.ai_handler import gemini_batch_client
-        
+
         if not gemini_batch_client:
             msg = "❌ gemini_batch_client is not initialized. Cannot create batch."
             logger.error(msg)
@@ -318,7 +320,7 @@ class ClipTriviaCog(commands.Cog):
 
                 file_id = f"clip_{msg.id}"
                 local_filename = f"temp/{file_id}.mp4"
-                
+
                 # Download
                 logger.info(f"Downloading clip {idx+1}/{queued_count}: {curl}")
                 download_result = await asyncio.to_thread(self.parser._download_video_sync, curl, local_filename)
@@ -329,66 +331,67 @@ class ClipTriviaCog(commands.Cog):
                     except Exception:
                         pass
                     continue
-                    
+
                 # Upload to Files API
                 logger.info(f"Uploading clip {idx+1} to Gemini Files API")
                 uploaded_file = await asyncio.to_thread(gemini_batch_client.files.upload, file=local_filename)
                 uploaded_files.append(uploaded_file)
-                
+
                 # Append to JSONL
                 jsonl_obj = {
                     "request": {
                         "contents": [
-                            {"role": "user", "parts": [{"fileData": {"fileUri": uploaded_file.uri, "mimeType": "video/mp4"}}, {"text": prompt}]}
+                            {"role": "user", "parts": [
+                                {"fileData": {"fileUri": uploaded_file.uri, "mimeType": "video/mp4"}}, {"text": prompt}]}
                         ]
                     },
                     "id": f"{canonical_url}|{msg.id}"  # Store both URL and Discord message ID as custom_id
                 }
                 jsonl_lines.append(json.dumps(jsonl_obj))
-                
+
                 # Cleanup local file
                 os.remove(local_filename)
-                
+
             if not jsonl_lines:
                 if ctx:
                     await ctx.send("❌ All clips failed to download or upload.")
                 return found_count, 0
-                
+
             # Create JSONL file
             jsonl_path = "temp/batch_requests.jsonl"
             with open(jsonl_path, "w") as f:
                 f.write("\n".join(jsonl_lines))
-                
+
             # Upload JSONL file
             jsonl_upload = await asyncio.to_thread(gemini_batch_client.files.upload, file=jsonl_path)
             uploaded_files.append(jsonl_upload)
-            
+
             # Start batch
             from google.genai import types
             logger.info("Submitting batch job...")
             batch_job = await asyncio.to_thread(gemini_batch_client.batches.create, src=jsonl_upload.uri)
             job_id = batch_job.name
-            
+
             # Add to DB
             for msg, curl, canonical_url in clips_to_queue:
                 # Add a dummy row to track the batch ID
                 db.trivia.add_pending_batch_clip(canonical_url, "Batch Pending Video")
                 db.trivia.update_clip_batch_job(canonical_url, job_id)
-                
+
             msg = f"🚀 Batch Job {job_id} successfully submitted with {len(jsonl_lines)} clips!"
             logger.info(msg)
             if ctx:
                 await ctx.send(msg)
-                
+
             os.remove(jsonl_path)
-            
+
             # Update state
             if oldest_message_id:
                 with open(state_file, 'w') as f:
                     json.dump({"last_scanned_message_id": oldest_message_id}, f)
-            
+
             return found_count, len(jsonl_lines)
-            
+
         except Exception as e:
             logger.error(f"Batch processing error: {e}")
             if ctx:

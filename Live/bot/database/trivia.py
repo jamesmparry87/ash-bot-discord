@@ -1856,7 +1856,6 @@ class TriviaDatabase:
                 'error': str(e)
             }
 
-
     def search_clip_lore_by_game(self, game_title: str) -> list:
         try:
             with self.get_connection() as conn:
@@ -1880,6 +1879,7 @@ class TriviaDatabase:
         except Exception as e:
             print(f"Error checking pending batches: {e}")
             return False
+
     def clip_lore_exists(self, canonical_url: str) -> bool:
         """Check if a clip has already been analyzed and stored in the database."""
         conn = self.db.get_connection()
@@ -1967,7 +1967,6 @@ class TriviaDatabase:
         finally:
             conn.close()
 
-    
     def add_pending_batch_clip(self, canonical_url: str, video_title: str) -> bool:
         """Add a clip to clip_lore as PENDING for batch processing"""
         conn = self.db.get_connection()
@@ -1995,7 +1994,7 @@ class TriviaDatabase:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT canonical_url, video_title, batch_job_id FROM clip_lore 
+                    SELECT canonical_url, video_title, batch_job_id FROM clip_lore
                     WHERE batch_status = 'PENDING'
                     """
                 )
@@ -2010,8 +2009,8 @@ class TriviaDatabase:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    UPDATE clip_lore 
-                    SET batch_job_id = %s, batch_status = 'PROCESSING' 
+                    UPDATE clip_lore
+                    SET batch_job_id = %s, batch_status = 'PROCESSING'
                     WHERE canonical_url = %s
                     """,
                     (batch_job_id, canonical_url)
@@ -2021,15 +2020,15 @@ class TriviaDatabase:
         except Exception as e:
             print(f"Error updating batch job: {e}")
             return False
-            
+
     def update_clip_lore_from_batch(self, canonical_url: str, data: dict) -> bool:
         conn = self.db.get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    UPDATE clip_lore 
-                    SET 
+                    UPDATE clip_lore
+                    SET
                         game_title = %s,
                         reaction = %s,
                         trigger = %s,
