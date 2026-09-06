@@ -1570,7 +1570,7 @@ class GamesDatabase:
                         (limit,)
                     )
                     rows = cur.fetchall()
-                    return [{"game_title": r[0], "submitted_by": r[1]} for r in rows]
+                    return [{"game_title": r.get("game_title"), "submitted_by": r.get("submitted_by")} for r in rows]
         except Exception as e:
             print(f"Error getting recommendations: {e}")
             return []

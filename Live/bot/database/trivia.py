@@ -1865,7 +1865,7 @@ class TriviaDatabase:
                         (f"%{game_title}%",)
                     )
                     rows = cur.fetchall()
-                    return [{"notable_quote": r[0], "clip_outcome": r[1]} for r in rows]
+                    return [{"notable_quote": r.get("notable_quote"), "clip_outcome": r.get("clip_outcome")} for r in rows]
         except Exception as e:
             print(f"Error searching clip lore: {e}")
             return []
@@ -1875,7 +1875,11 @@ class TriviaDatabase:
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("SELECT COUNT(*) FROM clip_lore WHERE batch_status = 'PENDING'")
-                    return cur.fetchone()[0] > 0
+                    row = cur.fetchone()
+                    # RealDictCursor returns a dict-like object, usually with 'count' as the key for COUNT(*)
+                    # To be safe, we can just get the first value from the dictionary's values
+                    count = list(row.values())[0] if row else 0
+                    return count > 0
         except Exception as e:
             print(f"Error checking pending batches: {e}")
             return False

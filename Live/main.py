@@ -19,8 +19,7 @@ from zoneinfo import ZoneInfo
 # Configure global logging format and levels
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s | %(levelname)-7s | %(name)s | %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
+    format='%(levelname)-7s | %(name)s | %(message)s',
     stream=sys.stdout
 )
 
