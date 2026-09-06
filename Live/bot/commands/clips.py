@@ -43,7 +43,7 @@ def canonicalize_clip_url(url: str) -> str:
                 clip_id = parsed.path.strip('/')
             elif '/clip/' in parsed.path:
                 clip_id = parsed.path.split('/clip/')[-1].strip('/')
-            
+
             if clip_id:
                 # We standardise all clips to the long format as it presents better in Discord
                 return f"https://www.twitch.tv/jonesyspacecat/clip/{clip_id}"
