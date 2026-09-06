@@ -350,7 +350,7 @@ class ClipTriviaCog(commands.Cog):
                 # Upload to Files API
                 logger.info(f"Uploading clip {idx+1} to Gemini Files API")
                 uploaded_file = await asyncio.to_thread(
-                    gemini_batch_client.files.upload, 
+                    gemini_batch_client.files.upload,
                     file=local_filename,
                     config={'mime_type': 'video/mp4'}
                 )
@@ -383,7 +383,7 @@ class ClipTriviaCog(commands.Cog):
 
             # Upload JSONL file
             jsonl_upload = await asyncio.to_thread(
-                gemini_batch_client.files.upload, 
+                gemini_batch_client.files.upload,
                 file=jsonl_path,
                 config={'mime_type': 'application/jsonl'}
             )

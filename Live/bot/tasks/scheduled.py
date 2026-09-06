@@ -916,28 +916,30 @@ async def process_clip_backlog():
         print(f"❌ Error in process_clip_backlog: {e}")
 
 # Run at 8:00 AM UK time every day
+
+
 @tasks.loop(time=time(8, 0, tzinfo=ZoneInfo("Europe/London")))
 async def daily_status_report():
     """Daily status update at 8:00am BST (replaces old restart/quota refresh)"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-    
+
     dst_offset = uk_now.dst()
     is_bst = dst_offset is not None and dst_offset.total_seconds() > 0
     timezone_name = "BST" if is_bst else "GMT"
-    
+
     print(f"🤖 Daily status report initiated at {uk_now.strftime(f'%H:%M:%S {timezone_name}')}")
-    
+
     try:
         from ..config import JAM_USER_ID
         from ..handlers.ai_handler import get_ai_status
         bot = get_bot_instance()
         if not bot:
             return
-            
+
         is_live_bot = "rook" not in bot.user.name.lower()
-        
+
         ai_status = get_ai_status()
-        
+
         # 1. Trivia Pool Validation and Auto-Replenishment
         pool_status_message = ""
         db = None
@@ -946,31 +948,31 @@ async def daily_status_report():
             if db:
                 available_questions = db.get_available_trivia_questions()
                 pool_count = len(available_questions) if available_questions else 0
-                
+
                 print(f"🧠 TRIVIA POOL CHECK (8:00 AM): {pool_count} questions available")
-                
+
                 if pool_count >= 3:
                     pool_status_message = f"✅ Trivia Pool: {pool_count} questions available"
                 else:
                     pool_status_message = f"⚠️ Trivia Pool: {pool_count}/5 questions (LOW)"
-                    
+
                     if is_live_bot:
                         needed = 5 - pool_count
                         print(f"🔄 TRIVIA POOL: Generating {needed} questions...")
                         try:
                             from ..handlers.conversations import start_jam_question_approval
                             from ..handlers.trivia.generator import generate_ai_trivia_question
-                            
+
                             generated = 0
                             failed = 0
                             consecutive_failures = 0
                             MAX_CONSECUTIVE_FAILURES = 2
-                            
+
                             for i in range(needed):
                                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                                     pool_status_message += f"\n🚨 Circuit breaker activated after {consecutive_failures} failures"
                                     break
-                                    
+
                                 try:
                                     question_list = await generate_ai_trivia_question(f"auto_replenish_{i}")
                                     if question_list and len(question_list) > 0:
@@ -987,7 +989,7 @@ async def daily_status_report():
                                 except Exception as gen_error:
                                     failed += 1
                                     consecutive_failures += 1
-                                    
+
                             pool_status_message += f"\n📤 Auto-generated: {generated} questions sent to approval queue"
                             if failed > 0:
                                 pool_status_message += f"\n⚠️ Failed: {failed} generation attempts"
@@ -997,21 +999,21 @@ async def daily_status_report():
                 pool_status_message = "❌ Trivia Pool: Database unavailable"
         except Exception as pool_error:
             pool_status_message = f"❌ Trivia Pool: Check failed - {str(pool_error)[:100]}"
-            
+
         # 2. Token Usage & Cost Report (Only on Live Bot)
         cost_info = ""
         if is_live_bot and db:
             try:
                 yesterday = (uk_now - timedelta(days=1)).date()
                 usage = db.get_token_usage_for_day(yesterday)
-                
+
                 if usage:
                     total_cost = 0.0
                     token_details = []
                     for model, counts in usage.items():
                         p_tok = counts['prompt_tokens']
                         c_tok = counts['candidate_tokens']
-                        
+
                         if "3.6-flash" in model:
                             cost = (p_tok / 1_000_000 * 0.75) + (c_tok / 1_000_000 * 3.75)
                         elif "3.5-flash" in model or "flash" in model:
@@ -1020,18 +1022,19 @@ async def daily_status_report():
                             cost = (p_tok / 1_000_000 * 1.25) + (c_tok / 1_000_000 * 5.00)
                         else:
                             cost = 0.0
-                            
+
                         total_cost += cost
                         short_model = model.replace('models/', '').replace('gemini-', '')
                         token_details.append(f"• *{short_model}*: {p_tok:,} in / {c_tok:,} out")
-                        
-                    cost_info = f"\n\n💰 **Yesterday's AI Usage & Cost**\n" + "\n".join(token_details) + f"\n**Total Est. Cost: ${total_cost:.4f}**"
+
+                    cost_info = f"\n\n💰 **Yesterday's AI Usage & Cost**\n" + \
+                        "\n".join(token_details) + f"\n**Total Est. Cost: ${total_cost:.4f}**"
                 else:
                     cost_info = "\n\n💰 **Yesterday's AI Usage & Cost**\nNo AI usage recorded yesterday."
             except Exception as e:
                 print(f"Error generating token report: {e}")
                 cost_info = "\n\n💰 **Yesterday's AI Usage & Cost**\nError fetching usage data."
-                
+
         # Send Notification to JAM
         if is_live_bot:
             user = await bot.fetch_user(JAM_USER_ID)
@@ -1046,7 +1049,7 @@ async def daily_status_report():
                 print("✅ Daily report sent to JAM")
         else:
             print("⏭️ Staging bot: Skipping daily DM report")
-            
+
     except Exception as e:
         print(f"❌ Error in daily_status_report: {e}")
 

@@ -137,7 +137,7 @@ class UtilityCommands(commands.Cog):
 
             # Enhanced AI system status
             ai_status_line = f"• **AI System**: {ai_status_msg}"
-            
+
             # Fetch daily token usage and calculate cost
             cost_info = ""
             try:
@@ -149,7 +149,7 @@ class UtilityCommands(commands.Cog):
                         for model, counts in usage.items():
                             p_tok = counts['prompt_tokens']
                             c_tok = counts['candidate_tokens']
-                            
+
                             # Calculate cost based on model
                             if "3.6-flash" in model:
                                 cost = (p_tok / 1_000_000 * 0.75) + (c_tok / 1_000_000 * 3.75)
@@ -159,16 +159,17 @@ class UtilityCommands(commands.Cog):
                                 cost = (p_tok / 1_000_000 * 1.25) + (c_tok / 1_000_000 * 5.00)
                             else:
                                 cost = 0.0
-                                
+
                             total_cost += cost
                             # Keep it brief for the status command
-                            short_model = model.replace('models/','').replace('gemini-', '')
+                            short_model = model.replace('models/', '').replace('gemini-', '')
                             token_details.append(f"*{short_model}*: {p_tok:,} in / {c_tok:,} out")
-                            
-                        cost_info = f"\n  └ 💰 **Daily Est. Cost**: ${total_cost:.4f}\n  └ 📊 **Tokens**: " + " | ".join(token_details)
+
+                        cost_info = f"\n  └ 💰 **Daily Est. Cost**: ${total_cost:.4f}\n  └ 📊 **Tokens**: " + " | ".join(
+                            token_details)
             except Exception as e:
                 print(f"Error fetching token usage for ashstatus: {e}")
-                
+
             status_lines.append(ai_status_line + cost_info)
 
             # Strike management
