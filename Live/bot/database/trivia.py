@@ -1865,7 +1865,8 @@ class TriviaDatabase:
                         (f"%{game_title}%",)
                     )
                     rows = cur.fetchall()
-                    return [{"notable_quote": r.get("notable_quote"), "clip_outcome": r.get("clip_outcome")} for r in rows]
+                    return [{"notable_quote": r.get("notable_quote"),
+                             "clip_outcome": r.get("clip_outcome")} for r in rows]
         except Exception as e:
             print(f"Error searching clip lore: {e}")
             return []
