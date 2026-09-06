@@ -292,7 +292,6 @@ async def _regenerate_weekly_announcement_content(analysis_cache: dict, day: str
     from bot.config import JAM_USER_ID
     from bot.handlers.ai_handler import (
         ai_enabled,
-        apply_ash_persona_to_ai_prompt,
         call_ai_with_rate_limiting,
         filter_ai_response,
     )
@@ -328,8 +327,8 @@ async def _regenerate_weekly_announcement_content(analysis_cache: dict, day: str
 
         CRITICAL: The new version must be substantially different from the original.
         """
-        prompt = apply_ash_persona_to_ai_prompt(content_prompt, "announcement_regeneration")
-        response_text, status_message = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+        prompt = content_prompt
+        response_text, status_message = await call_ai_with_rate_limiting(prompt=prompt, user_id=JAM_USER_ID)
 
         if response_text:
             return filter_ai_response(response_text)
@@ -344,7 +343,6 @@ async def amend_weekly_content_with_ai(original_content: str, amendment_instruct
     from bot.config import JAM_USER_ID
     from bot.handlers.ai_handler import (
         ai_enabled,
-        apply_ash_persona_to_ai_prompt,
         call_ai_with_rate_limiting,
         filter_ai_response,
     )
@@ -371,8 +369,8 @@ async def amend_weekly_content_with_ai(original_content: str, amendment_instruct
     Provide ONLY the revised announcement text, with no additional commentary.
     """
 
-    prompt = apply_ash_persona_to_ai_prompt(amendment_prompt, "announcement_amendment")
-    response_text, status_message = await call_ai_with_rate_limiting(prompt, JAM_USER_ID)
+    prompt = amendment_prompt
+    response_text, status_message = await call_ai_with_rate_limiting(prompt=prompt, user_id=JAM_USER_ID)
 
     if response_text:
         return filter_ai_response(response_text)

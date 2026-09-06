@@ -862,7 +862,7 @@ Each object in the JSON array MUST follow this exact format:
 
                 response_text, status_message = await call_ai_for_generation(
                     prompt,
-                    context=context,
+                    system_instruction=context,
                     temperature=temperature
                 )
 
@@ -1057,7 +1057,7 @@ Generate diverse, engaging questions about Jonesy's gaming journey."""
 
         # Call AI with rate limiting
         print(f"📞 Making single API call for {batch_size} questions...")
-        response_text, status_message = await call_ai_with_rate_limiting(batch_prompt, JONESY_USER_ID, context)
+        response_text, status_message = await call_ai_with_rate_limiting(prompt=batch_prompt, user_id=JONESY_USER_ID, context=context)
 
         if not response_text:
             print(f"❌ Batch generation failed: {status_message}")

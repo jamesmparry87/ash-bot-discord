@@ -189,9 +189,10 @@ async def generate_ai_enhanced_question(prompt_data: dict, bot=None):
             f"Format: Question: [question] | Answer: [answer]"
         )
 
+        context_data = {"bot": bot} if bot else None
         response_text, status = await call_ai_with_rate_limiting(
-            prompt, JAM_USER_ID, context="trivia_generation",
-            member_obj=None, bot=bot)
+            prompt=prompt, user_id=JAM_USER_ID, context="trivia_generation",
+            context_data=context_data)
 
         if response_text:
             # Parse response
@@ -378,9 +379,10 @@ async def generate_ai_question_fallback(db=None, bot=None, avoid_questions=None,
 
             logger.info(f"Generating trivia question (attempt {attempt + 1}/{max_attempts}): {selected_type['type']}")
 
+            context_data = {"bot": bot} if bot else None
             response_text, status = await call_ai_with_rate_limiting(
-                selected_type['prompt'], JAM_USER_ID, context="trivia_generation",
-                member_obj=None, bot=bot)
+                prompt=selected_type['prompt'], user_id=JAM_USER_ID, context="trivia_generation",
+                context_data=context_data)
 
             if response_text:
                 # Parse the response text using the helper function

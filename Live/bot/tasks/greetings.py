@@ -203,14 +203,17 @@ async def pops_annual_birthday_greeting():
 
         # 1. Run it through your standard Gemini AI handler
         try:
+            context_data = {
+                "member_obj": pops_user,
+                "bot": bot,
+                "channel_id": CHIT_CHAT_CHANNEL_ID,
+                "is_dm": False
+            }
             response_text, status_message = await call_ai_with_rate_limiting(
-                ai_prompt,
+                prompt=ai_prompt,
                 user_id=POPS_ARCADE_USER_ID,
                 context="personality_response",
-                member_obj=pops_user,
-                bot=bot,
-                channel_id=CHIT_CHAT_CHANNEL_ID,
-                is_dm=False
+                context_data=context_data
             )
         except Exception as ai_err:
             print(f"⚠️ BIRTHDAY PROTOCOL: AI generation failed, using fallback: {ai_err}")

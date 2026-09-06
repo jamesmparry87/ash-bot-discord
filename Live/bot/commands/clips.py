@@ -189,7 +189,7 @@ class ClipTriviaCog(commands.Cog):
             await message.add_reaction("👀")
 
     async def process_backlog_batch(self, search_limit: int = 200, max_process: int = 50,
-                                    ctx=None, dryrun: bool = False) -> tuple[int, int]:
+                                    ctx=None, dryrun: bool = False, resume_from_state: bool = True) -> tuple[int, int]:
         """Scans the clips channel history for unprocessed clips backwards through time.
         Uploads clips to Gemini Files API and creates a batch job.
         Returns (found_count, queued_count)."""
@@ -216,7 +216,7 @@ class ClipTriviaCog(commands.Cog):
         state_file = "data/clip_scan_state.json"
         os.makedirs("data", exist_ok=True)
         last_scanned_id = None
-        if os.path.exists(state_file):
+        if resume_from_state and os.path.exists(state_file):
             try:
                 with open(state_file, 'r') as f:
                     state = json.load(f)
@@ -266,7 +266,7 @@ class ClipTriviaCog(commands.Cog):
         if queued_count == 0:
             if ctx:
                 await ctx.send("✅ No unprocessed clips found in this scan segment.")
-            if oldest_message_id:
+            if resume_from_state and oldest_message_id:
                 with open(state_file, 'w') as f:
                     json.dump({"last_scanned_message_id": oldest_message_id}, f)
             return found_count, 0
@@ -421,7 +421,7 @@ class ClipTriviaCog(commands.Cog):
             os.remove(jsonl_path)
 
             # Update state
-            if oldest_message_id:
+            if resume_from_state and oldest_message_id:
                 with open(state_file, 'w') as f:
                     json.dump({"last_scanned_message_id": oldest_message_id}, f)
 

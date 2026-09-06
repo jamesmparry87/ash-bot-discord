@@ -18,6 +18,7 @@ from bot.handlers.ai_handler import (
     ai_enabled,
     call_ai_with_rate_limiting,
     filter_ai_response,
+    create_ai_announcement_content,
 )
 from bot.utils.permissions import get_user_communication_tier, user_is_mod_by_id
 from discord.ext import commands
@@ -32,6 +33,8 @@ from .core import (
 )
 from .trivia_approval import add_to_approval_queue, get_queue_length, process_next_approval
 from .utils import (
+    _regenerate_weekly_announcement_content,
+    amend_weekly_content_with_ai,
     check_conversation_health,
     check_escape_command,
     create_invalid_input_message,
