@@ -309,7 +309,7 @@ async def initialize_modular_components():
         initialize_ai()
         ai_status = get_ai_status()
         status_report["ai_handler"] = True
-        print(f"✅ AI Handler initialized: {ai_status['status_message']}")
+        print(f"✅ AI Handler initialized: {ai_status}")
     except Exception as e:
         status_report["errors"].append(f"AI Handler: {e}")
         print(f"❌ AI Handler initialization failed: {e}")
