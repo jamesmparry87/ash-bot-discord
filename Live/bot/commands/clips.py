@@ -395,7 +395,7 @@ class ClipTriviaCog(commands.Cog):
             batch_job = await asyncio.to_thread(
                 gemini_batch_client.batches.create, 
                 model='gemini-3.6-flash',
-                src=jsonl_upload.uri
+                src=jsonl_upload.name
             )
             job_id = batch_job.name
 
