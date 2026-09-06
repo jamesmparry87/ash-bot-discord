@@ -605,7 +605,7 @@ class DatabaseManager:
                     )
                 """)
 
-                # Create AI usage tracking tables
+                # Create AI usage tracking tables (legacy and new token tracking)
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS ai_usage_tracking (
                         tracking_date DATE PRIMARY KEY,
@@ -619,6 +619,16 @@ class DatabaseManager:
                         last_model_switch TIMESTAMP WITH TIME ZONE,
                         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_token_usage (
+                        date DATE DEFAULT CURRENT_DATE,
+                        model_name VARCHAR(50),
+                        prompt_tokens INTEGER DEFAULT 0,
+                        candidate_tokens INTEGER DEFAULT 0,
+                        PRIMARY KEY (date, model_name)
                     )
                 """)
 
@@ -881,6 +891,67 @@ class DatabaseManager:
     def get_engagement_metrics(self, game_name=None, limit=10):
         """Delegate to games module - get engagement metrics"""
         return self.games.get_engagement_metrics(game_name, limit)
+
+    def get_weekly_playtime_summary(self) -> Dict[str, Any]:
+        """Returns a summary of the current week's playtime (not implemented)"""
+        return {}
+        
+    # =========================================================================
+    # AI Token Tracking Methods
+    # =========================================================================
+
+    def log_token_usage(self, model_name: str, prompt_tokens: int, candidate_tokens: int):
+        """Log token usage for a specific model for the current day."""
+        conn = self.get_connection()
+        if not conn:
+            return
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO ai_token_usage (date, model_name, prompt_tokens, candidate_tokens)
+                    VALUES (CURRENT_DATE, %s, %s, %s)
+                    ON CONFLICT (date, model_name) 
+                    DO UPDATE SET 
+                        prompt_tokens = ai_token_usage.prompt_tokens + EXCLUDED.prompt_tokens,
+                        candidate_tokens = ai_token_usage.candidate_tokens + EXCLUDED.candidate_tokens
+                """, (model_name, prompt_tokens, candidate_tokens))
+            conn.commit()
+        except Exception as e:
+            logger.error(f"Error logging token usage: {e}")
+
+    def get_token_usage_for_day(self, target_date=None) -> Dict[str, Dict[str, int]]:
+        """Get token usage for all models on a specific date (defaults to today)."""
+        conn = self.get_connection()
+        if not conn:
+            return {}
+            
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                if target_date is None:
+                    cur.execute("""
+                        SELECT model_name, prompt_tokens, candidate_tokens 
+                        FROM ai_token_usage 
+                        WHERE date = CURRENT_DATE
+                    """)
+                else:
+                    cur.execute("""
+                        SELECT model_name, prompt_tokens, candidate_tokens 
+                        FROM ai_token_usage 
+                        WHERE date = %s
+                    """, (target_date,))
+                
+                rows = cur.fetchall()
+                usage = {}
+                for row in rows:
+                    usage[row['model_name']] = {
+                        'prompt_tokens': row['prompt_tokens'],
+                        'candidate_tokens': row['candidate_tokens']
+                    }
+                return usage
+        except Exception as e:
+            logger.error(f"Error getting token usage: {e}")
+            return {}
 
     def get_gaming_timeline(self, order='ASC'):
         """Delegate to games module - get gaming timeline"""

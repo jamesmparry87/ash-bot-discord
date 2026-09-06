@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+import random
 import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -47,6 +48,24 @@ ai_status_message = "Offline"
 # Sliding window tracking
 conversation_history: Dict[int, List[Dict[str, Any]]] = {}
 conversation_last_active: Dict[int, datetime] = {}
+MAX_TOKENS = 8000
+
+def _track_token_usage(model_name: str, response):
+    """Extract token usage from response and log it to the database"""
+    try:
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            prompt_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0)
+            candidate_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0)
+            if prompt_tokens > 0 or candidate_tokens > 0:
+                from ..database import get_database
+                db = get_database()
+                if db:
+                    # Run in a separate task so we don't block the AI response flow
+                    asyncio.create_task(
+                        asyncio.to_thread(db.log_token_usage, model_name, prompt_tokens, candidate_tokens)
+                    )
+    except Exception as e:
+        print(f"⚠️ Error tracking token usage: {e}")
 
 pacific_tz = ZoneInfo("US/Pacific")
 
@@ -155,7 +174,7 @@ async def call_ai_with_rate_limiting(prompt: str,
         if context:
             sys_instruction += f"\n\n[ADDITIONAL CONTEXT]\n{context}"
 
-        from bot.handlers.ai_tools import AI_TOOLS, query_game_recommendations, query_played_games, search_clip_lore
+        from .ai_tools import AI_TOOLS, query_game_recommendations, query_played_games, search_clip_lore
 
         config = types.GenerateContentConfig(
             system_instruction=sys_instruction,
@@ -193,6 +212,10 @@ async def call_ai_with_rate_limiting(prompt: str,
                     chat.send_message,
                     prompt
                 )
+                
+                # Track token usage
+                _track_token_usage(model_name, response)
+                
                 break  # Success, exit fallback loop
             except Exception as model_err:
                 last_error = model_err
@@ -233,6 +256,10 @@ async def call_ai_for_generation(prompt: str, system_instruction: str = None,
                     contents=prompt,
                     config=config
                 )
+                
+                # Track token usage
+                _track_token_usage(model_name, response)
+                
                 return filter_ai_response(response.text), "success"
             except Exception as model_err:
                 last_error = model_err
@@ -251,8 +278,14 @@ async def upload_and_analyze_media(file_path: str, prompt: str, is_batch: bool =
         return None, "offline"
 
     try:
+        import mimetypes
+        mime_type, _ = mimetypes.guess_type(file_path)
+        upload_kwargs = {"file": file_path}
+        if mime_type:
+            upload_kwargs["config"] = {'mime_type': mime_type}
+            
         uploaded_file = await asyncio.to_thread(
-            client.files.upload, file=file_path
+            client.files.upload, **upload_kwargs
         )
 
         config = types.GenerateContentConfig(

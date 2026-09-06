@@ -915,202 +915,139 @@ async def process_clip_backlog():
     except Exception as e:
         print(f"❌ Error in process_clip_backlog: {e}")
 
-# Run at 00:00 PT (midnight Pacific Time) every day
-
-
-@tasks.loop(time=time(0, 0, tzinfo=ZoneInfo("US/Pacific")))
-async def scheduled_midnight_restart():
-    """Automatically restart the bot at midnight Pacific Time to reset daily limits"""
-    pt_now = datetime.now(ZoneInfo("US/Pacific"))
-    print(
-        f"🔄 Midnight Pacific Time restart initiated at {pt_now.strftime('%Y-%m-%d %H:%M:%S PT')}")
-
-    try:
-        if not get_bot_instance():
-            print("❌ Bot instance not available for scheduled midnight restart")
-            return
-
-        guild = get_bot_instance().get_guild(GUILD_ID)  # type: ignore
-        if guild:
-            # Find mod channel
-            mod_channel = None
-            for channel in guild.text_channels:
-                if channel.name in ["mod-chat", "moderator-chat", "mod"]:
-                    mod_channel = channel
-                    break
-
-            if mod_channel:
-                await mod_channel.send(
-                    f"🌙 **Midnight Pacific Time Restart:** Initiating scheduled bot restart to reset daily AI limits. System will be back online momentarily. Current time: {pt_now.strftime('%Y-%m-%d %H:%M:%S PT')}"
-                )
-
-        # Graceful shutdown
-        await get_bot_instance().close()  # type: ignore
-
-    except Exception as e:
-        print(f"❌ Error in scheduled_midnight_restart: {e}")
-
-# Run at 8:15 AM UK time every day (5 minutes after Google quota reset)
-
-
-@tasks.loop(time=time(8, 15, tzinfo=ZoneInfo("Europe/London")))
-async def scheduled_ai_refresh():
-    """Silently refresh AI module connections at 8:15am BST (after Google quota reset)"""
+# Run at 8:00 AM UK time every day
+@tasks.loop(time=time(8, 0, tzinfo=ZoneInfo("Europe/London")))
+async def daily_status_report():
+    """Daily status update at 8:00am BST (replaces old restart/quota refresh)"""
     uk_now = datetime.now(ZoneInfo("Europe/London"))
-
+    
     dst_offset = uk_now.dst()
     is_bst = dst_offset is not None and dst_offset.total_seconds() > 0
     timezone_name = "BST" if is_bst else "GMT"
-
-    print(
-        f"🤖 AI module refresh initiated at {uk_now.strftime(f'%Y-%m-%d %H:%M:%S {timezone_name}')} (post-quota reset)")
-
+    
+    print(f"🤖 Daily status report initiated at {uk_now.strftime(f'%H:%M:%S {timezone_name}')}")
+    
     try:
-        from ..handlers.ai_handler import get_ai_status, initialize_ai
-
-        print("✅ AI usage counters reset (Not applicable in new framework)")
-
-        # Re-initialize AI connections to refresh quota status
-        initialize_ai()
-
-        # Get updated status
+        from ..config import JAM_USER_ID
+        from ..handlers.ai_handler import get_ai_status
+        bot = get_bot_instance()
+        if not bot:
+            return
+            
+        is_live_bot = "rook" not in bot.user.name.lower()
+        
         ai_status = get_ai_status()
-
-        print(
-            f"🔄 AI refresh completed - Status: {ai_status}")
-
-        # Only send notification if there were previous issues or this is the
-        # first refresh of the day
-        previous_errors = 0
-
-        # NEW: Trivia Pool Validation and Auto-Replenishment
+        
+        # 1. Trivia Pool Validation and Auto-Replenishment
         pool_status_message = ""
         try:
             db = get_database()
             if db:
                 available_questions = db.get_available_trivia_questions()
                 pool_count = len(available_questions) if available_questions else 0
-
-                print(f"🧠 TRIVIA POOL CHECK (8:15 AM): {pool_count} questions available")
-
+                
+                print(f"🧠 TRIVIA POOL CHECK (8:00 AM): {pool_count} questions available")
+                
                 if pool_count >= 3:
                     pool_status_message = f"✅ Trivia Pool: {pool_count} questions available"
                 else:
                     pool_status_message = f"⚠️ Trivia Pool: {pool_count}/5 questions (LOW)"
-
-                    # Auto-generate needed questions (always aim to fill back to 5)
-                    needed = 5 - pool_count
-                    print(f"🔄 TRIVIA POOL: Generating {needed} questions...")
-
-                    try:
-                        from ..handlers.conversations import start_jam_question_approval
-                        from ..handlers.trivia.generator import generate_ai_trivia_question
-
-                        generated = 0
-                        failed = 0
-
-                        # ✅ CIRCUIT BREAKER: Protect API quota from consecutive failures
-                        consecutive_failures = 0
-                        MAX_CONSECUTIVE_FAILURES = 2  # Stop after 2 failures in a row
-
-                        for i in range(needed):
-                            # ✅ CIRCUIT BREAKER CHECK: Stop if too many consecutive failures
-                            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                                print(
-                                    f"🚨 CIRCUIT BREAKER (8:15 AM): Stopping auto-replenishment after {consecutive_failures} consecutive failures")
-                                print(f"⚠️ API quota preserved: {needed - i} questions not attempted")
-                                pool_status_message += f"\n🚨 Circuit breaker activated after {consecutive_failures} failures"
-                                break
-
-                            try:
-                                question_list = await generate_ai_trivia_question(f"auto_replenish_{i}")
-                                if question_list and len(question_list) > 0:
-                                    question_data = question_list[0]
-                                    if await start_jam_question_approval(question_data):
-                                        generated += 1
-                                        consecutive_failures = 0  # ✅ Reset on success
-                                        print(f"✅ Generated question {i+1}/{needed}")
+                    
+                    if is_live_bot:
+                        needed = 5 - pool_count
+                        print(f"🔄 TRIVIA POOL: Generating {needed} questions...")
+                        try:
+                            from ..handlers.conversations import start_jam_question_approval
+                            from ..handlers.trivia.generator import generate_ai_trivia_question
+                            
+                            generated = 0
+                            failed = 0
+                            consecutive_failures = 0
+                            MAX_CONSECUTIVE_FAILURES = 2
+                            
+                            for i in range(needed):
+                                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                                    pool_status_message += f"\n🚨 Circuit breaker activated after {consecutive_failures} failures"
+                                    break
+                                    
+                                try:
+                                    question_list = await generate_ai_trivia_question(f"auto_replenish_{i}")
+                                    if question_list and len(question_list) > 0:
+                                        if await start_jam_question_approval(question_list[0]):
+                                            generated += 1
+                                            consecutive_failures = 0
+                                        else:
+                                            failed += 1
+                                            consecutive_failures += 1
                                     else:
                                         failed += 1
                                         consecutive_failures += 1
-                                else:
+                                    await asyncio.sleep(2)
+                                except Exception as gen_error:
                                     failed += 1
                                     consecutive_failures += 1
-                                    print(f"⚠️ Generation failure {consecutive_failures}/{MAX_CONSECUTIVE_FAILURES}")
-                                await asyncio.sleep(2)
-                            except Exception as gen_error:
-                                failed += 1
-                                consecutive_failures += 1
-                                print(f"❌ Question generation {i+1} failed: {gen_error}")
-                                print(f"⚠️ Consecutive failures: {consecutive_failures}/{MAX_CONSECUTIVE_FAILURES}")
-
-                        pool_status_message += f"\n📤 Auto-generated: {generated} questions sent to approval queue"
-                        if failed > 0:
-                            pool_status_message += f"\n⚠️ Failed: {failed} generation attempts"
-
-                    except Exception as replenish_error:
-                        pool_status_message += f"\n❌ Replenishment failed: {str(replenish_error)[:100]}"
-                        print(f"❌ TRIVIA POOL: Replenishment error: {replenish_error}")
+                                    
+                            pool_status_message += f"\n📤 Auto-generated: {generated} questions sent to approval queue"
+                            if failed > 0:
+                                pool_status_message += f"\n⚠️ Failed: {failed} generation attempts"
+                        except Exception as replenish_error:
+                            pool_status_message += f"\n❌ Replenishment failed: {str(replenish_error)[:100]}"
             else:
                 pool_status_message = "❌ Trivia Pool: Database unavailable"
-
         except Exception as pool_error:
             pool_status_message = f"❌ Trivia Pool: Check failed - {str(pool_error)[:100]}"
-            print(f"❌ TRIVIA POOL CHECK: Error - {pool_error}")
-
-        # Send notification to JAM (always send now, includes pool status)
-        try:
-            from ..config import JAM_USER_ID
-
-            if not get_bot_instance():
-                print("⚠️ Bot instance not available for AI refresh notification")
-                return
-
-            user = await get_bot_instance().fetch_user(JAM_USER_ID)  # type: ignore
-            if user:
-                # Build notification message
-                if previous_errors > 0:
-                    notification_msg = (
-                        f"🤖 **AI Module Refresh Complete**\n"
-                        f"• Status: {ai_status}\n"
-                        f"• Previous errors cleared: {previous_errors}\n"
-                        f"• Daily quota reset at {uk_now.strftime(f'%H:%M {timezone_name}')}\n\n"
-                        f"{pool_status_message}\n\n"
-                        f"*AI functionality should now be restored.*"
-                    )
+            
+        # 2. Token Usage & Cost Report (Only on Live Bot)
+        cost_info = ""
+        if is_live_bot and db:
+            try:
+                yesterday = (uk_now - timedelta(days=1)).date()
+                usage = db.get_token_usage_for_day(yesterday)
+                
+                if usage:
+                    total_cost = 0.0
+                    token_details = []
+                    for model, counts in usage.items():
+                        p_tok = counts['prompt_tokens']
+                        c_tok = counts['candidate_tokens']
+                        
+                        if "3.6-flash" in model:
+                            cost = (p_tok / 1_000_000 * 0.75) + (c_tok / 1_000_000 * 3.75)
+                        elif "3.5-flash" in model or "flash" in model:
+                            cost = (p_tok / 1_000_000 * 1.50) + (c_tok / 1_000_000 * 9.00)
+                        elif "pro" in model:
+                            cost = (p_tok / 1_000_000 * 1.25) + (c_tok / 1_000_000 * 5.00)
+                        else:
+                            cost = 0.0
+                            
+                        total_cost += cost
+                        short_model = model.replace('models/', '').replace('gemini-', '')
+                        token_details.append(f"• *{short_model}*: {p_tok:,} in / {c_tok:,} out")
+                        
+                    cost_info = f"\n\n💰 **Yesterday's AI Usage & Cost**\n" + "\n".join(token_details) + f"\n**Total Est. Cost: ${total_cost:.4f}**"
                 else:
-                    notification_msg = (
-                        f"🤖 **Daily System Refresh - {uk_now.strftime(f'%H:%M {timezone_name}')}**\n"
-                        f"• AI Status: {ai_status}\n"
-                        f"• {pool_status_message}\n\n"
-                        f"*All systems refreshed post-quota reset.*"
-                    )
-
-                await user.send(notification_msg)
-                print("✅ AI refresh notification with trivia pool status sent to JAM")
-        except Exception as notify_e:
-            print(f"⚠️ Could not send AI refresh notification: {notify_e}")
-
-    except Exception as e:
-        print(f"❌ Error in scheduled_ai_refresh: {e}")
-        # Try to notify JAM of refresh failure
-        try:
-            from ..config import JAM_USER_ID
-
-            if not get_bot_instance():
-                print("⚠️ Bot instance not available for AI refresh error notification")
-                return
-
-            user = await get_bot_instance().fetch_user(JAM_USER_ID)  # type: ignore
+                    cost_info = "\n\n💰 **Yesterday's AI Usage & Cost**\nNo AI usage recorded yesterday."
+            except Exception as e:
+                print(f"Error generating token report: {e}")
+                cost_info = "\n\n💰 **Yesterday's AI Usage & Cost**\nError fetching usage data."
+                
+        # Send Notification to JAM
+        if is_live_bot:
+            user = await bot.fetch_user(JAM_USER_ID)
             if user:
-                await user.send(
-                    f"⚠️ **AI Module Refresh Failed**\n"
-                    f"• Error: {str(e)}\n"
-                    f"• Time: {uk_now.strftime(f'%H:%M {timezone_name}')}\n\n"
-                    f"*Manual intervention may be required.*"
+                notification_msg = (
+                    f"🤖 **Daily System Report - {uk_now.strftime(f'%H:%M {timezone_name}')}**\n"
+                    f"• AI Status: {ai_status}\n\n"
+                    f"{pool_status_message}"
+                    f"{cost_info}"
                 )
-        except Exception:
-            pass
+                await user.send(notification_msg)
+                print("✅ Daily report sent to JAM")
+        else:
+            print("⏭️ Staging bot: Skipping daily DM report")
+            
+    except Exception as e:
+        print(f"❌ Error in daily_status_report: {e}")
 
 ## CONTINUOUS TASKS ##
 # Check reminders every minute
@@ -1837,8 +1774,7 @@ def start_all_scheduled_tasks(bot):
             (poll_gemini_batches, "Poll Gemini Batches (every 30 mins)"),
             (friday_morning_greeting, "Friday morning greeting task (9:00 AM UK time, Fridays)"),
             ## Daily ##
-            (scheduled_midnight_restart, "Scheduled midnight restart task (00:00 PT daily)"),
-            (scheduled_ai_refresh, "AI module refresh task (8:15 AM UK time daily)"),
+            (daily_status_report, "Daily system report task (8:00 AM UK time daily)"),
             (daily_clip_scan_task, "Daily clip scan task (20:15 UK time weekdays)"),
             (process_clip_backlog, "Nightly clip backlog processor (21:15 UK time)"),
             ## Hourly ##
@@ -1887,11 +1823,10 @@ def get_scheduled_tasks_status():
         tasks_to_check = [
             (monday_content_sync, "Weekly Content Sync (Monday 8am)"),
             (monday_vods_sync, "Weekly VODs Sync"),
-            (scheduled_midnight_restart, "Midnight Restart"),
+            (daily_status_report, "Daily System Report"),
             (check_due_reminders, "Reminder Check"),
             (check_auto_actions, "Auto Actions"),
             (trivia_tuesday, "Trivia Tuesday"),
-            (scheduled_ai_refresh, "AI Refresh"),
             (daily_clip_scan_task, "Daily Clip Scan"),
             (process_clip_backlog, "Nightly Clip Backlog"),
             (monday_morning_greeting, "Monday Greeting"),
@@ -1942,12 +1877,11 @@ def stop_all_scheduled_tasks():
         tasks_to_stop = [
             monday_content_sync,
             monday_vods_sync,
-            scheduled_midnight_restart,
+            daily_status_report,
             daily_clip_scan_task,
             check_due_reminders,
             check_auto_actions,
             trivia_tuesday,
-            scheduled_ai_refresh,
             monday_morning_greeting,
             tuesday_trivia_greeting,
             friday_morning_greeting,
