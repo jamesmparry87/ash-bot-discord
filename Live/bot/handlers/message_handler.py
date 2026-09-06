@@ -839,10 +839,10 @@ Respond to: {content}"""
                 "channel_id": message.channel.id if not isinstance(message.channel, discord.DMChannel) else None,
                 "is_dm": isinstance(message.channel, discord.DMChannel)
             }
-            
+
             response_text, status_message = await call_ai_with_rate_limiting(
-                prompt=ai_prompt, 
-                user_id=message.author.id, 
+                prompt=ai_prompt,
+                user_id=message.author.id,
                 context="personality_response",
                 user_name=author_name,
                 context_data=context_data
