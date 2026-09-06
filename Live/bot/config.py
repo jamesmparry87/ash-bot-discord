@@ -135,7 +135,7 @@ GEMINI_MODEL_CASCADE = [
 ]
 
 # For background tasks (e.g. video clip lore extraction)
-GEMINI_BATCH_MODEL = 'gemini-2.5-flash-lite'
+GEMINI_BATCH_MODEL = 'gemini-3.5-flash-lite'
 
 MAX_CONVERSATION_TURNS = 5
 INACTIVITY_TTL_MINUTES = 15
