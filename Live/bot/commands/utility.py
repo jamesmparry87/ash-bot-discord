@@ -65,9 +65,9 @@ class UtilityCommands(commands.Cog):
             # Import AI handler for status information
             try:
                 from ..handlers.ai_handler import get_ai_status
-                ai_status = get_ai_status()
+                ai_status_msg = str(get_ai_status())
             except ImportError:
-                ai_status = {"enabled": False, "status_message": "AI handler unavailable"}
+                ai_status_msg = "AI handler unavailable"
 
             # Determine authorization level and channel context
             is_authorized = False
@@ -135,35 +135,8 @@ class UtilityCommands(commands.Cog):
             else:
                 status_lines.append("• **Database**: ❌ Unavailable")
 
-            # Enhanced AI system status with detailed health information
-            ai_status_line = f"• **AI System**: {ai_status.get('status_message', 'Unknown')}"
-            if ai_status.get('enabled') and 'usage_stats' in ai_status:
-                usage = ai_status['usage_stats']
-                daily = usage.get('daily_requests', 0)
-                hourly = usage.get('hourly_requests', 0)
-
-                # Check for quota exhaustion or backup status
-                quota_exhausted = usage.get('quota_exhausted', False)
-                backup_active = usage.get('backup_active', False)
-
-                # Build status line with health indicators
-                status_indicator = "✅"
-                if quota_exhausted:
-                    status_indicator = "🚫"
-                elif backup_active:
-                    status_indicator = "⚠️"
-                elif primary_ai_errors > 0:
-                    status_indicator = "⚠️"
-
-                ai_status_line = f"• **AI System**: {status_indicator} Gemini"
-
-                # Add backup status if applicable
-                if backup_active and ai_status.get('backup_ai'):
-                    ai_status_line += f" → {ai_status.get('backup_ai', 'Unknown').title()} (Backup Active)"
-                elif quota_exhausted and ai_status.get('backup_ai'):
-                    ai_status_line += f" (Quota exhausted, using {ai_status.get('backup_ai', 'Unknown').title()} backup)"
-                elif ai_status.get('backup_ai'):
-                    ai_status_line += f" + {ai_status.get('backup_ai', 'Unknown').title()} backup"
+            # Enhanced AI system status
+            ai_status_line = f"• **AI System**: {ai_status_msg}"
 
             status_lines.append(ai_status_line)
 
@@ -406,10 +379,6 @@ class UtilityCommands(commands.Cog):
             if not ai_enabled:
                 await ctx.send("❌ **AI system is not available.** API keys are not configured or AI handler failed to initialize.")
                 return
-
-            # Get current AI status
-            ai_status = get_ai_status()
-            current_status = ai_status.get('enabled', True)
 
             # Toggle the status (this would need to be implemented in
             # ai_handler)

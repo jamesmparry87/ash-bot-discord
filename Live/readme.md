@@ -201,10 +201,6 @@ After every sync completes you'll receive a DM listing:
 
 Play data automatically updates every Sunday at midday (UK time) with fresh statistics.
 
-### **5am PT Daily Reset**
-
-AI limits reset silently at 5am Pacific Time daily.
-
 ---
 
 ## 🤖 What's New - Recent Fixes

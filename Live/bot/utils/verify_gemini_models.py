@@ -1,271 +1,77 @@
-from typing import Any
-
 """
-Gemini Model Testing Utility
-
-Tests which Gemini models are available and working with your API key.
-Useful for debugging quota issues and checking model availability.
-
-Usage:
-    python -m bot.utils.test_gemini_models
-    or
-    from bot.utils.test_gemini_models import test_all_models
-    results = await test_all_models()
+Tests which Gemini models are available and working with your API key using the Google GenAI SDK.
 """
 
+import asyncio
 import os
 import sys
-from datetime import datetime
-from typing import Dict, List
-from zoneinfo import ZoneInfo
 
-# Load environment variables from .env file
-try:
-    from pathlib import Path
+def get_api_key():
+    """Get API key from environment or .env file"""
+    import os
+    
+    # Try environment first
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if api_key:
+        return api_key
+        
+    # Manually read .env file if dotenv not available
+    try:
+        if os.path.exists('.env'):
+            with open('.env', 'r') as f:
+                for line in f:
+                    if line.startswith('GEMINI_API_KEY='):
+                        return line.strip().split('=', 1)[1]
+    except Exception:
+        pass
+        
+    return None
 
-    # Find .env file in Live directory
-    env_path = Path(__file__).parent.parent.parent / '.env'
-
-    if env_path.exists():
-        # Manually read .env file if dotenv not available
-        with open(env_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    # Remove quotes if present
-                    value = value.strip().strip('"').strip("'")
-                    os.environ[key.strip()] = value
-        print(f"🔧 Loaded .env from: {env_path}")
-    else:
-        print(f"⚠️ .env file not found at: {env_path}")
-except Exception as e:
-    print(f"⚠️ Could not load .env file: {e}")
-
-try:
-    import google.generativeai as genai  # type: ignore
-    GENAI_AVAILABLE = True
-except ImportError:
-    GENAI_AVAILABLE = False
-    print("❌ google.generativeai not installed. Run: pip install google-generativeai")
-    sys.exit(1)
-
-
-# Import the single source of truth from config
-from bot.config import GEMINI_MODEL_CASCADE as GEMINI_MODELS_TO_TEST  # type: ignore
-
-
-def configure_api():
-    """Configure Gemini API with API key from environment"""
-    api_key = os.getenv('GOOGLE_API_KEY')
-
+async def verify_models():
+    """Verify Gemini SDK models"""
+    print("🔍 ASH BOT - GEMINI SDK VERIFICATION")
+    print("=" * 50)
+    
+    api_key = get_api_key()
     if not api_key:
-        print("❌ GOOGLE_API_KEY not found in environment variables")
-        print("   Set it with: export GOOGLE_API_KEY='your-key-here'")
-        sys.exit(1)
-
-    genai.configure(api_key=api_key)
-    print(f"✅ API configured with key: {api_key[:10]}...{api_key[-4:]}")
-
-
-def list_available_models():
-    """List all models available from Gemini API"""
+        print("❌ ERROR: No GEMINI_API_KEY found in environment or .env file")
+        return 1
+        
+    print("✅ API Key found")
+    
     try:
-        print("\n📋 Listing all available Gemini models from API...")
-        models = genai.list_models()
-
-        gemini_models = [m for m in models if 'gemini' in m.name.lower()]
-
-        if not gemini_models:
-            print("⚠️ No Gemini models found in API response")
-            return []
-
-        print(f"✅ Found {len(gemini_models)} Gemini models in API catalog:")
-        for model in gemini_models:
-            print(f"   • {model.name}")
-            print(f"     Display: {model.display_name}")
-            if hasattr(model, 'supported_generation_methods'):
-                print(f"     Methods: {model.supported_generation_methods}")
-
-        return [m.name for m in gemini_models]
-
-    except Exception as e:
-        print(f"❌ Error listing models: {e}")
-        return []
-
-
-def test_model(model_name: str) -> Dict[str, Any]:
-    """Test if a specific model works with current API key"""
-    result = {
-        'model': model_name,
-        'available': False,
-        'error': None,
-        'response_time': None,
-        'response_text': None
-    }
-
-    try:
-        start_time = datetime.now()
-
-        # Create model instance
-        model = genai.GenerativeModel(model_name)
-
-        # Test with minimal request
-        response = model.generate_content(
-            "Test",
-            generation_config={"max_output_tokens": 5}
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        print("✅ google.genai SDK initialized successfully")
+        
+        print("\n📋 Listing available models...")
+        models = list(client.models.list())
+        text_models = [m for m in models if m.name.startswith("models/gemini-2.5") or m.name.startswith("models/gemini-1.5")]
+        
+        for m in text_models:
+            print(f"   • {m.name}")
+            
+        print(f"\n✅ Found {len(text_models)} relevant models.")
+        
+        print("\n🧪 Testing basic generation with gemini-2.5-flash...")
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents='Respond with "System Online"'
         )
-
-        end_time = datetime.now()
-        response_time = (end_time - start_time).total_seconds()
-
-        if response and response.text:
-            result['available'] = True
-            result['response_time'] = response_time
-            result['response_text'] = response.text[:50]
-            print(f"✅ {model_name:25s} - WORKS ({response_time:.2f}s) - Response: '{response.text[:30]}'")
-        else:
-            result['error'] = "Empty response"
-            print(f"⚠️ {model_name:25s} - Empty response returned")
-
+        print(f"✅ Response received: {response.text.strip()}")
+        print("\n✅ Verification complete. The new AI architecture is ready.")
+        
+    except ImportError:
+        print("❌ ERROR: google-genai package not found. Run `pipenv install google-genai`")
+        return 1
     except Exception as e:
-        error_str = str(e)
-        result['error'] = error_str
-
-        # Categorize error type
-        if "quota" in error_str.lower() or "429" in error_str:
-            if "limit: 0" in error_str or "limit:0" in error_str:
-                print(f"❌ {model_name:25s} - NOT AVAILABLE ON YOUR TIER (quota limit: 0)")
-            else:
-                print(f"❌ {model_name:25s} - QUOTA EXHAUSTED (daily/minute limit reached)")
-        elif "not found" in error_str.lower() or "404" in error_str:
-            print(f"⚠️ {model_name:25s} - MODEL NOT FOUND")
-        elif "permission" in error_str.lower() or "403" in error_str:
-            print(f"❌ {model_name:25s} - PERMISSION DENIED (check API key)")
-        else:
-            print(f"❌ {model_name:25s} - ERROR: {error_str[:80]}")
-
-    return result
-
-
-def test_all_models() -> Dict[str, List[Dict]]:
-    """Test all Gemini models and return results"""
-    print(f"\n{'=' * 80}")
-    print("🔍 TESTING GEMINI MODELS")
-    print(f"{'=' * 80}")
-    print(f"⏰ Time: {datetime.now(ZoneInfo('Europe/London')).strftime('%Y-%m-%d %H:%M:%S UK')}")
-
-    results = {
-        'working': [],
-        'quota_issues': [],
-        'not_available': [],
-        'errors': []
-    }
-
-    for model_name in GEMINI_MODELS_TO_TEST:
-        result = test_model(model_name)
-
-        if result['available']:
-            results['working'].append(result)
-        elif result['error']:
-            error_lower = result['error'].lower()
-            if "quota" in error_lower or "429" in error_lower:
-                if "limit: 0" in error_lower or "limit:0" in error_lower:
-                    results['not_available'].append(result)
-                else:
-                    results['quota_issues'].append(result)
-            elif "not found" in error_lower or "404" in error_lower:
-                results['not_available'].append(result)
-            else:
-                results['errors'].append(result)
-
-    return results
-
-
-def print_summary(results: Dict[str, List[Dict]]):
-    """Print summary of test results (Phase 4: Enhanced with cascade config)"""
-    print(f"\n{'=' * 80}")
-    print("📊 SUMMARY")
-    print(f"{'=' * 80}")
-
-    if results['working']:
-        print(f"\n✅ WORKING MODELS ({len(results['working'])} available):")
-        for i, r in enumerate(results['working'], 1):
-            status = "PRIMARY" if i == 1 else f"BACKUP {i - 1}"
-            print(f"   {i}. {r['model']:25s} - {status:10s} ({r['response_time']:.2f}s)")
-
-        print("\n🔧 RECOMMENDED CASCADE CONFIGURATION:")
-        print("   Update GEMINI_MODEL_CASCADE in ai_handler.py:")
-        print("   ```python")
-        print("   GEMINI_MODEL_CASCADE = [")
-        for i, r in enumerate(results['working']):
-            comment = "# Primary: Latest, fastest" if i == 0 else f"# Backup {i}: Stable, reliable"
-            print(f"       '{r['model']}',{' ' * (25 - len(r['model']))}{comment}")
-        print("   ]")
-        print("   ```")
-
-        print("\n📊 CASCADE STRATEGY:")
-        print("   • Phase 1: Fixed model names (✅ complete)")
-        print(f"   • Phase 2: Model cascade with {len(results['working'])} models (✅ complete)")
-        print("   • Phase 3: Auto-fallback on errors (✅ complete)")
-        print("   • Phase 4: Enhanced testing (✅ complete)")
-
-        if len(results['working']) > 1:
-            print("\n🛡️ REDUNDANCY:")
-            print(
-                f"   • {len(results['working'])} working models provide {len(results['working']) - 1} backup level(s)")
-            print("   • Automatic failover if primary fails")
-            print(f"   • Models tested in order: {' → '.join([r['model'] for r in results['working']])}")
-    else:
-        print("\n❌ NO WORKING MODELS FOUND")
-        print("   This means AI features will not work with current API key/configuration")
-
-    if results['not_available']:
-        print(f"\n⚠️ NOT AVAILABLE ON YOUR TIER ({len(results['not_available'])} models):")
-        for r in results['not_available']:
-            print(f"   • {r['model']} - May require paid plan or regional availability")
-
-    if results['quota_issues']:
-        print(f"\n🚫 QUOTA EXHAUSTED ({len(results['quota_issues'])} models):")
-        for r in results['quota_issues']:
-            print(f"   • {r['model']} - Daily/minute limit reached")
-        print("   💡 Quotas reset at 8:00 AM UK time (Google's reset time)")
-
-    if results['errors']:
-        print(f"\n❌ OTHER ERRORS ({len(results['errors'])} models):")
-        for r in results['errors']:
-            print(f"   • {r['model']} - {r['error'][:100]}")
-
-    print(f"\n{'=' * 80}")
-
+        print(f"❌ ERROR during verification: {e}")
+        return 1
+        
+    return 0
 
 def main():
-    """Main entry point for CLI usage"""
-    print(f"\n{'#' * 80}")
-    print("# GEMINI MODEL TESTING UTILITY")
-    print("# Tests which Gemini models work with your API key")
-    print(f"{'#' * 80}\n")
-
-    # Configure API
-    configure_api()
-
-    # List available models from API
-    list_available_models()
-
-    # Test each model
-    results = test_all_models()
-
-    # Print summary
-    print_summary(results)
-
-    # Return exit code based on results
-    if results['working']:
-        print("\n✅ SUCCESS: At least one working model found")
-        return 0
-    else:
-        print("\n❌ FAILURE: No working models found")
-        return 1
-
+    return asyncio.run(verify_models())
 
 if __name__ == "__main__":
     sys.exit(main())
