@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import commands
 
-from ..config import JAM_USER_ID, JONESY_USER_ID, MAX_DAILY_REQUESTS, MAX_HOURLY_REQUESTS, MOD_ALERT_CHANNEL_ID
+from ..config import JAM_USER_ID, JONESY_USER_ID, MOD_ALERT_CHANNEL_ID
 from ..database import get_database
 
 # Get database instance
@@ -164,11 +164,6 @@ class UtilityCommands(commands.Cog):
                     ai_status_line += f" (Quota exhausted, using {ai_status.get('backup_ai', 'Unknown').title()} backup)"
                 elif ai_status.get('backup_ai'):
                     ai_status_line += f" + {ai_status.get('backup_ai', 'Unknown').title()} backup"
-
-                # Add usage stats
-                ai_status_line += f" ({daily}/{MAX_DAILY_REQUESTS} daily, {hourly}/{MAX_HOURLY_REQUESTS} hourly)"
-
-                # Add error information if present
 
             status_lines.append(ai_status_line)
 

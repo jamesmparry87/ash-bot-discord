@@ -278,7 +278,22 @@ class ClipTriviaCog(commands.Cog):
                 for m, curl, canon in clips_to_queue[:10]:
                     msg += f"- <{canon}>\n"
                 if queued_count > 10:
-                    msg += f"...and {queued_count - 10} more."
+                    msg += f"...and {queued_count - 10} more.\n"
+                
+                # Mock JSONL preview for the first clip
+                first_msg, first_curl, first_canon = clips_to_queue[0]
+                mock_jsonl = {
+                    "request": {
+                        "contents": [
+                            {"role": "user", "parts": [
+                                {"fileData": {"fileUri": "https://generativelanguage.googleapis.com/v1beta/files/mockfile123", "mimeType": "video/mp4"}}, 
+                                {"text": TRIVIA_PROMPT[:50] + "..."}
+                            ]}
+                        ]
+                    },
+                    "id": f"{first_canon}|{first_msg.id}"
+                }
+                msg += f"\n**JSONL Preview (Line 1):**\n```json\n{json.dumps(mock_jsonl, indent=2)}\n```\n"
 
             if ctx:
                 await ctx.send(msg)

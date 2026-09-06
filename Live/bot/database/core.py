@@ -430,6 +430,7 @@ class DatabaseManager:
                         id SERIAL PRIMARY KEY,
                         canonical_url TEXT UNIQUE NOT NULL,
                         original_url TEXT,
+                        video_title TEXT,
                         game_title TEXT,
                         reaction TEXT,
                         trigger TEXT,
@@ -440,6 +441,8 @@ class DatabaseManager:
                         clip_outcome TEXT,
                         submitted_by_discord_id TEXT,
                         message_id BIGINT,
+                        batch_job_id TEXT,
+                        batch_status TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
@@ -449,6 +452,7 @@ class DatabaseManager:
                     DO $$
                     BEGIN
                         BEGIN
+                            ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS video_title TEXT;
                             ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS notable_quote TEXT;
                             ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS emotion_category TEXT;
                             ALTER TABLE clip_lore ADD COLUMN IF NOT EXISTS characters_involved TEXT;
