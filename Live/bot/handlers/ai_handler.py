@@ -50,6 +50,7 @@ conversation_history: Dict[int, List[Dict[str, Any]]] = {}
 conversation_last_active: Dict[int, datetime] = {}
 MAX_TOKENS = 8000
 
+
 def _track_token_usage(model_name: str, response):
     """Extract token usage from response and log it to the database"""
     try:
@@ -66,6 +67,7 @@ def _track_token_usage(model_name: str, response):
                     )
     except Exception as e:
         print(f"⚠️ Error tracking token usage: {e}")
+
 
 pacific_tz = ZoneInfo("US/Pacific")
 
@@ -212,10 +214,10 @@ async def call_ai_with_rate_limiting(prompt: str,
                     chat.send_message,
                     prompt
                 )
-                
+
                 # Track token usage
                 _track_token_usage(model_name, response)
-                
+
                 break  # Success, exit fallback loop
             except Exception as model_err:
                 last_error = model_err
@@ -256,10 +258,10 @@ async def call_ai_for_generation(prompt: str, system_instruction: str = None,
                     contents=prompt,
                     config=config
                 )
-                
+
                 # Track token usage
                 _track_token_usage(model_name, response)
-                
+
                 return filter_ai_response(response.text), "success"
             except Exception as model_err:
                 last_error = model_err
@@ -283,7 +285,7 @@ async def upload_and_analyze_media(file_path: str, prompt: str, is_batch: bool =
         upload_kwargs = {"file": file_path}
         if mime_type:
             upload_kwargs["config"] = {'mime_type': mime_type}
-            
+
         uploaded_file = await asyncio.to_thread(
             client.files.upload, **upload_kwargs
         )

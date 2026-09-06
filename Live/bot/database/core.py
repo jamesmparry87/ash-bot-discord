@@ -895,7 +895,7 @@ class DatabaseManager:
     def get_weekly_playtime_summary(self) -> Dict[str, Any]:
         """Returns a summary of the current week's playtime (not implemented)"""
         return {}
-        
+
     # =========================================================================
     # AI Token Tracking Methods
     # =========================================================================
@@ -905,14 +905,14 @@ class DatabaseManager:
         conn = self.get_connection()
         if not conn:
             return
-        
+
         try:
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO ai_token_usage (date, model_name, prompt_tokens, candidate_tokens)
                     VALUES (CURRENT_DATE, %s, %s, %s)
-                    ON CONFLICT (date, model_name) 
-                    DO UPDATE SET 
+                    ON CONFLICT (date, model_name)
+                    DO UPDATE SET
                         prompt_tokens = ai_token_usage.prompt_tokens + EXCLUDED.prompt_tokens,
                         candidate_tokens = ai_token_usage.candidate_tokens + EXCLUDED.candidate_tokens
                 """, (model_name, prompt_tokens, candidate_tokens))
@@ -925,22 +925,22 @@ class DatabaseManager:
         conn = self.get_connection()
         if not conn:
             return {}
-            
+
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 if target_date is None:
                     cur.execute("""
-                        SELECT model_name, prompt_tokens, candidate_tokens 
-                        FROM ai_token_usage 
+                        SELECT model_name, prompt_tokens, candidate_tokens
+                        FROM ai_token_usage
                         WHERE date = CURRENT_DATE
                     """)
                 else:
                     cur.execute("""
-                        SELECT model_name, prompt_tokens, candidate_tokens 
-                        FROM ai_token_usage 
+                        SELECT model_name, prompt_tokens, candidate_tokens
+                        FROM ai_token_usage
                         WHERE date = %s
                     """, (target_date,))
-                
+
                 rows = cur.fetchall()
                 usage = {}
                 for row in rows:
