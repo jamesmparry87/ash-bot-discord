@@ -1014,12 +1014,22 @@ async def daily_status_report():
                         p_tok = counts['prompt_tokens']
                         c_tok = counts['candidate_tokens']
 
-                        if "3.6-flash" in model:
+                        if "2.5-flash-lite" in model:
+                            cost = (p_tok / 1_000_000 * 0.10) + (c_tok / 1_000_000 * 0.40)
+                        elif "3.1-flash-lite" in model:
+                            cost = (p_tok / 1_000_000 * 0.25) + (c_tok / 1_000_000 * 1.50)
+                        elif "2.5-flash" in model or "3.5-flash-lite" in model:
+                            cost = (p_tok / 1_000_000 * 0.30) + (c_tok / 1_000_000 * 2.50)
+                        elif "3-flash-preview" in model:
+                            cost = (p_tok / 1_000_000 * 0.50) + (c_tok / 1_000_000 * 3.00)
+                        elif "3.7-flash" in model or "3.8-flash" in model:
                             cost = (p_tok / 1_000_000 * 0.75) + (c_tok / 1_000_000 * 3.75)
-                        elif "3.5-flash" in model or "flash" in model:
+                        elif "2.5-pro" in model:
+                            cost = (p_tok / 1_000_000 * 1.25) + (c_tok / 1_000_000 * 10.00)
+                        elif "3.6-flash" in model or "3.5-flash" in model:
                             cost = (p_tok / 1_000_000 * 1.50) + (c_tok / 1_000_000 * 9.00)
-                        elif "pro" in model:
-                            cost = (p_tok / 1_000_000 * 1.25) + (c_tok / 1_000_000 * 5.00)
+                        elif "3.1-pro" in model:
+                            cost = (p_tok / 1_000_000 * 2.00) + (c_tok / 1_000_000 * 12.00)
                         else:
                             cost = 0.0
 

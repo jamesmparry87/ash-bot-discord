@@ -51,7 +51,7 @@ def create_trivia_question_embed(
         # Scheduled trivia - automated
         embed = discord.Embed(
             title="🧠 **TRIVIA TUESDAY - INTELLIGENCE ASSESSMENT**",
-            description=f"**Analysis required, personnel.** Today's intelligence assessment focuses on Captain Jonesy's gaming archives.\n\n📋 **QUESTION:**\n{question_text}",
+            description=f"**Attention, biological entities.** It is time once again to test the meager limits of your memory banks. Let us see how much trivial data you have retained regarding Captain Jonesy's gaming archives.\n\n📋 **QUESTION:**\n{question_text}",
             color=0x00ff00,
             timestamp=datetime.now(
                 ZoneInfo("Europe/London")))
