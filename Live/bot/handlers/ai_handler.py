@@ -280,7 +280,7 @@ async def upload_and_analyze_media(file_path: str, prompt: str, is_batch: bool =
     try:
         import mimetypes
         mime_type, _ = mimetypes.guess_type(file_path)
-        upload_kwargs = {"file": file_path}
+        upload_kwargs: Dict[str, Any] = {"file": file_path}
         if mime_type:
             upload_kwargs["config"] = {'mime_type': mime_type}
             

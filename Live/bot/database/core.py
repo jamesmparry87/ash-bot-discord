@@ -11,7 +11,7 @@ This module provides the foundational DatabaseManager class with:
 import logging
 import os
 import sys
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 import psycopg2
 from psycopg2 import pool

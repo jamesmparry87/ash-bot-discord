@@ -940,6 +940,7 @@ async def daily_status_report():
         
         # 1. Trivia Pool Validation and Auto-Replenishment
         pool_status_message = ""
+        db = None
         try:
             db = get_database()
             if db:
