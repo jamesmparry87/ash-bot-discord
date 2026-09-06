@@ -409,6 +409,13 @@ class ClipTriviaCog(commands.Cog):
             logger.info(msg)
             if ctx:
                 await ctx.send(msg)
+            else:
+                try:
+                    jam = await self.bot.fetch_user(JAM_USER_ID)
+                    if jam:
+                        await jam.send(f"🤖 **Automated Clip Scan**\n{msg}")
+                except Exception as e:
+                    logger.error(f"Failed to DM JAM about automated batch submission: {e}")
 
             os.remove(jsonl_path)
 

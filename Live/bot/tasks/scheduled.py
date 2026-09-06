@@ -1738,6 +1738,15 @@ async def poll_gemini_batches():
                     except Exception as e:
                         print(f"Error parsing batch result for line: {e}")
 
+                # Send DM to JAM
+                try:
+                    from ..config import JAM_USER_ID
+                    jam = await bot.fetch_user(JAM_USER_ID)
+                    if jam:
+                        await jam.send(f"✅ **Batch Job Completed**\nJob ID: `{job_id}`\nSuccessfully added lore to database and reacted to original clips.")
+                except Exception as e:
+                    print(f"Failed to DM JAM about batch completion: {e}")
+
                 # Clean up Gemini API Files to save space
                 try:
                     await asyncio.to_thread(gemini_batch_client.batches.delete, name=job_id)
