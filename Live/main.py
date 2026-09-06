@@ -5,12 +5,12 @@ Main entry point for the refactored modular Discord bot with deployment blocker 
 """
 
 import asyncio
+import logging
 import os
 import re
 import sys
 from datetime import datetime, timedelta
 from typing import Any
-import logging
 from zoneinfo import ZoneInfo
 
 # Configure global logging format and levels
