@@ -6,10 +6,11 @@ import asyncio
 import os
 import sys
 
+
 def get_api_key():
     """Get API key from environment or .env file"""
     import os
-    
+
     # Try environment first
     api_key = os.environ.get('GEMINI_API_KEY')
     if api_key:
