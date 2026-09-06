@@ -393,7 +393,7 @@ class ClipTriviaCog(commands.Cog):
             from google.genai import types
             logger.info("Submitting batch job...")
             batch_job = await asyncio.to_thread(
-                gemini_batch_client.batches.create, 
+                gemini_batch_client.batches.create,
                 model='gemini-3.6-flash',
                 src=jsonl_upload.name
             )
