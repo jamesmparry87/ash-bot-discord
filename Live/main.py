@@ -4,13 +4,16 @@ Ash Bot - Modular Architecture Entry Point
 Main entry point for the refactored modular Discord bot with deployment blocker fixes.
 """
 
+from discord.ext import commands
+from bot.utils.text_processing import normalize_trivia_answer  # type: ignore
+import discord
 import asyncio
+import logging
 import os
 import re
 import sys
 from datetime import datetime, timedelta
 from typing import Any
-import logging
 from zoneinfo import ZoneInfo
 
 # Configure global logging format and levels
@@ -25,9 +28,6 @@ logging.basicConfig(
 for logger_name in ['httpx', 'httpcore', 'google_genai.chats', 'google_genai.models']:
     logging.getLogger(logger_name).setLevel(logging.WARNING)
 
-import discord
-from bot.utils.text_processing import normalize_trivia_answer  # type: ignore
-from discord.ext import commands
 
 # Import configuration directly from environment and fallback file
 try:
