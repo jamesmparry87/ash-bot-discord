@@ -69,6 +69,7 @@ class ClipParsingService:
             'format': 'bestvideo[ext=mp4][height<=480]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             'quiet': True,
             'no_warnings': True,
+            'noprogress': True,
         }
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
