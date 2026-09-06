@@ -10,7 +10,20 @@ import re
 import sys
 from datetime import datetime, timedelta
 from typing import Any
+import logging
 from zoneinfo import ZoneInfo
+
+# Configure global logging format and levels
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)-7s | %(name)s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    stream=sys.stdout
+)
+
+# Silence verbose third-party loggers
+for logger_name in ['httpx', 'httpcore', 'google_genai.chats', 'google_genai.models']:
+    logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 import discord
 from bot.utils.text_processing import normalize_trivia_answer  # type: ignore
