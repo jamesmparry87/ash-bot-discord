@@ -7,7 +7,22 @@ Shared text processing functions for game name extraction and validation.
 import re
 from typing import Optional
 
+import json
+
 MAX_DISCORD_LENGTH = 2000
+
+def robust_json_parse(text: str) -> dict:
+    """Safely parse JSON from a string that might contain markdown blocks."""
+    import logging
+    try:
+        # Strip markdown json blocks
+        cleaned = re.sub(r'```(?:json)?\n?(.*?)\n?```', r'\1', text, flags=re.DOTALL)
+        # Strip leading/trailing whitespace
+        cleaned = cleaned.strip()
+        return json.loads(cleaned)
+    except Exception as e:
+        logging.getLogger(__name__).error(f"JSON parsing failed: {e}\nContent was: {text[:200]}...")
+        return {}
 
 
 def smart_truncate_response(response: str, max_length: int = MAX_DISCORD_LENGTH,

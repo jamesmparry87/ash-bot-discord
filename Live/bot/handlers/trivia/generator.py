@@ -13,8 +13,8 @@ from ..ai_handler import (
     call_ai_for_generation,
     call_ai_with_rate_limiting,
     pacific_tz,
-    robust_json_parse,
 )
+from ...utils.text_processing import robust_json_parse
 
 
 async def generate_ai_trivia_question(context: str = "trivia",

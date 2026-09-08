@@ -75,7 +75,7 @@ class TriviaDatabase:
         Add a new trivia question to the database
 
         Args:
-            status: Question status - 'pending_approval', 'available', 'answered', 'rejected', 'retired'
+            status: Question status - 'pending_approval', 'available', 'answered', 'rejected'
                     Default 'available' for manually added questions
                     Use 'pending_approval' for AI-generated questions awaiting approval
         """
@@ -150,7 +150,7 @@ class TriviaDatabase:
         """
         Get the next trivia question based on priority system (excluding answered/retired questions)
 
-        ✅ FIX #2: Ensure retired questions are never selected
+        ✅ FIX #2: Ensure rejected questions are never selected
         """
         conn = self.db.get_connection()
         if not conn:
@@ -172,7 +172,7 @@ class TriviaDatabase:
 
                 exclusion_condition = " AND " + " AND ".join(exclusion_conditions) if exclusion_conditions else ""
 
-                # ✅ FIX #2: Explicitly exclude 'retired' and 'answered' statuses
+                # ✅ FIX #2: Explicitly exclude 'rejected' and 'answered' statuses
                 # Priority 1: Recent mod-submitted questions (available status,
                 # unused within 4 weeks)
                 query1 = f"""
@@ -1051,8 +1051,8 @@ class TriviaDatabase:
                     "answered_questions": status_counts.get(
                         'answered',
                         0),
-                    "retired_questions": status_counts.get(
-                        'retired',
+                    "rejected_questions": status_counts.get(
+                        'rejected',
                         0),
                 }
         except Exception as e:
@@ -1110,13 +1110,13 @@ class TriviaDatabase:
         Check if a similar question already exists in the database
 
         ✅ FIX #2: Enhanced duplicate detection with semantic similarity
-        - Checks against ALL statuses including 'retired' (rejected questions)
+        - Checks against ALL statuses including 'rejected' (rejected questions)
         - Uses semantic similarity to catch questions with different wording
-        - Prioritizes retired questions as strongest duplicates
+        - Prioritizes rejected questions as strongest duplicates
 
         ✅ FIX #3: Answer-based duplicate detection
-        - If question_answer provided, checks for same answer in retired/recent questions
-        - Blocks questions with same answer as retired questions (0.3 threshold)
+        - If question_answer provided, checks for same answer in rejected/recent questions
+        - Blocks questions with same answer as rejected questions (0.3 threshold)
         - Warns about questions with same answer as recently answered questions (0.5 threshold)
         """
         conn = self.get_connection()
@@ -1125,13 +1125,13 @@ class TriviaDatabase:
 
         try:
             with conn.cursor() as cur:
-                # ✅ FIX #2: Get ALL questions including retired ones
+                # ✅ FIX #2: Get ALL questions including rejected ones
                 cur.execute("""
                     SELECT id, question_text, status, created_at, correct_answer
                     FROM trivia_questions
                     WHERE is_active = TRUE
                     ORDER BY
-                        CASE WHEN status = 'retired' THEN 1 ELSE 2 END,
+                        CASE WHEN status = 'rejected' THEN 1 ELSE 2 END,
                         created_at DESC
                 """)
                 existing_questions = cur.fetchall()
@@ -1155,12 +1155,12 @@ class TriviaDatabase:
 
                         # Check if answers match
                         if normalized_new_answer == normalized_existing_answer:
-                            # ✅ FIX: Skip retired questions for answer-based duplicate check.
-                            # Retired questions have been used and are done - their answers should be
+                            # ✅ FIX: Skip rejected questions for answer-based duplicate check.
+                            # Rejected questions have been used and are done - their answers should be
                             # recyclable. The Trivia Director generates questions based on real DB answers,
-                            # so blocking by answer of a retired question starves the question pool.
-                            if existing_status == 'retired':
-                                continue  # Don't block new generation due to retired answer match
+                            # so blocking by answer of a rejected question starves the question pool.
+                            if existing_status == 'rejected':
+                                continue  # Don't block new generation due to rejected answer match
 
                             # Same answer as recently ANSWERED question - warn with medium strictness
                             elif existing_status == 'answered':
@@ -1183,7 +1183,7 @@ class TriviaDatabase:
                                         'status': existing_status,
                                         'created_at': existing_dict.get('created_at'),
                                         'match_type': 'answer_recent',
-                                        'is_retired': False,
+                                        'is_rejected': False,
                                         'duplicate_reason': f"Same answer as recently used question: '{question_answer}'"
                                     }
 
@@ -1218,11 +1218,11 @@ class TriviaDatabase:
                     # ✅ FIX #2: Use combined similarity score
                     combined_similarity = max(text_similarity, concept_similarity)
 
-                    # ✅ FIX: Retired questions use a HIGHER threshold (harder to trigger as duplicate).
-                    # Retired = previously used, not bad. The same topic should be recyclable.
-                    # Using 1.25x multiplier (capped at 0.97) means retired questions need near-exact
+                    # ✅ FIX: Rejected questions use a HIGHER threshold (harder to trigger as duplicate).
+                    # Rejected = previously used, not bad. The same topic should be recyclable.
+                    # Using 1.25x multiplier (capped at 0.97) means rejected questions need near-exact
                     # text match to block, preventing the pool from being starved by old questions.
-                    if existing_status == 'retired':
+                    if existing_status == 'rejected':
                         effective_threshold = min(similarity_threshold * 1.25, 0.97)
                     else:
                         effective_threshold = similarity_threshold
