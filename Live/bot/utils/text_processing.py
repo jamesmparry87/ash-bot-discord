@@ -4,10 +4,9 @@ Text Processing Utilities
 Shared text processing functions for game name extraction and validation.
 """
 
+import json
 import re
 from typing import Optional
-
-import json
 
 MAX_DISCORD_LENGTH = 2000
 

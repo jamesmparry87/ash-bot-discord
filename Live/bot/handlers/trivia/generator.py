@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from ...config import JONESY_USER_ID
+from ...utils.text_processing import robust_json_parse
 from ..ai_handler import (
     _get_db,
     ai_enabled,
@@ -14,7 +15,6 @@ from ..ai_handler import (
     call_ai_with_rate_limiting,
     pacific_tz,
 )
-from ...utils.text_processing import robust_json_parse
 
 
 async def generate_ai_trivia_question(context: str = "trivia",
