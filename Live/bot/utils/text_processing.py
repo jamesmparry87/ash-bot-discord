@@ -10,6 +10,7 @@ from typing import Optional
 
 MAX_DISCORD_LENGTH = 2000
 
+
 def robust_json_parse(text: str) -> dict:
     """Safely parse JSON from a string that might contain markdown blocks."""
     import logging
