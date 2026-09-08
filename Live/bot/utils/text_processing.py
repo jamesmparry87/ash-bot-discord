@@ -11,15 +11,48 @@ from typing import Optional
 MAX_DISCORD_LENGTH = 2000
 
 
-def robust_json_parse(text: str) -> dict:
+def robust_json_parse(text: str) -> dict | list:
     """Safely parse JSON from a string that might contain markdown blocks."""
     import logging
     try:
-        # Strip markdown json blocks
-        cleaned = re.sub(r'```(?:json)?\n?(.*?)\n?```', r'\1', text, flags=re.DOTALL)
-        # Strip leading/trailing whitespace
-        cleaned = cleaned.strip()
-        return json.loads(cleaned)
+        text = text.strip()
+        # First try direct parsing
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+            
+        # Try extracting from code blocks
+        match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, flags=re.DOTALL | re.IGNORECASE)
+        if match:
+            try:
+                return json.loads(match.group(1).strip())
+            except json.JSONDecodeError:
+                pass
+                
+        # Try finding the outermost brackets/braces
+        start_idx_list = text.find('[')
+        start_idx_dict = text.find('{')
+        
+        start_idx = -1
+        end_idx = -1
+        
+        if start_idx_list != -1 and (start_idx_dict == -1 or start_idx_list < start_idx_dict):
+            start_idx = start_idx_list
+            end_idx = text.rfind(']')
+        elif start_idx_dict != -1:
+            start_idx = start_idx_dict
+            end_idx = text.rfind('}')
+            
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            extracted = text[start_idx:end_idx+1]
+            try:
+                return json.loads(extracted)
+            except json.JSONDecodeError:
+                # One last attempt: try to fix missing closing bracket if truncated
+                pass
+                
+        raise ValueError("Could not extract valid JSON structure")
     except Exception as e:
         logging.getLogger(__name__).error(f"JSON parsing failed: {e}\nContent was: {text[:200]}...")
         return {}

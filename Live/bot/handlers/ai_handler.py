@@ -181,7 +181,7 @@ async def call_ai_with_rate_limiting(prompt: str,
         config = types.GenerateContentConfig(
             system_instruction=sys_instruction,
             temperature=0.75,
-            max_output_tokens=500,
+            max_output_tokens=1500,
             tools=AI_TOOLS
         )
 
@@ -240,7 +240,7 @@ async def call_ai_with_rate_limiting(prompt: str,
 
 
 async def call_ai_for_generation(prompt: str, system_instruction: str = None,
-                                 temperature: float = 0.7, max_tokens: int = 1000) -> Tuple[Optional[str], str]:
+                                 temperature: float = 0.7, max_tokens: int = 3000) -> Tuple[Optional[str], str]:
     if not ai_enabled or not gemini_live_client:
         return None, "offline"
     try:
