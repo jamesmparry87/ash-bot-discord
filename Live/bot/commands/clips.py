@@ -234,6 +234,7 @@ class ClipTriviaCog(commands.Cog):
                 await ctx.send(f"🔍 Scanning the most recent {search_limit} messages in <#{self.target_channel_id}> for clips...")
 
         found_count = 0
+        total_unprocessed = 0
         clips_to_queue = []
         oldest_message_id = None
 
@@ -249,19 +250,20 @@ class ClipTriviaCog(commands.Cog):
                 canonical_url = canonicalize_clip_url(clip_url)
 
                 if not db.trivia.clip_lore_exists(canonical_url):
-                    clips_to_queue.append((message, clip_url, canonical_url))
-                    if len(clips_to_queue) >= max_process:
-                        break
+                    total_unprocessed += 1
+                    if len(clips_to_queue) < max_process:
+                        clips_to_queue.append((message, clip_url, canonical_url))
                 else:
-                    # Clip already processed - ensure it has the ✅ reaction
-                    has_tick = any(str(r.emoji) == "✅" for r in message.reactions)
-                    if not has_tick:
-                        try:
-                            await message.add_reaction("✅")
-                            await message.remove_reaction("👀", self.bot.user)  # type: ignore
-                            await message.remove_reaction("❌", self.bot.user)  # type: ignore
-                        except Exception:
-                            pass
+                    # Clip already processed in DB - ensure it has the ✅ reaction ONLY if it is completed
+                    if db.trivia.is_clip_completed(canonical_url):
+                        has_tick = any(str(r.emoji) == "✅" for r in message.reactions)
+                        if not has_tick:
+                            try:
+                                await message.add_reaction("✅")
+                                await message.remove_reaction("👀", self.bot.user)  # type: ignore
+                                await message.remove_reaction("❌", self.bot.user)  # type: ignore
+                            except Exception:
+                                pass
 
         queued_count = len(clips_to_queue)
         if queued_count == 0:
@@ -409,6 +411,12 @@ class ClipTriviaCog(commands.Cog):
                 db.trivia.update_clip_batch_job(canonical_url, job_id)
 
             msg = f"🚀 Batch Job {job_id} successfully submitted with {len(jsonl_lines)} clips!"
+            remaining = total_unprocessed - len(jsonl_lines)
+            if remaining > 0:
+                msg += f"\n📊 There are at least **{remaining}** more unprocessed clips in the current scan range."
+            else:
+                msg += f"\n✅ All clips in the current scan range have been processed."
+                
             logger.info(msg)
             if ctx:
                 await ctx.send(msg)
@@ -416,7 +424,8 @@ class ClipTriviaCog(commands.Cog):
                 try:
                     jam = await self.bot.fetch_user(JAM_USER_ID)
                     if jam:
-                        await jam.send(f"🤖 **Automated Clip Scan**\n{msg}")
+                        scan_type = "Historical Backlog" if resume_from_state else "Recent Clips"
+                        await jam.send(f"🤖 **Automated Clip Scan ({scan_type})**\n{msg}")
                 except Exception as e:
                     logger.error(f"Failed to DM JAM about automated batch submission: {e}")
 

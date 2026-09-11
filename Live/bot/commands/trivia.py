@@ -981,21 +981,33 @@ class TriviaCommands(commands.Cog):
             question_data = None
 
             if target.lower() == 'auto':
-                # Auto-select next question using priority system
+                # Auto-process pending questions
                 try:
-                    # Use same logic as starttrivia command
-                    next_question = db.get_next_trivia_question(exclude_user_id=ctx.author.id)
-                    if not next_question:
-                        await ctx.send("❌ **No available questions for auto-selection.** Use `!addtrivia` to add questions or `!approvequestion generate` to create new ones.")
+                    from ..handlers.conversations import get_queue_length
+                    queue_length = get_queue_length()
+                    
+                    if queue_length > 0:
+                        await ctx.send(f"✅ **Queue active.** There are {queue_length} questions already in the approval queue. Processing next...")
+                        from ..handlers.conversations import process_next_approval
+                        await process_next_approval()
                         return
 
-                    # Calculate dynamic answer if needed
-                    if next_question.get('is_dynamic') and next_question.get('dynamic_query_type'):
-                        calculated_answer = db.calculate_dynamic_answer(next_question['dynamic_query_type'])
-                        next_question['correct_answer'] = calculated_answer
+                    pending_questions = db.get_pending_approval_questions()
+                    if not pending_questions:
+                        await ctx.send("✅ **No pending questions.** All questions have been approved. Use `!approvequestion generate` to create new ones.")
+                        return
 
-                    question_data = next_question
-                    await ctx.send(f"🎯 **Auto-selected question #{question_data['id']} sent to JAM for approval**\n\nQuestion preview: {question_data['question_text'][:100]}{'...' if len(question_data['question_text']) > 100 else ''}")
+                    from ..handlers.conversations import add_to_approval_queue, process_next_approval
+                    for q in pending_questions:
+                        add_to_approval_queue(
+                            item_type='trivia_question',
+                            data=q,
+                            priority=5,
+                            source='manual_auto_approval'
+                        )
+
+                    await ctx.send(f"✅ **Added {len(pending_questions)} pending questions to queue.** Starting approval flow...")
+                    await process_next_approval()
 
                 except Exception as e:
                     logger.error(f"Error auto-selecting question: {e}")

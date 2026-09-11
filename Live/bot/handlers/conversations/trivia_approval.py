@@ -480,6 +480,13 @@ async def handle_jam_approval_conversation(message: discord.Message) -> None:
                         await message.reply("❌ **Error saving approved question.** Database operation failed.")
 
                 # Clean up conversation FIRST
+                session_id = data.get('session_id')
+                if session_id and db:
+                    try:
+                        db.complete_approval_session(session_id, 'approved')
+                    except Exception as e:
+                        print(f"⚠️ Failed to complete database session {session_id}: {e}")
+
                 if user_id in jam_approval_conversations:
                     del jam_approval_conversations[user_id]
                     print(f"✅ FIX: Cleared approval conversation after approval")
@@ -727,7 +734,7 @@ async def start_jam_question_approval(question_data: Dict[str, Any]) -> bool:
         uk_now = datetime.now(ZoneInfo("Europe/London"))
         jam_approval_conversations[JAM_USER_ID] = {
             'step': 'approval',
-            'data': {'question_data': question_data},
+            'data': {'question_data': question_data, 'session_id': session_id},
             'last_activity': uk_now,
             'initiated_at': uk_now,
         }

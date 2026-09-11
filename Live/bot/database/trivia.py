@@ -1901,6 +1901,26 @@ class TriviaDatabase:
         finally:
             conn.close()
 
+    def is_clip_completed(self, canonical_url: str) -> bool:
+        """Check if a clip has been fully processed (not pending/processing)."""
+        conn = self.db.get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT batch_status FROM clip_lore WHERE canonical_url = %s",
+                    (canonical_url,)
+                )
+                row = cur.fetchone()
+                if row:
+                    status = row.get('batch_status')
+                    return status == 'COMPLETED' or status is None
+                return False
+        except Exception as e:
+            logger.error(f"Error checking clip completion status: {e}")
+            return False
+        finally:
+            conn.close()
+
     def add_clip_lore(
             self,
             canonical_url: str,
