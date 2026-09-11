@@ -416,7 +416,7 @@ class ClipTriviaCog(commands.Cog):
                 msg += f"\n📊 There are at least **{remaining}** more unprocessed clips in the current scan range."
             else:
                 msg += f"\n✅ All clips in the current scan range have been processed."
-                
+
             logger.info(msg)
             if ctx:
                 await ctx.send(msg)

@@ -985,7 +985,7 @@ class TriviaCommands(commands.Cog):
                 try:
                     from ..handlers.conversations import get_queue_length
                     queue_length = get_queue_length()
-                    
+
                     if queue_length > 0:
                         await ctx.send(f"✅ **Queue active.** There are {queue_length} questions already in the approval queue. Processing next...")
                         from ..handlers.conversations import process_next_approval
