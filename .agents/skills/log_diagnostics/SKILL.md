@@ -1,18 +1,31 @@
 ---
 name: log_diagnostics
-description: Diagnose bot crashes or connection issues from discord logs or standard output.
+description: >-
+  Diagnose bot crashes or connection issues from discord logs or standard output.
+  Run this when the user asks to diagnose an issue, crash, or inspect logs.
 ---
+
 # Log Diagnostics & DB Health Checker
 
-When the user asks to diagnose an issue, crash, or inspect logs:
+This skill automates the extraction and diagnosis of stack traces and database connection issues from the local `discord.log`, conforming to the strict workflow guidelines in `AGENTS.md`.
 
-1. **Fetch Logs:**
-   - Check the standard output from recent terminal crash dumps or fetch the latest `discord.log` entries from `Live/`.
+## Workflow Instructions
 
-2. **Railway Postgres Analysis:**
-   - Specifically search for `Connection refused` or `server closed the connection unexpectedly`.
-   - If found, explain that the Railway connection pool likely dropped due to idle timeout or concurrency limits, and suggest using local mocks or restarting the local development server.
+When invoked, execute the following steps in order:
 
-3. **Trace Route Extraction:**
-   - Follow stack traces specifically leading back to `bot/handlers/` or `bot/integrations/`.
-   - Formulate a precise patch rather than a broad refactor. Do not suggest rewriting the database core to fix a single handler crash.
+### 1. Pre-flight Validation
+Ensure that the `Live/discord.log` file exists and is accessible.
+
+### 2. Dry-Run Analysis
+Run the script in dry-run mode to verify log existence and size.
+- *Action*: Run `python .agents/skills/log_diagnostics/scripts/analyze_logs.py --dry-run`
+- *Validation*: Verify that the script successfully detects the log file and prints its size.
+
+### 3. Execution
+Run the full log parsing script to extract recent errors.
+- *Action*: Run `python .agents/skills/log_diagnostics/scripts/analyze_logs.py`
+- *Validation*: The script will parse the last 1000 lines, extract the latest Python stack trace, and count instances of Railway connection drops.
+
+### 4. Verification & Follow-up
+- If Railway connection errors are found, explain to the user that the Railway connection pool likely dropped due to idle timeout or concurrency limits, and suggest using local mocks or restarting the local development server.
+- If a stack trace is found, follow it specifically back to `bot/handlers/` or `bot/integrations/`. Formulate a precise patch rather than a broad refactor. Do not suggest rewriting the database core to fix a single handler crash.

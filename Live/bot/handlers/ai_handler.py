@@ -138,8 +138,9 @@ def filter_ai_response(response: str) -> str:
     if not response:
         return ""
     # Discord Message Sanitisation
-    response = re.sub(r'<@!?([0-9]+)>', r'@User', response)
-    response = re.sub(r'<:([a-zA-Z0-9_]+):[0-9]+>', r'::', response)
+    # Allow user mentions to pass through so the bot can refer to specific users correctly
+    # response = re.sub(r'<@!?([0-9]+)>', r'@User', response)
+    response = re.sub(r'<:([a-zA-Z0-9_]+):[0-9]+>', r': :', response)
     return response.strip()
 
 

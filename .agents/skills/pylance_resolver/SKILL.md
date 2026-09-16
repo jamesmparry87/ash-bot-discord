@@ -1,29 +1,34 @@
 ---
 name: pylance_resolver
-description: Automatically run pyright to find and fix Pylance/Type errors in recently modified code.
+description: >-
+  Automatically run pyright to find and fix Pylance/Type errors in recently modified code.
+  Run this whenever code has been refactored or you need to ensure type safety.
 ---
+
 # Pylance Error Resolver
 
-When the user asks to "resolve pylance errors", requests a check of recent edits, or pastes errors with red squiggly lines from VS Code (e.g., `Could not find name`, `Cannot find module`):
+This skill automates running the `pyright` type checker and parses the output to easily resolve module loading and type hinting errors. It strictly follows the `AGENTS.md` workflow.
 
-1. **Scan the Project or Analyze User Paste:**
-   - Review any Pylance errors pasted by the user directly from their VS Code Problems tab.
-   - If no errors were provided, run `pyright` or `pipenv run pyright` in the `C:\Users\james\Git\discord\Live` root to scan for errors.
-   - Parse the output for missing imports, `reportArgumentType`, `reportUndefinedVariable`, `Could not find name`, or `Cannot find module`.
+## Workflow Instructions
 
-2. **Automated Fixes - Name / Module Errors:**
-   - **`Could not find name 'X'`**: 
-     - Ensure the variable/function/module is imported at the top of the file (e.g., `import random` or `import asyncio`).
-     - If the name refers to an internal function or variable (e.g., a scheduled task or handler) that was recently deleted or renamed during a refactor, search the file and remove or update the stale references.
-   - **`Cannot find module 'X'`**:
-     - Check if absolute imports (e.g., `from bot.handlers.ai_tools import ...` inside a file that is *already* in `bot.handlers`) are causing Pylance to fail because it thinks the project root is elsewhere.
-     - Fix this by converting the absolute internal import to a relative import (e.g., `from .ai_tools import ...`).
+When invoked, execute the following steps in order:
 
-3. **Automated Fixes - Type Errors:**
-   - For unresolved dynamic third-party imports (e.g. `import isodate`, `import aiohttp` missing from global scope), confidently apply `# type: ignore` to suppress the pyright error without breaking the code.
-   - For dictionary-based type errors, inject explicit `Dict[str, Any]` typing instead of letting Python infer generic `dict`.
-   - Never remove imports that appear "unused" if they are part of a `discord.ext.commands` setup or similar dynamic loading structure.
+### 1. Pre-flight Validation
+Verify that `pyright` is installed on the system and accessible in the environment.
 
-4. **Validation:**
-   - If you can run `pyright` locally, re-run it after edits to confirm zero errors remaining.
-   - Otherwise, ask the user to verify if the red squiggly lines have disappeared in their IDE.
+### 2. Dry-Run Analysis
+Run the script in dry-run mode to confirm the environment is capable of executing Pyright.
+- *Action*: Run `python .agents/skills/pylance_resolver/scripts/run_pyright.py --dry-run`
+- *Validation*: Verify that Pyright is found.
+- *Reporting*: If not found, instruct the user to install it via `npm install -g pyright` or `pip install pyright`.
+
+### 3. Execution
+Execute the script to parse the JSON output of the type checker.
+- *Action*: Run `python .agents/skills/pylance_resolver/scripts/run_pyright.py`
+- *Validation*: The script will output a clean list of type errors, including the exact file name, line number, and rule broken.
+
+### 4. Verification & Follow-up
+Apply the necessary fixes using the `replace_file_content` tool:
+- **`reportMissingImports` / `Cannot find module`**: Fix this by converting the absolute internal import to a relative import (e.g., `from .ai_tools import ...`).
+- **Dynamic third-party imports**: Confidently apply `# type: ignore` to suppress the pyright error without breaking the code.
+- Re-run the execution script to verify that the errors have disappeared.

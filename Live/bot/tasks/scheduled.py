@@ -782,7 +782,7 @@ async def daily_clip_scan_task():
 
     print("🎬 Starting daily recent clip scan task...")
     try:
-        found, queued = await cog.process_backlog_batch(search_limit=100, max_process=20, ctx=None, resume_from_state=False)
+        found, queued = await cog.process_backlog_batch(search_limit=500, max_process=100, ctx=None, resume_from_state=False)
         print(f"✅ Daily recent clip scan completed. Found {found}, Queued {queued}.")
     except Exception as e:
         print(f"❌ Error in daily_clip_scan_task: {e}")
@@ -811,7 +811,7 @@ async def process_clip_backlog():
 
     print(f"🎬 Starting nightly video clip backlog processing at {uk_now.strftime('%H:%M:%S UK')}")
     try:
-        found, queued = await cog.process_backlog_batch(search_limit=200, max_process=25, ctx=None)
+        found, queued = await cog.process_backlog_batch(search_limit=500, max_process=100, ctx=None)
         print(f"✅ Clip backlog processing completed. Found {found}, Queued {queued}.")
     except Exception as e:
         print(f"❌ Error in process_clip_backlog: {e}")
