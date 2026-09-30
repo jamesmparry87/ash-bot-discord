@@ -517,5 +517,82 @@ class DataCleanupCommands(commands.Cog):
             traceback.print_exc()
 
 
+    @commands.command(name='fix_clip_urls')
+    @commands.check(lambda ctx: ctx.author.id == JAM_USER_ID)
+    async def fix_clip_urls(self, ctx):
+        """
+        Fixes casing and formatting of Twitch clip URLs in the trivia questions database.
+        Restores the exact case-sensitive URL slug from the original clip_lore records.
+
+        **Admin only command**
+        """
+        await ctx.send("🔄 **Clip URL Cleanup Started**\n\nScanning database for incorrectly cased clip URLs...")
+        
+        try:
+            conn = self.db.get_connection()
+            cur = conn.cursor()
+            
+            # Fetch all questions that have dynamic_query_type
+            cur.execute("""
+                SELECT id, dynamic_query_type 
+                FROM trivia_questions 
+                WHERE dynamic_query_type IS NOT NULL
+            """)
+            questions = cur.fetchall()
+            
+            # Fetch all canonical URLs from clip_lore
+            cur.execute("SELECT canonical_url FROM clip_lore")
+            lores = cur.fetchall()
+            
+            # Create a lowercase-to-canonical mapping
+            lore_map = {}
+            for lore in lores:
+                canon = lore['canonical_url']
+                slug = canon.split('/')[-1].lower()
+                lore_map[slug] = canon
+                
+            fixed_count = 0
+            
+            for q in questions:
+                try:
+                    import json
+                    dq = json.loads(q['dynamic_query_type'])
+                    clip_url = dq.get('clip_url')
+                    
+                    if clip_url:
+                        slug = clip_url.split('/')[-1].lower()
+                        # If the url is not perfectly matching our lore DB, fix it!
+                        if slug in lore_map and clip_url != lore_map[slug]:
+                            dq['clip_url'] = lore_map[slug]
+                            
+                            # Update the question
+                            cur.execute("""
+                                UPDATE trivia_questions 
+                                SET dynamic_query_type = %s 
+                                WHERE id = %s
+                            """, (json.dumps(dq), q['id']))
+                            fixed_count += 1
+                except Exception:
+                    continue
+                    
+            conn.commit()
+            conn.close()
+            
+            embed = discord.Embed(
+                title="✅ Clip URLs Fixed",
+                description=f"Successfully restored the correct case-sensitive URLs for Twitch clips.",
+                color=0x00ff00
+            )
+            embed.add_field(name="Questions Fixed", value=f"{fixed_count}", inline=True)
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            await ctx.send(f"❌ **Error fixing clip URLs:** {str(e)}")
+            print(f"Error in fix_clip_urls: {e}")
+            import traceback
+            traceback.print_exc()
+
+
 async def setup(bot):
     await bot.add_cog(DataCleanupCommands(bot))

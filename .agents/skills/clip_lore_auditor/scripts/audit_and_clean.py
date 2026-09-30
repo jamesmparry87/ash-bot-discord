@@ -36,12 +36,18 @@ def run_audit(dry_run=False):
             cursor.execute(query2_select)
             short_count = cursor.fetchone()[0]
             
-            total = null_count + short_count
+            # Query to find legacy broken URL structures
+            query3_select = "SELECT count(*) FROM clip_lore WHERE canonical_url LIKE '%clips.twitch.tv%';"
+            cursor.execute(query3_select)
+            legacy_url_count = cursor.fetchone()[0]
+            
+            total = null_count + short_count + legacy_url_count
             
             if dry_run:
                 print(f"🔍 [DRY RUN] Audit complete. Found {total} anomalous clips:")
                 print(f"   - {null_count} clips with missing critical data")
                 print(f"   - {short_count} clips with unhelpful short quotes")
+                print(f"   - {legacy_url_count} clips with legacy broken URL structures")
                 print("\nRun without --dry-run to delete these records.")
                 return
 
@@ -59,11 +65,15 @@ def run_audit(dry_run=False):
                 query2_delete = "DELETE FROM clip_lore WHERE array_length(regexp_split_to_array(trim(notable_quote), '\\s+'), 1) < 3;"
                 cursor.execute(query2_delete)
                 
+                query3_delete = "DELETE FROM clip_lore WHERE canonical_url LIKE '%clips.twitch.tv%';"
+                cursor.execute(query3_delete)
+                
                 conn.commit()
                 
                 print(f"✅ Audit complete. Flagged and deleted {total} anomalous clips for batch reprocessing:")
                 print(f"   - {null_count} clips with missing critical data")
                 print(f"   - {short_count} clips with unhelpful short quotes")
+                print(f"   - {legacy_url_count} clips with legacy broken URL structures")
             else:
                 print("✅ Audit complete. No anomalies found. Database is clean!")
                 

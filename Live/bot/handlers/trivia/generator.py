@@ -323,7 +323,7 @@ Example: "While fighting the final boss in Elden Ring, Jonesy confidently told c
 The question text MUST include the specific Game Title and Context (Lore) so the audience can reasonably guess.
 Use the provided Characters Involved and Context to create rich, specific questions. The correct answer should relate to the Quote or the Outcome.
 Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
-Additionally, for each question, include the "clip_url" from the clip it was based on, and write a custom Ash "commentary" string to be displayed alongside the answer.
+Additionally, for each question, include the "clip_index" (e.g., 1 or 2) indicating which clip it was based on, and write a custom Ash "commentary" string to be displayed alongside the answer.
 IMPORTANT: Ash uses he/him pronouns. You MUST credit the discord user who submitted the clip in your commentary using their Discord ID. (e.g. "I can confirm Jonesy was in a state of alarm. I have prepared this visual evidence for review, courtesy of Archival Agent <@123456789>.")
 Return strictly as a raw JSON array containing exactly 5 generated questions.
 DO NOT output a schema or placeholder text. You must generate REAL trivia questions based on the clip data.
@@ -336,7 +336,7 @@ Each object in the JSON array MUST follow this exact format:
     "decoy_1": "A real fake option",
     "decoy_2": "Another real fake option",
     "decoy_3": "A third real fake option",
-    "clip_url": "The provided URL",
+    "clip_index": 1,
     "commentary": "Ash's commentary"
   }}
 ]
@@ -377,7 +377,7 @@ Example: "When the Xenomorph suddenly dropped from the ceiling in Alien Isolatio
 The question text MUST describe the Game Title and the exact situation (Trigger) so the audience can reasonably guess. The correct answer should be a description of her reaction (e.g., "She screamed and threw her headset" or "She paused the game and walked away"), rather than just a single emotion word.
 Use the provided Emotion Displayed, Characters Involved, and Context to create rich, specific questions.
 Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
-Additionally, for each question, include the "clip_url" from the clip it was based on, and write a custom Ash "commentary" string to be displayed alongside the answer.
+Additionally, for each question, include the "clip_index" (e.g., 1 or 2) indicating which clip it was based on, and write a custom Ash "commentary" string to be displayed alongside the answer.
 IMPORTANT: Ash uses he/him pronouns. You MUST credit the discord user who submitted the clip in your commentary using their Discord ID. (e.g. "I can confirm Jonesy was in a state of alarm. I have prepared this visual evidence for review, courtesy of Archival Agent <@123456789>.")
 Return strictly as a raw JSON array containing exactly 5 generated questions.
 DO NOT output a schema or placeholder text. You must generate REAL trivia questions based on the clip data.
@@ -390,7 +390,7 @@ Each object in the JSON array MUST follow this exact format:
     "decoy_1": "A real fake option",
     "decoy_2": "Another real fake option",
     "decoy_3": "A third real fake option",
-    "clip_url": "The provided URL",
+    "clip_index": 1,
     "commentary": "Ash's commentary"
   }}
 ]
@@ -428,7 +428,7 @@ REAL CLIP DATA:{clip_data_str}
 Create 5 "Cause and Effect" questions. Example: "What caused Jonesy to drop her controller during her Phasmophobia stream?"
 Use the provided Characters Involved and Context to create rich, specific questions.
 Autonomously determine difficulty: For obscure details, provide 3 decoys and set question_type to 'multiple_choice'. For easier facts, set question_type to 'single_answer'.
-Additionally, for each question, include the "clip_url" from the clip it was based on, and write a custom Ash "commentary" string to be displayed alongside the answer.
+Additionally, for each question, include the "clip_index" (e.g., 1 or 2) indicating which clip it was based on, and write a custom Ash "commentary" string to be displayed alongside the answer.
 IMPORTANT: Ash uses he/him pronouns. You MUST credit the discord user who submitted the clip in your commentary using their Discord ID. (e.g. "I can confirm Jonesy was in a state of alarm. I have prepared this visual evidence for review, courtesy of Archival Agent <@123456789>.")
 Return strictly as a raw JSON array containing exactly 5 generated questions.
 DO NOT output a schema or placeholder text. You must generate REAL trivia questions based on the clip data.
@@ -441,7 +441,7 @@ Each object in the JSON array MUST follow this exact format:
     "decoy_1": "A real fake option",
     "decoy_2": "Another real fake option",
     "decoy_3": "A third real fake option",
-    "clip_url": "The provided URL",
+    "clip_index": 1,
     "commentary": "Ash's commentary"
   }}
 ]
@@ -949,9 +949,32 @@ Each object in the JSON array MUST follow this exact format:
                 })
 
                 if selected_category and selected_category.startswith("Clip_"):
-                    clip_url = q_data.pop("clip_url", None)  # type: ignore
+                    clip_index = q_data.pop("clip_index", None)
+                    clip_url = q_data.pop("clip_url", None)  # Fallback for old prompt caching
                     commentary = q_data.pop("commentary", None)  # type: ignore
+                    
+                    if not clip_url and clip_index is not None and 'selected_clips' in locals():
+                        try:
+                            # 1-indexed in prompt
+                            idx = int(clip_index) - 1
+                            if 0 <= idx < len(selected_clips):
+                                clip_url = selected_clips[idx].get('canonical_url')
+                        except (ValueError, TypeError) as e:
+                            print(f"⚠️ TRIVIA DIRECTOR: Error parsing clip_index {clip_index}: {e}")
+
                     if clip_url and commentary:
+                        # Fallback recovery if AI still output a string URL (e.g. due to prompt cache)
+                        if clip_url and 'selected_clips' in locals() and clip_index is None:
+                            try:
+                                clip_id_lower = clip_url.split('/')[-1].lower()
+                                for c in selected_clips:
+                                    original_url = c.get('canonical_url', '')
+                                    if original_url and original_url.split('/')[-1].lower() == clip_id_lower:
+                                        clip_url = original_url
+                                        break
+                            except Exception as e:
+                                print(f"⚠️ TRIVIA DIRECTOR: Error recovering clip URL case: {e}")
+
                         import json
                         q_data["dynamic_query_type"] = json.dumps({  # type: ignore
                             "clip_url": clip_url,
