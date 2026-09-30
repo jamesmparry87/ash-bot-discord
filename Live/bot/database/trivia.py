@@ -1935,7 +1935,13 @@ class TriviaDatabase:
             clip_outcome: str,
             submitted_by: str,
             message_id: int) -> bool:
-        """Insert extracted clip lore into the database."""
+        # Validate if essential fields were successfully extracted
+        nq = notable_quote.strip()
+        rct = reaction.strip()
+        out = clip_outcome.strip()
+        is_dud = (not nq or nq == 'None') and (not rct or rct == 'None') and (not out or out == 'None')
+        status = 'UNPROCESSABLE' if is_dud else 'COMPLETED'
+        
         conn = self.db.get_connection()
         try:
             with conn.cursor() as cur:
@@ -1943,12 +1949,13 @@ class TriviaDatabase:
                     INSERT INTO clip_lore (
                         canonical_url, original_url, game_title, reaction, trigger, lore_summary,
                         notable_quote, emotion_category, characters_involved, clip_outcome,
-                        submitted_by_discord_id, message_id
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (canonical_url) DO NOTHING
+                        submitted_by_discord_id, message_id, batch_status
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (canonical_url) DO UPDATE SET
+                        batch_status = EXCLUDED.batch_status
                 """, (canonical_url, original_url, game_title, reaction, trigger, lore_summary,
                       notable_quote, emotion_category, characters_involved, clip_outcome,
-                      submitted_by, message_id))
+                      submitted_by, message_id, status))
                 conn.commit()
                 return cur.rowcount > 0
         except Exception as e:
@@ -2047,6 +2054,14 @@ class TriviaDatabase:
             return False
 
     def update_clip_lore_from_batch(self, canonical_url: str, data: dict) -> bool:
+        # Validate if essential fields were successfully extracted
+        nq = data.get('notable_quote', '').strip()
+        react = data.get('reaction', '').strip()
+        outcome = data.get('clip_outcome', '').strip()
+        
+        is_dud = (not nq or nq == 'None') and (not react or react == 'None') and (not outcome or outcome == 'None')
+        status = 'UNPROCESSABLE' if is_dud else 'COMPLETED'
+        
         conn = self.db.get_connection()
         try:
             with conn.cursor() as cursor:
@@ -2064,7 +2079,7 @@ class TriviaDatabase:
                         characters_involved = %s,
                         clip_outcome = %s,
                         message_id = %s,
-                        batch_status = 'COMPLETED'
+                        batch_status = %s
                     WHERE canonical_url = %s
                     """,
                     (
@@ -2078,11 +2093,12 @@ class TriviaDatabase:
                         data.get('characters_involved', ''),
                         data.get('clip_outcome', ''),
                         data.get('message_id'),
+                        status,
                         canonical_url
                     )
                 )
                 conn.commit()
-                return True
+                return cursor.rowcount > 0
         except Exception as e:
             print(f"Error updating from batch: {e}")
             return False

@@ -24,9 +24,10 @@ def run_audit(dry_run=False):
             # Query to find rows where essential fields are missing or 'None'
             query1_select = """
                 SELECT count(*) FROM clip_lore 
-                WHERE notable_quote IS NULL OR notable_quote = 'None' OR notable_quote = ''
+                WHERE (notable_quote IS NULL OR notable_quote = 'None' OR notable_quote = ''
                    OR reaction IS NULL OR reaction = 'None' OR reaction = ''
-                   OR clip_outcome IS NULL OR clip_outcome = 'None' OR clip_outcome = ''
+                   OR clip_outcome IS NULL OR clip_outcome = 'None' OR clip_outcome = '')
+                   AND (batch_status != 'UNPROCESSABLE' OR batch_status IS NULL)
             """
             cursor.execute(query1_select)
             null_count = cursor.fetchone()[0]
@@ -56,9 +57,10 @@ def run_audit(dry_run=False):
                 
                 query1_delete = """
                     DELETE FROM clip_lore 
-                    WHERE notable_quote IS NULL OR notable_quote = 'None' OR notable_quote = ''
+                    WHERE (notable_quote IS NULL OR notable_quote = 'None' OR notable_quote = ''
                        OR reaction IS NULL OR reaction = 'None' OR reaction = ''
-                       OR clip_outcome IS NULL OR clip_outcome = 'None' OR clip_outcome = ''
+                       OR clip_outcome IS NULL OR clip_outcome = 'None' OR clip_outcome = '')
+                       AND (batch_status != 'UNPROCESSABLE' OR batch_status IS NULL)
                 """
                 cursor.execute(query1_delete)
                 
