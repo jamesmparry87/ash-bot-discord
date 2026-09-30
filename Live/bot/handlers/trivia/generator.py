@@ -952,7 +952,7 @@ Each object in the JSON array MUST follow this exact format:
                     clip_index = q_data.pop("clip_index", None)
                     clip_url = q_data.pop("clip_url", None)  # Fallback for old prompt caching
                     commentary = q_data.pop("commentary", None)  # type: ignore
-                    
+
                     if not clip_url and clip_index is not None and 'selected_clips' in locals():
                         try:
                             # 1-indexed in prompt
