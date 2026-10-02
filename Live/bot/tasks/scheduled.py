@@ -915,24 +915,30 @@ async def daily_status_report():
                         p_tok = counts['prompt_tokens']
                         c_tok = counts['candidate_tokens']
 
-                        if "2.5-flash-lite" in model:
+                        is_batch = "(Batch)" in model
+                        base_model = model.replace(" (Batch)", "")
+
+                        if "2.5-flash-lite" in base_model:
                             cost = (p_tok / 1_000_000 * 0.10) + (c_tok / 1_000_000 * 0.40)
-                        elif "3.1-flash-lite" in model:
+                        elif "3.1-flash-lite" in base_model:
                             cost = (p_tok / 1_000_000 * 0.25) + (c_tok / 1_000_000 * 1.50)
-                        elif "2.5-flash" in model or "3.5-flash-lite" in model:
+                        elif "2.5-flash" in base_model or "3.5-flash-lite" in base_model:
                             cost = (p_tok / 1_000_000 * 0.30) + (c_tok / 1_000_000 * 2.50)
-                        elif "3-flash-preview" in model:
+                        elif "3-flash-preview" in base_model:
                             cost = (p_tok / 1_000_000 * 0.50) + (c_tok / 1_000_000 * 3.00)
-                        elif "3.7-flash" in model or "3.8-flash" in model:
+                        elif "3.7-flash" in base_model or "3.8-flash" in base_model:
                             cost = (p_tok / 1_000_000 * 0.75) + (c_tok / 1_000_000 * 3.75)
-                        elif "2.5-pro" in model:
+                        elif "2.5-pro" in base_model:
                             cost = (p_tok / 1_000_000 * 1.25) + (c_tok / 1_000_000 * 10.00)
-                        elif "3.6-flash" in model or "3.5-flash" in model:
+                        elif "3.6-flash" in base_model or "3.5-flash" in base_model:
                             cost = (p_tok / 1_000_000 * 1.50) + (c_tok / 1_000_000 * 9.00)
-                        elif "3.1-pro" in model:
+                        elif "3.1-pro" in base_model:
                             cost = (p_tok / 1_000_000 * 2.00) + (c_tok / 1_000_000 * 12.00)
                         else:
                             cost = 0.0
+                            
+                        if is_batch:
+                            cost *= 0.5
 
                         total_cost += cost
                         short_model = model.replace('models/', '').replace('gemini-', '')
@@ -1613,6 +1619,17 @@ async def poll_gemini_batches():
                             "parts", [
                                 {}])[0].get(
                             "text", "")
+
+                        # Log batch token usage
+                        usage = obj.get("response", {}).get("usageMetadata") or obj.get("response", {}).get("usage_metadata", {})
+                        p_tok = usage.get("promptTokenCount", usage.get("prompt_token_count", 0))
+                        c_tok = usage.get("candidatesTokenCount", usage.get("candidates_token_count", 0))
+                        if p_tok > 0 or c_tok > 0:
+                            try:
+                                from ..config import GEMINI_BATCH_MODEL
+                                db.log_token_usage(f"{GEMINI_BATCH_MODEL} (Batch)", p_tok, c_tok)
+                            except Exception as e:
+                                print(f"Error logging batch tokens: {e}")
 
                         if response_text:
                             # Clean up markdown

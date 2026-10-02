@@ -151,14 +151,20 @@ class UtilityCommands(commands.Cog):
                             c_tok = counts['candidate_tokens']
 
                             # Calculate cost based on model
-                            if "3.6-flash" in model:
+                            is_batch = "(Batch)" in model
+                            base_model = model.replace(" (Batch)", "")
+
+                            if "3.6-flash" in base_model:
                                 cost = (p_tok / 1_000_000 * 0.75) + (c_tok / 1_000_000 * 3.75)
-                            elif "3.5-flash" in model or "flash" in model:
+                            elif "3.5-flash" in base_model or "flash" in base_model:
                                 cost = (p_tok / 1_000_000 * 1.50) + (c_tok / 1_000_000 * 9.00)
-                            elif "pro" in model:
+                            elif "pro" in base_model:
                                 cost = (p_tok / 1_000_000 * 1.25) + (c_tok / 1_000_000 * 5.00)
                             else:
                                 cost = 0.0
+                                
+                            if is_batch:
+                                cost *= 0.5
 
                             total_cost += cost
                             # Keep it brief for the status command
