@@ -1941,7 +1941,7 @@ class TriviaDatabase:
         out = clip_outcome.strip()
         is_dud = (not nq or nq == 'None') and (not rct or rct == 'None') and (not out or out == 'None')
         status = 'UNPROCESSABLE' if is_dud else 'COMPLETED'
-        
+
         conn = self.db.get_connection()
         try:
             with conn.cursor() as cur:
@@ -2058,10 +2058,10 @@ class TriviaDatabase:
         nq = data.get('notable_quote', '').strip()
         react = data.get('reaction', '').strip()
         outcome = data.get('clip_outcome', '').strip()
-        
+
         is_dud = (not nq or nq == 'None') and (not react or react == 'None') and (not outcome or outcome == 'None')
         status = 'UNPROCESSABLE' if is_dud else 'COMPLETED'
-        
+
         conn = self.db.get_connection()
         try:
             with conn.cursor() as cursor:
