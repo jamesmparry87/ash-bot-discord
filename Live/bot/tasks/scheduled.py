@@ -936,7 +936,7 @@ async def daily_status_report():
                             cost = (p_tok / 1_000_000 * 2.00) + (c_tok / 1_000_000 * 12.00)
                         else:
                             cost = 0.0
-                            
+
                         if is_batch:
                             cost *= 0.5
 
@@ -1621,7 +1621,13 @@ async def poll_gemini_batches():
                             "text", "")
 
                         # Log batch token usage
-                        usage = obj.get("response", {}).get("usageMetadata") or obj.get("response", {}).get("usage_metadata", {})
+                        usage = obj.get(
+                            "response",
+                            {}).get("usageMetadata") or obj.get(
+                            "response",
+                            {}).get(
+                            "usage_metadata",
+                            {})
                         p_tok = usage.get("promptTokenCount", usage.get("prompt_token_count", 0))
                         c_tok = usage.get("candidatesTokenCount", usage.get("candidates_token_count", 0))
                         if p_tok > 0 or c_tok > 0:

@@ -162,7 +162,7 @@ class UtilityCommands(commands.Cog):
                                 cost = (p_tok / 1_000_000 * 1.25) + (c_tok / 1_000_000 * 5.00)
                             else:
                                 cost = 0.0
-                                
+
                             if is_batch:
                                 cost *= 0.5
 
