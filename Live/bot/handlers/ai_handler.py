@@ -181,7 +181,6 @@ async def call_ai_with_rate_limiting(prompt: str,
 
         config = types.GenerateContentConfig(
             system_instruction=sys_instruction,
-            temperature=0.75,
             max_output_tokens=1500,
             tools=AI_TOOLS
         )
@@ -241,13 +240,12 @@ async def call_ai_with_rate_limiting(prompt: str,
 
 
 async def call_ai_for_generation(prompt: str, system_instruction: str = None,
-                                 temperature: float = 0.7, max_tokens: int = 3000) -> Tuple[Optional[str], str]:
+                                 max_tokens: int = 3000) -> Tuple[Optional[str], str]:
     if not ai_enabled or not gemini_live_client:
         return None, "offline"
     try:
         config = types.GenerateContentConfig(
             system_instruction=system_instruction or ASH_SYSTEM_INSTRUCTION,
-            temperature=temperature,
             max_output_tokens=max_tokens
         )
         last_error = None
@@ -292,7 +290,6 @@ async def upload_and_analyze_media(file_path: str, prompt: str, is_batch: bool =
         )
 
         config = types.GenerateContentConfig(
-            temperature=0.4,
             response_mime_type="application/json"
         )
 
@@ -328,18 +325,18 @@ async def generate_contextual_trivia(category: str, difficulty: str,
     prompt = f"Generate a {difficulty} trivia question about {category}. Provide the question and correct answer."
     if context:
         prompt += f" Context: {context}"
-    return await call_ai_for_generation(prompt, temperature=0.7)
+    return await call_ai_for_generation(prompt)
 
 
 async def create_ai_announcement_content(topic: str, context: Optional[str] = None) -> Tuple[Optional[str], str]:
     prompt = f"Write an announcement about {topic}."
     if context:
         prompt += f" Context: {context}"
-    return await call_ai_for_generation(prompt, temperature=0.75)
+    return await call_ai_for_generation(prompt)
 
 
 async def generate_weekly_report(stats: Dict[str, Any]) -> Tuple[Optional[str], str]:
     prompt = f"Generate a weekly report summarizing these stats: {stats}"
-    return await call_ai_for_generation(prompt, temperature=0.7)
+    return await call_ai_for_generation(prompt)
 
 initialize_ai()

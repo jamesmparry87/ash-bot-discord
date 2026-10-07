@@ -828,7 +828,6 @@ Each object in the JSON array MUST follow this exact format:
             print(f"🎮 TRIVIA DIRECTOR: Selected '{selected_category}' | Answer: {correct_answer or 'AI-determined'}")
 
             ai_question = None
-            temperature = 0.0  # Default if AI is skipped
 
             if final_question_text and selected_category != 'Franchise_Lore':
                 # HYBRID APPROACH: Skip AI for statistical questions
@@ -851,19 +850,11 @@ Each object in the JSON array MUST follow this exact format:
                     avoid_text += "\\n".join([f"  - {q[:60]}..." for q in avoid_questions[:15]])
                     prompt = str(prompt) + avoid_text  # type: ignore
 
-                CATEGORY_TEMPERATURES = {
-                    'Franchise_Lore': 0.9,
-                    'Clip_Famous_Last_Words': 0.8,
-                    'Clip_Vibe_Check': 0.8,
-                    'Clip_Cause_And_Effect': 0.8,
-                }
-                temperature = CATEGORY_TEMPERATURES.get(selected_category, 0.9)
-                print(f"🌡️ TRIVIA DIRECTOR: Using temperature {temperature} for '{selected_category}'")
+                print(f"🌡️ TRIVIA DIRECTOR: Using default sampling parameters for '{selected_category}'")
 
                 response_text, status_message = await call_ai_for_generation(
                     prompt,
-                    system_instruction=context,
-                    temperature=temperature
+                    system_instruction=context
                 )
 
                 if not response_text:
@@ -944,7 +935,6 @@ Each object in the JSON array MUST follow this exact format:
                             'year': g.get('release_year')
                         } for g in source_games
                     ],
-                    "temperature": temperature,
                     "generation_timestamp": datetime.now(ZoneInfo('Europe/London')).isoformat()
                 })
 
