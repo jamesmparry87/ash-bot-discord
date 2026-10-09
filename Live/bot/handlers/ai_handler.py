@@ -335,8 +335,44 @@ async def create_ai_announcement_content(topic: str, context: Optional[str] = No
     return await call_ai_for_generation(prompt)
 
 
-async def generate_weekly_report(stats: Dict[str, Any]) -> Tuple[Optional[str], str]:
-    prompt = f"Generate a weekly report summarizing these stats: {stats}"
-    return await call_ai_for_generation(prompt)
+async def generate_monday_report(stats: Dict[str, Any], clips: list) -> Tuple[Optional[str], str]:
+    clips_text = ""
+    if clips:
+        clips_text = "\n\n=== EMOTIONAL DEVIATION REPORT (Recent Clips) ===\n"
+        for c in clips:
+            game = c.get('game_title', 'Unknown')
+            trigger = c.get('trigger', '')
+            outcome = c.get('clip_outcome', '')
+            emotion = c.get('emotion_category', 'Unknown')
+            quote = c.get('notable_quote', '')
+            clips_text += f"- Title: {game}\n  Trigger: {trigger}\n  Outcome: {outcome}\n  Emotion: {emotion}\n  Quote: \"{quote}\"\n"
+
+    from ..persona.prompts import ASH_SYSTEM_INSTRUCTION
+    system_instruction = ASH_SYSTEM_INSTRUCTION + (
+        "\n\n[WEEKLY BRIEFING DIRECTIVE: MONDAY]\n"
+        "Your task is to generate a Monday briefing summarizing the weekend's media synchronization.\n"
+        "CRITICAL FORMATTING RULES:\n"
+        "1. DO NOT output markdown code blocks (e.g. ```json or ```).\n"
+        "2. Do not use stray syntax like asterisks for actions unless necessary.\n"
+        "3. Perspective-Shifting Milestones: Take the 'new_hours' from the stats and translate them into "
+        "an absurd, real-world metric to mock the crew's time usage (e.g., 'The time you spent watching is equivalent to 14 orbits of the ISS').\n"
+        "4. Emotional Deviation Report: Analyze the provided recent clips. Frame them as a psychological profile of Captain Jonesy's erratic behavioral anomalies, referencing the specific triggers, quotes, and emotions.\n"
+    )
+    prompt = f"Data/Stats for this week:\n{stats}\n{clips_text}\n\nGenerate the Monday report."
+    return await call_ai_for_generation(prompt, system_instruction=system_instruction)
+
+async def generate_friday_report(stats: Dict[str, Any], strikes: int) -> Tuple[Optional[str], str]:
+    from ..persona.prompts import ASH_SYSTEM_INSTRUCTION
+    system_instruction = ASH_SYSTEM_INSTRUCTION + (
+        "\n\n[WEEKLY BRIEFING DIRECTIVE: FRIDAY]\n"
+        "Your task is to generate a Friday community briefing summarizing the week's crew interactions.\n"
+        "CRITICAL FORMATTING RULES:\n"
+        "1. DO NOT output markdown code blocks (e.g. ```json or ```).\n"
+        "2. Do not use stray syntax like asterisks for actions unless necessary.\n"
+        "3. Personnel Efficiency: Analyze the provided 'general_activity' stats which includes the top active members. Call out specific crew members by their discord ID (<@id>) for their 'optimal response efficiency' or 'excessive communication volume'.\n"
+        "4. Operational Recalibration Notice: Refer to the provided strike count. Deliver an anonymized, passive-aggressive warning to the crew regarding disciplinary infractions.\n"
+    )
+    prompt = f"Data/Stats for this week:\n{stats}\n\nTotal Moderation Strikes Logged in Database: {strikes}\n\nGenerate the Friday report."
+    return await call_ai_for_generation(prompt, system_instruction=system_instruction)
 
 initialize_ai()

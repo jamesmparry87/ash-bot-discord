@@ -686,10 +686,26 @@ async def friday_community_analysis():
         # Module C: General Activity (Fallback)
         # Always available as long as there are messages, guarantees Friday greeting generates
         if all_messages:
+            from collections import Counter
+            from ..config import JONESY_USER_ID, JAM_USER_ID, POPS_ARCADE_USER_ID
+            
+            # Filter out Tier 1 personas and anyone with mod permissions
+            eligible_messages = [
+                m for m in all_messages
+                if isinstance(m.author, discord.Member) 
+                and m.author.id not in (JONESY_USER_ID, JAM_USER_ID, POPS_ARCADE_USER_ID)
+                and not m.author.guild_permissions.manage_messages
+            ]
+            author_counts = Counter(m.author.id for m in eligible_messages)
+            top_talkers = [f"<@{author}> ({count} msgs)" for author, count in author_counts.most_common(3)]
+            
             activity_recap = f"Total communication volume across the primary public server channels registered at **{len(all_messages)} transmissions** over the past 7 days. Processing complete."
             analysis_modules.append({
                 "type": "general_activity",
-                "data": {"total_messages": len(all_messages)},
+                "data": {
+                    "total_messages": len(all_messages),
+                    "top_talkers": top_talkers
+                },
                 "content": activity_recap
             })
 
@@ -704,10 +720,20 @@ async def friday_community_analysis():
 
         analysis_cache = {"modules": analysis_modules}  # Cache all found modules for regeneration
 
-        from ..handlers.ai_handler import generate_weekly_report
+        from ..handlers.ai_handler import generate_friday_report
+        
+        strikes_count = 0
+        try:
+            if hasattr(db, 'users') and hasattr(db.users, 'get_all_strikes'):
+                strikes_data = db.users.get_all_strikes()
+                strikes_count = sum(strikes_data.values()) if strikes_data else 0
+        except Exception as e:
+            print(f"Error fetching strikes: {e}")
 
         # Try dynamic AI generation first
-        debrief = await generate_weekly_report(analysis_cache)
+        debrief, status = await generate_friday_report(analysis_cache, strikes_count)
+        if status != "success":
+            debrief = None
 
         if not debrief:
             # Fallback to static message if AI is disabled or fails

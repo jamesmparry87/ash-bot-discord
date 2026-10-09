@@ -146,10 +146,19 @@ async def monday_content_sync():
         ]
 
         # --- Content Generation ---
-        from ..handlers.ai_handler import generate_weekly_report
+        from ..handlers.ai_handler import generate_monday_report
+        
+        clips = []
+        try:
+            if db and hasattr(db, 'trivia') and hasattr(db.trivia, 'get_random_clip_lore'):
+                clips = db.trivia.get_random_clip_lore(limit=5)
+        except Exception as e:
+            print(f"Error fetching clips for Monday report: {e}")
 
         # Try dynamic AI generation first
-        debrief = await generate_weekly_report(analysis_results)
+        debrief, status = await generate_monday_report(analysis_results, clips)
+        if status != "success":
+            debrief = None
 
         if not debrief:
             # Fallback to static message if AI is disabled or fails
