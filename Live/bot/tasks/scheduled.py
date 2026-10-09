@@ -1723,19 +1723,20 @@ async def poll_gemini_batches():
         except Exception as e:
             print(f"Error polling batch {job_id}: {e}")
 
+
 @tasks.loop(hours=24)
 async def cleanup_gemini_files():
     """Wipe old Gemini API files to prevent storage quota exhaustion (20 GB limit)"""
     from ..handlers.ai_handler import gemini_batch_client, gemini_live_client
-    
+
     for client_obj, name in [(gemini_batch_client, "Batch"), (gemini_live_client, "Live")]:
         if not client_obj:
             continue
-            
+
         try:
             print(f"🧹 Starting Gemini {name} API file cleanup...")
             files_deleted = 0
-            
+
             # Fetch files and delete them
             files_to_delete = []
             try:
@@ -1746,19 +1747,19 @@ async def cleanup_gemini_files():
                 files_to_delete.extend(files)
             except Exception as e:
                 print(f"⚠️ Error listing files for {name}: {e}")
-                
+
             for f in files_to_delete:
                 try:
                     await asyncio.to_thread(client_obj.files.delete, name=f.name)
                     files_deleted += 1
                 except Exception as e:
                     print(f"❌ Failed to delete {f.name}: {e}")
-            
+
             if files_deleted > 0:
                 print(f"✅ Successfully deleted {files_deleted} old files from Gemini {name} API.")
             else:
                 print(f"✅ No files needed to be deleted from Gemini {name} API.")
-                
+
         except Exception as e:
             print(f"❌ Critical error during Gemini {name} API cleanup: {e}")
 
