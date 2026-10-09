@@ -687,8 +687,9 @@ async def friday_community_analysis():
         # Always available as long as there are messages, guarantees Friday greeting generates
         if all_messages:
             from collections import Counter
-            from ..config import JONESY_USER_ID, JAM_USER_ID, POPS_ARCADE_USER_ID
-            
+
+            from ..config import JAM_USER_ID, JONESY_USER_ID, POPS_ARCADE_USER_ID
+
             # Filter out Tier 1 personas and anyone with mod permissions
             eligible_messages = [
                 m for m in all_messages
