@@ -688,8 +688,6 @@ async def friday_community_analysis():
         if all_messages:
             from collections import Counter
 
-            from ..config import JAM_USER_ID, JONESY_USER_ID, POPS_ARCADE_USER_ID
-
             # Filter out Tier 1 personas and anyone with mod permissions
             eligible_messages = [
                 m for m in all_messages
@@ -1725,6 +1723,45 @@ async def poll_gemini_batches():
         except Exception as e:
             print(f"Error polling batch {job_id}: {e}")
 
+@tasks.loop(hours=24)
+async def cleanup_gemini_files():
+    """Wipe old Gemini API files to prevent storage quota exhaustion (20 GB limit)"""
+    from ..handlers.ai_handler import gemini_batch_client, gemini_live_client
+    
+    for client_obj, name in [(gemini_batch_client, "Batch"), (gemini_live_client, "Live")]:
+        if not client_obj:
+            continue
+            
+        try:
+            print(f"🧹 Starting Gemini {name} API file cleanup...")
+            files_deleted = 0
+            
+            # Fetch files and delete them
+            files_to_delete = []
+            try:
+                # Need to run generator in sync context or wrap in thread
+                def _get_files():
+                    return list(client_obj.files.list())
+                files = await asyncio.to_thread(_get_files)
+                files_to_delete.extend(files)
+            except Exception as e:
+                print(f"⚠️ Error listing files for {name}: {e}")
+                
+            for f in files_to_delete:
+                try:
+                    await asyncio.to_thread(client_obj.files.delete, name=f.name)
+                    files_deleted += 1
+                except Exception as e:
+                    print(f"❌ Failed to delete {f.name}: {e}")
+            
+            if files_deleted > 0:
+                print(f"✅ Successfully deleted {files_deleted} old files from Gemini {name} API.")
+            else:
+                print(f"✅ No files needed to be deleted from Gemini {name} API.")
+                
+        except Exception as e:
+            print(f"❌ Critical error during Gemini {name} API cleanup: {e}")
+
 
 def start_all_scheduled_tasks(bot):
     """Start all scheduled tasks with enhanced monitoring"""
@@ -1753,6 +1790,8 @@ def start_all_scheduled_tasks(bot):
             (process_clip_backlog, "Nightly clip backlog processor (21:15 UK time)"),
             ## Hourly ##
             (cleanup_game_recommendations, "Game recommendation cleanup task (every hour)"),
+            ## Every 24 hours ##
+            (cleanup_gemini_files, "Gemini API storage cleanup task (every 24 hours)"),
             ## Every 15 minutes ##
             (check_stale_trivia_sessions, "Stale trivia session checker (every 15 minutes)"),
             ## Continuously ##
@@ -1807,7 +1846,8 @@ def get_scheduled_tasks_status():
             (tuesday_trivia_greeting, "Tuesday Greeting"),
             (friday_morning_greeting, "Friday Greeting"),
             (pre_trivia_approval, "Pre-trivia Approval"),
-            (cleanup_game_recommendations, "Cleanup Tasks")
+            (cleanup_game_recommendations, "Cleanup Tasks"),
+            (cleanup_gemini_files, "Gemini API Storage Cleanup")
         ]
 
         for task, name in tasks_to_check:
@@ -1859,7 +1899,8 @@ def stop_all_scheduled_tasks():
             monday_morning_greeting,
             tuesday_trivia_greeting,
             friday_morning_greeting,
-            pre_trivia_approval
+            pre_trivia_approval,
+            cleanup_gemini_files
         ]
 
         for task in tasks_to_stop:
