@@ -693,13 +693,13 @@ async def friday_community_analysis():
             # Filter out Tier 1 personas and anyone with mod permissions
             eligible_messages = [
                 m for m in all_messages
-                if isinstance(m.author, discord.Member) 
-                and m.author.id not in (JONESY_USER_ID, JAM_USER_ID, POPS_ARCADE_USER_ID)
-                and not m.author.guild_permissions.manage_messages
+                if isinstance(m.author, discord.Member) and
+                m.author.id not in (JONESY_USER_ID, JAM_USER_ID, POPS_ARCADE_USER_ID) and
+                not m.author.guild_permissions.manage_messages
             ]
             author_counts = Counter(m.author.id for m in eligible_messages)
             top_talkers = [f"<@{author}> ({count} msgs)" for author, count in author_counts.most_common(3)]
-            
+
             activity_recap = f"Total communication volume across the primary public server channels registered at **{len(all_messages)} transmissions** over the past 7 days. Processing complete."
             analysis_modules.append({
                 "type": "general_activity",
@@ -722,7 +722,7 @@ async def friday_community_analysis():
         analysis_cache = {"modules": analysis_modules}  # Cache all found modules for regeneration
 
         from ..handlers.ai_handler import generate_friday_report
-        
+
         strikes_count = 0
         try:
             if hasattr(db, 'users') and hasattr(db.users, 'get_all_strikes'):

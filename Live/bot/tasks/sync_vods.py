@@ -147,7 +147,7 @@ async def monday_content_sync():
 
         # --- Content Generation ---
         from ..handlers.ai_handler import generate_monday_report
-        
+
         clips = []
         try:
             if db and hasattr(db, 'trivia') and hasattr(db.trivia, 'get_random_clip_lore'):
