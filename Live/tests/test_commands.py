@@ -686,9 +686,11 @@ class TestClipScanAutoLoop:
         class AsyncIter:
             def __init__(self, items):
                 self.items = items
+
             def __aiter__(self):
                 self._iter = iter(self.items)
                 return self
+
             async def __anext__(self):
                 try:
                     return next(self._iter)
@@ -734,9 +736,9 @@ class TestClipScanAutoLoop:
             return orig_open(p, *args, **kwargs)
 
         with patch("bot.commands.clips.get_database", return_value=mock_db), \
-             patch("bot.commands.clips.os.path.exists", side_effect=fake_exists), \
-             patch("bot.commands.clips.open", side_effect=fake_open), \
-             patch("bot.commands.clips.os.remove", side_effect=fake_remove) as mock_remove:
+                patch("bot.commands.clips.os.path.exists", side_effect=fake_exists), \
+                patch("bot.commands.clips.open", side_effect=fake_open), \
+                patch("bot.commands.clips.os.remove", side_effect=fake_remove) as mock_remove:
 
             found, queued = await cog.process_backlog_batch(
                 search_limit=10,
@@ -776,7 +778,7 @@ class TestClipQualityControl:
             "reaction": "screamed",
             "trigger": "died to boss",
             "lore_summary": "Jonesy died to Malenia",
-            "notable_quote": "Oh no", # Only 2 words
+            "notable_quote": "Oh no",  # Only 2 words
             "clip_outcome": "Death"
         }
         trivia_db.update_clip_lore_from_batch("https://twitch.tv/clip/1", dud_data)
@@ -872,7 +874,7 @@ class TestClipQualityControl:
                     "reaction": "laughed",
                     "trigger": "funny glitch",
                     "lore_summary": "Saw a glitch",
-                    "notable_quote": "Lol nope", # only 2 words
+                    "notable_quote": "Lol nope",  # only 2 words
                     "clip_outcome": "Neutral"
                 })}]}}]
             }
@@ -882,15 +884,17 @@ class TestClipQualityControl:
         class MockResponse:
             def read(self):
                 return jsonl_content
+
             def __enter__(self):
                 return self
+
             def __exit__(self, *args):
                 pass
 
         with patch("bot.tasks.scheduled.get_bot_instance", return_value=mock_bot), \
-             patch("bot.tasks.scheduled.get_database", return_value=mock_db), \
-             patch("bot.handlers.ai_handler.gemini_batch_client", mock_batch_client), \
-             patch("urllib.request.urlopen", return_value=MockResponse()):
+                patch("bot.tasks.scheduled.get_database", return_value=mock_db), \
+                patch("bot.handlers.ai_handler.gemini_batch_client", mock_batch_client), \
+                patch("urllib.request.urlopen", return_value=MockResponse()):
 
             await poll_gemini_batches()
 

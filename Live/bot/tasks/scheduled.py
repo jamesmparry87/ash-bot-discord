@@ -1762,7 +1762,7 @@ async def poll_gemini_batches():
                         if len(summary_msg) <= 2000:
                             await jam.send(summary_msg)
                         else:
-                            chunks = [summary_msg[i:i+1900] for i in range(0, len(summary_msg), 1900)]
+                            chunks = [summary_msg[i:i + 1900] for i in range(0, len(summary_msg), 1900)]
                             for chunk in chunks:
                                 await jam.send(chunk)
                 except Exception as e:

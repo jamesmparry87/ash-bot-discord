@@ -2064,10 +2064,10 @@ class TriviaDatabase:
 
             nq_words = len(nq.split())
             is_dud = (
-                not nq or nq.lower() == 'none' or nq_words < 3
-                or not react or react.lower() == 'none'
-                or not outcome or outcome.lower() == 'none'
-                or not lore or lore.lower() == 'none'
+                not nq or nq.lower() == 'none' or nq_words < 3 or
+                not react or react.lower() == 'none' or
+                not outcome or outcome.lower() == 'none' or
+                not lore or lore.lower() == 'none'
             )
             status = 'UNPROCESSABLE' if is_dud else 'COMPLETED'
 
