@@ -9,7 +9,7 @@ LIVE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 BOT_DIR = os.path.join(LIVE_DIR, "Live", "bot")
 
 # Regex patterns for deprecated models and parameters
-DEPRECATED_MODELS_PATTERN = re.compile(r"['\"]gemini-(1\.5|2\.0|2\.5).*?['\"]")
+DEPRECATED_MODELS_PATTERN = re.compile(r"['\"]gemini-(1\.5|2\.0|2\.5|3\.5|3\.7).*?['\"]")
 DEPRECATED_PARAMS_PATTERN = re.compile(r"\b(temperature|top_k|top_p|thinking_budget)\s*=")
 
 def audit_codebase(dry_run: bool):

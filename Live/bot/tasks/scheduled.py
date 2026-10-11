@@ -951,11 +951,11 @@ async def daily_status_report():
                             cost = (p_tok / 1_000_000 * 0.30) + (c_tok / 1_000_000 * 2.50)
                         elif "3-flash-preview" in base_model:
                             cost = (p_tok / 1_000_000 * 0.50) + (c_tok / 1_000_000 * 3.00)
-                        elif "3.7-flash" in base_model or "3.8-flash" in base_model:
+                        elif "3.6-flash" in base_model or "3.7-flash" in base_model or "3.8-flash" in base_model:
                             cost = (p_tok / 1_000_000 * 0.75) + (c_tok / 1_000_000 * 3.75)
                         elif "2.5-pro" in base_model:
                             cost = (p_tok / 1_000_000 * 1.25) + (c_tok / 1_000_000 * 10.00)
-                        elif "3.6-flash" in base_model or "3.5-flash" in base_model:
+                        elif "3.5-flash" in base_model:
                             cost = (p_tok / 1_000_000 * 1.50) + (c_tok / 1_000_000 * 9.00)
                         elif "3.1-pro" in base_model:
                             cost = (p_tok / 1_000_000 * 2.00) + (c_tok / 1_000_000 * 12.00)
@@ -1626,6 +1626,9 @@ async def poll_gemini_batches():
                 channel = bot.get_channel(
                     bot.get_cog("ClipTriviaCog").target_channel_id) if bot.get_cog("ClipTriviaCog") else None
 
+                completed_clips = []
+                unprocessable_clips = []
+
                 # Parse JSONL output
                 for line in output_data.strip().split("\n"):
                     if not line:
@@ -1662,6 +1665,10 @@ async def poll_gemini_batches():
                             except Exception as e:
                                 print(f"Error logging batch tokens: {e}")
 
+                        # Quality Control Validation
+                        data = {}
+                        rejection_reasons = []
+
                         if response_text:
                             # Clean up markdown
                             clean_text = response_text.strip()
@@ -1670,29 +1677,69 @@ async def poll_gemini_batches():
                             if clean_text.endswith("```"):
                                 clean_text = clean_text[:-3]
 
-                            data = json.loads(clean_text)
+                            try:
+                                data = json.loads(clean_text)
+                            except Exception as parse_err:
+                                rejection_reasons.append(f"Invalid JSON: {parse_err}")
+                        else:
+                            rejection_reasons.append("Empty AI model response")
 
-                            # DB update
-                            success = db.trivia.update_clip_lore_from_batch(canonical_url, {
-                                "game_title": data.get("game_title", "Unknown"),
-                                "reaction": data.get("reaction", ""),
-                                "trigger": data.get("trigger", ""),
-                                "lore_summary": data.get("lore_summary", ""),
-                                "notable_quote": data.get("notable_quote", ""),
-                                "emotion_category": data.get("emotion_category", ""),
-                                "characters_involved": data.get("characters_involved", ""),
-                                "clip_outcome": data.get("clip_outcome", ""),
-                                "message_id": msg_id
-                            })
+                        if not rejection_reasons:
+                            quote = str(data.get("notable_quote", "") or "").strip()
+                            react = str(data.get("reaction", "") or "").strip()
+                            outcome = str(data.get("clip_outcome", "") or "").strip()
+                            lore = str(data.get("lore_summary", "") or "").strip()
 
-                            # Retroactive React
-                            if channel and success:
-                                try:
-                                    msg = await channel.fetch_message(msg_id)
+                            if not quote or quote.lower() == "none":
+                                rejection_reasons.append("Missing notable quote")
+                            elif len(quote.split()) < 3:
+                                rejection_reasons.append(f"Quote fewer than 3 words (got '{quote}')")
+
+                            if not react or react.lower() == "none":
+                                rejection_reasons.append("Missing reaction")
+
+                            if not outcome or outcome.lower() == "none":
+                                rejection_reasons.append("Missing clip outcome")
+
+                            if not lore or lore.lower() == "none":
+                                rejection_reasons.append("Missing lore summary")
+
+                        is_valid = len(rejection_reasons) == 0
+                        status = "COMPLETED" if is_valid else "UNPROCESSABLE"
+
+                        # DB update
+                        db.trivia.update_clip_lore_from_batch(canonical_url, {
+                            "game_title": data.get("game_title", "Unknown"),
+                            "reaction": data.get("reaction", ""),
+                            "trigger": data.get("trigger", ""),
+                            "lore_summary": data.get("lore_summary", ""),
+                            "notable_quote": data.get("notable_quote", ""),
+                            "emotion_category": data.get("emotion_category", ""),
+                            "characters_involved": data.get("characters_involved", ""),
+                            "clip_outcome": data.get("clip_outcome", ""),
+                            "message_id": msg_id,
+                            "batch_status": status
+                        })
+
+                        # Retroactive React & Tracking
+                        if channel:
+                            try:
+                                msg = await channel.fetch_message(msg_id)
+                                if is_valid:
                                     await msg.add_reaction("✅")
                                     await msg.remove_reaction("👀", bot.user)
-                                except Exception as e:
-                                    print(f"Failed to react to parsed batch message {msg_id}: {e}")
+                                    await msg.remove_reaction("❌", bot.user)
+                                else:
+                                    await msg.add_reaction("❌")
+                                    await msg.remove_reaction("👀", bot.user)
+                                    await msg.remove_reaction("✅", bot.user)
+                            except Exception as react_err:
+                                print(f"Failed to update reactions on message {msg_id}: {react_err}")
+
+                        if is_valid:
+                            completed_clips.append(canonical_url)
+                        else:
+                            unprocessable_clips.append((canonical_url, msg_id, ", ".join(rejection_reasons)))
 
                     except Exception as e:
                         print(f"Error parsing batch result for line: {e}")
@@ -1702,7 +1749,22 @@ async def poll_gemini_batches():
                     from ..config import JAM_USER_ID
                     jam = await bot.fetch_user(JAM_USER_ID)
                     if jam:
-                        await jam.send(f"✅ **Batch Job Completed**\nJob ID: `{job_id}`\nSuccessfully added lore to database and reacted to original clips.")
+                        summary_msg = f"🎬 **Batch Job Completed**\nJob ID: `{job_id}`\n"
+                        summary_msg += f"• **Successfully processed:** {len(completed_clips)} clips\n"
+                        if unprocessable_clips:
+                            summary_msg += f"• **Rejected / Unprocessable:** {len(unprocessable_clips)} clips\n\n"
+                            summary_msg += "⚠️ **Unprocessable Clips (failed quality control):**\n"
+                            for u_url, u_mid, u_reason in unprocessable_clips:
+                                summary_msg += f"- <{u_url}> — *{u_reason}*\n"
+                        else:
+                            summary_msg += "• All clips passed quality control!\n"
+
+                        if len(summary_msg) <= 2000:
+                            await jam.send(summary_msg)
+                        else:
+                            chunks = [summary_msg[i:i+1900] for i in range(0, len(summary_msg), 1900)]
+                            for chunk in chunks:
+                                await jam.send(chunk)
                 except Exception as e:
                     print(f"Failed to DM JAM about batch completion: {e}")
 

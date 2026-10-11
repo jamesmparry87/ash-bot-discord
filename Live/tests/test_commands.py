@@ -4,6 +4,7 @@ Designed to run from project root directory.
 """
 
 import asyncio
+import json
 import os
 import sys
 from datetime import datetime, timedelta
@@ -45,7 +46,7 @@ from discord.ext import commands
 from typing import Any, Optional, Tuple, Union, Dict, List
 
 # Add the Live directory to sys.path for imports
-live_path = os.path.join(os.path.dirname(__file__), '..', 'Live')
+live_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if live_path not in sys.path:
     sys.path.insert(0, live_path)
 
@@ -655,6 +656,257 @@ class TestTimezoneAwareFunctionality:
         # Basic test that verifies timezone handling
         uk_sunday = datetime(2024, 6, 16, 12, 0, tzinfo=ZoneInfo("Europe/London"))
         assert uk_sunday.weekday() == 6  # Sunday = 6
+
+
+class TestClipScanAutoLoop:
+    """Test auto-looping and state reset behavior for clip backlog scanning."""
+
+    @pytest.mark.asyncio
+    async def test_clip_scan_auto_loops_on_empty_history(self, tmp_path):
+        """Test that if the scan hits the end of history (0 messages), it clears state and restarts from top."""
+        from bot.commands.clips import ClipTriviaCog
+        import json
+
+        bot_mock = MagicMock()
+        mock_db = MagicMock()
+        mock_db.trivia.has_pending_batch.return_value = False
+        mock_db.trivia.clip_lore_exists.return_value = False
+
+        with patch("bot.commands.clips.get_database", return_value=mock_db):
+            cog = ClipTriviaCog(bot_mock)
+
+        # Set up mock channel
+        channel_mock = MagicMock(spec=discord.TextChannel)
+        bot_mock.get_channel.return_value = channel_mock
+
+        # Setup state file in tmp_path
+        state_file = tmp_path / "clip_scan_state.json"
+        state_file.write_text(json.dumps({"last_scanned_message_id": 12345}))
+
+        class AsyncIter:
+            def __init__(self, items):
+                self.items = items
+            def __aiter__(self):
+                self._iter = iter(self.items)
+                return self
+            async def __anext__(self):
+                try:
+                    return next(self._iter)
+                except StopIteration:
+                    raise StopAsyncIteration
+
+        call_count = 0
+
+        def mock_history(limit=200, before=None):
+            nonlocal call_count
+            call_count += 1
+            if before is not None:
+                # First call with before_obj: channel has 0 older messages
+                return AsyncIter([])
+            else:
+                # Retry call with before=None: returns 1 message
+                msg = MagicMock()
+                msg.id = 54321
+                msg.author.bot = False
+                msg.content = "Check this clip https://clips.twitch.tv/TestClip123"
+                msg.reactions = []
+                return AsyncIter([msg])
+
+        channel_mock.history = mock_history
+
+        orig_exists = os.path.exists
+        orig_open = open
+        state_exists = True
+
+        def fake_exists(p):
+            if "clip_scan_state.json" in str(p):
+                return state_exists
+            return orig_exists(p)
+
+        def fake_remove(p):
+            nonlocal state_exists
+            if "clip_scan_state.json" in str(p):
+                state_exists = False
+
+        def fake_open(p, *args, **kwargs):
+            if "clip_scan_state.json" in str(p):
+                return orig_open(state_file, *args, **kwargs)
+            return orig_open(p, *args, **kwargs)
+
+        with patch("bot.commands.clips.get_database", return_value=mock_db), \
+             patch("bot.commands.clips.os.path.exists", side_effect=fake_exists), \
+             patch("bot.commands.clips.open", side_effect=fake_open), \
+             patch("bot.commands.clips.os.remove", side_effect=fake_remove) as mock_remove:
+
+            found, queued = await cog.process_backlog_batch(
+                search_limit=10,
+                max_process=5,
+                ctx=None,
+                dryrun=True,
+                resume_from_state=True
+            )
+
+            # Verified: it called history twice (first before=12345 returned 0, then auto-looped before=None)
+            assert call_count == 2
+            # Verified: it removed the state file
+            assert mock_remove.called
+            # Verified: it found the clip on the retry from the top
+            assert found == 1
+            assert queued == 1
+
+
+class TestClipQualityControl:
+    """Test strict quality control validation and DM notifications for clip batches."""
+
+    def test_database_update_clip_lore_strict_validation(self):
+        """Test that update_clip_lore_from_batch sets UNPROCESSABLE if fields are missing or quote is short."""
+        from bot.database.trivia import TriviaDatabase
+
+        mock_db = MagicMock()
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_db.get_connection.return_value = mock_conn
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+        trivia_db = TriviaDatabase(mock_db)
+
+        # 1. Dud: Short quote (2 words)
+        dud_data = {
+            "game_title": "Elden Ring",
+            "reaction": "screamed",
+            "trigger": "died to boss",
+            "lore_summary": "Jonesy died to Malenia",
+            "notable_quote": "Oh no", # Only 2 words
+            "clip_outcome": "Death"
+        }
+        trivia_db.update_clip_lore_from_batch("https://twitch.tv/clip/1", dud_data)
+        executed_params = mock_cursor.execute.call_args[0][1]
+        # batch_status is 11th parameter (index 10)
+        assert executed_params[10] == "UNPROCESSABLE"
+
+        # 2. Dud: Missing reaction
+        dud_data2 = {
+            "game_title": "Elden Ring",
+            "reaction": "",
+            "trigger": "died to boss",
+            "lore_summary": "Jonesy died to Malenia",
+            "notable_quote": "Why did that happen to me right now",
+            "clip_outcome": "Death"
+        }
+        trivia_db.update_clip_lore_from_batch("https://twitch.tv/clip/2", dud_data2)
+        executed_params2 = mock_cursor.execute.call_args[0][1]
+        assert executed_params2[10] == "UNPROCESSABLE"
+
+        # 3. Valid: Good quote, reaction, outcome, summary
+        valid_data = {
+            "game_title": "Elden Ring",
+            "reaction": "screamed in terror",
+            "trigger": "ambushed by skeleton",
+            "lore_summary": "Jonesy was ambushed in the catacombs",
+            "notable_quote": "Where did that skeleton come from?!",
+            "clip_outcome": "Death"
+        }
+        trivia_db.update_clip_lore_from_batch("https://twitch.tv/clip/3", valid_data)
+        executed_params3 = mock_cursor.execute.call_args[0][1]
+        assert executed_params3[10] == "COMPLETED"
+
+    @pytest.mark.asyncio
+    async def test_poll_gemini_batches_rejects_dud_and_sends_detailed_dm(self):
+        """Test that poll_gemini_batches puts ❌ on dud clips and sends a detailed DM to JAM."""
+        from bot.tasks.scheduled import poll_gemini_batches
+
+        mock_bot = MagicMock()
+        mock_channel = MagicMock(spec=discord.TextChannel)
+        mock_cog = MagicMock()
+        mock_cog.target_channel_id = 12345
+        mock_bot.get_cog.return_value = mock_cog
+        mock_bot.get_channel.return_value = mock_channel
+
+        # Mock messages in Discord
+        valid_msg = AsyncMock(spec=discord.Message)
+        dud_msg = AsyncMock(spec=discord.Message)
+
+        async def fetch_msg(mid):
+            return valid_msg if mid == 100 else dud_msg
+
+        mock_channel.fetch_message = fetch_msg
+
+        # Mock JAM user
+        jam_user = AsyncMock()
+        mock_bot.fetch_user = AsyncMock(return_value=jam_user)
+
+        # Mock database pending batches
+        mock_db = MagicMock()
+        mock_db.trivia.get_pending_batch_clips.return_value = [
+            {"batch_job_id": "batches/test-batch-1", "canonical_url": "https://twitch.tv/clip/valid"},
+            {"batch_job_id": "batches/test-batch-1", "canonical_url": "https://twitch.tv/clip/dud"}
+        ]
+
+        # Mock Gemini Batch Client
+        mock_batch_client = MagicMock()
+        batch_obj = MagicMock()
+        batch_obj.state = "SUCCEEDED"
+        batch_obj.output_uri = "https://fake.url/output"
+        mock_batch_client.batches.get.return_value = batch_obj
+
+        # Mock JSONL output: 1 valid, 1 dud (quote too short)
+        valid_line = json.dumps({
+            "id": "https://twitch.tv/clip/valid|100",
+            "response": {
+                "candidates": [{"content": {"parts": [{"text": json.dumps({
+                    "game_title": "Elden Ring",
+                    "reaction": "screamed",
+                    "trigger": "boss spawn",
+                    "lore_summary": "Startled by boss",
+                    "notable_quote": "I was not ready for that at all!",
+                    "clip_outcome": "Death"
+                })}]}}]
+            }
+        })
+
+        dud_line = json.dumps({
+            "id": "https://twitch.tv/clip/dud|200",
+            "response": {
+                "candidates": [{"content": {"parts": [{"text": json.dumps({
+                    "game_title": "Elden Ring",
+                    "reaction": "laughed",
+                    "trigger": "funny glitch",
+                    "lore_summary": "Saw a glitch",
+                    "notable_quote": "Lol nope", # only 2 words
+                    "clip_outcome": "Neutral"
+                })}]}}]
+            }
+        })
+        jsonl_content = f"{valid_line}\n{dud_line}".encode("utf-8")
+
+        class MockResponse:
+            def read(self):
+                return jsonl_content
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+
+        with patch("bot.tasks.scheduled.get_bot_instance", return_value=mock_bot), \
+             patch("bot.tasks.scheduled.get_database", return_value=mock_db), \
+             patch("bot.handlers.ai_handler.gemini_batch_client", mock_batch_client), \
+             patch("urllib.request.urlopen", return_value=MockResponse()):
+
+            await poll_gemini_batches()
+
+            # 1. Verified: Valid clip got ✅
+            valid_msg.add_reaction.assert_called_with("✅")
+
+            # 2. Verified: Dud clip got ❌
+            dud_msg.add_reaction.assert_called_with("❌")
+
+            # 3. Verified: JAM was sent a DM with the rejected clip list
+            assert jam_user.send.called
+            sent_dm = jam_user.send.call_args[0][0]
+            assert "**Successfully processed:** 1 clips" in sent_dm
+            assert "**Rejected / Unprocessable:** 1 clips" in sent_dm
+            assert "https://twitch.tv/clip/dud" in sent_dm
+            assert "Quote fewer than 3 words" in sent_dm
 
 
 if __name__ == "__main__":

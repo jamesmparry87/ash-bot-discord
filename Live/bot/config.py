@@ -129,9 +129,8 @@ GEMINI_BATCH_API_KEY = os.getenv('GEMINI_BATCH_API_KEY')
 
 # Gemini model cascade configuration (priority order)
 GEMINI_MODEL_CASCADE = [
-    'gemini-3.8-flash',       # Primary: $0.75 / $3.75 (High fidelity, promotional pricing)
-    'gemini-3.7-flash',       # Backup: Strong middle-ground
-    'gemini-3.5-flash-lite',  # Final fallback: $0.30 / $2.50
+    'gemini-3.8-flash',  # Primary: $0.75 / $3.75 (High fidelity, promotional pricing)
+    'gemini-3.6-flash',  # Backup / Fallback: $0.75 / $3.75 (Promotional pricing, replaces deprecated 3.5 & 3.7)
 ]
 
 # For background tasks (e.g. video clip lore extraction)

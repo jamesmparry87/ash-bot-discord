@@ -190,7 +190,8 @@ class ClipTriviaCog(commands.Cog):
             await message.add_reaction("👀")
 
     async def process_backlog_batch(self, search_limit: int = 200, max_process: int = 50,
-                                    ctx=None, dryrun: bool = False, resume_from_state: bool = True) -> tuple[int, int]:
+                                    ctx=None, dryrun: bool = False, resume_from_state: bool = True,
+                                    _is_retry: bool = False) -> tuple[int, int]:
         """Scans the clips channel history for unprocessed clips backwards through time.
         Uploads clips to Gemini Files API and creates a batch job.
         Returns (found_count, queued_count)."""
@@ -237,8 +238,10 @@ class ClipTriviaCog(commands.Cog):
         total_unprocessed = 0
         clips_to_queue = []
         oldest_message_id = None
+        messages_scanned = 0
 
         async for message in channel.history(limit=search_limit, before=before_obj):
+            messages_scanned += 1
             oldest_message_id = message.id
             if message.author.bot:
                 continue
@@ -265,13 +268,42 @@ class ClipTriviaCog(commands.Cog):
                             except Exception:
                                 pass
 
+        # Auto-loop: If resuming from state returned 0 messages, we hit the beginning of the channel history
+        if resume_from_state and last_scanned_id and messages_scanned == 0:
+            logger.info("Reached beginning of channel history (0 messages older than last scanned ID). Resetting scan state to top.")
+            if os.path.exists(state_file):
+                try:
+                    os.remove(state_file)
+                except Exception as e:
+                    logger.error(f"Error removing clip scan state file: {e}")
+            if not _is_retry:
+                if ctx:
+                    await ctx.send("🔄 Reached the beginning of channel history. Looping back to the most recent message...")
+                return await self.process_backlog_batch(
+                    search_limit=search_limit,
+                    max_process=max_process,
+                    ctx=ctx,
+                    dryrun=dryrun,
+                    resume_from_state=True,
+                    _is_retry=True
+                )
+
         queued_count = len(clips_to_queue)
         if queued_count == 0:
             if ctx:
                 await ctx.send("✅ No unprocessed clips found in this scan segment.")
-            if resume_from_state and oldest_message_id:
-                with open(state_file, 'w') as f:
-                    json.dump({"last_scanned_message_id": oldest_message_id}, f)
+            if resume_from_state:
+                if messages_scanned < search_limit:
+                    # Reached the end of channel history - reset state for next cycle
+                    logger.info("No clips queued and reached beginning of channel history. Resetting clip scan state.")
+                    if os.path.exists(state_file):
+                        try:
+                            os.remove(state_file)
+                        except Exception as e:
+                            logger.error(f"Error removing clip scan state file: {e}")
+                elif oldest_message_id:
+                    with open(state_file, 'w') as f:
+                        json.dump({"last_scanned_message_id": oldest_message_id}, f)
             return found_count, 0
 
         if dryrun:
@@ -432,14 +464,28 @@ class ClipTriviaCog(commands.Cog):
             os.remove(jsonl_path)
 
             # Update state
-            if resume_from_state and oldest_message_id:
-                with open(state_file, 'w') as f:
-                    json.dump({"last_scanned_message_id": oldest_message_id}, f)
+            if resume_from_state:
+                if messages_scanned < search_limit:
+                    # Reached the end of channel history - reset state for next cycle
+                    logger.info("Batch submitted and reached beginning of channel history. Resetting clip scan state.")
+                    if os.path.exists(state_file):
+                        try:
+                            os.remove(state_file)
+                        except Exception as e:
+                            logger.error(f"Error removing clip scan state file: {e}")
+                elif oldest_message_id:
+                    with open(state_file, 'w') as f:
+                        json.dump({"last_scanned_message_id": oldest_message_id}, f)
 
             return found_count, len(jsonl_lines)
 
         except Exception as e:
             logger.error(f"Batch processing error: {e}")
+            for uf in uploaded_files:
+                try:
+                    await asyncio.to_thread(gemini_batch_client.files.delete, name=uf.name)
+                except Exception:
+                    pass
             if ctx:
                 await ctx.send(f"❌ Error creating batch: {str(e)[:100]}")
             return found_count, 0

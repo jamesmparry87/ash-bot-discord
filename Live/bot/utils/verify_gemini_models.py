@@ -48,17 +48,16 @@ async def verify_models():
 
         print("\n📋 Listing available models...")
         models = list(client.models.list())
-        text_models = [m for m in models if m.name.startswith(
-            "models/gemini-2.5") or m.name.startswith("models/gemini-1.5")]
+        text_models = [m for m in models if m.name.startswith("models/gemini-3.")]
 
         for m in text_models:
             print(f"   • {m.name}")
 
         print(f"\n✅ Found {len(text_models)} relevant models.")
 
-        print("\n🧪 Testing basic generation with gemini-2.5-flash...")
+        print("\n🧪 Testing basic generation with gemini-3.6-flash...")
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents='Respond with "System Online"'
         )
         print(f"✅ Response received: {response.text.strip()}")

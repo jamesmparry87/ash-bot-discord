@@ -2055,12 +2055,21 @@ class TriviaDatabase:
 
     def update_clip_lore_from_batch(self, canonical_url: str, data: dict) -> bool:
         # Validate if essential fields were successfully extracted
-        nq = data.get('notable_quote', '').strip()
-        react = data.get('reaction', '').strip()
-        outcome = data.get('clip_outcome', '').strip()
+        status = data.get('batch_status')
+        if not status:
+            nq = str(data.get('notable_quote', '') or '').strip()
+            react = str(data.get('reaction', '') or '').strip()
+            outcome = str(data.get('clip_outcome', '') or '').strip()
+            lore = str(data.get('lore_summary', '') or '').strip()
 
-        is_dud = (not nq or nq == 'None') and (not react or react == 'None') and (not outcome or outcome == 'None')
-        status = 'UNPROCESSABLE' if is_dud else 'COMPLETED'
+            nq_words = len(nq.split())
+            is_dud = (
+                not nq or nq.lower() == 'none' or nq_words < 3
+                or not react or react.lower() == 'none'
+                or not outcome or outcome.lower() == 'none'
+                or not lore or lore.lower() == 'none'
+            )
+            status = 'UNPROCESSABLE' if is_dud else 'COMPLETED'
 
         conn = self.db.get_connection()
         try:
@@ -2115,7 +2124,7 @@ class TriviaDatabase:
                     FROM clip_lore
                 """
 
-                conditions = []
+                conditions = ["(batch_status = 'COMPLETED' OR batch_status IS NULL)"]
                 if required_fields:
                     for field in required_fields:
                         # Ensure the field is valid to prevent SQL injection
